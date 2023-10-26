@@ -5,7 +5,7 @@
 [general]
 name=FilterMate
 qgisMinimumVersion=3.0
-description=FilterMate is a vector layer filter companion that will allow you to filter your data in detail
+description=FilterMate is a Qgis plugin, an everyday companion that allows you to easily filter your vector layers
 version=1.0
 author=imagodata
 email=imagodata+filter_mate@skiff.com
