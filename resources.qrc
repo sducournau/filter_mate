@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/plugins/filter_layers" >
+          <file>icon.png</file>
+    	     <file>images/filter.png</file>
+   	       <file>images/filter_erase.png</file>
+    	     <file>images/filter_multi.png</file>
+    	      <file>images/reset.png</file>
+    </qresource>
+</RCC>
