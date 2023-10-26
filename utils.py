@@ -135,7 +135,7 @@ class ManagerWidgets:
 
 
 
-class FilterLayers_(QgsTask):
+class FilterMate_(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
 
     def __init__(self, description, dockwidget, action, current_index, managerWidgets):

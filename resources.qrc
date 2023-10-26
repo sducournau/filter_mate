@@ -1,5 +1,5 @@
 <RCC>
-    <qresource prefix="/plugins/filter_layers" >
+    <qresource prefix="/plugins/filter_mate" >
           <file>icon.png</file>
     	     <file>images/filter.png</file>
    	       <file>images/filter_erase.png</file>

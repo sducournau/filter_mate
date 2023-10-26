@@ -28,7 +28,7 @@ if PATH_ABSOLUTE_PROJECT =='./':
 
 
 CONFIG_DATA = None
-DIR_CONFIG =  os.getenv('APPDATA') + os.sep + 'Circet' + os.sep +  'Filter'
+DIR_CONFIG =  os.getenv('APPDATA') + os.sep + 'QGIS' + os.sep +  'FilterMate'
 
 if not os.path.isdir(DIR_CONFIG):
     try:
