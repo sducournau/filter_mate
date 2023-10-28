@@ -123,16 +123,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/projection_1.png"))
         self.checkBox_export_projection.setIcon(icon)
 
-        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/selection_7.png"))
+        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/selection_4.png"))
         self.checkBox_filter_by_selection.setIcon(icon)
 
-        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/zoom_2.png"))
+        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/zoom_1.png"))
         self.checkBox_filter_by_selection_auto_change_layer.setIcon(icon)
 
-        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/selection_4.png"))
-        self.checkBox_test_1.setIcon(icon)
+        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/zoom_2.png"))
+        self.pushButton.setIcon(icon)
 
-        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/selection_5.png"))
+        icon = QtGui.QIcon(os.path.join(DIR_PLUGIN,  "images/link.png"))
         self.checkBox_test_2.setIcon(icon)
 
 
@@ -142,7 +142,101 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         """Manage the plugin style"""
 
         combobox_style = """
+                        QgsFeaturePickerWidget
+                        {
+                        background-color:{color_1};
+                        border: 1px solid {color_1};
+                        border-radius: 3px;
+                        padding: 3px 3px 3px 3px;
+                        color:{color_3};
+                        }
+                        QgsFeaturePickerWidget:hover
+                        {
+                        border: 2px solid {color_3};
+                        }
+                        QgsFeaturePickerWidget QAbstractItemView 
+                        {
+                        background: {color_1};
+                        selection-background-color:{color_3};
+                        color:{color_3};
+                        border: 2px solid {color_3};
+                        }
+                        QgsProjectionSelectionWidget
+                        {
+                        background-color:{color_1};
+                        border: 1px solid {color_1};
+                        border-radius: 3px;
+                        padding: 3px 3px 3px 3px;
+                        color:{color_3};
+                        }
+                        QgsProjectionSelectionWidget:hover
+                        {
+                        border: 2px solid {color_3};
+                        }
+                        QgsProjectionSelectionWidget QAbstractItemView 
+                        {
+                        background: {color_1};
+                        selection-background-color:{color_3};
+                        color:{color_3};
+                        border: 2px solid {color_3};
+                        }
+                        QgsMapLayerComboBox
+                        {
+                        background-color:{color_1};
+                        border: 1px solid {color_1};
+                        border-radius: 3px;
+                        padding: 3px 3px 3px 3px;
+                        color:{color_3};
+                        }
+                        QgsMapLayerComboBox:hover
+                        {
+                        border: 2px solid {color_3};
+                        }
+                        QgsMapLayerComboBox QAbstractItemView 
+                        {
+                        background: {color_1};
+                        selection-background-color:{color_3};
+                        color:{color_3};
+                        border: 2px solid {color_3};
+                        }
+                        QgsFieldComboBox
+                        {
+                        background-color:{color_1};
+                        border: 1px solid {color_1};
+                        border-radius: 3px;
+                        padding: 3px 3px 3px 3px;
+                        color:{color_3};
+                        }
+                        QgsFieldComboBox:hover
+                        {
+                        border: 2px solid {color_3};
+                        }
+                        QgsFieldComboBox QAbstractItemView {
 
+                        background: {color_1};
+                        selection-background-color:{color_3};
+                        color:{color_3};
+                        border: 2px solid {color_3};
+                        }
+                        QgsFieldComboBox
+                        {
+                        background-color:{color_1};
+                        border: 1px solid {color_1};
+                        border-radius: 3px;
+                        padding: 3px 3px 3px 3px;
+                        color:{color_3};
+                        }
+                        QgsFieldComboBox:hover
+                        {
+                        border: 2px solid {color_3};
+                        }
+                        QgsFieldComboBox QAbstractItemView {
+
+                        background: {color_1};
+                        selection-background-color:{color_3};
+                        color:{color_3};
+                        border: 2px solid {color_3};
+                        }
                         QgsFieldExpressionWidget
                         {
                         background-color:{color_1};
@@ -160,6 +254,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         background: {color_1};
                         selection-background-color:{color_3};
                         color:{color_3};
+                        border: 2px solid {color_3};
                         }
                         QgsCheckableComboBox
                         {
@@ -178,11 +273,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                         }
 
-                        QComboBox QAbstractItemView {
+                        QgsCheckableComboBox QAbstractItemView {
 
                           background: {color_1};
                           selection-background-color: {color_2};
-                        	color:{color_3};
+                            color:{color_3};
                             border: 2px solid {color_3};
                         }
                         QComboBox
@@ -322,7 +417,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
 
-        self.groupBox_explorer.setStyleSheet(groupbox_style)
+        self.group_explorer.setStyleSheet(groupbox_style)
 
         self.mFieldExpressionWidget.setStyleSheet(combobox_style)
         self.mFieldExpressionWidget_filter_by_selection.setStyleSheet(combobox_style)
@@ -356,7 +451,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.mMapLayerComboBox_filter_by_selection.setStyleSheet(combobox_style)
 
 
-        self.checkBox_test_1.setStyleSheet(checkbox_style)
+        self.pushButton.setStyleSheet(pushbutton_style)
         self.checkBox_test_2.setStyleSheet(checkbox_style)
 
         self.checkBox_filter_by_selection.setStyleSheet(checkbox_style)
