@@ -20,6 +20,7 @@ def merge(a, b, path=None):
     return a
 
 PROJECT = QgsProject.instance()
+
 ROOT = PROJECT.layerTreeRoot()
 DIR_PLUGIN = os.path.normpath(os.path.dirname(__file__))
 PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))

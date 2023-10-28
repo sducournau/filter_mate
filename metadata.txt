@@ -6,7 +6,7 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a Qgis plugin, an everyday companion that allows you to easily filter your vector layers
-version=1.0
+version=1.1
 author=imagodata
 email=imagodata+filter_mate@skiff.com
 about=about
@@ -22,7 +22,7 @@ hasProcessingProvider=no
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=python,filter,vector,layers,geofilter,search,postgis
+tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration
 
 homepage=https://sducournau.github.io/filter_mate
 category=Plugins

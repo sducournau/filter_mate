@@ -4,6 +4,7 @@ from qgis.PyQt.QtWidgets import *
 from qgis.core import *
 from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
 from qgis.utils import *
+from qgis.utils import iface
 import os.path
 from pathlib import Path
 import re
@@ -11,7 +12,267 @@ from .config import *
 import processing
 from .qt_json_view.model import JsonModel, JsonSortFilterProxyModel
 from .qt_json_view.view import JsonView
+from functools import partial
+import json
 
+# Import the code for the DockWidget
+from .filter_mate_dockwidget import FilterMateDockWidget
+
+class FilterMateApp:
+
+    PROJECT_LAYERS = {} 
+
+    def __init__(self):
+        self.iface = iface
+        self.dockwidget = None
+        self.run()
+
+
+    def run(self):
+        if self.dockwidget == None:
+            self.dockwidget = FilterMateDockWidget()
+
+            """Controller for populating and keep updated comboboxes"""
+            self.populate = populateData(self.dockwidget)
+
+            init_layers = list(PROJECT.mapLayers().values())
+
+            self.manage_project_layers(init_layers, 'add')
+
+            # """Controller for dealing with filter widgets and the configuration model"""
+            # self.managerWidgets = ManagerWidgets(self.dockwidget)
+
+            # """Init the filter widgets"""
+            # self.managerWidgets.manage_widgets(CONFIG_DATA['WIDGETS'])
+
+            """Init the advanced filters"""
+            self.populate.populate_predicat()
+            self.populate.populate_layers()
+
+            # show the dockwidget
+            # TODO: fix to allow choice of dock location
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
+            self.dockwidget.show()
+
+
+        """Keep the advanced filter combobox updated on adding or removing layers"""
+
+        PROJECT.layersAdded.connect(partial(self.manage_project_layers, 'add'))
+        PROJECT.layersRemoved.connect(partial(self.manage_project_layers, 'remove'))
+
+        self.dockwidget.launchingTask.connect(self.manage_task)
+
+        self.change_currentLayerChanged_filter_by_selection(self.iface.activeLayer())
+
+        self.dockwidget.mMapLayerComboBox_filter_by_selection.layerChanged.connect(self.change_MapLayerComboBox_filter_by_selection)
+
+        self.dockwidget.mFieldExpressionWidget_filter_by_selection.fieldChanged.connect(self.change_FieldExpressionWidget_filter_by_selection)
+
+
+
+        self.iface.layerTreeView().currentLayerChanged.connect(self.change_currentLayerChanged_filter_by_selection)
+
+        self.dockwidget.checkBox_filter_by_selection.stateChanged.connect(self.change_checkBox_filter_by_selection)
+
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.featureChanged.connect(self.change_FeaturePickerWidget_filter_by_selection)
+        
+        """Overload configuration qtreeview model to keep configuration file up to date"""
+        # self.managerWidgets.model.dataChanged.connect(self.qtree_signal)
+        # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
+        # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
+
+
+        # self.managerWidgets.view.onLeaveEvent.connect(self.reload_config)
+        #self.managerWidgets.view.onAddWidget.connect(lambda: self.reload_config('add'))
+        #self.managerWidgets.view.onRemoveWidget.connect(lambda: self.reload_config('remove'))
+
+    def change_FeaturePickerWidget_filter_by_selection(self, feature):
+        layer = self.dockwidget.mFeaturePickerWidget_filter_by_selection.layer()
+
+        print(layer, feature, self.PROJECT_LAYERS[layer.id()])
+        if self.PROJECT_LAYERS[layer.id()][1]["is_selected"] == True:
+            layer.removeSelection()
+            layer.select([feature.id()])
+            if self.PROJECT_LAYERS[layer.id()][1]["has_tracking"] == True:
+                box = layer.boundingBoxOfSelected()
+                self.iface.mapCanvas().setExtent(box)
+                self.iface.mapCanvas().refresh()
+        
+
+    def change_checkBox_filter_by_selection(self):
+
+        layer = self.dockwidget.mFieldExpressionWidget_filter_by_selection.layer()
+
+        if self.dockwidget.checkBox_filter_by_selection.checkState() == 2:
+            self.PROJECT_LAYERS[layer.id()][1]["is_selected"] = True
+        else:
+            self.PROJECT_LAYERS[layer.id()][1]["is_selected"] = False
+
+
+
+    def change_FieldExpressionWidget_filter_by_selection(self):
+        layer = self.dockwidget.mFieldExpressionWidget_filter_by_selection.layer()
+        self.PROJECT_LAYERS[layer.id()][1]["display_expression"] = self.dockwidget.mFieldExpressionWidget_filter_by_selection.expression()
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setDisplayExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
+
+    def change_currentLayerChanged_filter_by_selection(self, layer):
+        
+        self.dockwidget.mMapLayerComboBox_filter_by_selection.setLayer(layer)
+        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setLayer(layer)
+        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
+
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setLayer(layer)
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setDisplayExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setFetchGeometry(True)
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setShowBrowserButtons(True)
+
+        if self.PROJECT_LAYERS[layer.id()][1]["is_selected"] == True:
+            self.dockwidget.checkBox_filter_by_selection.setCheckState(2)
+        else:
+            self.dockwidget.checkBox_filter_by_selection.setCheckState(0)
+
+
+    def change_MapLayerComboBox_filter_by_selection(self):
+
+        layer = self.dockwidget.mMapLayerComboBox_filter_by_selection.currentLayer()
+
+        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setLayer(layer)
+        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
+
+
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setLayer(layer)
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setDisplayExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setFetchGeometry(True)
+        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setShowBrowserButtons(True)
+        self.iface.setActiveLayer(layer)
+
+    def manage_project_layers(self, layers, action):
+
+        self.json_template_layer_infos = '{"layer_type":"%s","layer_crs":"%s","layer_id":"%s","layer_name":"%s","primary_key_name":"%s"}'
+        self.json_template_layer_meta = '{"is_source_filter":false,"has_tracking":true,"is_selected":false,"is_already_subset":false,"display_expression":"%s"}'
+        
+        print(layers, action)
+        
+        for layer in layers:
+            if action == 'add':     
+                self.add_project_layer(layer)
+            elif action == 'remove':
+                self.remove_project_layer(layer)
+                
+
+
+    def add_project_layer(self, layer):
+
+
+        if layer.id() not in self.PROJECT_LAYERS.keys():
+
+            if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
+        
+                primary_key_name = self.search_primary_key_from_layer(layer)
+
+                if layer.providerType() == 'ogr':
+
+                    capabilities = layer.capabilitiesString().split(', ')
+                    if 'Transactions' in capabilities:
+                        layer_type = 'spatialite'
+                    else:
+                        layer_type = 'ogr'
+
+                elif layer.providerType() == 'postgres':
+                    layer_type = 'postgresql'
+
+                else:
+                    capabilities = layer.capabilitiesString().split(', ')
+                    if 'Transactions' in capabilities:
+                        layer_type = 'spatialite'
+                    else:
+                        layer_type = 'ogr'
+
+                layer_infos = json.loads(self.json_template_layer_infos % (layer_type, layer.sourceCrs().authid(), layer.id(), layer.name(), primary_key_name))
+                layer_meta = json.loads(self.json_template_layer_meta % (str(primary_key_name)))
+
+                self.PROJECT_LAYERS[layer.id()] = (layer_infos, layer_meta)
+
+
+    def remove_project_layer(self, layer_id):
+
+        if layer_id in self.PROJECT_LAYERS.keys():
+            self.PROJECT_LAYERS.pop(layer_id)
+
+
+    def search_primary_key_from_layer(self, layer):
+        """For each layer we search the primary key"""
+
+        primary_key_index = layer.primaryKeyAttributes()
+        if len(primary_key_index) > 0:
+            for field_id in primary_key_index:
+                if len(layer.uniqueValues(field_id)) == layer.featureCount():
+                    field = layer.fields()[field_id]
+                    return field.name()
+        else:
+            for field in layer.fields():
+                if 'ID' in str(field.name()).upper():
+                    if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
+                        return field.name()
+                    
+            for field in layer.fields():
+                if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
+                    return field.name()
+
+
+    def manage_task(self, task_name):
+        """Manage the different tasks"""
+
+        self.tasks_descriptions = {'filter':'Filtering data',
+                                    'unfilter':'Unfiltering data',
+                                    'export':'Exporting data'}
+        
+        assert task_name in list(self.tasks_descriptions.keys())
+        
+        params = self.serialize_parameters(task_name)
+
+        t0 = time.time()
+        self.task = FilterEngineTask(self.tasks_descriptions[task_name], task_name, params)
+
+        if task_name == 'start':
+            layer_name = self.dockwidget.mMapLayerComboBox_filter_by_selection.currentText()
+            self.layer_zoom = PROJECT.mapLayersByName(layer_name)[0]
+            self.task.taskCompleted.connect(lambda: zoom_to_features(self.layer_zoom, t0))
+
+        QgsApplication.taskManager().addTask(self.task)
+
+    def serialize_parameters(self, task_name):
+
+        if task_name == 'filter':
+
+            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
+            self.filter_multi = self.dockwidget.checkBox_multi_filter.checkState()
+            self.filter_add = self.dockwidget.checkBox_filter_add.checkState()
+            self.from_operator = self.dockwidget.comboBox_filter_add.currentText()
+            self.filter_add_multi = self.dockwidget.checkBox_add_multi.checkState()
+            self.multi_operator = self.dockwidget.comboBox_filter_add_multi.currentText()
+            self.current_index = self.dockwidget.current_index
+            avance = self.dockwidget.checkBox_filter_layer.checkState()
+            self.filter_geo = self.dockwidget.checkBox_filter_geo.checkState()
+            with_tampon = self.dockwidget.checkBox_tampon.checkState()
+            predicats = self.dockwidget.mComboBox_filter_geo.checkedItems()
+            distance = float(self.dockwidget.mQgsDoubleSpinBox_tampon.value())
+
+            expression = self.dockwidget.mFieldExpressionWidget.currentText()
+
+            expression = expression.replace("'", "\'")
+            layer_name = self.dockwidget.mMapLayerComboBox_filter_by_selection.currentText()
+
+        elif task_name == 'unfilter':
+
+            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
+
+        elif task_name == 'export':    
+
+            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
+            format = self.dockwidget.comboBox_export_type.currentText()
+            name = str(self.dockwidget.lineEdit_export.text()) if self.dockwidget.lineEdit_export.text() != '' else 'output'
+            crs = self.dockwidget.mQgsProjectionSelectionWidget.crs()
 
 
 
@@ -135,7 +396,7 @@ class ManagerWidgets:
 
 
 
-class FilterMate_(QgsTask):
+class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
 
     def __init__(self, description, dockwidget, action, current_index, managerWidgets):
@@ -149,10 +410,101 @@ class FilterMate_(QgsTask):
         self.populate = populateData(self.dockwidget)
         self.managerWidgets = managerWidgets
         self.filter_from = 0
-        self.filter_geo = self.dockwidget.checkBox_filter_geo.checkState()
+        
         print(self.current_index)
 
 
+
+    def run(self):
+        """Main function that run the right method from init parameters"""
+
+
+
+
+
+        """We split the selected layers to be filtered in two categories sql and others"""
+        self.layers = {}
+        self.layers['ogr'] = []
+        self.layers['sqlite'] = []
+        self.layers['postgresql'] = []
+
+        for item in selected_layers_data:
+
+            layers =  PROJECT.mapLayersByName(item)
+            for layer in layers:
+                if layer.isSpatial():
+                    if layer.providerType() == 'ogr':
+                        capabilities = layer.capabilitiesString().split(', ')
+                        if 'Transactions' in capabilities:
+                            self.layers['sqlite'].append(layer)
+                        else:
+                            self.layers['ogr'].append(layer)
+
+                    elif layer.providerType() == 'postgres':
+                        self.layers['postgresql'].append(layer)
+
+                    else:
+                        capabilities = layer.capabilitiesString().split(', ')
+                        if 'Transactions' in capabilities:
+                            self.layers['sqlite'].append(layer)
+                        else:
+                            self.layers['ogr'].append(layer)
+
+
+
+
+
+        if self.action == 'start':
+            """We will filter layers"""
+
+
+            
+
+
+            if self.current_index == 0:
+                """If user is on basic tab we launch the basic filtering"""
+                self.filter_basic()
+
+            elif self.current_index == 1 and avance == 0:
+                """If user is on widget tab and the advanced checkbox is not checked then we launch the widget filtering"""
+                self.filter_widget()
+
+
+            elif avance == 2:
+                """If user is on widget tab and the advanced checkbox is checked then we launch the advanced filtering"""
+
+                from_layer = PROJECT.mapLayersByName(layer_name)[0]
+
+                status = self.filter_advanced(expression, from_layer, None)
+                #self.managerWidgets.update_widgets()
+                if not status:
+                    return False
+
+        elif self.action == 'end':
+            """We will unfilter the layers"""
+
+            for layer in self.layers['sql']:
+                if isinstance(layer, QgsVectorLayer):
+
+                    layer.setSubsetString('')
+            for layer in self.layers['shape']:
+                if isinstance(layer, QgsVectorLayer):
+
+                    layer.setSubsetString('')
+
+
+        elif self.action == 'export':
+            """We will export layers"""
+
+            status = self.export_to_package()
+            return status
+
+
+        return True
+        #except Exception as e:
+            #self.exception = e
+            #print(self.exception)
+            #return False
 
 
     def export_to_package(self):
@@ -187,214 +539,6 @@ class FilterMate_(QgsTask):
 
         return True
 
-    def create_expressions(self, field):
-        """Function to manage the basic filter logic"""
-
-        def create_expression_za_nro(field):
-
-            list_za_nro = {}
-            list_za_nro['sql'] = []
-            list_za_nro['shape'] = []
-
-            for item in self.selected_za_nro_data:
-                list_za_nro['sql'].append(field + ' ~ \'' + str(item) + '$\'' + ' OR ' +  field + ' ~ \''  + str(item) + ',\'' )
-                list_za_nro['shape'].append(field + ' LIKE \'' + str(item) + '\'' )
-            self.filter_za_nro['sql'] = ' OR '.join(list_za_nro['sql'])
-            self.filter_za_nro['shape'] = ' OR '.join(list_za_nro['shape'])
-
-        def create_expression_za_zpm(field):
-
-            list_za_zpm = {}
-            list_za_zpm['sql'] = []
-            list_za_zpm['shape'] = []
-
-            list_za_nro = {}
-            list_za_nro['sql'] = []
-            list_za_nro['shape'] = []
-
-            for item in self.selected_za_zpm_data:
-
-                field = '"{}"'.format(LAYERS['ZONE_DE_PM'][1])
-                list_za_zpm['sql'].append(field + ' ~ \'' + str(item) + '$\'' + ' OR ' +  field + ' ~ \''  + str(item) + ',\'' )
-                list_za_zpm['shape'].append(field + ' LIKE \'' + str(item) + '\'' )
-
-                field = '"{}"'.format(LAYERS['ZONE_DE_NRO'][1])
-                list_za_nro['sql'].append(field + ' ~ \'' + str(item[:5]) + '$\'' + ' OR ' +  field + ' ~ \''  + str(item[:5]) + ',\'' )
-                list_za_nro['shape'].append(field + ' LIKE \'' + str(item[:5]) + '\'' )
-
-            self.filter_za_zpm['sql'] = ' OR '.join(list_za_zpm['sql'])
-            self.filter_za_zpm['shape'] = ' OR '.join(list_za_zpm['shape'])
-
-
-            self.filter_za_nro['sql'] = ' OR '.join(list_za_nro['sql'])
-            self.filter_za_nro['shape'] = ' OR '.join(list_za_nro['shape'])
-
-
-        def create_expression_za_zpa(field):
-
-            list_za_zpa = {}
-            list_za_zpa['sql'] = []
-            list_za_zpa['shape'] = []
-
-            list_za_zpm = {}
-            list_za_zpm['sql'] = []
-            list_za_zpm['shape'] = []
-
-            list_za_nro = {}
-            list_za_nro['sql'] = []
-            list_za_nro['shape'] = []
-
-            for item in self.selected_za_zpa_data:
-                item_zpm = re.search('[A-Z0-9_]*_PA',item)[0][:-3]
-
-                field = '"{}"'.format(LAYERS['ZONE_DE_PA'][1])
-                list_za_zpa['sql'].append(field + ' ~ \'' + str(item) + '$\'' + ' OR ' +  field + ' ~ \'' + str(item) + ',\'' )
-                list_za_zpa['shape'].append(field + ' LIKE \'' + str(item) + '\'' )
-
-                field = '"{}"'.format(LAYERS['ZONE_DE_PM'][1])
-                list_za_zpm['sql'].append(field + ' ~ \'' + str(item_zpm) + '$\'' + ' OR ' +  field + ' ~ \''  + str(item_zpm) + ',\'' )
-                list_za_zpm['shape'].append(field + ' LIKE \'' + str(item_zpm) + '\'' )
-
-                field = '"{}"'.format(LAYERS['ZONE_DE_NRO'][1])
-                list_za_nro['sql'].append(field + ' ~ \'' + str(item[:5]) + '$\'' + ' OR ' +  field + ' ~ \''  + str(item[:5]) + ',\'' )
-                list_za_nro['shape'].append(field + ' LIKE \'' + str(item[:5]) + '\'' )
-
-            self.filter_za_zpa['sql'] = ' OR '.join(list_za_zpa['sql'])
-            self.filter_za_zpa['shape'] = ' OR '.join(list_za_zpa['shape'])
-
-            self.filter_za_zpm['sql'] = ' OR '.join(list_za_zpm['sql'])
-            self.filter_za_zpm['shape'] = ' OR '.join(list_za_zpm['shape'])
-
-            self.filter_za_nro['sql'] = ' OR '.join(list_za_nro['sql'])
-            self.filter_za_nro['shape'] = ' OR '.join(list_za_nro['shape'])
-
-
-        def create_expression_commune(field):
-
-            list_commune = {}
-            list_commune['sql'] = []
-            list_commune['shape'] = []
-
-            for item in self.selected_commune_data:
-
-                field = '"{}"'.format(LAYERS['CONTOURS_COMMUNES'][1])
-                list_commune['sql'].append(field + ' ~ \'' + str(item) + '$\'' + ' OR ' +  field + ' ~ \''  + str(item) + ',\'' )
-                list_commune['shape'].append(field + ' LIKE \'' + str(item) + '\'')
-            self.filter_commune['sql'] = ' OR '.join(list_commune['sql'])
-            self.filter_commune['shape'] = ' OR '.join(list_commune['shape'])
-
-
-
-        if field == LAYERS['ZONE_DE_NRO'][1]:
-            create_expression_za_nro(field)
-
-        elif field == LAYERS['ZONE_DE_PM'][1]:
-            create_expression_za_zpm(field)
-
-        if field == LAYERS['ZONE_DE_PA'][1]:
-            create_expression_za_zpa(field)
-
-        if field == LAYERS['CONTOURS_COMMUNES'][1]:
-            create_expression_commune(field)
-
-
-
-
-
-    def filter_basic(self):
-        """Manage the basic filter logic"""
-
-        if len(self.selected_za_nro_data) > 0:
-
-            self.create_expressions(LAYERS['ZONE_DE_NRO'][1])
-
-            for layer in self.layers['sql']:
-                field_zpm_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_NRO'][1])
-                if field_zpm_idx != -1:
-                    layer.setSubsetString(self.filter_za_nro['sql'])
-
-            for layer in self.layers['shape']:
-                field_zpm_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_NRO'][1])
-                if field_zpm_idx != -1:
-                    layer.setSubsetString(self.filter_za_nro['shape'])
-
-            if len(self.selected_za_zpm_data) < 1 and LAYERS['ZONE_DE_PM'][2] == 'True':
-                self.populate.populate_za_zpm()
-            if len(self.selected_za_zpa_data) < 1 and LAYERS['ZONE_DE_PA'][2] == 'True':
-                self.populate.populate_za_zpa()
-            if len(self.selected_commune_data) < 1 and LAYERS['CONTOURS_COMMUNES'][2] == 'True':
-                self.populate.populate_commune()
-
-
-        if len(self.selected_za_zpm_data) > 0:
-
-            self.create_expressions(LAYERS['ZONE_DE_PM'][1])
-
-            for layer in self.layers['sql']:
-                field_zpm_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PM'][1])
-                if field_zpm_idx == -1:
-                    layer.setSubsetString(self.filter_za_nro['sql'])
-                else:
-                    layer.setSubsetString(self.filter_za_zpm['sql'])
-
-            for layer in self.layers['shape']:
-                field_zpm_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PM'][1])
-                if field_zpm_idx == -1:
-                    layer.setSubsetString(self.filter_za_nro['shape'])
-                else:
-                    layer.setSubsetString(self.filter_za_zpm['shape'])
-
-
-            if len(self.selected_za_zpa_data) < 1 and LAYERS['ZONE_DE_PA'][2] == 'True':
-                self.populate.populate_za_zpa()
-            if len(self.selected_commune_data) < 1 and LAYERS['CONTOURS_COMMUNES'][2] == 'True':
-                self.populate.populate_commune()
-
-
-
-
-        if len(self.selected_za_zpa_data) > 0:
-
-            self.create_expressions(LAYERS['ZONE_DE_PA'][1])
-
-            for layer in self.layers:
-                for layer in self.layers['sql']:
-                    field_zpm_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PM'][1])
-                    field_zpa_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PA'][1])
-                    if field_zpa_idx != -1 and field_zpm_idx != -1:
-                        layer.setSubsetString(self.filter_za_zpa['sql'])
-                    elif field_zpa_idx == -1 and field_zpm_idx != -1:
-                        layer.setSubsetString(self.filter_za_zpm['sql'])
-                    elif field_zpm_idx == -1:
-                        layer.setSubsetString(self.filter_za_nro['sql'])
-
-
-                for layer in self.layers['shape']:
-                    field_zpm_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PM'][1])
-                    field_zpa_idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PA'][1])
-                    if field_zpa_idx != -1 and field_zpm_idx != -1:
-                        layer.setSubsetString(self.filter_za_zpa['shape'])
-                    elif field_zpa_idx == -1 and field_zpm_idx != -1:
-                        layer.setSubsetString(self.filter_za_zpm['shape'])
-                    elif field_zpm_idx == -1:
-                        layer.setSubsetString(self.filter_za_nro['shape'])
-
-
-        if len(self.selected_commune_data) > 0:
-
-            self.create_expressions(LAYERS['CONTOURS_COMMUNES'][1])
-
-            field_name = LAYERS['ZONE_DE_PM'][1]
-            from_layer = PROJECT.mapLayersByName(LAYERS['CONTOURS_COMMUNES'][0])[0]
-            if 'dbname' in from_layer.dataProvider().dataSourceUri():
-                layer_type = 'sql'
-                expression = self.filter_commune['sql']
-            else:
-                layer_type = 'shape'
-                expression = self.filter_commune['shape']
-            self.filter_from = 2
-            self.filter_advanced(expression,from_layer, field_name)
-
 
     def filter_expression(self, layer):
         """Manage the creation of the origin filtering expression"""
@@ -402,9 +546,6 @@ class FilterMate_(QgsTask):
             for feat in layer.getFeatures():
                 first_feat = feat
                 break
-
-
-
 
             exp = QgsExpression(self.expression)
             context = QgsExpressionContext()
@@ -451,12 +592,6 @@ class FilterMate_(QgsTask):
                     print('(' + old_subset + ') ' + self.from_operator + ' ' + self.filter)
                 else:
                     layer.setSubsetString(self.filter)
-
-
-
-
-
-
 
 
     def filter_advanced(self, expression, from_layer, field_name):
@@ -554,9 +689,6 @@ class FilterMate_(QgsTask):
                         print('Le champ ' + field_name + ' non présent dans la couche ' + layer.name())
                     else:
                         layer.setSubsetString(self.filter_items['shape'])
-
-
-
 
         return True
 
@@ -674,143 +806,6 @@ class FilterMate_(QgsTask):
                 break
 
 
-
-
-    def run(self):
-        """Main function that run the right method from init parameters"""
-
-
-        selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
-        self.filter_multi = self.dockwidget.checkBox_multi_filter.checkState()
-        self.filter_add = self.dockwidget.checkBox_filter_add.checkState()
-        self.filter_add_multi = self.dockwidget.checkBox_add_multi.checkState()
-        self.multi_operator = self.dockwidget.comboBox_filter_add_multi.currentText()
-
-
-        """We split the selected layers to be filtered in two categories sql and others"""
-        self.layers = {}
-        self.layers['sql'] = []
-        self.layers['shape'] = []
-
-
-        for item in selected_layers_data:
-
-            layers =  PROJECT.mapLayersByName(item)
-            for layer in layers:
-                if 'dbname' in layer.dataProvider().dataSourceUri():
-                    self.layers['sql'].append(layer)
-
-                else:
-                    self.layers['shape'].append(layer)
-
-        """For each layer we search the primary key"""
-        self.fields_id = {}
-
-        for layer in self.layers['sql']:
-            for field in layer.fields():
-                if 'ID' in str(field.name()).upper():
-                    self.fields_id[layer.id()] = field.name()
-                    break
-
-        for layer in self.layers['shape']:
-            for field in layer.fields():
-                if 'ID' in str(field.name()).upper():
-                    self.fields_id[layer.id()] = field.name()
-                    break
-
-
-        if self.action == 'start':
-            """We will filter layers"""
-
-
-            avance = self.dockwidget.checkBox_filter_layer.checkState()
-
-            """For basic filter"""
-            self.selected_za_nro_data = self.dockwidget.comboBox_select_za_nro.checkedItems()
-            self.selected_za_zpm_data = self.dockwidget.comboBox_select_za_zpm.checkedItems()
-            self.selected_za_zpa_data = self.dockwidget.comboBox_select_za_zpa.checkedItems()
-            self.selected_commune_data = self.dockwidget.comboBox_select_commune.checkedItems()
-            self.filter_za_nro = {}
-            self.filter_za_nro['sql'] = ''
-            self.filter_za_nro['shape'] = ''
-
-            self.filter_za_zpm = {}
-            self.filter_za_zpm['sql'] = ''
-            self.filter_za_zpm['shape'] = ''
-
-            self.filter_za_zpa = {}
-            self.filter_za_zpa['sql'] = ''
-            self.filter_za_zpa['shape'] = ''
-
-            self.filter_commune = {}
-            self.filter_commune['sql'] = ''
-            self.filter_commune['shape'] = ''
-
-
-
-            if self.current_index == 0:
-                """If user is on basic tab we launch the basic filtering"""
-                self.filter_basic()
-
-            elif self.current_index == 1 and avance == 0:
-                """If user is on widget tab and the advanced checkbox is not checked then we launch the widget filtering"""
-                self.filter_widget()
-
-
-            elif avance == 2:
-                """If user is on widget tab and the advanced checkbox is checked then we launch the advanced filtering"""
-                expression = self.dockwidget.mFieldExpressionWidget.currentText()
-
-                expression = expression.replace("'", "\'")
-                layer_name = self.dockwidget.comboBox_multi_layers.currentText()
-                from_layer = PROJECT.mapLayersByName(layer_name)[0]
-
-                status = self.filter_advanced(expression, from_layer, None)
-                #self.managerWidgets.update_widgets()
-                if not status:
-                    return False
-
-        elif self.action == 'end':
-            """We will unfilter the layers"""
-
-            for layer in self.layers['sql']:
-                if isinstance(layer, QgsVectorLayer):
-
-                    layer.setSubsetString('')
-            for layer in self.layers['shape']:
-                if isinstance(layer, QgsVectorLayer):
-
-                    layer.setSubsetString('')
-
-            """Then reset the basic comboboxes"""
-            if LAYERS['ZONE_DE_NRO'][2] == 'True':
-                self.populate.populate_za_nro()
-            if LAYERS['ZONE_DE_PM'][2] == 'True':
-                self.populate.populate_za_zpm()
-            if LAYERS['ZONE_DE_PA'][2] == 'True':
-                self.populate.populate_za_zpa()
-            if LAYERS['CONTOURS_COMMUNES'][2] == 'True':
-                self.populate.populate_commune()
-
-
-
-
-        elif self.action == 'export':
-            """We will export layers"""
-
-            status = self.export_to_package()
-            return status
-
-
-
-
-
-        return True
-        #except Exception as e:
-            #self.exception = e
-            #print(self.exception)
-            #return False
-
     def cancel(self):
         QgsMessageLog.logMessage(
             '"{name}" was canceled'.format(name=self.description()))
@@ -910,163 +905,6 @@ class populateData:
             combobox.deselectAllOptions()
 
 
-
-    def populate_za_nro(self):
-
-
-        try:
-            print('populate_nro')
-            list_za_nro = []
-
-            layer = PROJECT.mapLayersByName(LAYERS['ZONE_DE_NRO'][0])[0]
-            idx = layer.fields().indexFromName(LAYERS['ZONE_DE_NRO'][1])
-
-            for feature in layer.getFeatures():
-
-                if feature.attributes()[idx] not in list_za_nro:
-                    list_za_nro.append(str(feature.attributes()[idx]))
-
-
-            list_za_nro = sorted(list_za_nro)
-            self.dockwidget.comboBox_select_za_nro.clear()
-            self.dockwidget.comboBox_select_za_nro.addItems(list_za_nro)
-
-        except Exception as e:
-            self.exception = e
-            print(self.exception)
-            return False
-
-    def populate_za_zpm(self):
-
-        try:
-            print('populate_pmz')
-            list_za_zpm = []
-
-            layer = PROJECT.mapLayersByName(LAYERS['ZONE_DE_PM'][0])[0]
-            idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PM'][1])
-
-            selected_za_nro_data = self.dockwidget.comboBox_select_za_nro.checkedItems()
-            selected_za_nro = []
-
-            if len(selected_za_nro_data) > 0:
-                for item in selected_za_nro_data:
-                    selected_za_nro.append('"{}"  ILIKE \''.format(LAYERS['ZONE_DE_NRO'][1]) + str(item) + '\'')
-                filter_za_nro = ' OR '.join(selected_za_nro)
-
-                layer.selectByExpression(filter_za_nro, QgsVectorLayer.SetSelection)
-                layer_selection = layer.selectedFeatures()
-
-            else:
-                layer_selection = layer.getFeatures()
-
-            for feature in layer_selection:
-                if feature.attributes()[idx] not in list_za_zpm:
-                    list_za_zpm.append(str(feature.attributes()[idx]))
-
-            layer.removeSelection()
-
-
-
-
-            list_za_zpm = sorted(list_za_zpm)
-            self.dockwidget.comboBox_select_za_zpm.clear()
-            self.dockwidget.comboBox_select_za_zpm.addItems(list_za_zpm)
-
-        except Exception as e:
-            self.exception = e
-            print(self.exception)
-            return False
-
-    def populate_za_zpa(self):
-
-        try:
-            print('populate_zpa')
-            list_za_zpa = []
-
-            layer = PROJECT.mapLayersByName(LAYERS['ZONE_DE_PA'][0])[0]
-            idx = layer.fields().indexFromName(LAYERS['ZONE_DE_PA'][1])
-
-            selected_za_nro_data = self.dockwidget.comboBox_select_za_nro.checkedItems()
-            selected_za_zpm_data = self.dockwidget.comboBox_select_za_zpm.checkedItems()
-            selected_za_nro = []
-            selected_za_zpm = []
-
-
-            if len(selected_za_nro_data) > 0 and len(selected_za_zpm_data) < 1:
-                for item in selected_za_nro_data:
-                    selected_za_nro.append('"{}"  ILIKE \''.format(LAYERS['ZONE_DE_NRO'][1]) + str(item) + '\'')
-                filter_za_nro = ' OR '.join(selected_za_nro)
-                layer.selectByExpression(filter_za_nro, QgsVectorLayer.SetSelection)
-                layer_selection = layer.selectedFeatures()
-
-            elif (len(selected_za_zpm_data) > 0 and len(selected_za_nro_data) < 1) or (len(selected_za_zpm_data) > 0 and len(selected_za_nro_data) > 0):
-                for item in selected_za_zpm_data:
-                    selected_za_zpm.append('"{}"  ILIKE \''.format(LAYERS['ZONE_DE_PM'][1]) + str(item) + '\'')
-                filter_za_zpm = ' OR '.join(selected_za_zpm)
-                layer.selectByExpression(filter_za_zpm, QgsVectorLayer.SetSelection)
-                layer_selection = layer.selectedFeatures()
-
-
-            elif len(selected_za_nro_data) < 1 and len(selected_za_zpm_data) < 1:
-                layer_selection = layer.getFeatures()
-
-            for feature in layer_selection:
-                if feature.attributes()[idx] not in list_za_zpa:
-                    list_za_zpa.append(str(feature.attributes()[idx]))
-
-            layer.removeSelection()
-
-
-
-
-            list_za_zpa = sorted(list_za_zpa)
-            self.dockwidget.comboBox_select_za_zpa.clear()
-            self.dockwidget.comboBox_select_za_zpa.addItems(list_za_zpa)
-
-        except Exception as e:
-            self.exception = e
-            print(self.exception)
-            return False
-    def populate_commune(self):
-
-        try:
-            print('populate_commune')
-            list_commune = []
-
-            layer = PROJECT.mapLayersByName(LAYERS['CONTOURS_COMMUNES'][0])[0]
-            idx = layer.fields().indexFromName(LAYERS['CONTOURS_COMMUNES'][1])
-
-            selected_za_nro_data = self.dockwidget.comboBox_select_za_nro.checkedItems()
-            selected_za_nro = []
-
-            if len(selected_za_nro_data) > 0:
-                for item in selected_za_nro_data:
-                    selected_za_nro.append('"{}"  ~ \''.format(LAYERS['ZONE_DE_NRO'][1]) + str(item) + '\'')
-                filter_za_nro = ' OR '.join(selected_za_nro)
-
-                layer.selectByExpression(filter_za_nro, QgsVectorLayer.SetSelection)
-                layer_selection = layer.selectedFeatures()
-
-            else:
-                layer_selection = layer.getFeatures()
-
-            for feature in layer_selection:
-                if feature.attributes()[idx] not in list_commune:
-                    list_commune.append(str(feature.attributes()[idx]))
-
-            layer.removeSelection()
-
-
-            list_commune = sorted(list_commune)
-            self.dockwidget.comboBox_select_commune.clear()
-            self.dockwidget.comboBox_select_commune.addItems(list_commune)
-
-        except Exception as e:
-            self.exception = e
-            print(self.exception)
-            return False
-
-
     def populate_predicat(self):
 
         predicats = ['0:intersecte','1:contient','2:est disjoint','3:égal','4:touche','5:chevauche','6:est à l\'intérieur','7:croise']
@@ -1088,16 +926,13 @@ class populateData:
                 list_layers.append(layer_name)
 
 
-
-
-        self.dockwidget.comboBox_multi_layers.clear()
         self.dockwidget.comboBox_select_layers.clear()
-        self.dockwidget.comboBox_multi_layers.addItems(list_layers)
         self.dockwidget.comboBox_select_layers.addItems(list_layers)
         self.dockwidget.comboBox_select_layers.selectAllOptions()
-        self.dockwidget.comboBox_multi_layers.setCurrentIndex(0)
-
-
+        
+        self.dockwidget.comboBox_export_layers.clear()
+        self.dockwidget.comboBox_export_layers.addItems(list_layers)
+        self.dockwidget.comboBox_export_layers.selectAllOptions()
 
 
 
