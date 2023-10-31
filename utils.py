@@ -5,6 +5,7 @@ from qgis.core import *
 from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
 from qgis.utils import *
 from qgis.utils import iface
+
 import os.path
 from pathlib import Path
 import re
@@ -22,22 +23,26 @@ class FilterMateApp:
 
     PROJECT_LAYERS = {} 
 
+
     def __init__(self):
         self.iface = iface
         self.dockwidget = None
+        self.flags = {}
         self.run()
 
 
     def run(self):
         if self.dockwidget == None:
-            self.dockwidget = FilterMateDockWidget()
-
-            """Controller for populating and keep updated comboboxes"""
-            self.populate = populateData(self.dockwidget)
 
             init_layers = list(PROJECT.mapLayers().values())
 
             self.manage_project_layers(init_layers, 'add')
+
+            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS)
+
+            """Controller for populating and keep updated comboboxes"""
+            self.populate = populateData(self.dockwidget)
+
 
             # """Controller for dealing with filter widgets and the configuration model"""
             # self.managerWidgets = ManagerWidgets(self.dockwidget)
@@ -58,23 +63,21 @@ class FilterMateApp:
         """Keep the advanced filter combobox updated on adding or removing layers"""
 
         PROJECT.layersAdded.connect(partial(self.manage_project_layers, 'add'))
-        PROJECT.layersRemoved.connect(partial(self.manage_project_layers, 'remove'))
+        PROJECT.layersWillBeRemoved.connect(partial(self.manage_project_layers, 'remove'))
 
+        #PROJECT.loadingLayer.connect(partial(self.manage_flags, 'layers', 'loadingLayer'))
+        PROJECT.legendLayersAdded.connect(partial(self.manage_flags, 'layers', 'legendLayersAdded'))
+        PROJECT.layersRemoved.connect(partial(self.manage_flags, 'layers', 'layersRemoved'))
+
+
+
+        
         self.dockwidget.launchingTask.connect(self.manage_task)
 
-        self.change_currentLayerChanged_filter_by_selection(self.iface.activeLayer())
+        #self.dockwidget.gettingProjectLayers.connect(partial(self.dockwidget.get_project_layers_from_app, self.PROJECT_LAYERS))
 
-        self.dockwidget.mMapLayerComboBox_filter_by_selection.layerChanged.connect(self.change_MapLayerComboBox_filter_by_selection)
+        self.dockwidget.settingProjectLayers.connect(self.set_project_layers_from_dockwidget)
 
-        self.dockwidget.mFieldExpressionWidget_filter_by_selection.fieldChanged.connect(self.change_FieldExpressionWidget_filter_by_selection)
-
-
-
-        self.iface.layerTreeView().currentLayerChanged.connect(self.change_currentLayerChanged_filter_by_selection)
-
-        self.dockwidget.checkBox_filter_by_selection.stateChanged.connect(self.change_checkBox_filter_by_selection)
-
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.featureChanged.connect(self.change_FeaturePickerWidget_filter_by_selection)
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
         # self.managerWidgets.model.dataChanged.connect(self.qtree_signal)
@@ -85,80 +88,40 @@ class FilterMateApp:
         # self.managerWidgets.view.onLeaveEvent.connect(self.reload_config)
         #self.managerWidgets.view.onAddWidget.connect(lambda: self.reload_config('add'))
         #self.managerWidgets.view.onRemoveWidget.connect(lambda: self.reload_config('remove'))
-
-    def change_FeaturePickerWidget_filter_by_selection(self, feature):
-        layer = self.dockwidget.mFeaturePickerWidget_filter_by_selection.layer()
-
-        print(layer, feature, self.PROJECT_LAYERS[layer.id()])
-        if self.PROJECT_LAYERS[layer.id()][1]["is_selected"] == True:
-            layer.removeSelection()
-            layer.select([feature.id()])
-            if self.PROJECT_LAYERS[layer.id()][1]["has_tracking"] == True:
-                box = layer.boundingBoxOfSelected()
-                self.iface.mapCanvas().setExtent(box)
-                self.iface.mapCanvas().refresh()
-        
-
-    def change_checkBox_filter_by_selection(self):
-
-        layer = self.dockwidget.mFieldExpressionWidget_filter_by_selection.layer()
-
-        if self.dockwidget.checkBox_filter_by_selection.checkState() == 2:
-            self.PROJECT_LAYERS[layer.id()][1]["is_selected"] = True
-        else:
-            self.PROJECT_LAYERS[layer.id()][1]["is_selected"] = False
+    def manage_flags(self, flag_type, flag):
+        if flag_type == 'layers':
+            if flag == 'loadingLayer':
+                self.flags['is_managing_project_layers'] = True
+            elif flag == 'legendLayersAdded':
+                self.flags['is_managing_project_layers'] = False
+            elif flag == 'layersRemoved':
+                self.flags['is_managing_project_layers'] = False
 
 
+    def set_project_layers_from_dockwidget(self, project_layers):
+        if isinstance(project_layers, dict):
+            self.PROJECT_LAYERS = project_layers
+            
 
-    def change_FieldExpressionWidget_filter_by_selection(self):
-        layer = self.dockwidget.mFieldExpressionWidget_filter_by_selection.layer()
-        self.PROJECT_LAYERS[layer.id()][1]["display_expression"] = self.dockwidget.mFieldExpressionWidget_filter_by_selection.expression()
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setDisplayExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
-
-    def change_currentLayerChanged_filter_by_selection(self, layer):
-        
-        self.dockwidget.mMapLayerComboBox_filter_by_selection.setLayer(layer)
-        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setLayer(layer)
-        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
-
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setLayer(layer)
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setDisplayExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setFetchGeometry(True)
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setShowBrowserButtons(True)
-
-        if self.PROJECT_LAYERS[layer.id()][1]["is_selected"] == True:
-            self.dockwidget.checkBox_filter_by_selection.setCheckState(2)
-        else:
-            self.dockwidget.checkBox_filter_by_selection.setCheckState(0)
-
-
-    def change_MapLayerComboBox_filter_by_selection(self):
-
-        layer = self.dockwidget.mMapLayerComboBox_filter_by_selection.currentLayer()
-
-        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setLayer(layer)
-        self.dockwidget.mFieldExpressionWidget_filter_by_selection.setExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
-
-
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setLayer(layer)
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setDisplayExpression(self.PROJECT_LAYERS[layer.id()][1]["display_expression"])
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setFetchGeometry(True)
-        self.dockwidget.mFeaturePickerWidget_filter_by_selection.setShowBrowserButtons(True)
-        self.iface.setActiveLayer(layer)
 
     def manage_project_layers(self, layers, action):
 
-        self.json_template_layer_infos = '{"layer_type":"%s","layer_crs":"%s","layer_id":"%s","layer_name":"%s","primary_key_name":"%s"}'
-        self.json_template_layer_meta = '{"is_source_filter":false,"has_tracking":true,"is_selected":false,"is_already_subset":false,"display_expression":"%s"}'
-        
-        print(layers, action)
+        self.flags['is_managing_project_layers'] = True
+
+        self.json_template_layer_infos = '{"layer_type":"%s","layer_crs":"%s","layer_id":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","primary_key_is_numeric":%s}'
+        self.json_template_layer_meta = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_already_subset":false,"single_selection":{"expression":"%s"},"multiple_selection":{"expression":"%s"},"custom_selection":{"expression":"%s"} }'
         
         for layer in layers:
             if action == 'add':     
                 self.add_project_layer(layer)
             elif action == 'remove':
                 self.remove_project_layer(layer)
-                
+
+
+        if self.dockwidget != None:
+            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS) 
+            
+        self.flags['is_managing_project_layers'] = False
 
 
     def add_project_layer(self, layer):
@@ -168,7 +131,7 @@ class FilterMateApp:
 
             if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
         
-                primary_key_name = self.search_primary_key_from_layer(layer)
+                primary_key_name, primary_key_idx, primary_key_type, primary_key_is_numeric = self.search_primary_key_from_layer(layer)
 
                 if layer.providerType() == 'ogr':
 
@@ -188,17 +151,18 @@ class FilterMateApp:
                     else:
                         layer_type = 'ogr'
 
-                layer_infos = json.loads(self.json_template_layer_infos % (layer_type, layer.sourceCrs().authid(), layer.id(), layer.name(), primary_key_name))
-                layer_meta = json.loads(self.json_template_layer_meta % (str(primary_key_name)))
+                layer_infos = json.loads(self.json_template_layer_infos % (layer_type, layer.sourceCrs().authid(), layer.id(), layer.name(), primary_key_name, primary_key_idx, primary_key_type, str(primary_key_is_numeric).lower()))
+                layer_meta = json.loads(self.json_template_layer_meta % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
 
-                self.PROJECT_LAYERS[layer.id()] = (layer_infos, layer_meta)
+                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "meta": layer_meta}
 
 
     def remove_project_layer(self, layer_id):
-
-        if layer_id in self.PROJECT_LAYERS.keys():
-            self.PROJECT_LAYERS.pop(layer_id)
-
+        try:
+            del self.PROJECT_LAYERS[layer_id]
+            
+        except:
+            print("Layer id not found")
 
     def search_primary_key_from_layer(self, layer):
         """For each layer we search the primary key"""
@@ -208,16 +172,16 @@ class FilterMateApp:
             for field_id in primary_key_index:
                 if len(layer.uniqueValues(field_id)) == layer.featureCount():
                     field = layer.fields()[field_id]
-                    return field.name()
+                    return field.name(), field_id, field.typeName(), field.isNumeric()
         else:
             for field in layer.fields():
                 if 'ID' in str(field.name()).upper():
                     if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
-                        return field.name()
+                        return field.name(), field.id(), field.typeName(), field.isNumeric()
                     
             for field in layer.fields():
                 if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
-                    return field.name()
+                    return field.name(), field.id(), field.typeName(), field.isNumeric()
 
 
     def manage_task(self, task_name):
@@ -229,7 +193,7 @@ class FilterMateApp:
         
         assert task_name in list(self.tasks_descriptions.keys())
         
-        params = self.serialize_parameters(task_name)
+        #params = self.serialize_parameters(task_name)
 
         t0 = time.time()
         self.task = FilterEngineTask(self.tasks_descriptions[task_name], task_name, params)
@@ -241,38 +205,38 @@ class FilterMateApp:
 
         QgsApplication.taskManager().addTask(self.task)
 
-    def serialize_parameters(self, task_name):
+    # def serialize_parameters(self, task_name):
 
-        if task_name == 'filter':
+    #     if task_name == 'filter':
 
-            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
-            self.filter_multi = self.dockwidget.checkBox_multi_filter.checkState()
-            self.filter_add = self.dockwidget.checkBox_filter_add.checkState()
-            self.from_operator = self.dockwidget.comboBox_filter_add.currentText()
-            self.filter_add_multi = self.dockwidget.checkBox_add_multi.checkState()
-            self.multi_operator = self.dockwidget.comboBox_filter_add_multi.currentText()
-            self.current_index = self.dockwidget.current_index
-            avance = self.dockwidget.checkBox_filter_layer.checkState()
-            self.filter_geo = self.dockwidget.checkBox_filter_geo.checkState()
-            with_tampon = self.dockwidget.checkBox_tampon.checkState()
-            predicats = self.dockwidget.mComboBox_filter_geo.checkedItems()
-            distance = float(self.dockwidget.mQgsDoubleSpinBox_tampon.value())
+    #         selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
+    #         self.filter_multi = self.dockwidget.checkBox_multi_filter.checkState()
+    #         self.filter_add = self.dockwidget.checkBox_filter_add.checkState()
+    #         self.from_operator = self.dockwidget.comboBox_filter_add.currentText()
+    #         self.filter_add_multi = self.dockwidget.checkBox_add_multi.checkState()
+    #         self.multi_operator = self.dockwidget.comboBox_filter_add_multi.currentText()
+    #         self.current_index = self.dockwidget.current_index
+    #         avance = self.dockwidget.checkBox_filter_layer.checkState()
+    #         self.filter_geo = self.dockwidget.checkBox_filter_geo.checkState()
+    #         with_tampon = self.dockwidget.checkBox_tampon.checkState()
+    #         predicats = self.dockwidget.mComboBox_filter_geo.checkedItems()
+    #         distance = float(self.dockwidget.mQgsDoubleSpinBox_tampon.value())
 
-            expression = self.dockwidget.mFieldExpressionWidget.currentText()
+    #         expression = self.dockwidget.mFieldExpressionWidget.currentText()
 
-            expression = expression.replace("'", "\'")
-            layer_name = self.dockwidget.mMapLayerComboBox_filter_by_selection.currentText()
+    #         expression = expression.replace("'", "\'")
+    #         layer_name = self.dockwidget.mMapLayerComboBox_filter_by_selection.currentText()
 
-        elif task_name == 'unfilter':
+    #     elif task_name == 'unfilter':
 
-            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
+    #         selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
 
-        elif task_name == 'export':    
+    #     elif task_name == 'export':    
 
-            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
-            format = self.dockwidget.comboBox_export_type.currentText()
-            name = str(self.dockwidget.lineEdit_export.text()) if self.dockwidget.lineEdit_export.text() != '' else 'output'
-            crs = self.dockwidget.mQgsProjectionSelectionWidget.crs()
+    #         selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
+    #         format = self.dockwidget.comboBox_export_type.currentText()
+    #         name = str(self.dockwidget.lineEdit_export.text()) if self.dockwidget.lineEdit_export.text() != '' else 'output'
+    #         crs = self.dockwidget.mQgsProjectionSelectionWidget.crs()
 
 
 
@@ -910,8 +874,8 @@ class populateData:
         predicats = ['0:intersecte','1:contient','2:est disjoint','3:égal','4:touche','5:chevauche','6:est à l\'intérieur','7:croise']
 
 
-        self.dockwidget.mComboBox_filter_geo.clear()
-        self.dockwidget.mComboBox_filter_geo.addItems(predicats)
+        self.dockwidget.mComboBox_filtering_geometric_predicates.clear()
+        self.dockwidget.mComboBox_filtering_geometric_predicates.addItems(predicats)
 
     def populate_layers(self):
 
@@ -926,13 +890,13 @@ class populateData:
                 list_layers.append(layer_name)
 
 
-        self.dockwidget.comboBox_select_layers.clear()
-        self.dockwidget.comboBox_select_layers.addItems(list_layers)
-        self.dockwidget.comboBox_select_layers.selectAllOptions()
+        self.dockwidget.comboBox_filtering_layers_to_filter.clear()
+        self.dockwidget.comboBox_filtering_layers_to_filter.addItems(list_layers)
+        self.dockwidget.comboBox_filtering_layers_to_filter.selectAllOptions()
         
-        self.dockwidget.comboBox_export_layers.clear()
-        self.dockwidget.comboBox_export_layers.addItems(list_layers)
-        self.dockwidget.comboBox_export_layers.selectAllOptions()
+        self.dockwidget.comboBox_exporting_layers.clear()
+        self.dockwidget.comboBox_exporting_layers.addItems(list_layers)
+        self.dockwidget.comboBox_exporting_layers.selectAllOptions()
 
 
 
