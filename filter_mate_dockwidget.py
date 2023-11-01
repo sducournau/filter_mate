@@ -868,46 +868,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def dialog_export_folder(self):
 
-        if self.pushButton_checkable_export_folder.isChecked() == True:
+        if self.pushButton_checkable_exporting_output_folder.isChecked() == True:
             
             folderpath = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
 
             if folderpath:
-                self.lineEdit_export_folder.setText(folderpath)
+                self.lineEdit_exporting_output_folder.setText(folderpath)
                 print(folderpath)
             else:
-                self.pushButton_checkable_export_folder.setChecked(False)
+                self.pushButton_checkable_exporting_output_folder.setChecked(False)
         else:
-            self.lineEdit_export_folder.clear()
+            self.lineEdit_exporting_output_folder.clear()
 
     def reset_export_folder(self):
 
-        if str(self.lineEdit_export_folder.text()) == '':
-            self.lineEdit_export_folder.clear()
-            self.pushButton_checkable_export_folder.setChecked(False)
+        if str(self.lineEdit_exporting_output_folder.text()) == '':
+            self.lineEdit_exporting_output_folder.clear()
+            self.pushButton_checkable_exporting_output_folder.setChecked(False)
 
 
     def dialog_export_zip(self):
 
-        if self.pushButton_checkable_export_zip.isChecked() == True:
+        if self.pushButton_checkable_exporting_zip.isChecked() == True:
 
             
             filepath = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
 
             if filepath:
-                self.lineEdit_export_zip.setText(filepath)
+                self.lineEdit_exporting_zip.setText(filepath)
                 print(filepath)
             else:
-                self.pushButton_checkable_export_zip.setChecked(False)
+                self.pushButton_checkable_exporting_zip.setChecked(False)
         else:
-            self.lineEdit_export_zip.clear()
+            self.lineEdit_exporting_zip.clear()
 
 
     def reset_export_zip(self):
 
-        if str(self.lineEdit_export_zip.text()) == '':
-            self.lineEdit_export_zip.clear()
-            self.pushButton_checkable_export_zip.setChecked(False)
+        if str(self.lineEdit_exporting_zip.text()) == '':
+            self.lineEdit_exporting_zip.clear()
+            self.pushButton_checkable_exporting_zip.setChecked(False)
 
 
     def select_tabTools_index(self, i):
