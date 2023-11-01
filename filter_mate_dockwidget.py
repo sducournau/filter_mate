@@ -691,11 +691,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.comboBox_filtering_layers_to_filter.setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)
                     if len(layer_props["filtering"]["layers_to_filter"]) > 0:
                         if layer_id in [layer_info["layer_id"] for layer_info in layer_props["filtering"]["layers_to_filter"]]:
-                            self.comboBox_filtering_layers_to_filter.setItemCheckState(i, True)
+                            self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Checked)
                         else:
-                            self.comboBox_filtering_layers_to_filter.setItemCheckState(i, False)   
+                            self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Unchecked)   
                     else:
-                        self.comboBox_filtering_layers_to_filter.setItemCheckState(i, False)
+                        self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Unchecked)
                     i += 1    
         else:
             i = 0
@@ -706,7 +706,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 
                 if key != self.current_layer.id():
                     self.comboBox_filtering_layers_to_filter.addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])                 
-                    self.comboBox_filtering_layers_to_filter.setItemCheckState(i, False)
+                    self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Unchecked)
                     i += 1    
 
 
@@ -1337,7 +1337,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if len(features) > 0 and expression != None:
                     self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression(expression)
             elif self.customCheckableComboBox_exploring_multiple_selection.currentVisibleFeatures() != False:
-                print(self.customCheckableComboBox_exploring_multiple_selection.currentVisibleFeatures())
                 features, expression = self.getExploringFeatures(self.customCheckableComboBox_exploring_multiple_selection.currentVisibleFeatures(), True)
                 if len(features) > 0 and expression != None:
                     self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression(expression)
@@ -1475,8 +1474,7 @@ class CustomIdentifyTool(QgsIdentifyMenu):
                 self.features_result.append(self.map_tool_identify.IdentifyResult(self.layer, feature, self.map_tool_identify.derivedAttributesForPoint(QgsPoint(feature_point_XY))))
 
             self.exec(self.features_result, feature_point_XY.toQPointF().toPoint())
-            
-            print(features)
+
             
     def canvasPressEvent(self, event):
         results = self.identify(event.x(), event.y(), [self.layer], QgsMapToolIdentify.TopDownAll)

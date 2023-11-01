@@ -1534,7 +1534,7 @@ color:black;
          <enum>QFrame::Panel</enum>
         </property>
         <property name="currentIndex">
-         <number>1</number>
+         <number>0</number>
         </property>
         <widget class="QWidget" name="FILTERING">
          <property name="geometry">
@@ -3282,7 +3282,7 @@ QComboBox QAbstractItemView {
                 <property name="iconSize">
                  <size>
                   <width>20</width>
-                  <height>30</height>
+                  <height>20</height>
                  </size>
                 </property>
                 <property name="separator">

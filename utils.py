@@ -38,6 +38,7 @@ class FilterMateApp:
             
 
             init_layers = list(PROJECT.mapLayers().values())
+            #self.remove_projectCustomProperties_layers_all()
 
             self.manage_project_layers(init_layers, 'add')
 
