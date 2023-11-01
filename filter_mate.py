@@ -85,7 +85,7 @@ class FilterMate:
         #print "** INITIALIZING FilterMate"
 
         self.pluginIsActive = False
-        self.app = None
+        self.app = False
 
 
     # noinspection PyMethodMayBeStatic
@@ -203,6 +203,7 @@ class FilterMate:
         # Commented next statement since it causes QGIS crashe
         # when closing the docked window:
         # self.dockwidget = None
+        #self.app = None
 
         self.pluginIsActive = False
 
@@ -286,14 +287,18 @@ class FilterMate:
 
             #print "** STARTING FilterMate"
 
-
+            
 
             # dockwidget may not exist if:
             #    first run of plugin
             #    removed on close (see self.onClosePlugin method)
-            if self.app == None:
-                # Create the dockwidget (after translation) and keep reference
+            if not self.app:
                 self.app = FilterMateApp()
+                self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+            else:
+                self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                self.app.dockwidget.show()
+            
 
 
 

@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>413</width>
-    <height>1148</height>
+    <height>1252</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -437,7 +437,7 @@ background: #bdc3c7;
       <property name="maximumSize">
        <size>
         <width>16777215</width>
-        <height>16777215</height>
+        <height>500</height>
        </size>
       </property>
       <property name="baseSize">
@@ -1534,15 +1534,15 @@ color:black;
          <enum>QFrame::Panel</enum>
         </property>
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <widget class="QWidget" name="FILTERING">
          <property name="geometry">
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>384</width>
-           <height>400</height>
+           <width>387</width>
+           <height>534</height>
           </rect>
          </property>
          <attribute name="label">
@@ -1779,82 +1779,6 @@ color:black;
                    </property>
                    <property name="toolTip">
                     <string>Filtrage additif pour la couche sélectionnée</string>
-                   </property>
-                   <property name="layoutDirection">
-                    <enum>Qt::LeftToRight</enum>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                   <property name="iconSize">
-                    <size>
-                     <width>35</width>
-                     <height>35</height>
-                    </size>
-                   </property>
-                   <property name="checkable">
-                    <bool>true</bool>
-                   </property>
-                   <property name="flat">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_21">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                  </spacer>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter_add">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="baseSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="font">
-                    <font>
-                     <family>Segoe UI</family>
-                    </font>
-                   </property>
-                   <property name="cursor">
-                    <cursorShape>PointingHandCursor</cursorShape>
-                   </property>
-                   <property name="mouseTracking">
-                    <bool>true</bool>
-                   </property>
-                   <property name="focusPolicy">
-                    <enum>Qt::ClickFocus</enum>
-                   </property>
-                   <property name="toolTip">
-                    <string>Filtrage additif pour les autres couches</string>
                    </property>
                    <property name="layoutDirection">
                     <enum>Qt::LeftToRight</enum>
@@ -2458,8 +2382,8 @@ QComboBox QAbstractItemView {
                 </property>
                 <property name="iconSize">
                  <size>
-                  <width>30</width>
-                  <height>30</height>
+                  <width>20</width>
+                  <height>20</height>
                  </size>
                 </property>
                 <property name="separator">
@@ -2528,112 +2452,6 @@ QComboBox QAbstractItemView {
                 </property>
                 <property name="toolTip">
                  <string>Couche de l'expression</string>
-                </property>
-                <property name="layoutDirection">
-                 <enum>Qt::LeftToRight</enum>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">QComboBox
-{
- background-color:#bdc3c7;
-border: 1px solid black;
-border-radius: 3px;
-padding: 3px 3px 3px 3px;
-color:black;
-
-}
-
-QComboBox:hover
-{
-
-border: 2px solid black;
-
-}
-
-QComboBox QAbstractItemView {
-
-  background: #bdc3c7;
-  selection-background-color: #34495e;
-	color:black;
-}
-
-
-
-
-</string>
-                </property>
-                <property name="maxVisibleItems">
-                 <number>20</number>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>AND</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>AND NOT</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>OR</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item>
-               <spacer name="verticalSpacer_9">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item>
-               <widget class="QComboBox" name="comboBox_filtering_layers_to_filter_add">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>240</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>16777215</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="baseSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <family>Segoe UI</family>
-                  <pointsize>8</pointsize>
-                  <weight>75</weight>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="cursor">
-                 <cursorShape>PointingHandCursor</cursorShape>
-                </property>
-                <property name="toolTip">
-                 <string>Les autres couches sélectionnées</string>
                 </property>
                 <property name="layoutDirection">
                  <enum>Qt::LeftToRight</enum>
@@ -2780,6 +2598,12 @@ QComboBox QAbstractItemView {
                 <property name="maxVisibleItems">
                  <number>20</number>
                 </property>
+                <property name="iconSize">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
                 <property name="separator">
                  <string>, </string>
                 </property>
@@ -2908,8 +2732,8 @@ border: 2px solid black;
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>383</width>
-           <height>400</height>
+           <width>387</width>
+           <height>534</height>
           </rect>
          </property>
          <attribute name="label">
@@ -3457,7 +3281,7 @@ QComboBox QAbstractItemView {
                 </property>
                 <property name="iconSize">
                  <size>
-                  <width>30</width>
+                  <width>20</width>
                   <height>30</height>
                  </size>
                 </property>
@@ -3939,7 +3763,7 @@ border: 2px solid black;
            <x>0</x>
            <y>0</y>
            <width>387</width>
-           <height>259</height>
+           <height>534</height>
           </rect>
          </property>
          <attribute name="label">
