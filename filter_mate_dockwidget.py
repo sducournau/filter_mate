@@ -599,14 +599,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         """SLOTS"""
         self.mMapLayerComboBox_filtering_current_layer.layerChanged.connect(self.current_layer_changed)
         self.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.layer_property_changed, 'layers_to_filter'))
+        self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
         self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.connect(partial(self.layer_property_changed, 'geometric_predicates'))
         self.mQgsDoubleSpinBox_filtering_buffer.textChanged.connect(partial(self.layer_property_changed, 'buffer'))
         
 
         self.pushButton_checkable_filtering_layers_to_filter.clicked.connect(partial(self.layer_property_changed, 'has_layers_to_filter'))
+        self.pushButton_checkable_filtering_current_layer_add.clicked.connect(partial(self.layer_property_changed, 'has_combined_filter_logic'))
         self.pushButton_checkable_filtering_geometric_predicates.clicked.connect(partial(self.layer_property_changed, 'has_geometric_predicates'))
         self.pushButton_checkable_filtering_buffer.clicked.connect(partial(self.layer_property_changed, 'has_buffer'))
-        
+
 
 
         self.pushButton_checkable_filtering_auto_current_layer.clicked.connect(self.filtering_auto_current_layer_changed)
@@ -809,6 +811,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.layer_property_changed, 'layers_to_filter'))
                 flag_value_changed = True
 
+        elif property == "has_combined_filter_logic":
+            if layer_props["filtering"]["has_combined_filter_logic"] is False and self.pushButton_checkable_filtering_current_layer_add.isChecked() is True:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_combined_filter_logic"] = True
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["combined_filter_logic"] = self.comboBox_filtering_current_layer_add.currentText()
+                flag_value_changed = True
+            elif layer_props["filtering"]["has_combined_filter_logic"] is True and self.pushButton_checkable_filtering_current_layer_add.isChecked() is False:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_combined_filter_logic"] = False
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["combined_filter_logic"] = ''
+                self.comboBox_filtering_current_layer_add.currentTextChanged.disconnect()
+                self.comboBox_filtering_current_layer_add.setCurrentIndex(0)
+                self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
+                flag_value_changed = True
+            
+        elif property == "combined_filter_logic":
+            if layer_props["filtering"]["has_combined_filter_logic"] is True and self.pushButton_checkable_filtering_layers_to_filter.isChecked() is True:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["combined_filter_logic"] = self.comboBox_filtering_current_layer_add.currentText()
+                flag_value_changed = True
+            else:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["combined_filter_logic"] = ''
+                self.comboBox_filtering_current_layer_add.currentTextChanged.disconnect()
+                self.comboBox_filtering_current_layer_add.setCurrentIndex(0)
+                self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
+                flag_value_changed = True
 
         elif property == "has_geometric_predicates":
             self.filtering_geometric_predicates_state_changed()
@@ -1194,7 +1219,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if self.current_layer == None:
             return
         
-          
+        #self.exploring_link_widgets()
 
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
@@ -1237,7 +1262,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.mFieldExpressionWidget_exploring_custom_selection.setLayer(self.current_layer)
         self.mFieldExpressionWidget_exploring_custom_selection.setExpression(layer_props["exploring"]["custom_selection_expression"])
 
-        self.exploring_link_widgets()
+        
 
 
         if layer_props["exploring"]["is_selecting"] == True:
@@ -1298,6 +1323,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.pushButton_checkable_filtering_buffer.setChecked(False)
             self.mQgsDoubleSpinBox_filtering_buffer.setValue(0.0)
 
+        self.filtering_geometric_predicates_state_changed()
         self.filtering_buffer_state_changed()
 
         self.mQgsDoubleSpinBox_filtering_buffer.textChanged.connect(partial(self.layer_property_changed, 'buffer'))
@@ -1315,6 +1341,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(self.exploring_source_params_changed)
         self.mMapLayerComboBox_filtering_current_layer.layerChanged.connect(self.current_layer_changed)
 
+        self.exploring_link_widgets()
             
 
     def exploring_link_widgets(self, expression=None):

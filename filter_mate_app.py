@@ -154,7 +154,7 @@ class FilterMateApp:
 
         self.json_template_layer_infos = '{"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","primary_key_is_numeric":%s}'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linked":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0}'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combined_filter_logic":false,"combined_filter_logic":\'\',"has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0}'
 
         for layer in layers:
             if action == 'add':     
@@ -356,66 +356,42 @@ class FilterEngineTask(QgsTask):
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
-
+        self.predicats = {"intersect":"ST_Intersects","contain":"ST_Contains","disjoint":"ST_Disjoint","equal":"ST_Equals","ST_Touches":"ST_Intersects","overlap":"ST_Overlaps","are within":"ST_Within","cross":"ST_Crosses"}
 
     def run(self):
         """Main function that run the right method from init parameters"""
 
+
+        self.source_layer = PROJECT.mapLayersByName(layer_name)[0]
+        layers = [layer for layer in PROJECT.mapLayersByName(self.task_parameters["info"]["layer_name"]) if layer.id() == self.task_parameters["info"]["layer_id"]]
+        if len(layers) == 1:
+            self.source_layer = layers[0]
+
+
         """We split the selected layers to be filtered in two categories sql and others"""
         self.layers = {}
-        self.layers['ogr'] = []
-        self.layers['sqlite'] = []
-        self.layers['postgresql'] = []
 
-        for item in selected_layers_data:
+        if self.task_parameters["filtering"]["has_layers_to_filter"] == True:
+            for layer_props in self.task_parameters["filtering"]["layers_to_filter"]:
+                layer_props["layer_provider_type"]
+                if layer_props["layer_provider_type"] not in self.layers:
+                    self.layers[layer_props["layer_provider_type"]] = []
 
-            layers =  PROJECT.mapLayersByName(item)
-            for layer in layers:
-                if layer.isSpatial():
-                    if layer.providerType() == 'ogr':
-                        capabilities = layer.capabilitiesString().split(', ')
-                        if 'Transactions' in capabilities:
-                            self.layers['sqlite'].append(layer)
-                        else:
-                            self.layers['ogr'].append(layer)
-
-                    elif layer.providerType() == 'postgres':
-                        self.layers['postgresql'].append(layer)
-
-                    else:
-                        capabilities = layer.capabilitiesString().split(', ')
-                        if 'Transactions' in capabilities:
-                            self.layers['sqlite'].append(layer)
-                        else:
-                            self.layers['ogr'].append(layer)
-
-
-
-
+                layers = [layer for layer in PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
+                if len(layers) == 1:
+                    self.layers[layer_props["layer_provider_type"]].append(layers[0], layer_props)
+   
 
         if self.task_action == 'filter':
             """We will filter layers"""
 
+            self.source_layer
+            
 
-        
-            if self.current_index == 0:
-                """If user is on basic tab we launch the basic filtering"""
-                self.filter_basic()
-
-            elif self.current_index == 1 and avance == 0:
-                """If user is on widget tab and the advanced checkbox is not checked then we launch the widget filtering"""
-                self.filter_widget()
-
-
-            elif avance == 2:
-                """If user is on widget tab and the advanced checkbox is checked then we launch the advanced filtering"""
-
-                from_layer = PROJECT.mapLayersByName(layer_name)[0]
-
-                status = self.filter_advanced(expression, from_layer, None)
-                #self.managerWidgets.update_widgets()
-                if not status:
-                    return False
+            status = self.filter_advanced(expression, from_layer, None)
+            #self.managerWidgets.update_widgets()
+            if not status:
+                return False
                 
 
         elif self.task_action == 'unfilter':
@@ -535,29 +511,8 @@ class FilterEngineTask(QgsTask):
     def filter_advanced(self, expression, from_layer, field_name):
         """Manage the advanced filtering"""
 
-
-        if 'dbname' in from_layer.dataProvider().dataSourceUri():
-            layer_type = 'sql'
-        else:
-            layer_type = 'shape'
-
-        self.expression = expression
-
-
-
-        """We create the origin expression"""
-        if self.filter_multi == 2:
-            for layer in self.layers['sql']:
-
-                self.filter_expression(layer)
-
-            for layer in self.layers['shape']:
-
-                self.filter_expression(layer)
-
-
-        else:
-            self.filter_expression(from_layer)
+       
+        self.filter_expression(from_layer)
 
         if self.filter_geo == 2:
             """If geospatial filter is activated"""

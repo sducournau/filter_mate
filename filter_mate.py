@@ -35,7 +35,7 @@ from qgis.PyQt.QtWidgets import QApplication
 from .resources import *
 import os
 import os.path
-from .utils import *
+from .filter_mate_app import *
 
 from qgis.PyQt.QtGui import QIcon
 
