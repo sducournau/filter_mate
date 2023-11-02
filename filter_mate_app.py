@@ -154,7 +154,7 @@ class FilterMateApp:
 
         self.json_template_layer_infos = '{"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","primary_key_is_numeric":%s}'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linked":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combined_filter_logic":false,"combined_filter_logic":\'\',"has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0}'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combined_filter_logic":false,"combined_filter_logic":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0}'
 
         for layer in layers:
             if action == 'add':     
@@ -356,7 +356,7 @@ class FilterEngineTask(QgsTask):
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
-        self.predicats = {"intersect":"ST_Intersects","contain":"ST_Contains","disjoint":"ST_Disjoint","equal":"ST_Equals","ST_Touches":"ST_Intersects","overlap":"ST_Overlaps","are within":"ST_Within","cross":"ST_Crosses"}
+        self.predicats = {"Intersect":"ST_Intersects","Contain":"ST_Contains","Disjoint":"ST_Disjoint","Equal":"ST_Equals","Touch":"ST_Touches","Overlap":"ST_Overlaps","Are within":"ST_Within","Cross":"ST_Crosses"}
 
     def run(self):
         """Main function that run the right method from init parameters"""

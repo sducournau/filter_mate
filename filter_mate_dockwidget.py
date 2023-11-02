@@ -671,7 +671,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     
     def populate_predicats_chekableCombobox(self):
 
-        self.predicats = ["intersect","contain","disjoint","equal","touch","overlap","are within","cross"]
+        self.predicats = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
         self.mComboBox_filtering_geometric_predicates.clear()
         self.mComboBox_filtering_geometric_predicates.addItems(self.predicats)
 
@@ -1219,7 +1219,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if self.current_layer == None:
             return
         
-        #self.exploring_link_widgets()
+        
 
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
@@ -1300,6 +1300,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
 
+        self.comboBox_filtering_current_layer_add.currentTextChanged.disconnect()
+
+        if layer_props["filtering"]["has_combined_filter_logic"] == True:
+            self.pushButton_checkable_filtering_current_layer_add.setChecked(True)
+            self.comboBox_filtering_current_layer_add.setCurrentText(layer_props["filtering"]["combined_filter_logic"])
+        elif layer_props["filtering"]["has_combined_filter_logic"] == False:
+            self.pushButton_checkable_filtering_current_layer_add.setChecked(False)
+            self.comboBox_filtering_current_layer_add.setCurrentIndex(0)
+
+        self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
+
+
+
         self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.disconnect()
 
         if layer_props["filtering"]["has_geometric_predicates"] == True:
@@ -1308,7 +1321,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         elif layer_props["filtering"]["has_geometric_predicates"] == False:
             self.pushButton_checkable_filtering_geometric_predicates.setChecked(False)
             self.mComboBox_filtering_geometric_predicates.deselectAllOptions()
-
 
         self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.connect(partial(self.layer_property_changed, 'geometric_predicates'))
 
@@ -1336,12 +1348,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.iface.layerTreeView().setCurrentLayer(self.current_layer)
             self.iface.layerTreeView().currentLayerChanged.connect(self.current_layer_changed)
 
+        self.exploring_link_widgets()
+
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(self.exploring_source_params_changed)
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(self.exploring_source_params_changed)
         self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(self.exploring_source_params_changed)
         self.mMapLayerComboBox_filtering_current_layer.layerChanged.connect(self.current_layer_changed)
 
-        self.exploring_link_widgets()
+        
             
 
     def exploring_link_widgets(self, expression=None):
