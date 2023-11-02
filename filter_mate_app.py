@@ -9,10 +9,8 @@ from qgis.utils import iface
 import os.path
 from pathlib import Path
 import re
-from .config import *
+from .widgets.config import *
 import processing
-from .qt_json_view.model import JsonModel, JsonSortFilterProxyModel
-from .qt_json_view.view import JsonView
 from functools import partial
 import json
 
@@ -24,11 +22,12 @@ class FilterMateApp:
     PROJECT_LAYERS = {} 
 
 
-    def __init__(self):
+    def __init__(self, plugin_dir):
         self.iface = iface
         self.dockwidget = None
         self.flags = {}
         self.appTasks = {"filter":None,"unfilter":None,"export":None}
+        self.plugin_dir = plugin_dir
         self.run()
 
 
@@ -42,7 +41,7 @@ class FilterMateApp:
 
             self.manage_project_layers(init_layers, 'add')
 
-            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS)
+            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir)
 
             # show the dockwidget
             # TODO: fix to allow choice of dock location

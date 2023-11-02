@@ -293,7 +293,7 @@ class FilterMate:
             #    first run of plugin
             #    removed on close (see self.onClosePlugin method)
             if not self.app:
-                self.app = FilterMateApp()
+                self.app = FilterMateApp(self.plugin_dir)
                 self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
             else:
                 self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
