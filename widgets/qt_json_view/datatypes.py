@@ -2,6 +2,8 @@ from functools import partial
 import re
 import webbrowser
 
+from qgis.gui import QgsColorButton
+
 from qgis.PyQt import QtCore, QtGui, QtWidgets
 
 
@@ -81,7 +83,29 @@ class DataType(object):
 # -----------------------------------------------------------------------------
 # Default Types
 # -----------------------------------------------------------------------------
+class CustomQStandardItem(QtGui.QStandardItem):
+    TypeQgsColorButton = QgsColorButton()
 
+    def clone(self):
+        return CustomQStandardItem()
+
+    def type(self):
+        return self.data(QtCore.Qt.UserRole + 1000)
+
+    def setType(self, value):
+        self.wrapped_widget = value
+        self.setData(self.wrapped_widget, QtCore.Qt.UserRole + 1000)
+
+    def setColor(self, color):
+        if self.wrapped_widget == None:
+            self.wrapped_widget = self.data(QtCore.Qt.UserRole + 1000)
+        self.wrapped_widget.setColor(QtGui.QColor(color))
+
+    def getColor(self, color):
+        if self.wrapped_widget == None:
+            self.wrapped_widget = self.data(QtCore.Qt.UserRole + 1000)
+        self.wrapped_widget.color().name()
+        
 
 class NoneType(DataType):
     """None"""
@@ -105,6 +129,43 @@ class NoneType(DataType):
         elif isinstance(data, list):
             data.append(value)
 
+
+class ColorType(DataType):
+    """Strings and unicodes"""
+
+    REGEX = re.compile(r'#')
+
+    def matches(self, data):
+        if isinstance(data, str) or isinstance(data, unicode):
+            if data[0] == '#':
+                return True
+        return False
+    
+    def createEditor(self, parent, option, index):
+        data = index.data(QtCore.Qt.UserRole)
+        print(data)
+        print(parent)
+        print(parent.row())
+        value_item = parent.child(parent.row(), 1)
+        print(value_item)
+        value_item.setColor(data)
+        return value_item
+
+    def serialize(self, model, item, data, parent):
+        """Serialize this data type."""
+        value_item = parent.child(item.row(), 1)
+        value = value_item.getColor()
+        data = value
+
+    def value_item(self, value, model, key=None):
+        item = super(ColorType, self).value_item(value, model, key)
+        item = CustomQStandardItem()
+        item.setType(CustomQStandardItem.TypeQgsColorButton)
+        item.setColor(value)
+        item.setData(value, QtCore.Qt.DisplayRole)
+        item.setData(value, QtCore.Qt.UserRole)
+        return item
+    
 
 class StrType(DataType):
     """Strings and unicodes"""
@@ -432,6 +493,7 @@ class ChoicesType(DataType):
 # Add any custom DataType to this list
 #
 DATA_TYPES = [
+    ColorType(),
     NoneType(),
     UrlType(),
     FilepathType(),

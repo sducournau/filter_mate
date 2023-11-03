@@ -1,6 +1,5 @@
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 import json
-from ..config import *
 from .datatypes import match_type, TypeRole, ListType, DictType
 
 class InputWindow(QtWidgets.QDialog):
@@ -30,44 +29,6 @@ class InputWindow(QtWidgets.QDialog):
         self.layout.addWidget(self.valueLabel, 1, 0)
         self.layout.addWidget(self.value, 1, 1)
         self.layout.addWidget(self.buttonBox, 2, 1)
-
-class InputWindowWidgets(QtWidgets.QDialog):
-    """Main Window."""
-    def __init__(self):
-        """Initializer."""
-        super().__init__()
-        self.setWindowTitle("Add property and value")
-        self.resize(400, 200)
-
-
-
-        self.layout = QtWidgets.QGridLayout(self)
-
-        QBtn = QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
-        self.buttonBox = QtWidgets.QDialogButtonBox(QBtn)
-
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
-        self.key =  QtWidgets.QComboBox()
-
-
-        list = ["checkableComboBox", "searchComboBox","expressionWidget"]
-        self.key.clear()
-        self.key.addItems(list)
-
-        #self.value = QtWidgets.QgsCheckableTextEdit()
-        self.keyLabel = QtWidgets.QLabel("Select a widget")
-        #self.valueLabel = QtWidgets.QLabel("Value")
-
-        self.layout.addWidget(self.keyLabel, 0, 0)
-        self.layout.addWidget(self.key, 0, 1)
-        #self.layout.addWidget(self.valueLabel, 1, 0)
-        #self.layout.addWidget(self.value, 1, 1)
-        self.layout.addWidget(self.buttonBox, 1, 1)
-
-
-
-
 
 
 class JsonModel(QtGui.QStandardItemModel):
@@ -105,85 +66,32 @@ class JsonModel(QtGui.QStandardItemModel):
         return data
 
     def addData(self, item, direction='insert', widgets=False):
-        global CONFIG_SCOPE
-        CONFIG_SCOPE = True
         print(item.data(0))
-        if widgets:
-            self.input = InputWindowWidgets()
-            if self.input.exec_() == QtWidgets.QDialog.Accepted:
 
-                value = self.input.key.currentText()
-                type = {"searchComboBox":{
-                        "Name":"MySearchComboBox",
-                         "Type":"searchComboBox",
-                         "Parameters":{
-                            "layer":"zone_de_nro",
-                            "field":"za_nro",
-                            "id":"code_id"
-                         }
-                      },"checkableComboBox":{
-                        "Name":"MyCheckableComboBox",
-                         "Type":"checkableComboBox",
-                         "Parameters":{
-                            "layer":"zone_de_nro",
-                            "field":"za_nro"
-                         }
-                      },"expressionWidget":{
-                        "Name":"MyExpressionWidget",
-                         "Type":"expressionWidget",
-                         "Parameters":{
-                            "layer":"zone_de_nro"
-                         }
-                      }}
-                if item.hasChildren():
-                    type_ = item.data(TypeRole)
-                    data = []
-                    type_.serialize(model=self, item=item, data=data, parent=self.invisibleRootItem())
-                    data = data[0]
-                    for i in range(0,item.rowCount()):
-                        item.removeRow(0)
+        self.input = InputWindow()
 
-                else:
-                    data = []
+        if self.input.exec_() == QtWidgets.QDialog.Accepted:
 
-                data.append(type[value])
-                print(data)
-                type_ = match_type(data)
-                print(type_)
-                item.setData(type_, TypeRole)
-                type_.next(model=self, data=data, parent=item)
+            key = self.input.key.text()
+            try:
+                value = json.loads(self.input.value.toPlainText())
+            except:
+                value = self.input.value.toPlainText()
 
+            type_ = match_type(value)
+            key_item = type_.key_item(key, datatype=type_, model=self)
+            value_item = type_.value_item(value, self, key)
+            if item.parent() is None:
+                parent = self.invisibleRootItem()
+            else:
+                parent = item.parent()
 
-
-
-
-
-        else:
-
-            self.input = InputWindow()
-
-            if self.input.exec_() == QtWidgets.QDialog.Accepted:
-
-                key = self.input.key.text()
-                try:
-                    value = json.loads(self.input.value.toPlainText())
-                except:
-                    value = self.input.value.toPlainText()
-
-                type_ = match_type(value)
-                key_item = type_.key_item(key, datatype=type_, model=self)
-                value_item = type_.value_item(value, self, key)
-                if item.parent() is None:
-                    parent = self.invisibleRootItem()
-                else:
-                    parent = item.parent()
-
-                if direction == 'insert':
-                    item.appendRow([key_item, value_item])
-                elif direction == 'up':
-                    parent.insertRow(item.row(), [key_item, value_item])
-                elif direction == 'down':
-                    parent.insertRow(item.row() + 1, [key_item, value_item])
+            if direction == 'insert':
+                item.appendRow([key_item, value_item])
+            elif direction == 'up':
+                parent.insertRow(item.row(), [key_item, value_item])
+            elif direction == 'down':
+                parent.insertRow(item.row() + 1, [key_item, value_item])
 
 
 
@@ -196,9 +104,6 @@ class JsonModel(QtGui.QStandardItemModel):
         else:
             parent = item.parent()
         parent.removeRow(item.row())
-
-
-
 
 
 class JsonSortFilterProxyModel(QtCore.QSortFilterProxyModel):

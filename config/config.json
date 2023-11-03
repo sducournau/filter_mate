@@ -1,1 +1,46 @@
-{"COLORS": {"BACKGROUND": ["white", "#CCCCCC", "#F0F0F0"], "FONT": ["black", "black"]}, "LAYERS": {"CONTOURS_COMMUNES": ["contours_communes", "commune", "True"], "ZONE_DE_NRO": ["zone_de_nro", "za_nro", "True"], "ZONE_DE_PA": ["zone_de_pa", "za_zpa", "True"], "ZONE_DE_PM": ["zone_de_pm", "za_zpm", "True"]}, "WIDGETS": [{"Name": "MySearchComboBox", "Type": "searchComboBox", "Parameters": {"layer": "zone_de_pm", "field": "za_zpm", "id": "code_id"}}, {"Name": "MySearchComboBox", "Type": "searchComboBox", "Parameters": {"layer": "zone_de_pm", "field": "za_zpm", "id": "code_id"}}, {"Name": "MySearchComboBox", "Type": "searchComboBox", "Parameters": {"layer": "zone_de_pa", "field": "za_zpa", "id": "code_id"}}, {"Name": "MySearchComboBox", "Type": "searchComboBox", "Parameters": {"layer": "zone_de_pb", "field": "za_zpb", "id": "code_id"}}, {"Name": "MySearchComboBox", "Type": "searchComboBox", "Parameters": {"layer": "cable", "field": "c_branche", "id": "id"}}, {"Name": "MySearchComboBox", "Type": "searchComboBox", "Parameters": {"layer": "cable", "field": "c_pee", "id": "id"}}]}
+{
+    "COLORS": {
+        "BACKGROUND": [
+            "white",
+            "#CCCCCC",
+            "#F0F0F0"
+        ],
+        "FONT": [
+            "black",
+            "black"
+        ]
+    },
+    "LAYERS": {
+        "CONTOURS_COMMUNES": [
+            "contours_communes",
+            "commune",
+            "True"
+        ],
+        "ZONE_DE_NRO": [
+            "zone_de_nro",
+            "za_nro",
+            "True"
+        ],
+        "ZONE_DE_PA": [
+            "zone_de_pa",
+            "za_zpa",
+            "True"
+        ],
+        "ZONE_DE_PM": [
+            "zone_de_pm",
+            "za_zpm",
+            "True"
+        ]
+    },
+    "ENGINE": {
+        "page":"https://sducournau.github.io/filter_mate/",
+        "bool":true,
+        "path":"C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png",
+        "choice": {
+            "value": "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png",
+            "choices": ["C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png",
+                         "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\add.png",
+                          "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\styles_2.png"]
+        }
+    }
+}

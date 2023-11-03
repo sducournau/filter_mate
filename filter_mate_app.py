@@ -9,7 +9,7 @@ from qgis.utils import iface
 import os.path
 from pathlib import Path
 import re
-from .widgets.config import *
+from .config.config import *
 import processing
 from functools import partial
 import json
@@ -27,6 +27,9 @@ class FilterMateApp:
         self.dockwidget = None
         self.flags = {}
         self.appTasks = {"filter":None,"unfilter":None,"export":None}
+        self.tasks_descriptions = {'filter':'Filtering data',
+                                    'unfilter':'Unfiltering data',
+                                    'export':'Exporting data'}
         self.plugin_dir = plugin_dir
         self.run()
 
@@ -151,9 +154,9 @@ class FilterMateApp:
 
         self.flags['is_managing_project_layers'] = True
 
-        self.json_template_layer_infos = '{"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","primary_key_is_numeric":%s}'
+        self.json_template_layer_infos = '{"has_combined_filter_logic":false,"combined_filter_logic":"","is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linked":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combined_filter_logic":false,"combined_filter_logic":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0}'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
 
         for layer in layers:
             if action == 'add':     
@@ -210,6 +213,9 @@ class FilterMateApp:
             if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
                 primary_key_name, primary_key_idx, primary_key_type, primary_key_is_numeric = self.search_primary_key_from_layer(layer)
+                source_schema = 'NULL'
+                geometry_field = 'NULL'
+
 
                 if layer.providerType() == 'ogr':
 
@@ -221,6 +227,17 @@ class FilterMateApp:
 
                 elif layer.providerType() == 'postgres':
                     layer_provider_type = 'postgresql'
+                    
+                    layer_source = layer.source()
+                    regexp_match_source_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)',layer_source)
+                    if regexp_match_source_schema != None:
+                        source_schema = regexp_match_source_schema.group()
+
+                    regexp_match_geometry_field = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))',layer_source)
+                    if regexp_match_geometry_field != None:
+                        geometry_field = regexp_match_geometry_field.group()
+
+                    print(layer, regexp_match_geometry_field)
 
                 else:
                     capabilities = layer.capabilitiesString().split(', ')
@@ -230,8 +247,12 @@ class FilterMateApp:
                         layer_provider_type = 'ogr'
 
                 layer_geometry_type = layer.geometryType()
-            
-                new_layer_infos = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer_provider_type, layer.sourceCrs().authid(), layer.id(), layer.name(), primary_key_name, primary_key_idx, primary_key_type, str(primary_key_is_numeric).lower()))
+                if layer_provider_type == 'spatialite':
+                    geometry_field = 'GEOMETRY'
+                elif layer_provider_type == 'ogr':
+                    geometry_field = '_ogr_geometry_'
+
+                new_layer_infos = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer_provider_type, layer.sourceCrs().authid(), layer.id(), source_schema, layer.name(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
                 new_layer_exploring = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
                 new_layer_filtering = json.loads(self.json_template_layer_filtering)
 
@@ -296,51 +317,67 @@ class FilterMateApp:
     def manage_task(self, task_name):
         """Manage the different tasks"""
 
-        self.tasks_descriptions = {'filter':'Filtering data',
-                                    'unfilter':'Unfiltering data',
-                                    'export':'Exporting data'}
-        
         assert task_name in list(self.tasks_descriptions.keys())
         
         task_parameters, current_layer = self.get_task_parameters(task_name)
 
-        t0 = time.time()
-
         self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
 
-        if task_name == 'filter':
-            self.appTasks[task_name].taskCompleted.connect(lambda: zoom_to_features(current_layer, t0))
-        elif task_name == 'unfilter':
-            self.appTasks[task_name].taskCompleted.connect(lambda: zoom_to_features(current_layer, t0))
+        self.appTasks[task_name].taskCompleted.connect(partial(self.task_postprocessing, current_layer, task_parameters))
 
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
 
     def get_task_parameters(self, task_name):
 
-        layer = self.dockwidget.current_layer
-        if layer.id() in self.PROJECT_LAYERS.keys():
-            task_parameters = self.PROJECT_LAYERS[layer.id()]
+        current_layer = self.dockwidget.current_layer
+        
+        if current_layer.id() in self.PROJECT_LAYERS.keys():
+            task_parameters = self.PROJECT_LAYERS[current_layer.id()]
+
+        if current_layer.subsetString() != '':
+            self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
+        else:
+            self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
 
         features, expression = self.dockwidget.get_current_features()
 
         if task_name == 'filter':
 
-            task_parameters["task"] = {"features": features, "expression": expression, "selection": self.current_exploring_groupbox}
-            return task_parameters
+            task_parameters["task"] = {"features": features, "expression": expression}
+            return task_parameters, current_layer
 
         elif task_name == 'unfilter':
 
-            task_parameters["task"] = {"features": features, "expression": expression, "selection": self.current_exploring_groupbox}
-            return task_parameters
+            task_parameters["task"] = {"features": features, "expression": expression}
+            return task_parameters, current_layer
 
         elif task_name == 'export':
+            return task_parameters, current_layer
+            
 
-            selected_layers_data = self.dockwidget.comboBox_select_layers.checkedItems()
-            format = self.dockwidget.comboBox_export_type.currentText()
-            name = str(self.dockwidget.lineEdit_export.text()) if self.dockwidget.lineEdit_export.text() != '' else 'output'
-            crs = self.dockwidget.mQgsProjectionSelectionWidget.crs()
+    def task_postprocessing(self, current_layer, task_parameters):
+         
+        if current_layer.subsetString() != '':
+            self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
+        else:
+            self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
 
+        task_parameters
+    
+        if task_parameters["filtering"]["has_layers_to_filter"] == True:
+            for layer_props in task_parameters["filtering"]["layers_to_filter"]:
+                if layer_props["layer_id"] in self.PROJECT_LAYERS:
+                    layers = [layer for layer in PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
+                    if len(layers) == 1:
+                        layer = layers[0]
+                        if layer.subsetString() != '':
+                            self.PROJECT_LAYERS[layer_props["layer_id"]]["infos"]["is_already_subset"] = True
+                        else:
+                            self.PROJECT_LAYERS[layer_props["layer_id"]]["infos"]["is_already_subset"] = False
+           
+        self.iface.mapCanvas().refreshAllLayers()
+        self.iface.mapCanvas().refresh()
 
 
 
@@ -349,78 +386,385 @@ class FilterEngineTask(QgsTask):
 
     def __init__(self, description, task_action, task_parameters):
 
-        QgsTask.__init__(self, description,QgsTask.CanCancel)
+        QgsTask.__init__(self, description, QgsTask.CanCancel)
 
 
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
-        self.predicats = {"Intersect":"ST_Intersects","Contain":"ST_Contains","Disjoint":"ST_Disjoint","Equal":"ST_Equals","Touch":"ST_Touches","Overlap":"ST_Overlaps","Are within":"ST_Within","Cross":"ST_Crosses"}
+        
+        self.expression = None
+        self.is_field_expression = None
+
+        self.param_source_provider_type = None
+        self.param_buffer_value = None
+        self.param_source_schema = None
+        self.param_source_table = None
+        self.param_source_geom = None
+        self.param_source_geom_operator = None
+        self.param_source_subset = None
+
+        self.postgresql_source_geom = None
+        self.spatialite_source_geom = None
+        self.ogr_source_geom = None
+
+        self.current_predicates = {}
+        self.outputs = {}
+
+        self.predicates = {"Intersect":"ST_Intersects","Contain":"ST_Contains","Disjoint":"ST_Disjoint","Equal":"ST_Equals","Touch":"ST_Touches","Overlap":"ST_Overlaps","Are within":"ST_Within","Cross":"ST_Crosses"}
 
     def run(self):
         """Main function that run the right method from init parameters"""
 
+        try:
 
-        self.source_layer = PROJECT.mapLayersByName(layer_name)[0]
-        layers = [layer for layer in PROJECT.mapLayersByName(self.task_parameters["info"]["layer_name"]) if layer.id() == self.task_parameters["info"]["layer_id"]]
-        if len(layers) == 1:
-            self.source_layer = layers[0]
+            layers = [layer for layer in PROJECT.mapLayersByName(self.task_parameters["infos"]["layer_name"]) if layer.id() == self.task_parameters["infos"]["layer_id"]]
+            if len(layers) == 1:
+                self.source_layer = layers[0]
 
 
-        """We split the selected layers to be filtered in two categories sql and others"""
-        self.layers = {}
+            """We split the selected layers to be filtered in two categories sql and others"""
+            self.layers = {}
 
-        if self.task_parameters["filtering"]["has_layers_to_filter"] == True:
-            for layer_props in self.task_parameters["filtering"]["layers_to_filter"]:
-                layer_props["layer_provider_type"]
-                if layer_props["layer_provider_type"] not in self.layers:
-                    self.layers[layer_props["layer_provider_type"]] = []
+            if self.task_parameters["filtering"]["has_layers_to_filter"] == True:
+                for layer_props in self.task_parameters["filtering"]["layers_to_filter"]:
+                    if layer_props["layer_provider_type"] not in self.layers:
+                        self.layers[layer_props["layer_provider_type"]] = []
 
-                layers = [layer for layer in PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
-                if len(layers) == 1:
-                    self.layers[layer_props["layer_provider_type"]].append(layers[0], layer_props)
-   
+                    layers = [layer for layer in PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
+                    if len(layers) == 1:
+                        self.layers[layer_props["layer_provider_type"]].append([layers[0], layer_props])
+    
+                self.provider_list = list(self.layers)
 
-        if self.task_action == 'filter':
-            """We will filter layers"""
+            if self.task_action == 'filter':
+                """We will filter layers"""
 
-            self.source_layer
+                self.execute_filtering()
+                    
+
+            elif self.task_action == 'unfilter':
+                """We will unfilter the layers"""
+
+                self.execute_unfiltering()
+
+
+            elif self.task_action == 'export':
+                """We will export layers"""
+
+                self.execute_exporting()
+                
+            return True
+    
+        except Exception as e:
+            self.exception = e
+            print(self.exception)
+            return False
+
+
+    def execute_filtering(self):
+        """Manage the advanced filtering"""
+
+       
+        result = self.execute_source_layer_filtering()
+
+
+        if self.task_parameters["filtering"]["has_geometric_predicates"] == True:
+
+            if len(self.task_parameters["filtering"]["geometric_predicates"]) > 0:
+                
+                source_predicates = self.task_parameters["filtering"]["geometric_predicates"]
+                
+                for key in source_predicates:
+                    index = None
+                    if key in self.predicates:
+                        index = list(self.predicates).index(key)
+                        if index >= 0:
+                            self.current_predicates[str(index)] = self.predicates[key]
+
+                self.geometric_predicates_operator = self.task_parameters["filtering"]["geometric_predicates_operator"]
+                self.manage_distant_layers_geometric_filtering()
+
+        elif self.is_field_expression != None:
+            field_idx = -1
+            for layer_provider_type in self.layers:
+                for layer, layer_prop in self.layers[layer_provider_type]:
+                    field_idx = layer.fields().indexOf(self.is_field_expression[1])
+                    if field_idx >= 0:
+                        param_old_subset = ''
+                        param_combine_operator = ''
+                        if layer_prop["has_combined_filter_logic"] == True:
+                            if layer_prop["combined_filter_logic"] != '':
+                                param_combine_operator = layer_prop["combined_filter_logic"]
+                                if layer_prop["is_already_subset"] == True:
+                                    param_old_subset = layer.subsetString()
+
+                        if param_old_subset != '' and param_combine_operator != '':
+                            """If we add the current expression to the previous expression"""
+                            print('(' + param_old_subset + ') ' + param_combine_operator + ' ' + self.expression)
+                            layer.setSubsetString('(' + param_old_subset + ') ' + param_combine_operator + ' ' + self.expression)
+                        else:
+                            layer.setSubsetString(self.expression)
+
+        return result
+    
+
+    def execute_source_layer_filtering(self):
+        """Manage the creation of the origin filtering expression"""
+        result = False
+        param_combine_operator = ''
+        param_old_subset = ''
+
+        self.param_source_provider_type = self.task_parameters["infos"]["layer_provider_type"]
+        self.param_source_schema = self.task_parameters["infos"]["layer_schema"]
+        self.param_source_table = self.task_parameters["infos"]["layer_name"]
+        self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
+        self.source_layer_fields_names = [field.name() for field in self.source_layer.fields()]
+
+        if self.task_parameters["infos"]["has_combined_filter_logic"] == True:
+            if self.task_parameters["infos"]["combined_filter_logic"] != '':
+                param_combine_operator = self.task_parameters["infos"]["combined_filter_logic"]
+                if self.task_parameters["infos"]["is_already_subset"] == True:
+                    param_old_subset = self.source_layer.subsetString()
+
+        self.expression = self.task_parameters["task"]["expression"]
+        if QgsExpression(self.expression).isValid() is True:
+            
+            is_field_expression =  QgsExpression().isFieldEqualityExpression(self.expression)
+
+            if is_field_expression[0] == True:
+                self.is_field_expression = is_field_expression
+
+            if QgsExpression(self.expression).isField() is False:
+                
+                if self.expression.find(self.param_source_table) < 0:
+                    for field_name in self.source_layer_fields_names:
+                        if self.expression.find('"' + field_name + '"') >= 0:
+                            self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                        elif self.expression.find(field_name) >= 0:
+                            self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+
+
+                if param_old_subset != '' and param_combine_operator != '':
+
+                    result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                        combine_operator=param_combine_operator,
+                                                                                                                        expression=self.expression))
+                else:
+                    result = self.source_layer.setSubsetString(self.expression)
+
+
+        if result is False:
+            self.is_field_expression = None    
+            features_list = self.task_parameters["task"]["features"]
+
+            features_ids = [str(feature[self.primary_key_name]) for feature in features_list]
+
+            if len(features_ids) > 0:
+                if self.task_parameters["infos"]["primary_key_is_numeric"] is True:
+                    self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(" + ", ".join(features_ids) + ")"
+                else:
+                    self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
+
+
+                if param_old_subset != '' and param_combine_operator != '':
+        
+                    result = self.source_layer.setSubsetString('(' + param_old_subset + ') ' + param_combine_operator + ' ' + self.expression)
+                    
+                else:
+                    result = self.source_layer.setSubsetString(self.expression)
+
+ 
+        return result
+        
+
+    def manage_distant_layers_geometric_filtering(self):
+        """Filter layers from a prefiltered layer"""
+
+        result = False
+        self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
+        self.param_source_geom_operator = ' ' + self.task_parameters["filtering"]["geometric_predicates_operator"] + ' '
+        self.param_source_subset = self.expression
+
+        if self.task_parameters["filtering"]["has_buffer"]:
+            self.param_buffer_value = float(self.task_parameters["filtering"]["buffer"]) 
+        
+        provider_list = self.provider_list + [self.param_source_provider_type]
+
+        if 'postgresql' in provider_list:
+            self.prepare_postgresql_source_geom()
+
+        if 'spatialite' in provider_list:
+            self.prepare_spatialite_source_geom()
+
+        if 'ogr' in provider_list:
+            self.prepare_ogr_source_geom()
+
+        for layer_provider_type in self.layers:
+            for layer, layer_props in self.layers[layer_provider_type]:
+                result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
+                if result == True:
+                    print(layer.name(), 'has been filtered')
+                else:
+                    print(layer.name(), 'errors occured')
+
+
+    def prepare_postgresql_source_geom(self):
+
+        if self.param_buffer_value != None:
+            self.postgresql_source_geom = 'ST_Buffer("{source_table}"."{source_geom}", {buffer_value})'.format(source_table=self.param_source_table,
+                                                                                                               source_geom=self.param_source_geom,
+                                                                                                               buffer_value=self.param_buffer_value)
+        else:
+            self.postgresql_source_geom = '"{source_table}"."{source_geom}"'.format(source_table=self.param_source_table,
+                                                                                    source_geom=self.param_source_geom)
+
+
+    def prepare_spatialite_source_geom(self):
+
+        raw_geometries = [feature.geometry() for feature in self.task_parameters["task"]["features"] if feature.hasGeometry()]
+        geometries = []
+
+        for geometry in raw_geometries:
+            if geometry.isEmpty() is False:
+                if geometry.isMultipart():
+                    geometry.convertToSingleType()
+                if self.param_buffer_value != None:
+                    geometry = geometry.buffer(self.param_buffer_value, 5)
+                geometries.append(geometry)
+
+        collected_geometry = QgsGeometry().collectGeometry(geometries)
+        self.spatialite_source_geom = collected_geometry.asWkt()
+
+
+    def prepare_ogr_source_geom(self):
+
+        if self.param_buffer_value != None:
+
+            alg_params_buffer = {
+                'DISSOLVE': True,
+                'DISTANCE': self.param_buffer_value,
+                'END_CAP_STYLE': 2,
+                'INPUT': self.source_layer,
+                'JOIN_STYLE': 2,
+                'MITER_LIMIT': 2,
+                'SEGMENTS': 5,
+                'OUTPUT': 'TEMPORARY_OUTPUT'
+            }
+
+            self.outputs['alg_params_buffer'] = processing.run('qgis:buffer', alg_params_buffer)
+            self.ogr_source_geom = self.outputs['alg_params_buffer']['OUTPUT']
+
+
+    def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
+
+        result = False
+        postgis_predicates = list(self.current_predicates.values())
+
+        param_old_subset = ''
+        param_combine_operator = ''
+        if layer_props["has_combined_filter_logic"] == True:
+            if layer_props["combined_filter_logic"] != '':
+                param_combine_operator = layer_props["combined_filter_logic"]
+                if layer_props["is_already_subset"] == True:
+                    param_old_subset = layer.subsetString()
+
+        param_distant_schema = layer_props["layer_schema"]
+        param_distant_table = layer_props["layer_name"]
+        param_distant_primary_key_name = layer_props["primary_key_name"]
+        param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
+        param_distant_geometry_field = layer_props["geometry_field"]
+
+
+        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
+
+            postgis_sub_expression_array = []
+            for postgis_predicate in postgis_predicates:
+                postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},"{distant_table}"."{distant_geometry_field}")'.format(source_sub_expression_geom=self.postgresql_source_geom,
+                                                                                                                                                                distant_table=param_distant_table,
+                                                                                                                                                                distant_geometry_field=param_distant_geometry_field))
+            
+            if len(postgis_sub_expression_array) > 1:
+                param_postgis_sub_expression = self.param_source_geom_operator.join(postgis_sub_expression_array)
+            else:
+                param_postgis_sub_expression = postgis_sub_expression_array[0]
+
+            param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                                                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
+                                                                                                                                                                                                                                                                            distant_table=param_distant_table,
+                                                                                                                                                                                                                                                                            source_schema=self.param_source_schema,    
+                                                                                                                                                                                                                                                                            source_table=self.param_source_table,
+                                                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression,
+                                                                                                                                                                                                                                                                            source_subset=self.expression)
+            print(param_expression)
+            if param_old_subset != '' and param_combine_operator != '':
+                result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                              combine_operator=param_combine_operator,
+                                                                                              expression=param_expression))
+            else:
+                result = layer.setSubsetString(param_expression)
+    
+
+        elif self.param_source_provider_type == 'spatialite' or layer_provider_type == 'spatialite':
+
             
 
-            status = self.filter_advanced(expression, from_layer, None)
-            #self.managerWidgets.update_widgets()
-            if not status:
-                return False
-                
+            if len(postgis_predicates) == 1:
+                param_postgis_sub_expression = postgis_predicates[0] + '({source_sub_expression_geom},"{distant_geometry_field}")'
 
-        elif self.task_action == 'unfilter':
-            """We will unfilter the layers"""
-
-            for layer in self.layers['sql']:
-                if isinstance(layer, QgsVectorLayer):
-
-                    layer.setSubsetString('')
-            for layer in self.layers['shape']:
-                if isinstance(layer, QgsVectorLayer):
-
-                    layer.setSubsetString('')
+            elif len(postgis_predicates) > 1:
+                postgis_sub_expression_array = []
+                for postgis_predicate in postgis_predicates:
+                    postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},"{distant_table}"."geom")')
 
 
-        elif self.task_action == 'export':
-            """We will export layers"""
+        elif self.param_source_provider_type == 'ogr' or layer_provider_type == 'ogr':
 
-            status = self.export_to_package()
-            return status
+            features_list = []
+            alg_params_select = {
+                'INPUT': layer,
+                'INTERSECT': self.ogr_source_geom,
+                'METHOD': 0,
+                'PREDICATE': [int(predicate) for predicate in self.current_predicates]
+            }
+            processing.run("qgis:selectbylocation", alg_params_select)
 
+            for feature in layer.selectedFeatures():
+                features_list.append(feature)
+
+            layer.removeSelection()
+            features_ids = [str(feature[param_distant_primary_key_name]) for feature in features_list]
+
+            if len(features_ids) > 0:
+                if param_distant_primary_key_is_numeric == True:
+                    param_expression = param_distant_primary_key_name + " IN (" + ", ".join(features_ids) + ")"
+                else:
+                    param_expression = param_distant_primary_key_name + " IN (\'" + "\', \'".join(features_ids) + "\')"
+
+                if QgsExpression(param_expression).isValid():
+
+                    if param_old_subset != '' and param_combine_operator != '':
+                        result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                    combine_operator=param_combine_operator,
+                                                                                                    expression=param_expression))
+                    else:
+                        result = layer.setSubsetString(param_expression)
+
+        return result    
+
+
+    def execute_unfiltering(self):
+
+        self.source_layer.setSubsetString('')
+
+        for layer_provider_type in self.layers:
+            for layer, layer_props in self.layers[layer_provider_type]:
+                layer.setSubsetString('')
 
         return True
-        #except Exception as e:
-            #self.exception = e
-            #print(self.exception)
-            #return False
 
 
-    def export_to_package(self):
+    def execute_exporting(self):
         """Main function to export the selected layers to the right format with their associated styles"""
 
         format = self.dockwidget.comboBox_export_type.currentText()
@@ -451,213 +795,13 @@ class FilterEngineTask(QgsTask):
                     PROJECT.mapLayersByName(layer)[0].saveNamedStyle(PATH_ABSOLUTE_PROJECT + os.sep + name + os.sep + PROJECT.mapLayersByName(layer)[0].name() + '.qml')
 
         return True
-
-
-    def filter_expression(self, layer):
-        """Manage the creation of the origin filtering expression"""
-        try:
-            for feat in layer.getFeatures():
-                first_feat = feat
-                break
-
-            exp = QgsExpression(self.expression)
-            context = QgsExpressionContext()
-            context.setFeature(first_feat)
-            context.setFields(layer.fields())
-            print(exp.evaluate(context), exp.evalErrorString())
-        except:
-            pass
-        old_subset = layer.subsetString()
-
-        self.from_operator = self.dockwidget.comboBox_filter_add.currentText()
-        print('Going sql')
-        self.filter =  self.expression
-
-        if self.filter_add == 2:
-            """If we add the current expression to the previous expression"""
-            filtered = layer.setSubsetString('(' + old_subset + ') ' + self.from_operator + ' ' + self.filter)
-            print('(' + old_subset + ') ' + self.from_operator + ' ' + self.filter)
-        else:
-            filtered = layer.setSubsetString(self.filter)
-
-        if not filtered:
-            print('Going select ids')
-
-            features_list = []
-            layer.selectByExpression(self.expression)
-            field_idx = layer.fields().indexFromName(self.fields_id[layer.id()])
-            if field_idx != -1:
-                for feat in layer.selectedFeatures():
-                    if self.isCanceled():
-                        print('Cancel')
-                        return False
-                    features_list.append(feat[self.fields_id[layer.id()]])
-                string_ints = [str(int) for int in features_list]
-
-                if len(string_ints) > 0:
-                    self.filter = '"{}" IN (\''.format(self.fields_id[layer.id()]) + '\',\''.join(string_ints)  + '\')'
-                elif len(string_ints) == 0:
-                    self.filter = '"{}" is null'.format(self.fields_id[layer.id()])
-
-
-                if self.filter_add == 2:
-                    layer.setSubsetString('(' + old_subset + ') ' + self.from_operator + ' ' + self.filter)
-                    print('(' + old_subset + ') ' + self.from_operator + ' ' + self.filter)
-                else:
-                    layer.setSubsetString(self.filter)
-
-
-    def filter_advanced(self, expression, from_layer, field_name):
-        """Manage the advanced filtering"""
-
-       
-        self.filter_expression(from_layer)
-
-        if self.filter_geo == 2:
-            """If geospatial filter is activated"""
-            self.filter_geospatial(from_layer, self.layers['sql'] + self.layers['shape'])
-
-
-
-        if self.filter_from == 2 and field_name is not None:
-            """Advanced filter from basic commune filter"""
-            if len(self.selected_za_nro_data) > 0:
-                from_layer.setSubsetString('(' + self.filter_za_nro[layer_type] + ') AND ' + expression)
-
-            elif len(self.selected_za_zpm_data) > 0:
-                from_layer.setSubsetString('(' + self.filter_za_zpm[layer_type] + ') AND ' + expression)
-
-            elif len(self.selected_za_zpa_data) > 0:
-                from_layer.setSubsetString('(' + self.filter_za_zpa[layer_type] + ') AND ' + expression)
-
-            else:
-                from_layer.setSubsetString(expression)
-
-
-            idx = from_layer.fields().indexFromName(field_name)
-            list_items = []
-
-            selected_items = {}
-            selected_items['sql'] = []
-            selected_items['shape'] = []
-
-            self.filter_items = {}
-            self.filter_items['sql'] = ''
-            self.filter_items['shape'] = ''
-
-            for feature in from_layer.getFeatures():
-                feature_field = feature.attributes()[idx]
-                if feature_field != NULL:
-                    if ',' in feature_field:
-                        feature_array = feature_field.split(',')
-                        for feat_field in feature_array:
-                            if feat_field not in list_items:
-                                list_items.append(feat_field)
-
-                    else:
-                        if feature_field not in list_items:
-                            list_items.append(feature_field)
-
-
-            for item in list_items:
-                selected_items['sql'].append('"' + str(field_name) + '" ~ \'' + str(item) + '$\'' + ' OR "' +  str(field_name) + '" ~ \'' + str(item) + ',\'' )
-                selected_items['shape'].append('"' + str(field_name) + '" LIKE \'' + str(item) + '\'')
-
-            self.filter_items['sql'] = ' OR '.join(selected_items['sql'])
-            self.filter_items['shape'] = ' OR '.join(selected_items['shape'])
-
-            for layer in self.layers['sql']:
-                if layer.name() != from_layer.name():
-                    field_idx = layer.fields().indexFromName(field_name)
-                    if field_idx == -1:
-                        print('Le champ ' + field_name + ' non présent dans la couche ' + layer.name())
-                    else:
-                        layer.setSubsetString(self.filter_items['sql'])
-
-            for layer in self.layers['shape']:
-                if layer.name() != from_layer.name():
-                    field_idx = layer.fields().indexFromName(field_name)
-                    if field_idx == -1:
-                        print('Le champ ' + field_name + ' non présent dans la couche ' + layer.name())
-                    else:
-                        layer.setSubsetString(self.filter_items['shape'])
-
-        return True
-
-
-
-
-
-
-    def filter_geospatial(self, from_layer, layers):
-        """Filter layers from a prefiltered layer"""
-
-        with_tampon = self.dockwidget.checkBox_tampon.checkState()
-        predicats = self.dockwidget.mComboBox_filter_geo.checkedItems()
-
-        predicats = ['0:intersecte','1:contient','2:est disjoint','3:égal','4:touche','5:chevauche','6:est à l\'intérieur','7:croise']
-
-
-        if with_tampon == 2:
-            distance = float(self.dockwidget.mQgsDoubleSpinBox_tampon.value())
-            print(distance)
-            outputs = {}
-            alg_params_buffer = {
-                'DISSOLVE': True,
-                'DISTANCE': distance,
-                'END_CAP_STYLE': 2,
-                'INPUT': from_layer,
-                'JOIN_STYLE': 2,
-                'MITER_LIMIT': 2,
-                'SEGMENTS': 5,
-                'OUTPUT': 'TEMPORARY_OUTPUT'
-            }
-            outputs['alg_params_buffer'] = processing.run('qgis:buffer', alg_params_buffer)
-            layer_name = from_layer.name()
-            from_layer = outputs['alg_params_buffer']['OUTPUT']
-            from_layer.setName(layer_name)
-
-
-        for layer in layers:
-            if layer.name() != from_layer.name():
-                old_subset = layer.subsetString()
-                features_list = []
-                alg_params_select = {
-
-                    'INPUT': layer,
-                    'INTERSECT': from_layer,
-                    'METHOD': 0,
-                    'PREDICATE':[int(predicat[0]) for predicat in predicats]
-                }
-                field_idx = layer.fields().indexFromName(self.fields_id[layer.id()])
-                if field_idx != -1:
-                    processing.run("qgis:selectbylocation", alg_params_select)
-                    for feat in layer.selectedFeatures():
-                        if self.isCanceled():
-                            return False
-                        features_list.append(feat[self.fields_id[layer.id()]])
-                    string_ints = [str(int) for int in features_list]
-
-                    if len(string_ints) > 0:
-                        self.filter = '"{}" IN (\''.format(self.fields_id[layer.id()]) + '\',\''.join(string_ints)  + '\')'
-                    elif len(string_ints) == 0:
-                        self.filter = '"{}" is null'.format(self.fields_id[layer.id()])
-
-                    if self.filter_add_multi == 2 and old_subset != self.filter:
-                        layer.setSubsetString('(' + old_subset + ') ' + self.multi_operator + ' ' + self.filter)
-                        print('(' + old_subset + ') ' + self.multi_operator + ' ' + self.filter)
-                    else:
-                        layer.setSubsetString(self.filter)
-                else:
-                    print('Le champ "code_id" non présent dans la couche ' + layer.name())
-                layer.removeSelection()
-
-
+    
 
     def cancel(self):
         QgsMessageLog.logMessage(
             '"{name}" was canceled'.format(name=self.description()))
         super().cancel()
+
 
     def finished(self, result):
         """This function is called automatically when the task is completed and is
@@ -668,9 +812,6 @@ class FilterEngineTask(QgsTask):
             else:
                 iface.messageBar().pushMessage('Errors occured')
                 print(self.exception)
-
-        else:
-            print('Couches filtrées')
 
 
 class barProgress:
