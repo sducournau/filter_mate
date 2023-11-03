@@ -66,6 +66,8 @@ class FilterMateApp:
         
         self.dockwidget.launchingTask.connect(self.manage_task)
 
+        self.dockwidget.reinitializingLayerOnError.connect(self.remove_layer_projectCustomProperties)
+        
         #self.dockwidget.gettingProjectLayers.connect(partial(self.dockwidget.get_project_layers_from_app, self.PROJECT_LAYERS))
 
         self.dockwidget.settingProjectLayers.connect(self.save_projectCustomProperties_layers)
@@ -109,18 +111,21 @@ class FilterMateApp:
                         layer.saveNamedStyle(os.path.dirname(layer.styleURI())  + 'FilterMate_style_{}.qml'.format(layer.name()))
 
 
-    def remove_projectCustomProperties_layers(self, project_layers):
-        if isinstance(project_layers, dict):
-            self.PROJECT_LAYERS = project_layers
+    def remove_layer_projectCustomProperties(self, layer_id):
         
-        for layer_id in self.PROJECT_LAYERS.keys():
-            if self.PROJECT_LAYERS[layer_id]["exploring"]["is_saving"] == True:
-                layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
-                if len(layers) == 1:
-                    layer = layers[0]
-                    layer.removeCustomProperty("filterMate/infos")
-                    layer.removeCustomProperty("filterMate/exploring")
-                    layer.removeCustomProperty("filterMate/filtering")
+        if layer_id in self.PROJECT_LAYERS:
+            layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
+            if len(layers) == 1:
+                layer = layers[0]
+                layer.removeCustomProperty("filterMate/infos")
+                layer.removeCustomProperty("filterMate/exploring")
+                layer.removeCustomProperty("filterMate/filtering")
+                self.remove_project_layer(layer_id)
+                self.add_project_layer(layer)
+
+
+        if self.dockwidget != None:
+            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS) 
                     
 
     def remove_projectCustomProperties_layers_all(self):
@@ -154,7 +159,7 @@ class FilterMateApp:
 
         self.flags['is_managing_project_layers'] = True
 
-        self.json_template_layer_infos = '{"has_combined_filter_logic":false,"combined_filter_logic":"","is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
+        self.json_template_layer_infos = '{"has_combined_filter_logic":false,"combined_filter_logic":"","subset_history":[],"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linked":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
 
@@ -237,7 +242,7 @@ class FilterMateApp:
                     if regexp_match_geometry_field != None:
                         geometry_field = regexp_match_geometry_field.group()
 
-                    print(layer, regexp_match_geometry_field)
+      
 
                 else:
                     capabilities = layer.capabilitiesString().split(', ')
@@ -323,7 +328,7 @@ class FilterMateApp:
 
         self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
 
-        self.appTasks[task_name].taskCompleted.connect(partial(self.task_postprocessing, current_layer, task_parameters))
+        self.appTasks[task_name].taskCompleted.connect(partial(self.task_postprocessing, task_name, current_layer, task_parameters))
 
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
@@ -356,14 +361,18 @@ class FilterMateApp:
             return task_parameters, current_layer
             
 
-    def task_postprocessing(self, current_layer, task_parameters):
+    def task_postprocessing(self, task_name, current_layer, task_parameters):
          
         if current_layer.subsetString() != '':
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
+            if task_name == 'filter':
+                self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":current_layer.subsetString()})
+            elif task_name == 'unfilter':
+                if len(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"]) > 0:
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = [subset_history for subset_history in self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] if subset_history["source_layer"] != current_layer.id()]
         else:
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
-
-        task_parameters
+            self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
     
         if task_parameters["filtering"]["has_layers_to_filter"] == True:
             for layer_props in task_parameters["filtering"]["layers_to_filter"]:
@@ -372,13 +381,23 @@ class FilterMateApp:
                     if len(layers) == 1:
                         layer = layers[0]
                         if layer.subsetString() != '':
-                            self.PROJECT_LAYERS[layer_props["layer_id"]]["infos"]["is_already_subset"] = True
+                            self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+                            if task_name == 'filter':
+                                self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":layer.subsetString()})
+                                print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
+                            elif task_name == 'unfilter':
+                                if len(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"]) > 0:
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = [subset_history for subset_history in self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] if subset_history["source_layer"] != current_layer.id()]
                         else:
-                            self.PROJECT_LAYERS[layer_props["layer_id"]]["infos"]["is_already_subset"] = False
+                            self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+                            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
            
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
+
+        if task_name == 'filter':
+            self.dockwidget.exploring_zoom_clicked()
 
 
 
@@ -521,7 +540,7 @@ class FilterEngineTask(QgsTask):
         self.param_source_schema = self.task_parameters["infos"]["layer_schema"]
         self.param_source_table = self.task_parameters["infos"]["layer_name"]
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
-        self.source_layer_fields_names = [field.name() for field in self.source_layer.fields()]
+        self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
         if self.task_parameters["infos"]["has_combined_filter_logic"] == True:
             if self.task_parameters["infos"]["combined_filter_logic"] != '':
@@ -529,22 +548,31 @@ class FilterEngineTask(QgsTask):
                 if self.task_parameters["infos"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
 
-        self.expression = self.task_parameters["task"]["expression"]
+        self.expression = " " + self.task_parameters["task"]["expression"]
         if QgsExpression(self.expression).isValid() is True:
             
-            is_field_expression =  QgsExpression().isFieldEqualityExpression(self.expression)
+            is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
 
             if is_field_expression[0] == True:
                 self.is_field_expression = is_field_expression
 
             if QgsExpression(self.expression).isField() is False:
                 
-                if self.expression.find(self.param_source_table) < 0:
-                    for field_name in self.source_layer_fields_names:
-                        if self.expression.find('"' + field_name + '"') >= 0:
-                            self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
-                        elif self.expression.find(field_name) >= 0:
-                            self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                print(self.expression)
+                existing_fields = [x for x in self.source_layer_fields_names if self.expression.find(x) > -1]
+                if len(existing_fields) == 0 and self.expression.find(self.primary_key_name) > -1:
+                    if self.expression.find(self.param_source_table) < 0:
+                        if self.expression.find(' "' + self.primary_key_name + '" ') > -1:
+                            self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                        elif self.expression.find(" " + self.primary_key_name + " ") > -1:
+                            self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                elif len(existing_fields) >= 1:
+                    if self.expression.find(self.param_source_table) < 0:
+                        for field_name in existing_fields:
+                            if self.expression.find(' "' + field_name + '" ') > -1:
+                                self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                            elif self.expression.find(" " + field_name + " ") > -1:
+                                self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
 
 
                 if param_old_subset != '' and param_combine_operator != '':
@@ -758,11 +786,26 @@ class FilterEngineTask(QgsTask):
 
     def execute_unfiltering(self):
 
-        self.source_layer.setSubsetString('')
-
+        if len(self.task_parameters["infos"]["subset_history"]) > 1:
+            if self.task_parameters["infos"]["subset_history"][-1]["source_layer"] == self.source_layer.id():
+                self.source_layer.setSubsetString(self.task_parameters["infos"]["subset_history"][-2]["subset_string"])
+            else:
+                self.source_layer.setSubsetString('')
+        else:
+            self.source_layer.setSubsetString('')
+        
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                layer.setSubsetString('')
+                if len(layer_props["subset_history"]) > 1:
+                    print(self.source_layer.id())
+                    print(layer, layer_props["subset_history"])
+                    if layer_props["subset_history"][-1]["source_layer"] == self.source_layer.id():
+                        print(layer_props["subset_history"][-2]["subset_string"])
+                        layer.setSubsetString(layer_props["subset_history"][-2]["subset_string"])
+                    else:
+                        layer.setSubsetString('')
+                else:
+                    layer.setSubsetString('')
 
         return True
 
