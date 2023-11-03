@@ -1006,7 +1006,7 @@ color:black;
               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
              </property>
              <property name="flat">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <property name="checkable">
               <bool>true</bool>
@@ -1014,11 +1014,14 @@ color:black;
              <property name="collapsed">
               <bool>false</bool>
              </property>
+             <property name="syncGroup">
+              <string>exploring_GroupBox</string>
+             </property>
              <property name="saveCollapsedState">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <property name="saveCheckedState">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <layout class="QGridLayout" name="gridLayout_10">
               <property name="sizeConstraint">
@@ -1255,11 +1258,14 @@ QComboBox QAbstractItemView {
              <property name="collapsed">
               <bool>true</bool>
              </property>
+             <property name="syncGroup">
+              <string>exploring_GroupBox</string>
+             </property>
              <property name="saveCollapsedState">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <property name="saveCheckedState">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <layout class="QGridLayout" name="gridLayout_12">
               <property name="sizeConstraint">
@@ -1369,11 +1375,14 @@ QComboBox QAbstractItemView {
              <property name="collapsed">
               <bool>true</bool>
              </property>
+             <property name="syncGroup">
+              <string>exploring_GroupBox</string>
+             </property>
              <property name="saveCollapsedState">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <property name="saveCheckedState">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_4">
               <item>
@@ -1738,7 +1747,7 @@ color:black;
                   </spacer>
                  </item>
                  <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_add">
+                  <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator">
                    <property name="sizePolicy">
                     <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                      <horstretch>0</horstretch>
@@ -2200,7 +2209,7 @@ color:black;
                </spacer>
               </item>
               <item>
-               <widget class="QgsMapLayerComboBox" name="mMapLayerComboBox_filtering_current_layer">
+               <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                   <horstretch>0</horstretch>
@@ -2408,7 +2417,7 @@ QComboBox QAbstractItemView {
                </spacer>
               </item>
               <item>
-               <widget class="QComboBox" name="comboBox_filtering_current_layer_add">
+               <widget class="QComboBox" name="comboBox_filtering_current_layer_combine_operator">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                   <horstretch>0</horstretch>
@@ -2520,7 +2529,7 @@ QComboBox QAbstractItemView {
                </spacer>
               </item>
               <item>
-               <widget class="QgsCheckableComboBox" name="mComboBox_filtering_geometric_predicates">
+               <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                   <horstretch>0</horstretch>

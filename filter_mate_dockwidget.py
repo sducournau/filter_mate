@@ -33,9 +33,10 @@ from qgis.gui import *
 from qgis.utils import iface
 from qgis.PyQt.QtWidgets import QApplication, QVBoxLayout
 
-from .widgets.qgsCustomCheckableListWidget import QgsCustomCheckableListWidget
-from .widgets.qt_json_view.model import JsonModel, JsonSortFilterProxyModel
-from .widgets.qt_json_view.view import JsonView
+from .modules.qgsCustomCheckableListWidget import QgsCustomCheckableListWidget
+from .modules.qt_json_view.model import JsonModel, JsonSortFilterProxyModel
+from .modules.qt_json_view.view import JsonView
+from .modules.customExceptions import *
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'filter_mate_dockwidget_base.ui'))
@@ -55,37 +56,170 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         """Constructor."""
         super(FilterMateDockWidget, self).__init__(parent)
         
+        self.exception = None
+
+        self.plugin_dir = plugin_dir
         self.iface = iface
         self.PROJECT_LAYERS = project_layers
-        self.plugin_dir = plugin_dir
-
+        
         self.tabTools_current_index = 0
-        self.tabWidgets_current_index = 0
 
-        self.current_layer = self.iface.activeLayer()
-        self.current_exploring_groupbox = None
         self.auto_change_current_layer_flag = False
 
-        self.exception = None
-        # Set up the user interface from Designer.
-        # After setupUI you can access any designer object by doing
-        # self.<objectname>, and you can use autoconnect slots - see
-        # http://doc.qt.io/qt-5/designer-using-a-ui-file.html
-        # #widgets-and-dialogs-with-auto-connect
+        self.widgets = None
+        self.current_exploring_groupbox = None
+        self.current_layer = None
+
         self.setupUi(self)
         self.setupUiCustom()
-        self.manage_ui_icons()
+        self.dockwidget_widgets_configuration()
         self.manage_ui_style()
         self.manage_interactions()
         self.manage_output_name()
+
+    def getSignal(self, oObject : QObject, strSignalName : str):
+        oMetaObj = oObject.metaObject()
+        for i in range (oMetaObj.methodCount()):
+            oMetaMethod = oMetaObj.method(i)
+            if not oMetaMethod.isValid():
+                continue
+            if oMetaMethod.methodType () == QMetaMethod.Signal and \
+                oMetaMethod.name() == strSignalName:
+                return oMetaMethod
+
+        return None
+
+    def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
+        current_signal_name = None
+        current_triggered_function = None
+        state = None
+        widget_object = None
+
+
+        if isinstance(widget_path, list) and len(widget_path) == 2:
+            widget_object = self.widgets[widget_path[0]][widget_path[1]]
+        else:
+            raise SignalStateChangeError(state, widget_path, 'Incorrect input parameters')
+
+        if custom_signal_name != None:
+           for signal in widget_object["SIGNALS"]:
+               if signal[0] == custom_signal_name:
+                    current_signal_name = custom_signal_name
+                    current_triggered_function = signal[1]
+
+        else:
+            current_signal_name = widget_object["SIGNALS"][0][0]
+            current_triggered_function = widget_object["SIGNALS"][0][1]
+            
+
+        if hasattr(widget_object["WIDGET"], current_signal_name):
+            state = widget_object["WIDGET"].isSignalConnected(self.getSignal(widget_object["WIDGET"], current_signal_name))
+            if custom_action != None:
+                if custom_action == 'disconnect' and state == True:
+                    getattr(widget_object["WIDGET"], current_signal_name).disconnect()
+                elif custom_action == 'connect' and state == False:
+                    getattr(widget_object["WIDGET"], current_signal_name).connect(current_triggered_function)
+            else:
+                if state == True:
+                    getattr(widget_object["WIDGET"], current_signal_name).disconnect()
+                else:
+                    getattr(widget_object["WIDGET"], current_signal_name).connect(current_triggered_function)
+
+            state = widget_object["WIDGET"].isSignalConnected(self.getSignal(widget_object["WIDGET"], current_signal_name))   
+            return state
+        
+        if state == None:
+            raise SignalStateChangeError(state, widget_path)
+
+
 
     def setupUiCustom(self):
         self.customCheckableComboBox_exploring_multiple_selection = QgsCustomCheckableListWidget(self)
         self.layout = self.verticalLayout_exploring_multiple_selection
         self.layout.insertWidget(0, self.customCheckableComboBox_exploring_multiple_selection)
-        self.manage_configuration_model()
-        self.exploring_groupbox_init()
+
+        #self.custom_identify_tool = CustomIdentifyTool(self.iface)
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
+        self.manage_configuration_model()
+
+
+
+    def dockwidget_widgets_configuration(self):
+
+        self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "SINGLE_SELECTION":{}, "MULTIPLE_SELECTION":{}, "CUSTOM_SELECTION":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
+            
+        self.widgets["DOCK"] = {
+                                "GroupBox_SINGLE_SELECTION":{"WIDGET":self.mGroupBox_exploring_single_selection, "SIGNALS":[("clicked", partial(self.exploring_groupbox_changed, 'single_selection'))]},
+                                "GroupBox_MULTIPLE_SELECTION":{"WIDGET":self.mGroupBox_exploring_multiple_selection, "SIGNALS":[("clicked", partial(self.exploring_groupbox_changed, 'multiple_selection'))]},
+                                "GroupBox_CUSTOM_SELECTION":{"WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("clicked", partial(self.exploring_groupbox_changed, 'custom_selection'))]},
+                                "ToolBox_tabTools":{"WIDGET":self.toolBox_tabTools, "SIGNALS":[("currentChanged", self.select_tabTools_index)]}
+                                }   
+
+        self.widgets["ACTION"] = {
+                                "PushButton_FILTER":{"WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", partial(self.launchTaskEvent, 'filter'))], "ICON":None},
+                                "PushButton_UNFILTER":{"WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", partial(self.launchTaskEvent, 'unfilter'))], "ICON":None},
+                                "PushButton_EXPORT":{"WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", partial(self.launchTaskEvent, 'export'))], "ICON":None}
+                                }        
+        
+        self.widgets["EXPLORING"] = {
+                                    "PushButton_IDENTIFY":{"WIDGET":self.pushButton_exploring_identify, "SIGNALS":[("clicked", self.exploring_identify_clicked)], "ICON":None},
+                                    "PushButton_ZOOM":{"WIDGET":self.pushButton_exploring_zoom, "SIGNALS":[("clicked", self.exploring_zoom_clicked)], "ICON":None},
+                                    "PushButton_SELECTING":{"WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'is_selecting'))], "ICON":None},
+                                    "PushButton_TRACKING":{"WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'is_tracking'))], "ICON":None},
+                                    "PushButton_LINKING":{"WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'is_linked'))], "ICON":None},
+                                    "PushButton_SAVING":{"WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'is_saving'))], "ICON":None}
+                                    }
+        
+        self.widgets["SINGLE_SELECTION"] = {
+                                            "ComboBox_FeaturePickerWidget":{"WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed)]},
+                                            "ComboBox_FieldExpressionWidget":{"WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
+                                            }
+        
+        self.widgets["MULTIPLE_SELECTION"] = {
+                                            "ComboBox_CustomCheckableComboBox":{"WIDGET":self.customCheckableComboBox_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_link_widgets)]},
+                                            "ComboBox_FieldExpressionWidget":{"WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
+                                            }
+        
+        self.widgets["CUSTOM_SELECTION"] = {
+                                            "ComboBox_FieldExpressionWidget":{"WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
+                                            }
+        
+        self.widgets["FILTERING"] = {
+                                    "PushButton_AUTO_CURRENT_LAYER":{"WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", self.filtering_auto_current_layer_changed)], "ICON":None},
+                                    "PushButton_LAYERS_TO_FILTER":{"WIDGET":self.pushButton_checkable_filtering_layers_to_filter, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'has_layers_to_filter'))], "ICON":None},
+                                    "PushButton_COMBINE_OPERATOR":{"WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'has_combined_filter_logic'))], "ICON":None},
+                                    "PushButton_GEOMETRIC_PREDICATES":{"WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'has_geometric_predicates'))], "ICON":None},
+                                    "PushButton_BUFFER":{"WIDGET":self.pushButton_checkable_filtering_buffer, "SIGNALS":[("clicked", partial(self.layer_property_changed, 'has_buffer'))], "ICON":None},
+                                    "ComboBox_CURRENT_LAYER":{"WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
+                                    "ComboBox_LAYERS_TO_FILTER":{"WIDGET":self.comboBox_filtering_layers_to_filter, "SIGNALS":[("checkedItemsChanged", partial(self.layer_property_changed, 'layers_to_filter'))]},
+                                    "ComboBox_COMBINE_OPERATOR":{"WIDGET":self.comboBox_filtering_current_layer_combine_operator, "SIGNALS":[("currentTextChanged", partial(self.layer_property_changed, 'combined_filter_logic'))]},
+                                    "ComboBox_GEOMETRIC_PREDICATES":{"WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", partial(self.layer_property_changed, 'geometric_predicates'))]},
+                                    "ComboBox_PREDICATES_OPERATOR":{"WIDGET":self.comboBox_filtering_geometric_predicates_operator, "SIGNALS":[("currentTextChanged", partial(self.layer_property_changed, 'geometric_predicates_operator'))]},
+                                    "QgsDoubleSpinBox_BUFFER":{"WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("textChanged", partial(self.layer_property_changed, 'buffer'))]}
+                                    }
+        
+        self.widgets["EXPORTING"] = {
+                                    "PushButton_LAYERS":{"WIDGET":self.pushButton_checkable_exporting_layers, "SIGNALS":[("clicked", None)], "ICON":None},
+                                    "PushButton_PROJECTION":{"WIDGET":self.pushButton_checkable_exporting_projection, "SIGNALS":[("clicked", None)], "ICON":None},
+                                    "PushButton_STYLES":{"WIDGET":self.pushButton_checkable_exporting_styles, "SIGNALS":[("clicked", None)], "ICON":None},
+                                    "PushButton_DATATYPE":{"WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", None)], "ICON":None},
+                                    "PushButton_OUTPUT_FOLDER":{"WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", self.dialog_export_folder)], "ICON":None},
+                                    "PushButton_ZIP":{"WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", self.dialog_export_zip)], "ICON":None},
+                                    "ComboBox_LAYERS":{"WIDGET":self.comboBox_exporting_layers, "SIGNALS":[("checkedItemsChanged", None)]},
+                                    "ComboBox_PROJECTION":{"WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", None)]},
+                                    "ComboBox_STYLES":{"WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", None)]},
+                                    "ComboBox_DATATYPE":{"WIDGET":self.comboBox_exporting_datatype, "SIGNALS":[("currentTextChanged", None)]},
+                                    "LineEdit_OUTPUT_FOLDER":{"WIDGET":self.lineEdit_exporting_output_folder, "SIGNALS":[("textEdited", self.reset_export_folder)]},
+                                    "LineEdit_ZIP":{"WIDGET":self.lineEdit_exporting_zip, "SIGNALS":[("textEdited", self.reset_export_zip)]}
+                                    }
+    
+        self.widgets["QGIS"] = {
+                                "LayerTreeView":{"WIDGET":self.iface.layerTreeView(), "SIGNALS":[("currentLayerChanged", self.current_layer_changed)]}
+                                }
+        
+
+
+
 
     def manage_configuration_model(self):
         """Manage the qtreeview model configuration"""
@@ -117,84 +251,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.output_name = 'export' + '_' + str(self.current_project_title)
 
 
-    def manage_ui_icons(self):
+    def set_widget_icon(self, widget_path, widget_type):
 
-        """SET PUSHBUTTONS' ICONS"""
-
-        """ACTION"""
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/filter.png"))
-        self.pushButton_action_filter.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/unfilter.png"))
-        self.pushButton_action_unfilter.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/export.png"))
-        self.pushButton_action_export.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/logo.png"))
-        self.pushButton_action_help.setIcon(icon)
-
-
-        """EXPLORING"""
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/selection_7.png"))
-        self.pushButton_exploring_identify.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/zoom_2.png"))
-        self.pushButton_exploring_zoom.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/selection_3.png"))
-        self.pushButton_checkable_exploring_selecting.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/zoom_1.png"))
-        self.pushButton_checkable_exploring_tracking.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/link.png"))
-        self.pushButton_checkable_exploring_linking_widgets.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/auto_save.png"))
-        self.pushButton_checkable_exploring_saving_parameters.setIcon(icon)
-
-
-
-        """FILTERING"""
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/change_2.png"))
-        self.pushButton_checkable_filtering_auto_current_layer.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/layers.png"))
-        self.pushButton_checkable_filtering_layers_to_filter.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/add.png"))
-        self.pushButton_checkable_filtering_current_layer_add.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/geo_1.png"))
-        self.pushButton_checkable_filtering_geometric_predicates.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/geo_tampon.png"))
-        self.pushButton_checkable_filtering_buffer.setIcon(icon)
-
-
-        """EXPORTING"""
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/layers.png"))
-        self.pushButton_checkable_exporting_layers.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/projection_1.png"))
-        self.pushButton_checkable_exporting_projection.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/styles_1.png"))
-        self.pushButton_checkable_exporting_styles.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/datatype.png"))
-        self.pushButton_checkable_exporting_datatype.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/folder_white.png"))
-        self.pushButton_checkable_exporting_output_folder.setIcon(icon)
-
-        icon = QtGui.QIcon(os.path.join(self.plugin_dir,  "icons/zip.png"))
-        self.pushButton_checkable_exporting_zip.setIcon(icon)
-
-
-
-
+        file = CONFIG_DATA["DOCKWIDGET"][widget_type]["ICONS"][widget_path[0]][widget_path[1]]
+        file_path = os.path.join(self.plugin_dir, "icons", file)
+        icon = QtGui.QIcon(file_path)
+        self.widgets[widget_path[0]][widget_path[1]]["ICON"] = file_path
+        self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].setIcon(icon)
 
 
 
@@ -202,7 +265,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         """Manage the plugin style"""
 
-        combobox_style = """
+        comboBox_style = """
                         QgsFeaturePickerWidget
                         {
                         background-color:{color_1};
@@ -273,7 +336,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         border: 2px solid {color_3};
                         }
                         QgsFieldComboBox QAbstractItemView {
-
                         background: {color_1};
                         selection-background-color:{color_3};
                         color:{color_3};
@@ -292,7 +354,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         border: 2px solid {color_3};
                         }
                         QgsFieldComboBox QAbstractItemView {
-
                         background: {color_1};
                         selection-background-color:{color_3};
                         color:{color_3};
@@ -311,7 +372,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         border: 2px solid {color_3};
                         }
                         QgsFieldExpressionWidget QAbstractItemView {
-
                         background: {color_1};
                         selection-background-color:{color_3};
                         color:{color_3};
@@ -319,101 +379,43 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         }
                         QgsCheckableComboBox
                         {
-                         background-color:{color_1};
+                        background-color:{color_1};
                         border: 1px solid {color_1};
                         border-radius: 3px;
                         padding: 3px 3px 3px 3px;
                         color:{color_3};
-
                         }
-
                         QgsCheckableComboBox:hover
                         {
-
                         border: 2px solid {color_3};
-
                         }
-
                         QgsCheckableComboBox QAbstractItemView {
-
-                          background: {color_1};
-                          selection-background-color: {color_2};
-                            color:{color_3};
-                            border: 2px solid {color_3};
+                        background: {color_1};
+                        selection-background-color: {color_2};
+                        color:{color_3};
+                        border: 2px solid {color_3};
                         }
                         QComboBox
                         {
-                         background-color:{color_1};
+                        background-color:{color_1};
                         border: 1px solid {color_1};
                         border-radius: 3px;
                         padding: 3px 3px 3px 3px;
                         color:{color_3};
-
                         }
-
                         QComboBox:hover
                         {
-
                         border: 2px solid {color_3};
-
                         }
-
                         QComboBox QAbstractItemView {
-
-                          background: {color_1};
-                          selection-background-color: {color_2};
-                          color:{color_3};
-                          border: 2px solid {color_3};
+                        background: {color_1};
+                        selection-background-color: {color_2};
+                        color:{color_3};
+                        border: 2px solid {color_3};
                         }
                         """
 
 
-
-
-        checkbox_style = """QCheckBox:hover
-                            {
-                            background-color: {color};
-                            }
-                            QCheckBox:pressed
-                            {
-                            background-color: {color};
-                            border: 2px solid black;
-                            }
-                            QCheckBox:checked
-                            {
-                            background-color:{color};
-                            border: 2px solid black;
-                            }
-                            QCheckBox::indicator
-                            {
-                            border: none;
-                            background: none;
-                            }
-                            QCheckBox::indicator:checked
-                            {
-                            background: none;
-                            }"""
-
-        pushbutton_style = """QPushButton
-                            {
-                            border-radius: 10px;
-                            padding: 10px 10px 10px 10px;
-                            }
-                            QPushButton:hover
-                            {
-                            background-color: {color};
-                            }
-                            QPushButton:pressed
-                            {
-                            background-color: {color};
-                            border: 2px solid black;
-                            }
-                            QPushButton:checked
-                            {
-                            background-color: {color};
-                            border: 2px solid black;
-                            }
-                            """
         dock_style = ("""QWidget
                         {
                         background: {color};
@@ -428,23 +430,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             color:{color_3}
                             }"""
 
-        expression_style = """
+        lineEdit_style = """
                                 background-color: {color_2};
                                 color:{color_1};
                                 border-radius: 3px;
                                 padding: 3px 3px 3px 3px;"""
 
-        combobox_style = combobox_style.replace("{color_1}",COLORS["BACKGROUND"][1]).replace("{color_2}",COLORS["BACKGROUND"][2]).replace("{color_3}",COLORS["FONT"][1])
-
-        checkbox_style = checkbox_style.replace("{color}",COLORS["BACKGROUND"][1])
-
-        pushbutton_style = pushbutton_style.replace("{color}",COLORS["BACKGROUND"][1])
+        comboBox_style = comboBox_style.replace("{color_1}",COLORS["BACKGROUND"][1]).replace("{color_2}",COLORS["BACKGROUND"][2]).replace("{color_3}",COLORS["FONT"][1])
 
         dock_style = dock_style.replace("{color}",COLORS["BACKGROUND"][2])
 
         groupbox_style = groupbox_style.replace("{color_1}",COLORS["BACKGROUND"][0]).replace("{color_3}",COLORS["FONT"][1])
 
-        expression_style = expression_style.replace("{color_1}",COLORS["FONT"][1]).replace("{color_2}",COLORS["BACKGROUND"][1])
+        lineEdit_style = lineEdit_style.replace("{color_1}",COLORS["FONT"][1]).replace("{color_2}",COLORS["BACKGROUND"][1])
 
 
         # self.toolBox_tabWidgets.setStyleSheet("""background-color: {};
@@ -462,19 +460,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         #                                                 color:{};""".format(COLORS["BACKGROUND"][0],COLORS["FONT"][0]))
 
 
-
-
-
-
-
-
-
         """SET STYLES"""
         
         """DOCK"""
         self.dockWidgetContents.setStyleSheet(dock_style)
 
-        self.toolBox_tabTools.setStyleSheet("""background-color: {};
+        self.widgets["DOCK"]["ToolBox_tabTools"]["WIDGET"].setStyleSheet("""background-color: {};
                                                         border-color: rgb(0, 0, 0);
                                                         border-radius:6px;
                                                         padding: 10px 10px 10px 10px;
@@ -487,196 +478,55 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                                         border-radius:6px;
                                                         marging: 25px 10px 10px 10px;
                                                         color:{};""".format(COLORS["BACKGROUND"][0],COLORS["FONT"][0]))
-
-
-
-        """ACTION"""
-        self.pushButton_action_filter.setStyleSheet(pushbutton_style)
-        self.pushButton_action_unfilter.setStyleSheet(pushbutton_style)
-        self.pushButton_action_export.setStyleSheet(pushbutton_style)
-        self.pushButton_action_help.setStyleSheet(pushbutton_style)
-
         
+        pushButton_style = json.dumps(CONFIG_DATA["DOCKWIDGET"]["PushButton"]["STYLE"])[1:-1].replace(': {', ' {').replace('\"', '').replace(',', '')
+        print(pushButton_style)
 
-        """EXPLORING"""
-        self.pushButton_exploring_identify.setStyleSheet(pushbutton_style)
-        self.pushButton_exploring_zoom.setStyleSheet(pushbutton_style)
-
-        self.pushButton_checkable_exploring_selecting.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exploring_tracking.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exploring_linking_widgets.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exploring_saving_parameters.setStyleSheet(pushbutton_style)
-
-        """SINGLE SELECTION"""
-        #self.mGroupBox_exploring_single_selection.setStyleSheet(groupbox_style)
-        self.mFeaturePickerWidget_exploring_single_selection.setStyleSheet(combobox_style)
-        self.mFieldExpressionWidget_exploring_single_selection.setStyleSheet(combobox_style)
-
-        """MULTIPLE SELECTION"""
-        #self.mGroupBox_exploring_multiple_selection.setStyleSheet(groupbox_style)
-        #self.mFeatureListComboBox_exploring_multiple_selection.setStyleSheet(combobox_style)
-        self.mFieldExpressionWidget_exploring_multiple_selection.setStyleSheet(combobox_style)
-
-        """CUSTOM SELECTION"""
-        #self.mGroupBox_exploring_custom_selection.setStyleSheet(groupbox_style)
-        self.mFieldExpressionWidget_exploring_custom_selection.setStyleSheet(combobox_style)
+        for widget_group in self.widgets:
+            for widget_name in self.widgets[widget_group]:
+                if widget_name.find("PushButton") >= 0:
+                    self.set_widget_icon([widget_group, widget_name], "PushButton")
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(pushButton_style)
+                elif widget_name.find("ComboBox") >= 0:
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
+                elif widget_name.find("LineEdit") >= 0:
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
 
 
-        """FILTERING"""
-        self.pushButton_checkable_filtering_auto_current_layer.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_filtering_layers_to_filter.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_filtering_current_layer_add.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_filtering_geometric_predicates.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_filtering_buffer.setStyleSheet(pushbutton_style)
-
-
-        self.mMapLayerComboBox_filtering_current_layer.setStyleSheet(combobox_style)
-        self.comboBox_filtering_layers_to_filter.setStyleSheet(combobox_style)
-        self.comboBox_filtering_current_layer_add.setStyleSheet(combobox_style)
-        self.mComboBox_filtering_geometric_predicates.setStyleSheet(combobox_style)
-        self.comboBox_filtering_geometric_predicates_operator.setStyleSheet(combobox_style)
-        #lineedit
-        #self.mQgsDoubleSpinBox_filtering_buffer.setStyleSheet()
-        
-
-        """EXPORTING"""
-        self.pushButton_checkable_exporting_layers.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exporting_projection.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exporting_styles.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exporting_datatype.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exporting_output_folder.setStyleSheet(pushbutton_style)
-        self.pushButton_checkable_exporting_zip.setStyleSheet(pushbutton_style)
-
-
-        self.comboBox_exporting_layers.setStyleSheet(combobox_style)
-        self.mQgsProjectionSelectionWidget_exporting_projection.setStyleSheet(combobox_style)
-        self.comboBox_exporting_styles.setStyleSheet(combobox_style)
-        self.comboBox_exporting_datatype.setStyleSheet(combobox_style)
-
-        #lineedit
-        #self.lineEdit_exporting_output_folder.setStyleSheet()
-        #self.lineEdit_exporting_zip.setStyleSheet()
-
-
-        print("Colors changed!")
 
     def manage_interactions(self):
 
-        """SET INTERACTIONS"""
+        
 
-        self.custom_identify_tool = CustomIdentifyTool(self.iface)
-        """DOCK"""
+
 
         """INIT"""
-        self.select_tabTools_index(self.toolBox_tabTools.currentIndex())
-
-        """SLOTS"""
-        self.toolBox_tabTools.currentChanged.connect(self.select_tabTools_index)
-
-
-
-        """ACTION"""
-
-        """SLOTS"""
-        self.pushButton_action_filter.clicked.connect(partial(self.launchTaskEvent, 'filter'))
-        self.pushButton_action_unfilter.clicked.connect(partial(self.launchTaskEvent, 'unfilter'))
-        self.pushButton_action_export.clicked.connect(partial(self.launchTaskEvent, 'export'))
-
-
-        """EXPLORING"""
-
-        """SLOTS"""
-        self.pushButton_checkable_exploring_selecting.clicked.connect(partial(self.layer_property_changed, 'is_selecting'))
-        self.pushButton_checkable_exploring_tracking.clicked.connect(partial(self.layer_property_changed, 'is_tracking'))
-        self.pushButton_checkable_exploring_linking_widgets.clicked.connect(partial(self.layer_property_changed, 'is_linked'))
-        self.pushButton_checkable_exploring_saving_parameters.clicked.connect(partial(self.layer_property_changed, 'is_saving'))
-        
-        self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
-        self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
-
-
-        """SINGLE SELECTION"""
-
-        """SLOTS"""
-        self.mGroupBox_exploring_single_selection.clicked.connect(partial(self.exploring_groupbox_changed, 'single_selection'))
-
-        
-
-        self.mFeaturePickerWidget_exploring_single_selection.featureChanged.connect(self.exploring_features_changed)
-        self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(self.exploring_source_params_changed)
-
-        
-
-        """MULTIPLE SELECTION"""
-        self.mGroupBox_exploring_multiple_selection.clicked.connect(partial(self.exploring_groupbox_changed, 'multiple_selection'))
-
-        self.customCheckableComboBox_exploring_multiple_selection.updatingCheckedItemList.connect(self.exploring_features_changed)
-        self.customCheckableComboBox_exploring_multiple_selection.filteringCheckedItemList.connect(self.exploring_link_widgets)
-
-        self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(self.exploring_source_params_changed)
-        
-
-        """CUSTOM SELECTION"""
-        self.mGroupBox_exploring_custom_selection.clicked.connect(partial(self.exploring_groupbox_changed, 'custom_selection'))
-
-        self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(self.exploring_source_params_changed)
-
-
-        """FILTERING"""
-
-        """INIT"""
-        self.mQgsDoubleSpinBox_filtering_buffer.setExpressionsEnabled(True)
-
-
-        """SLOTS"""
-        self.mMapLayerComboBox_filtering_current_layer.layerChanged.connect(self.current_layer_changed)
-        self.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.layer_property_changed, 'layers_to_filter'))
-        self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
-        self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.connect(partial(self.layer_property_changed, 'geometric_predicates'))
-        self.comboBox_filtering_geometric_predicates_operator.currentTextChanged.connect(partial(self.layer_property_changed, 'geometric_predicates_operator'))
-        self.mQgsDoubleSpinBox_filtering_buffer.textChanged.connect(partial(self.layer_property_changed, 'buffer'))
-        
-
-        self.pushButton_checkable_filtering_layers_to_filter.clicked.connect(partial(self.layer_property_changed, 'has_layers_to_filter'))
-        self.pushButton_checkable_filtering_current_layer_add.clicked.connect(partial(self.layer_property_changed, 'has_combined_filter_logic'))
-        self.pushButton_checkable_filtering_geometric_predicates.clicked.connect(partial(self.layer_property_changed, 'has_geometric_predicates'))
-        self.pushButton_checkable_filtering_buffer.clicked.connect(partial(self.layer_property_changed, 'has_buffer'))
-
-
-
-        self.pushButton_checkable_filtering_auto_current_layer.clicked.connect(self.filtering_auto_current_layer_changed)
-
-
-
-        """EXPORTING"""
-        
-        """INIT"""
-        self.mQgsProjectionSelectionWidget_exporting_projection.setCrs(PROJECT.crs())
-
-        """SLOTS"""
-        self.pushButton_checkable_exporting_output_folder.clicked.connect(self.dialog_export_folder)
-        self.lineEdit_exporting_output_folder.textEdited.connect(self.reset_export_folder)
-
-        self.pushButton_checkable_exporting_zip.clicked.connect(self.dialog_export_zip)
-        self.lineEdit_exporting_zip.textEdited.connect(self.reset_export_zip)
-
-
-        """QGIS"""
-
-        """SLOTS"""
-        if self.auto_change_current_layer_flag is True:
-            self.iface.layerTreeView().currentLayerChanged.connect(self.current_layer_changed)
-
-        """INIT"""
-        
         self.current_layer = self.iface.activeLayer()
+        
 
-        self.populate_predicats_chekableCombobox()
+        self.select_tabTools_index(self.widgets["DOCK"]["ToolBox_tabTools"]["WIDGET"].currentIndex())
+        self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setExpressionsEnabled(True)
+        self.widgets["EXPORTING"]["ComboBox_PROJECTION"]["WIDGET"].setCrs(PROJECT.crs())
+
+        """SET INTERACTIONS"""
+        for widget_group in self.widgets:
+            for widget in self.widgets[widget_group]:
+                for signal in self.widgets[widget_group][widget]["SIGNALS"]:
+                    if signal[1] != None:
+                        self.manageSignal([widget_group, widget], 'connect', signal[0])
+
+
+
 
         if self.current_layer != None:
+            self.populate_predicats_chekableCombobox()
             self.exporting_populate_layers_chekableCombobox()
             self.filtering_populate_layers_chekableCombobox()
+            self.filtering_auto_current_layer_changed()
+            #self.exploring_groupbox_changed('single_selection')
             self.current_layer_changed(self.current_layer)
+
+
 
     def icon_per_geometry_type(self, geometry_type):
         """Return the icon for a geometry type.
@@ -705,12 +555,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def populate_predicats_chekableCombobox(self):
 
         self.predicats = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
-        self.mComboBox_filtering_geometric_predicates.clear()
-        self.mComboBox_filtering_geometric_predicates.addItems(self.predicats)
+        self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].clear()
+        self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicats)
 
     def filtering_populate_layers_chekableCombobox(self):
         try:    
-            self.comboBox_filtering_layers_to_filter.clear()
+            self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].clear()
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
             if layer_props["filtering"]["has_layers_to_filter"] == True:
@@ -722,15 +572,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
 
                     if key != self.current_layer.id():
-                        self.comboBox_filtering_layers_to_filter.addItem(layer_icon, layer_name + ' [%s]' % (layer_crs))
-                        self.comboBox_filtering_layers_to_filter.setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)
+                        self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs))
+                        self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)
                         if len(layer_props["filtering"]["layers_to_filter"]) > 0:
                             if layer_id in list(layer_info["layer_id"] for layer_info in list(layer_props["filtering"]["layers_to_filter"])):
-                                self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Checked)
+                                self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Checked)
                             else:
-                                self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Unchecked)   
+                                self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)   
                         else:
-                            self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Unchecked)
+                            self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
                         i += 1    
             else:
                 i = 0
@@ -740,8 +590,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
                     
                     if key != self.current_layer.id():
-                        self.comboBox_filtering_layers_to_filter.addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])                 
-                        self.comboBox_filtering_layers_to_filter.setItemCheckState(i, Qt.Unchecked)
+                        self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])                 
+                        self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
                         i += 1    
         
         except Exception as e:
@@ -751,15 +601,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exporting_populate_layers_chekableCombobox(self):
 
-        self.comboBox_exporting_layers.clear()
+        self.widgets["EXPORTING"]["ComboBox_LAYERS"]["WIDGET"].clear()
 
         for key in self.PROJECT_LAYERS:
             layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
             layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
             layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
-            self.comboBox_exporting_layers.addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])
+            self.widgets["EXPORTING"]["ComboBox_LAYERS"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])
         
-        self.comboBox_exporting_layers.selectAllOptions()
+        self.widgets["EXPORTING"]["ComboBox_LAYERS"]["WIDGET"].selectAllOptions()
             
 
 
@@ -779,71 +629,73 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         flag_value_changed = False
 
         if property == "is_selecting":
-            if layer_props["exploring"]["is_selecting"] is False and self.pushButton_checkable_exploring_selecting.isChecked() is True:
+            if layer_props["exploring"]["is_selecting"] is False and self.widgets["EXPLORING"]["PushButton_SELECTING"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_selecting"] = True
                 flag_value_changed = True
-                self.exploring_groupbox_changed(self.current_exploring_groupbox)
+                #self.exploring_groupbox_changed(self.current_exploring_groupbox)
 
-            elif layer_props["exploring"]["is_selecting"] is True and self.pushButton_checkable_exploring_selecting.isChecked() is False:
+            elif layer_props["exploring"]["is_selecting"] is True and self.widgets["EXPLORING"]["PushButton_SELECTING"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_selecting"] = False
                 flag_value_changed = True
 
         elif property == "is_tracking":
-            if layer_props["exploring"]["is_tracking"] is False and self.pushButton_checkable_exploring_tracking.isChecked() is True:
+            if layer_props["exploring"]["is_tracking"] is False and self.widgets["EXPLORING"]["PushButton_TRACKING"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_tracking"] = True
                 flag_value_changed = True
-                self.exploring_groupbox_changed(self.current_exploring_groupbox)
+                #self.exploring_groupbox_changed(self.current_exploring_groupbox)
 
-            elif layer_props["exploring"]["is_tracking"] is True and self.pushButton_checkable_exploring_tracking.isChecked() is False:
+            elif layer_props["exploring"]["is_tracking"] is True and self.widgets["EXPLORING"]["PushButton_TRACKING"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_tracking"] = False
                 flag_value_changed = True
 
         elif property == "is_linked":
-            if layer_props["exploring"]["is_linked"] is False and self.pushButton_checkable_exploring_linking_widgets.isChecked() is True:
+            if layer_props["exploring"]["is_linked"] is False and self.widgets["EXPLORING"]["PushButton_LINKING"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_linked"] = True
                 flag_value_changed = True
 
-            elif layer_props["exploring"]["is_linked"] is True and self.pushButton_checkable_exploring_linking_widgets.isChecked() is False:
+            elif layer_props["exploring"]["is_linked"] is True and self.widgets["EXPLORING"]["PushButton_LINKING"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_linked"] = False
                 flag_value_changed = True
             self.exploring_link_widgets()
 
         elif property == "is_saving":
-            if layer_props["exploring"]["is_saving"] is False and self.pushButton_checkable_exploring_saving_parameters.isChecked() is True:
+            if layer_props["exploring"]["is_saving"] is False and self.widgets["EXPLORING"]["PushButton_SAVING"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_saving"] = True
                 flag_value_changed = True
-            elif layer_props["exploring"]["is_saving"] is True and self.pushButton_checkable_exploring_saving_parameters.isChecked() is False:
+            elif layer_props["exploring"]["is_saving"] is True and self.widgets["EXPLORING"]["PushButton_SAVING"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["is_saving"] = False
                 flag_value_changed = True
                 self.reinitializeLayerOnErrorEvent(self.current_layer.id())
 
         elif property == "has_layers_to_filter":
-            if layer_props["filtering"]["has_layers_to_filter"] is False and self.pushButton_checkable_filtering_layers_to_filter.isChecked() is True:
+            if layer_props["filtering"]["has_layers_to_filter"] is False and self.widgets["FILTERING"]["PushButton_LAYERS_TO_FILTER"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_layers_to_filter"] = True
                 checked_list_data = []
-                for i in range(self.comboBox_filtering_layers_to_filter.count()):
-                   if self.comboBox_filtering_layers_to_filter.itemCheckState(i) == Qt.Checked:
-                        data = self.comboBox_filtering_layers_to_filter.itemData(i, Qt.UserRole)
+                for i in range(self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].count()):
+                   if self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].itemCheckState(i) == Qt.Checked:
+                        data = self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].itemData(i, Qt.UserRole)
                         if isinstance(data, dict):
                             checked_list_data.append(data)
                         else:
                             checked_list_data.append(json.loads(data))
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = checked_list_data
                 flag_value_changed = True
-            elif layer_props["filtering"]["has_layers_to_filter"] is True and self.pushButton_checkable_filtering_layers_to_filter.isChecked() is False:
+            elif layer_props["filtering"]["has_layers_to_filter"] is True and self.widgets["FILTERING"]["PushButton_LAYERS_TO_FILTER"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_layers_to_filter"] = False
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = []
-                self.comboBox_filtering_layers_to_filter.checkedItemsChanged.disconnect()
-                self.comboBox_filtering_layers_to_filter.deselectAllOptions()
-                self.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.layer_property_changed, 'layers_to_filter'))
+
+                state = self.manageSignal(["FILTERING","ComboBox_LAYERS_TO_FILTER"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].deselectAllOptions()
+                    self.manageSignal(["FILTERING","ComboBox_LAYERS_TO_FILTER"])
                 flag_value_changed = True
             
         elif property == "layers_to_filter":
-            if layer_props["filtering"]["has_layers_to_filter"] is True and self.pushButton_checkable_filtering_layers_to_filter.isChecked() is True:
+            if layer_props["filtering"]["has_layers_to_filter"] is True and self.widgets["FILTERING"]["PushButton_LAYERS_TO_FILTER"]["WIDGET"].isChecked() is True:
                 checked_list_data = []
-                for i in range(self.comboBox_filtering_layers_to_filter.count()):
-                   if self.comboBox_filtering_layers_to_filter.itemCheckState(i) == Qt.Checked:
-                        data = self.comboBox_filtering_layers_to_filter.itemData(i, Qt.UserRole)
+                for i in range(self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].count()):
+                   if self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].itemCheckState(i) == Qt.Checked:
+                        data = self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].itemData(i, Qt.UserRole)
                         if isinstance(data, dict):
                             checked_list_data.append(data)
                         else:
@@ -852,95 +704,103 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 flag_value_changed = True
             else:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = []
-                self.comboBox_filtering_layers_to_filter.checkedItemsChanged.disconnect()
-                self.comboBox_filtering_layers_to_filter.deselectAllOptions()
-                self.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.layer_property_changed, 'layers_to_filter'))
+                state = self.manageSignal(["FILTERING","ComboBox_LAYERS_TO_FILTER"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_LAYERS_TO_FILTER"]["WIDGET"].deselectAllOptions()
+                    self.manageSignal(["FILTERING","ComboBox_LAYERS_TO_FILTER"])
                 flag_value_changed = True
 
         elif property == "has_combined_filter_logic":
-            if layer_props["infos"]["has_combined_filter_logic"] is False and self.pushButton_checkable_filtering_current_layer_add.isChecked() is True:
+            if layer_props["infos"]["has_combined_filter_logic"] is False and self.widgets["FILTERING"]["PushButton_COMBINE_OPERATOR"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["has_combined_filter_logic"] = True
-                self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["combined_filter_logic"] = self.comboBox_filtering_current_layer_add.currentText()
+                self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["combined_filter_logic"] = self.widgets["FILTERING"]["ComboBox_COMBINE_OPERATOR"]["WIDGET"].currentText()
                 flag_value_changed = True
-            elif layer_props["infos"]["has_combined_filter_logic"] is True and self.pushButton_checkable_filtering_current_layer_add.isChecked() is False:
+            elif layer_props["infos"]["has_combined_filter_logic"] is True and self.widgets["FILTERING"]["PushButton_COMBINE_OPERATOR"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["has_combined_filter_logic"] = False
                 self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["combined_filter_logic"] = ''
-                self.comboBox_filtering_current_layer_add.currentTextChanged.disconnect()
-                self.comboBox_filtering_current_layer_add.setCurrentIndex(0)
-                self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
+                state = self.manageSignal(["FILTERING","ComboBox_COMBINE_OPERATOR"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+                    self.manageSignal(["FILTERING","ComboBox_COMBINE_OPERATOR"])
                 flag_value_changed = True
             
         elif property == "combined_filter_logic":
-            if layer_props["infos"]["has_combined_filter_logic"] is True and self.pushButton_checkable_filtering_layers_to_filter.isChecked() is True:
-                self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["combined_filter_logic"] = self.comboBox_filtering_current_layer_add.currentText()
+            if layer_props["infos"]["has_combined_filter_logic"] is True and self.widgets["FILTERING"]["PushButton_LAYERS_TO_FILTER"]["WIDGET"].isChecked() is True:
+                self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["combined_filter_logic"] = self.widgets["FILTERING"]["ComboBox_COMBINE_OPERATOR"]["WIDGET"].currentText()
                 flag_value_changed = True
             else:
                 self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["combined_filter_logic"] = ''
-                self.comboBox_filtering_current_layer_add.currentTextChanged.disconnect()
-                self.comboBox_filtering_current_layer_add.setCurrentIndex(0)
-                self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
+                state = self.manageSignal(["FILTERING","ComboBox_COMBINE_OPERATOR"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+                    self.manageSignal(["FILTERING","ComboBox_COMBINE_OPERATOR"])
                 flag_value_changed = True
 
         elif property == "has_geometric_predicates":
             self.filtering_geometric_predicates_state_changed()
-            if layer_props["filtering"]["has_geometric_predicates"] is False and self.pushButton_checkable_filtering_geometric_predicates.isChecked() is True:
+            if layer_props["filtering"]["has_geometric_predicates"] is False and self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_geometric_predicates"] = True
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates"] = self.mComboBox_filtering_geometric_predicates.checkedItems()
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates"] = self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].checkedItems()
                 flag_value_changed = True
-            elif layer_props["filtering"]["has_geometric_predicates"] is True and self.pushButton_checkable_filtering_geometric_predicates.isChecked() is False:
+            elif layer_props["filtering"]["has_geometric_predicates"] is True and self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_geometric_predicates"] = False
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates"] = []
-                self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.disconnect()
-                self.mComboBox_filtering_geometric_predicates.deselectAllOptions()
-                self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.connect(partial(self.layer_property_changed, 'geometric_predicates'))
+                state = self.manageSignal(["FILTERING","ComboBox_GEOMETRIC_PREDICATES"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].deselectAllOptions()
+                    self.manageSignal(["FILTERING","ComboBox_GEOMETRIC_PREDICATES"])
                 flag_value_changed = True
 
         elif property == "geometric_predicates":
-            if layer_props["filtering"]["has_geometric_predicates"] is True and self.pushButton_checkable_filtering_geometric_predicates.isChecked() is True:
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates"] = self.mComboBox_filtering_geometric_predicates.checkedItems()
+            if layer_props["filtering"]["has_geometric_predicates"] is True and self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked() is True:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates"] = self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].checkedItems()
                 flag_value_changed = True
             else:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates"] = []
-                self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.disconnect()
-                self.mComboBox_filtering_geometric_predicates.deselectAllOptions()
-                self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.connect(partial(self.layer_property_changed, 'geometric_predicates'))
+                state = self.manageSignal(["FILTERING","ComboBox_GEOMETRIC_PREDICATES"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].deselectAllOptions()
+                    self.manageSignal(["FILTERING","ComboBox_GEOMETRIC_PREDICATES"])
                 flag_value_changed = True
 
         
         elif property == "geometric_predicates_operator":
-            if layer_props["filtering"]["has_geometric_predicates"] is True and self.pushButton_checkable_filtering_geometric_predicates.isChecked() is True:
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates_operator"] = self.comboBox_filtering_geometric_predicates_operator.currentText()
+            if layer_props["filtering"]["has_geometric_predicates"] is True and self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked() is True:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates_operator"] = self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].currentText()
                 flag_value_changed = True
             else:
-                self.comboBox_filtering_geometric_predicates_operator.currentTextChanged.disconnect()
-                self.comboBox_filtering_geometric_predicates_operator.setCurrentIndex(0)
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates_operator"] = self.comboBox_filtering_geometric_predicates_operator.currentText()
-                self.comboBox_filtering_geometric_predicates_operator.currentTextChanged.connect(partial(self.layer_property_changed, 'geometric_predicates_operator'))
+                state = self.manageSignal(self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"])
+                if state == False:
+                    self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+                    self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates_operator"] = self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].currentText()
+                    self.manageSignal(self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"])
                 flag_value_changed = True
 
         elif property == "has_buffer":
             self.filtering_buffer_state_changed()
-            if layer_props["filtering"]["has_buffer"] is False and self.pushButton_checkable_filtering_buffer.isChecked() is True:
+            if layer_props["filtering"]["has_buffer"] is False and self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].isChecked() is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_buffer"] = True
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.mQgsDoubleSpinBox_filtering_buffer.value()
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].value()
                 flag_value_changed = True
-            elif layer_props["filtering"]["has_buffer"] is True and self.pushButton_checkable_filtering_buffer.isChecked() is False:
+            elif layer_props["filtering"]["has_buffer"] is True and self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].isChecked() is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["has_buffer"] = False
-                self.mQgsDoubleSpinBox_filtering_buffer.textChanged.disconnect()
-                self.mQgsDoubleSpinBox_filtering_buffer.setValue(0.0)
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.mQgsDoubleSpinBox_filtering_buffer.value()
-                self.mQgsDoubleSpinBox_filtering_buffer.textChanged.connect(partial(self.layer_property_changed, 'buffer'))
+                state = self.manageSignal(["FILTERING","QgsDoubleSpinBox_BUFFER"])
+                if state == False:
+                    self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setValue(0.0)
+                    self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].value()
+                    self.manageSignal(["FILTERING","QgsDoubleSpinBox_BUFFER"])
                 flag_value_changed = True
 
         elif property == "buffer":
-            if layer_props["filtering"]["has_buffer"] is True and self.pushButton_checkable_filtering_buffer.isChecked() is True:
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.mQgsDoubleSpinBox_filtering_buffer.value()
+            if layer_props["filtering"]["has_buffer"] is True and self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].isChecked() is True:
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].value()
                 flag_value_changed = True
             else:
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = 0.0
-                self.mQgsDoubleSpinBox_filtering_buffer.textChanged.disconnect()
-                self.mQgsDoubleSpinBox_filtering_buffer.setValue(0.0)
-                self.mQgsDoubleSpinBox_filtering_buffer.textChanged.connect(partial(self.layer_property_changed, 'buffer'))
+                state = self.manageSignal(["FILTERING","QgsDoubleSpinBox_BUFFER"])
+                if state == False:
+                    self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setValue(0.0)
+                    self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer"] = self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].value()
+                    self.manageSignal(["FILTERING","QgsDoubleSpinBox_BUFFER"])
                 flag_value_changed = True
 
 
@@ -951,102 +811,105 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def dialog_export_folder(self):
 
-        if self.pushButton_checkable_exporting_output_folder.isChecked() == True:
+        if self.widgets["EXPORTING"]["PushButton_OUTPUT_FOLDER"]["WIDGET"].isChecked() == True:
             
             folderpath = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
 
             if folderpath:
-                self.lineEdit_exporting_output_folder.setText(folderpath)
+                self.widgets["EXPORTING"]["LineEdit_OUTPUT_FOLDER"]["WIDGET"].setText(folderpath)
                 print(folderpath)
             else:
-                self.pushButton_checkable_exporting_output_folder.setChecked(False)
+                self.widgets["EXPORTING"]["PushButton_OUTPUT_FOLDER"]["WIDGET"].setChecked(False)
         else:
-            self.lineEdit_exporting_output_folder.clear()
+            self.widgets["EXPORTING"]["LineEdit_OUTPUT_FOLDER"]["WIDGET"].clear()
 
     def reset_export_folder(self):
 
-        if str(self.lineEdit_exporting_output_folder.text()) == '':
-            self.lineEdit_exporting_output_folder.clear()
-            self.pushButton_checkable_exporting_output_folder.setChecked(False)
+        if str(self.widgets["EXPORTING"]["LineEdit_OUTPUT_FOLDER"]["WIDGET"].text()) == '':
+            self.widgets["EXPORTING"]["LineEdit_OUTPUT_FOLDER"]["WIDGET"].clear()
+            self.widgets["EXPORTING"]["PushButton_OUTPUT_FOLDER"]["WIDGET"].setChecked(False)
 
 
     def dialog_export_zip(self):
 
-        if self.pushButton_checkable_exporting_zip.isChecked() == True:
+        if self.widgets["EXPORTING"]["PushButton_ZIP"]["WIDGET"].isChecked() == True:
 
             
             filepath = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
 
             if filepath:
-                self.lineEdit_exporting_zip.setText(filepath)
+                self.widgets["EXPORTING"]["LineEdit_ZIP"]["WIDGET"].setText(filepath)
                 print(filepath)
             else:
-                self.pushButton_checkable_exporting_zip.setChecked(False)
+                self.widgets["EXPORTING"]["PushButton_ZIP"]["WIDGET"].setChecked(False)
         else:
-            self.lineEdit_exporting_zip.clear()
+            self.widgets["EXPORTING"]["LineEdit_ZIP"]["WIDGET"].clear()
 
 
     def reset_export_zip(self):
 
-        if str(self.lineEdit_exporting_zip.text()) == '':
-            self.lineEdit_exporting_zip.clear()
-            self.pushButton_checkable_exporting_zip.setChecked(False)
+        if str(self.widgets["EXPORTING"]["LineEdit_ZIP"]["WIDGET"].text()) == '':
+            self.widgets["EXPORTING"]["LineEdit_ZIP"]["WIDGET"].clear()
+            self.widgets["EXPORTING"]["PushButton_ZIP"]["WIDGET"].setChecked(False)
 
 
     def select_tabTools_index(self, i):
         """Keep the current tab index updated"""
         self.tabTools_current_index = i
         if self.tabTools_current_index == 1:
-            self.pushButton_action_export.setEnabled(True)
+            self.widgets["ACTION"]["PushButton_EXPORT"]["WIDGET"].setEnabled(True)
         else:
-            self.pushButton_action_export.setEnabled(False)
+            self.widgets["ACTION"]["PushButton_EXPORT"]["WIDGET"].setEnabled(False)
 
     def filtering_auto_current_layer_changed(self):
-        if self.pushButton_checkable_filtering_auto_current_layer.isChecked() is True:
+        if self.widgets["FILTERING"]["PushButton_AUTO_CURRENT_LAYER"]["WIDGET"].isChecked() is True:
             self.auto_change_current_layer_flag = True
-            self.iface.layerTreeView().currentLayerChanged.connect(self.current_layer_changed)
+            state = self.manageSignal(["QGIS","LayerTreeView"], 'connect')
+            if state == False:
+                raise SignalStateChangeError(state, self.widgets, ["QGIS","LayerTreeView"], 'connect')
         else:
             self.auto_change_current_layer_flag = False
-            self.iface.layerTreeView().currentLayerChanged.disconnect()
+            state = self.manageSignal(["QGIS","LayerTreeView"], 'disconnect')
+            if state == True:
+                raise SignalStateChangeError(state, self.widgets, ["QGIS","LayerTreeView"], 'disconnect')
 
 
     def filtering_geometric_predicates_state_changed(self):
         """Manage the geo filter state checkbox"""
-        if self.pushButton_checkable_filtering_geometric_predicates.isChecked() is True:
-            self.pushButton_checkable_filtering_buffer.setEnabled(True)
+        if self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked() is True:
+            self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].setEnabled(True)
 
-            self.comboBox_filtering_geometric_predicates_operator.setEnabled(True)
-            self.comboBox_filtering_geometric_predicates_operator.setFrame(True)
-            self.mComboBox_filtering_geometric_predicates.setEnabled(True)
-            self.mComboBox_filtering_geometric_predicates.setFrame(True)
+            self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setEnabled(True)
+            self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setFrame(True)
+            self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(True)
+            self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].setFrame(True)
         else:
-            self.pushButton_checkable_filtering_buffer.setEnabled(False)
-            self.pushButton_checkable_filtering_buffer.setChecked(False)
+            self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].setEnabled(False)
+            self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].setChecked(False)
 
-            self.mComboBox_filtering_geometric_predicates.setFrame(False)
-            self.mComboBox_filtering_geometric_predicates.setDisabled(True)
-            self.comboBox_filtering_geometric_predicates_operator.setDisabled(True)
-            self.comboBox_filtering_geometric_predicates_operator.setFrame(True)
-            self.mQgsDoubleSpinBox_filtering_buffer.setDisabled(True)
+            self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].setFrame(False)
+            self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].setDisabled(True)
+            self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setDisabled(True)
+            self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setFrame(True)
+            self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setDisabled(True)
             
       
     def filtering_buffer_state_changed(self):
         """Manage the buffer state checkbox"""
-        if self.pushButton_checkable_filtering_buffer.isChecked() is True:
-            self.mQgsDoubleSpinBox_filtering_buffer.setEnabled(True)
+        if self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].isChecked() is True:
+            self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setEnabled(True)
         else:
-            self.mQgsDoubleSpinBox_filtering_buffer.setEnabled(False)
+            self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setEnabled(False)
 
     def exploring_identify_clicked(self):
         
-        self.custom_identify_tool.setLayer(self.current_layer)
 
         if self.current_exploring_groupbox == "single_selection":
-            input = self.mFeaturePickerWidget_exploring_single_selection.feature()
+            input = self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].feature()
             features, expr = self.getExploringFeatures(input)
 
         elif self.current_exploring_groupbox == "multiple_selection":
-            input = self.customCheckableComboBox_exploring_multiple_selection.checkedItems()
+            input = self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].checkedItems()
             features, expr = self.getExploringFeatures(input, True)
 
         elif self.current_exploring_groupbox == "custom_selection":
@@ -1062,11 +925,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def get_current_features(self):
 
         if self.current_exploring_groupbox == "single_selection":
-            input = self.mFeaturePickerWidget_exploring_single_selection.feature()
+            input = self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].feature()
             features, expression = self.getExploringFeatures(input)
 
         elif self.current_exploring_groupbox == "multiple_selection":
-            input = self.customCheckableComboBox_exploring_multiple_selection.checkedItems()
+            input = self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].checkedItems()
             features, expression = self.getExploringFeatures(input, True)
 
         elif self.current_exploring_groupbox == "custom_selection":
@@ -1118,8 +981,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         if self.current_exploring_groupbox == "single_selection":
             
-            if expression != self.mFeaturePickerWidget_exploring_single_selection.displayExpression():
-                self.mFeaturePickerWidget_exploring_single_selection.setDisplayExpression(expression)
+            if expression != self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].displayExpression():
+                self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setDisplayExpression(expression)
 
 
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = expression
@@ -1127,8 +990,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         elif self.current_exploring_groupbox == "multiple_selection":
 
-            if expression != self.customCheckableComboBox_exploring_multiple_selection.displayExpression():
-                self.customCheckableComboBox_exploring_multiple_selection.setDisplayExpression(expression)
+            if expression != self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].displayExpression():
+                self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].setDisplayExpression(expression)
 
 
                 self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
@@ -1161,16 +1024,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exploring_groupbox_init(self):
 
-        if self.mGroupBox_exploring_single_selection.isChecked() is True or self.mGroupBox_exploring_single_selection.isCollapsed() is False:
-            self.current_exploring_groupbox = "single_selection"
+        if self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
+            exploring_groupbox = "single_selection"
 
-        elif self.mGroupBox_exploring_multiple_selection.isChecked() is True or self.mGroupBox_exploring_multiple_selection.isCollapsed() is False:
-            self.current_exploring_groupbox = "multiple_selection"  
+        elif self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
+            exploring_groupbox = "multiple_selection"  
 
-        elif self.mGroupBox_exploring_custom_selection.isChecked() is True or self.mGroupBox_exploring_custom_selection.isCollapsed() is False:
-            self.current_exploring_groupbox = "custom_selection"
+        elif self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
+            exploring_groupbox = "custom_selection"
 
-        self.exploring_groupbox_changed(self.current_exploring_groupbox)
+        self.exploring_groupbox_changed(exploring_groupbox)
 
 
 
@@ -1178,100 +1041,93 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def exploring_groupbox_changed(self, groupbox):
 
 
+        state = self.manageSignal(["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"], 'disconnect')
+        state = self.manageSignal(["DOCK","GroupBox_SINGLE_SELECTION"], 'disconnect')
+        state = self.manageSignal(["DOCK","GroupBox_MULTIPLE_SELECTION"], 'disconnect')
+        state = self.manageSignal(["DOCK","GroupBox_CUSTOM_SELECTION"], 'disconnect')
+        print(state)
+        # if state == True:
+        #     raise SignalStateChangeError(state, self.widgets, ["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"])
 
         if groupbox == "single_selection":
   
-            if self.mGroupBox_exploring_single_selection.isChecked() is True or self.mGroupBox_exploring_single_selection.isCollapsed() is False:
+            if self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
 
 
-                try:
-                    self.mFeaturePickerWidget_exploring_single_selection.featureChanged.connect(self.exploring_features_changed)
-                except:
-                    pass
+                self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].setChecked(True)
+                self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
 
-                self.mGroupBox_exploring_single_selection.setChecked(True)
-                self.mGroupBox_exploring_single_selection.setCollapsed(False)
+                self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+                self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                self.mFeaturePickerWidget_exploring_single_selection.setEnabled(True)
-                self.mFieldExpressionWidget_exploring_single_selection.setEnabled(True)
-
-                self.mGroupBox_exploring_multiple_selection.setChecked(False)
-                self.mGroupBox_exploring_multiple_selection.setCollapsed(True)
-
-                self.mGroupBox_exploring_custom_selection.setChecked(False)
-                self.mGroupBox_exploring_custom_selection.setCollapsed(True)
+                self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+                self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
 
                 self.current_exploring_groupbox = "single_selection"
 
-                if self.current_layer != None:
-                    self.exploring_features_changed(self.mFeaturePickerWidget_exploring_single_selection.feature())
-            # else:
-            #     self.mGroupBox_exploring_single_selection.setChecked(False)
-            #     self.mGroupBox_exploring_single_selection.setCollapsed(True)
+                self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setEnabled(True)
+                self.widgets["SINGLE_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setEnabled(True)
 
-            #     self.current_exploring_groupbox = None
+                if self.current_layer != None:
+                    self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].feature())
+
 
 
         elif groupbox == "multiple_selection":
 
-            if self.mGroupBox_exploring_multiple_selection.isChecked() is True or self.mGroupBox_exploring_multiple_selection.isCollapsed() is False:
+            if self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
                 
-                try:
-                    self.mFeaturePickerWidget_exploring_single_selection.featureChanged.disconnect()
-                except:
-                    pass
 
+                self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
+                self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
 
-                self.mGroupBox_exploring_multiple_selection.setChecked(True)
-                self.mGroupBox_exploring_multiple_selection.setCollapsed(False)
+                self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+                self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                self.customCheckableComboBox_exploring_multiple_selection.setEnabled(True)
-                self.mFieldExpressionWidget_exploring_multiple_selection.setEnabled(True)
-
-                self.mGroupBox_exploring_single_selection.setChecked(False)
-                self.mGroupBox_exploring_single_selection.setCollapsed(True)
-
-                self.mGroupBox_exploring_custom_selection.setChecked(False)
-                self.mGroupBox_exploring_custom_selection.setCollapsed(True)
+                self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+                self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
 
                 self.current_exploring_groupbox = "multiple_selection"
 
+                self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].setEnabled(True)
+                self.widgets["MULTIPLE_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setEnabled(True)
+
+
+
                 if self.current_layer != None:
-                    self.exploring_features_changed(self.customCheckableComboBox_exploring_multiple_selection.currentSelectedFeatures(), True)
-            # else:
-            #     self.mGroupBox_exploring_multiple_selection.setChecked(False)
-            #     self.mGroupBox_exploring_multiple_selection.setCollapsed(True)
+                    self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].currentSelectedFeatures(), True)
+
 
         elif groupbox == "custom_selection":
 
-            if self.mGroupBox_exploring_custom_selection.isChecked() is True or self.mGroupBox_exploring_custom_selection.isCollapsed() is False:
+            if self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
+                
 
-                try:
-                    self.mFeaturePickerWidget_exploring_single_selection.featureChanged.disconnect()
-                except:
-                    pass
+                self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
+                self.widgets["DOCK"]["GroupBox_CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
 
-                self.mGroupBox_exploring_custom_selection.setChecked(True)
-                self.mGroupBox_exploring_custom_selection.setCollapsed(False)
+                self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+                self.widgets["DOCK"]["GroupBox_MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                self.mFieldExpressionWidget_exploring_custom_selection.setEnabled(True)
-
-                self.mGroupBox_exploring_multiple_selection.setChecked(False)
-                self.mGroupBox_exploring_multiple_selection.setCollapsed(True)
-
-                self.mGroupBox_exploring_single_selection.setChecked(False)
-                self.mGroupBox_exploring_single_selection.setCollapsed(True)
+                self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+                self.widgets["DOCK"]["GroupBox_SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
                 self.current_exploring_groupbox = "custom_selection"
+
+                self.widgets["CUSTOM_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setEnabled(True)
 
                 if self.current_layer != None:
                     self.exploring_custom_selection()
 
-            # else:
-            #     self.mGroupBox_exploring_custom_selection.setChecked(False)
-            #     self.mGroupBox_exploring_custom_selection.setCollapsed(True)
 
-
+        state = self.manageSignal(["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"], 'connect')
+        state = self.manageSignal(["DOCK","GroupBox_SINGLE_SELECTION"], 'connect')
+        state = self.manageSignal(["DOCK","GroupBox_MULTIPLE_SELECTION"], 'connect')
+        state = self.manageSignal(["DOCK","GroupBox_CUSTOM_SELECTION"], 'connect')
+        print(state)
+        # if state == False:
+        #     raise SignalStateChangeError(state, self.widgets, ["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"])
+        
 
     def current_layer_changed(self, layer):
 
@@ -1280,158 +1136,146 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if self.current_layer == None:
             return
         
-        
-
-        self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
-        self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
-        self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()
-        self.mMapLayerComboBox_filtering_current_layer.layerChanged.disconnect()
-        
-
-
-        self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
-
-        if self.auto_change_current_layer_flag == True:
-            self.iface.layerTreeView().currentLayerChanged.disconnect()
-
         layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
-        currentLayer = self.mMapLayerComboBox_filtering_current_layer.currentLayer()
-        if currentLayer != None and currentLayer.id() != self.current_layer.id():
-            self.mMapLayerComboBox_filtering_current_layer.setLayer(self.current_layer)
-
-        layer_geometry_type = layer_props["infos"]["layer_geometry_type"]
-
-        # if layer_geometry_type == 'GeometryType.Polygon':
-        #     self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
-        # elif layer_geometry_type == 'GeometryType.Point':
-        #     self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 255))
-        # elif layer_geometry_type == 'GeometryType.Line':
-        #     self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 255))
-
-        """EXPLORING"""
+        widgets_to_stop =   [
+                                ["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"],
+                                ["SINGLE_SELECTION","ComboBox_FieldExpressionWidget"],
+                                ["MULTIPLE_SELECTION","ComboBox_CustomCheckableComboBox"],
+                                ["MULTIPLE_SELECTION","ComboBox_FieldExpressionWidget"],
+                                ["CUSTOM_SELECTION","ComboBox_FieldExpressionWidget"],
+                                ["FILTERING","QgsDoubleSpinBox_BUFFER"],
+                                ["FILTERING","ComboBox_GEOMETRIC_PREDICATES"],
+                                ["FILTERING","ComboBox_PREDICATES_OPERATOR"],
+                                ["FILTERING","ComboBox_COMBINE_OPERATOR"],
+                                ["FILTERING","ComboBox_LAYERS_TO_FILTER"],
+                                ["FILTERING","ComboBox_CURRENT_LAYER"]
+                            ]
         
+        for widget_path in widgets_to_stop:
+            state = self.manageSignal(widget_path)
+            if state == True:
+                raise SignalStateChangeError(state, self.widgets, widget_path)
+
+        if self.auto_change_current_layer_flag == True:
+            widget_path = ["QGIS","LayerTreeView"]
+            state = self.manageSignal(widget_path)
+            if state == True:
+                raise SignalStateChangeError(state, self.widgets, widget_path)
+
+
+
+
+        currentLayer = self.widgets["FILTERING"]["ComboBox_CURRENT_LAYER"]["WIDGET"].currentLayer()
+        if currentLayer != None and currentLayer.id() != self.current_layer.id():
+            self.widgets["FILTERING"]["ComboBox_CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
+
+
         """SINGLE SELECTION"""
 
-        self.mFieldExpressionWidget_exploring_single_selection.setLayer(self.current_layer)
-        self.mFieldExpressionWidget_exploring_single_selection.setExpression(layer_props["exploring"]["single_selection_expression"])
+        self.widgets["SINGLE_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setLayer(self.current_layer)
+        self.widgets["SINGLE_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
 
-        self.mFeaturePickerWidget_exploring_single_selection.setLayer(self.current_layer)
-        self.mFeaturePickerWidget_exploring_single_selection.setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-        self.mFeaturePickerWidget_exploring_single_selection.setFetchGeometry(True)
-        self.mFeaturePickerWidget_exploring_single_selection.setShowBrowserButtons(True)
-
+        self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setLayer(self.current_layer)
+        self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+        self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setFetchGeometry(True)
+        self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setShowBrowserButtons(True)
 
 
         """MULTIPLE SELECTION"""
         
-        self.mFieldExpressionWidget_exploring_multiple_selection.setLayer(self.current_layer)
-        self.mFieldExpressionWidget_exploring_multiple_selection.setExpression(layer_props["exploring"]["multiple_selection_expression"])
+        self.widgets["MULTIPLE_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setLayer(self.current_layer)
+        self.widgets["MULTIPLE_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
 
-        self.customCheckableComboBox_exploring_multiple_selection.setLayer(self.current_layer, layer_props)
+        self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].setLayer(self.current_layer, layer_props)
+
 
         """CUSTOM SELECTION"""
 
-        self.mFieldExpressionWidget_exploring_custom_selection.setLayer(self.current_layer)
-        self.mFieldExpressionWidget_exploring_custom_selection.setExpression(layer_props["exploring"]["custom_selection_expression"])
+        self.widgets["CUSTOM_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setLayer(self.current_layer)
+        self.widgets["CUSTOM_SELECTION"]["ComboBox_FieldExpressionWidget"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
 
-        
 
+        """EXPLORING"""
 
         if layer_props["exploring"]["is_selecting"] == True:
-            self.pushButton_checkable_exploring_selecting.setChecked(True)
+            self.widgets["EXPLORING"]["PushButton_SELECTING"]["WIDGET"].setChecked(True)
         elif layer_props["exploring"]["is_selecting"] == False:
-            self.pushButton_checkable_exploring_selecting.setChecked(False)
+            self.widgets["EXPLORING"]["PushButton_SELECTING"]["WIDGET"].setChecked(False)
+
 
         if layer_props["exploring"]["is_tracking"] == True:
-            self.pushButton_checkable_exploring_tracking.setChecked(True)
+            self.widgets["EXPLORING"]["PushButton_TRACKING"]["WIDGET"].setChecked(True)
         elif layer_props["exploring"]["is_tracking"] == False:
-            self.pushButton_checkable_exploring_tracking.setChecked(False)
+            self.widgets["EXPLORING"]["PushButton_TRACKING"]["WIDGET"].setChecked(False)
+
 
         if layer_props["exploring"]["is_linked"] == True:
-            self.pushButton_checkable_exploring_linking_widgets.setChecked(True)
+            self.widgets["EXPLORING"]["PushButton_LINKING"]["WIDGET"].setChecked(True)
         elif layer_props["exploring"]["is_linked"] == False:
-            self.pushButton_checkable_exploring_linking_widgets.setChecked(False)
+            self.widgets["EXPLORING"]["PushButton_LINKING"]["WIDGET"].setChecked(False)
+
 
         if layer_props["exploring"]["is_saving"] == True:
-            self.pushButton_checkable_exploring_saving_parameters.setChecked(True)
+            self.widgets["EXPLORING"]["PushButton_SAVING"]["WIDGET"].setChecked(True)
         elif layer_props["exploring"]["is_saving"] == False:
-            self.pushButton_checkable_exploring_saving_parameters.setChecked(False)
+            self.widgets["EXPLORING"]["PushButton_SAVING"]["WIDGET"].setChecked(False)
 
 
-
-        self.comboBox_filtering_layers_to_filter.checkedItemsChanged.disconnect()
+        """FILTERING"""
 
         if layer_props["filtering"]["has_layers_to_filter"] == True:
-            self.pushButton_checkable_filtering_layers_to_filter.setChecked(True)
+            self.widgets["FILTERING"]["PushButton_LAYERS_TO_FILTER"]["WIDGET"].setChecked(True)
             self.filtering_populate_layers_chekableCombobox()
         elif layer_props["filtering"]["has_layers_to_filter"] == False:
-            self.pushButton_checkable_filtering_layers_to_filter.setChecked(False)
+            self.widgets["FILTERING"]["PushButton_LAYERS_TO_FILTER"]["WIDGET"].setChecked(False)
             self.filtering_populate_layers_chekableCombobox()
 
-        self.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.layer_property_changed, 'layers_to_filter'))
-
-
-
-        self.comboBox_filtering_current_layer_add.currentTextChanged.disconnect()
 
         if layer_props["infos"]["has_combined_filter_logic"] == True:
-            self.pushButton_checkable_filtering_current_layer_add.setChecked(True)
-            self.comboBox_filtering_current_layer_add.setCurrentText(layer_props["infos"]["combined_filter_logic"])
+            self.widgets["FILTERING"]["PushButton_COMBINE_OPERATOR"]["WIDGET"].setChecked(True)
+            self.widgets["FILTERING"]["ComboBox_COMBINE_OPERATOR"]["WIDGET"].setCurrentText(layer_props["infos"]["combined_filter_logic"])
         elif layer_props["infos"]["has_combined_filter_logic"] == False:
-            self.pushButton_checkable_filtering_current_layer_add.setChecked(False)
-            self.comboBox_filtering_current_layer_add.setCurrentIndex(0)
+            self.widgets["FILTERING"]["PushButton_COMBINE_OPERATOR"]["WIDGET"].setChecked(False)
+            self.widgets["FILTERING"]["ComboBox_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
 
-        self.comboBox_filtering_current_layer_add.currentTextChanged.connect(partial(self.layer_property_changed, 'combined_filter_logic'))
-
-
-
-        self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.disconnect()
-        self.comboBox_filtering_geometric_predicates_operator.currentTextChanged.disconnect()
 
         if layer_props["filtering"]["has_geometric_predicates"] == True:
-            self.pushButton_checkable_filtering_geometric_predicates.setChecked(True)
-            self.mComboBox_filtering_geometric_predicates.setCheckedItems(layer_props["filtering"]["geometric_predicates"])
-            self.comboBox_filtering_geometric_predicates_operator.setCurrentText(layer_props["filtering"]["geometric_predicates_operator"])
+            self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].setChecked(True)
+            self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].setCheckedItems(layer_props["filtering"]["geometric_predicates"])
+            self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setCurrentText(layer_props["filtering"]["geometric_predicates_operator"])
         elif layer_props["filtering"]["has_geometric_predicates"] == False:
-            self.pushButton_checkable_filtering_geometric_predicates.setChecked(False)
-            self.mComboBox_filtering_geometric_predicates.deselectAllOptions()
-            self.comboBox_filtering_geometric_predicates_operator.setCurrentIndex(0)
-            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates_operator"] = self.comboBox_filtering_geometric_predicates_operator.currentText()
+            self.widgets["FILTERING"]["PushButton_GEOMETRIC_PREDICATES"]["WIDGET"].setChecked(False)
+            self.widgets["FILTERING"]["ComboBox_GEOMETRIC_PREDICATES"]["WIDGET"].deselectAllOptions()
+            self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["geometric_predicates_operator"] = self.widgets["FILTERING"]["ComboBox_PREDICATES_OPERATOR"]["WIDGET"].currentText()
                 
-        self.mComboBox_filtering_geometric_predicates.checkedItemsChanged.connect(partial(self.layer_property_changed, 'geometric_predicates'))
-        self.comboBox_filtering_geometric_predicates_operator.currentTextChanged.connect(partial(self.layer_property_changed, 'geometric_predicates_operator'))
-
-
-        self.mQgsDoubleSpinBox_filtering_buffer.textChanged.disconnect()
 
         if layer_props["filtering"]["has_buffer"] == True:
-            self.pushButton_checkable_filtering_buffer.setChecked(True)
-            self.mQgsDoubleSpinBox_filtering_buffer.setValue(layer_props["filtering"]["buffer"])
+            self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].setChecked(True)
+            self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setValue(layer_props["filtering"]["buffer"])
         elif layer_props["filtering"]["has_buffer"] == False:
-            self.pushButton_checkable_filtering_buffer.setChecked(False)
-            self.mQgsDoubleSpinBox_filtering_buffer.setValue(0.0)
+            self.widgets["FILTERING"]["PushButton_BUFFER"]["WIDGET"].setChecked(False)
+            self.widgets["FILTERING"]["QgsDoubleSpinBox_BUFFER"]["WIDGET"].setValue(0.0)
+
 
         self.filtering_geometric_predicates_state_changed()
         self.filtering_buffer_state_changed()
+        self.exploring_link_widgets()
 
-        self.mQgsDoubleSpinBox_filtering_buffer.textChanged.connect(partial(self.layer_property_changed, 'buffer'))
-
-        
-        
+        for widget_path in widgets_to_stop:
+            state = self.manageSignal(widget_path)
+            if state == False:
+                raise SignalStateChangeError(state, self.widgets, widget_path)
 
         if self.auto_change_current_layer_flag == True:
             if self.iface.activeLayer().id() != self.current_layer.id():
-                self.iface.layerTreeView().setCurrentLayer(self.current_layer)
-            self.iface.layerTreeView().currentLayerChanged.connect(self.current_layer_changed)
+                self.widgets["QGIS"]["LayerTreeView"]["WIDGET"].setCurrentLayer(self.current_layer)
 
-        self.exploring_link_widgets()
-
-        self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(self.exploring_source_params_changed)
-        self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(self.exploring_source_params_changed)
-        self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(self.exploring_source_params_changed)
-        self.mMapLayerComboBox_filtering_current_layer.layerChanged.connect(self.current_layer_changed)
-
+            widget_path = ["QGIS","LayerTreeView"]
+            state = self.manageSignal(widget_path)
+            if state == False:
+                raise SignalStateChangeError(state, self.widgets, widget_path)
         
             
 
@@ -1447,38 +1291,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
                 if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
                     custom_filter = layer_props["exploring"]["custom_selection_expression"]
-                    self.customCheckableComboBox_exploring_multiple_selection.setFilterExpression(custom_filter)
+                    self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].setFilterExpression(custom_filter)
             if expression != None:
-                self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression(expression)
-            elif self.customCheckableComboBox_exploring_multiple_selection.currentSelectedFeatures() != False:
-                features, expression = self.getExploringFeatures(self.customCheckableComboBox_exploring_multiple_selection.currentSelectedFeatures(), True)
+                self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setFilterExpression(expression)
+            elif self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].currentSelectedFeatures() != False:
+                features, expression = self.getExploringFeatures(self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].currentSelectedFeatures(), True)
                 if len(features) > 0 and expression != None:
-                    self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression(expression)
-            elif self.customCheckableComboBox_exploring_multiple_selection.currentVisibleFeatures() != False:
-                features, expression = self.getExploringFeatures(self.customCheckableComboBox_exploring_multiple_selection.currentVisibleFeatures(), True)
+                    self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setFilterExpression(expression)
+            elif self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].currentVisibleFeatures() != False:
+                features, expression = self.getExploringFeatures(self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].currentVisibleFeatures(), True)
                 if len(features) > 0 and expression != None:
-                    self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression(expression)
+                    self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setFilterExpression(expression)
             elif custom_filter != None:
-                self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression(custom_filter)
+                self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setFilterExpression(custom_filter)
            
         else:
-            self.mFeaturePickerWidget_exploring_single_selection.setFilterExpression('')
-            self.customCheckableComboBox_exploring_multiple_selection.setFilterExpression('')
+            self.widgets["SINGLE_SELECTION"]["ComboBox_FeaturePickerWidget"]["WIDGET"].setFilterExpression('')
+            self.widgets["MULTIPLE_SELECTION"]["ComboBox_CustomCheckableComboBox"]["WIDGET"].setFilterExpression('')
 
 
 
     def zooming_to_features(self, features):
         features_with_geometry = [feature for feature in features if feature.hasGeometry()]
-
-        # geometries = []
-
-        # for geometry in raw_geometries:
-        #     if geometry.isEmpty() is False:
-        #         if geometry.isMultipart():
-        #             geometry.convertToSingleType()
-        #         geometries.append(geometry)
-        # collected_geometry = QgsGeometry().collectGeometry(geometries)
-        # box = collected_geometry.boundingBox()
 
         if len(features_with_geometry) == 1:
             feature = features_with_geometry[0]
@@ -1489,13 +1323,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 box = feature.geometry().boundingBox()
 
             self.iface.mapCanvas().zoomToFeatureExtent(box)
-
-            # if str(feature.geometry().type()) == 'GeometryType.Point':
-            #     point_xy = feature.geometry().asPoint()
-            #     self.iface.mapCanvas().zoomByFactor(0.25, point_xy)
         else:
             self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [feature.id() for feature in features_with_geometry])
-        # self.iface.mapCanvas().refresh()
+
+        self.iface.mapCanvas().refresh()
 
 
     def getExploringFeatures(self, input, identify_by_primary_key_name=False, custom_expression=None):
@@ -1554,14 +1385,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.current_layer_changed(self.current_layer)
         self.layer_property_changed('layers_to_filter')
 
-
-
     def setProjectLayersEvent(self, event):
         self.settingProjectLayers.emit(event)
     
     def getProjectLayersEvent(self, event):
         self.gettingProjectLayers.emit()
-
 
     def closeEvent(self, event):
         self.closingPlugin.emit()

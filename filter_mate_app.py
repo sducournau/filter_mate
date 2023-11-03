@@ -10,9 +10,11 @@ import os.path
 from pathlib import Path
 import re
 from .config.config import *
-import processing
+from qgis import processing
 from functools import partial
 import json
+from .modules.customExceptions import *
+
 
 # Import the code for the DockWidget
 from .filter_mate_dockwidget import FilterMateDockWidget
@@ -57,20 +59,12 @@ class FilterMateApp:
         PROJECT.layersAdded.connect(partial(self.manage_project_layers, 'add'))
         PROJECT.layersWillBeRemoved.connect(partial(self.manage_project_layers, 'remove'))
 
-        #PROJECT.loadingLayer.connect(partial(self.manage_flags, 'layers', 'loadingLayer'))
-        PROJECT.legendLayersAdded.connect(partial(self.manage_flags, 'layers', 'legendLayersAdded'))
-        PROJECT.layersRemoved.connect(partial(self.manage_flags, 'layers', 'layersRemoved'))
-
-
-
         
         self.dockwidget.launchingTask.connect(self.manage_task)
-
         self.dockwidget.reinitializingLayerOnError.connect(self.remove_layer_projectCustomProperties)
-        
-        #self.dockwidget.gettingProjectLayers.connect(partial(self.dockwidget.get_project_layers_from_app, self.PROJECT_LAYERS))
-
         self.dockwidget.settingProjectLayers.connect(self.save_projectCustomProperties_layers)
+
+
 
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
@@ -78,18 +72,6 @@ class FilterMateApp:
         # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
 
-
-        # self.managerWidgets.view.onLeaveEvent.connect(self.reload_config)
-        #self.managerWidgets.view.onAddWidget.connect(lambda: self.reload_config('add'))
-        #self.managerWidgets.view.onRemoveWidget.connect(lambda: self.reload_config('remove'))
-    def manage_flags(self, flag_type, flag):
-        if flag_type == 'layers':
-            if flag == 'loadingLayer':
-                self.flags['is_managing_project_layers'] = True
-            elif flag == 'legendLayersAdded':
-                self.flags['is_managing_project_layers'] = False
-            elif flag == 'layersRemoved':
-                self.flags['is_managing_project_layers'] = False
 
 
     def save_projectCustomProperties_layers(self, project_layers):
@@ -142,18 +124,23 @@ class FilterMateApp:
 
     def manage_project_layers(self, layers, action):
 
-        if self.dockwidget != None:    
-            self.dockwidget.mFeaturePickerWidget_exploring_single_selection.featureChanged.disconnect()
-            self.dockwidget.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
+        if self.dockwidget != None:
 
-            self.dockwidget.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
-            self.dockwidget.customCheckableComboBox_exploring_multiple_selection.updatingCheckedItemList.disconnect()
-            self.dockwidget.customCheckableComboBox_exploring_multiple_selection.filteringCheckedItemList.disconnect()
-
-            self.dockwidget.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()
-
-            self.dockwidget.mMapLayerComboBox_filtering_current_layer.layerChanged.disconnect()
-            self.dockwidget.comboBox_filtering_layers_to_filter.checkedItemsChanged.disconnect()
+            widgets_to_stop =   [
+                                    ["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"],
+                                    ["SINGLE_SELECTION","ComboBox_FieldExpressionWidget"],
+                                    ["MULTIPLE_SELECTION","ComboBox_CustomCheckableComboBox"],
+                                    ["MULTIPLE_SELECTION","ComboBox_FieldExpressionWidget"],
+                                    ["CUSTOM_SELECTION","ComboBox_FieldExpressionWidget"],
+                                    ["FILTERING","QgsDoubleSpinBox_BUFFER"],
+                                    ["FILTERING","ComboBox_LAYERS_TO_FILTER"],
+                                    ["FILTERING","ComboBox_CURRENT_LAYER"]
+                                ]
+        
+            for widget_path in widgets_to_stop:
+                state = self.dockwidget.manageSignal(widget_path)
+                if state == True:
+                    raise SignalStateChangeError(state, self.widgets, widget_path)
 
 
 
@@ -170,24 +157,13 @@ class FilterMateApp:
                 self.remove_project_layer(layer)
 
         if self.dockwidget != None:
-            self.dockwidget.mFeaturePickerWidget_exploring_single_selection.featureChanged.connect(self.dockwidget.exploring_features_changed)
-            self.dockwidget.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(self.dockwidget.exploring_source_params_changed)
-
-            self.dockwidget.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(self.dockwidget.exploring_source_params_changed)
-            self.dockwidget.customCheckableComboBox_exploring_multiple_selection.updatingCheckedItemList.connect(self.dockwidget.exploring_features_changed)
-            self.dockwidget.customCheckableComboBox_exploring_multiple_selection.filteringCheckedItemList.connect(self.dockwidget.exploring_link_widgets)
-
-            self.dockwidget.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(self.dockwidget.exploring_source_params_changed)
-
-            self.dockwidget.mMapLayerComboBox_filtering_current_layer.layerChanged.connect(self.dockwidget.current_layer_changed)
-            self.dockwidget.comboBox_filtering_layers_to_filter.checkedItemsChanged.connect(partial(self.dockwidget.layer_property_changed, 'layers_to_filter'))
+            for widget_path in widgets_to_stop:
+                state = self.dockwidget.manageSignal(widget_path)
+                if state == False:
+                    raise SignalStateChangeError(state, self.widgets, widget_path)
 
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
             
-        self.flags['is_managing_project_layers'] = False
-
-
-
 
 
     def check_dict_structure(self, input, reference):
@@ -277,7 +253,6 @@ class FilterMateApp:
 
                 self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "exploring": layer_exploring, "filtering": layer_filtering}
 
-
     def remove_project_layer(self, layer_id):
         try:
             if self.dockwidget.current_layer.id() == layer_id:
@@ -307,11 +282,11 @@ class FilterMateApp:
             for field in layer.fields():
                 if 'ID' in str(field.name()).upper():
                     if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
-                        return field.name(), field.id(), field.typeName(), field.isNumeric()
+                        return field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric()
                     
             for field in layer.fields():
                 if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
-                    return field.name(), field.id(), field.typeName(), field.isNumeric()
+                    return field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric()
                 
         new_field = QgsField('ID', QVariant.LongLong)
         layer.addExpressionField('@row_number', new_field)
@@ -548,40 +523,41 @@ class FilterEngineTask(QgsTask):
                 if self.task_parameters["infos"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
 
-        self.expression = " " + self.task_parameters["task"]["expression"]
-        if QgsExpression(self.expression).isValid() is True:
-            
-            is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
-
-            if is_field_expression[0] == True:
-                self.is_field_expression = is_field_expression
-
-            if QgsExpression(self.expression).isField() is False:
+        if self.task_parameters["task"]["expression"] != None:
+            self.expression = " " + self.task_parameters["task"]["expression"]
+            if QgsExpression(self.expression).isValid() is True:
                 
-                print(self.expression)
-                existing_fields = [x for x in self.source_layer_fields_names if self.expression.find(x) > -1]
-                if len(existing_fields) == 0 and self.expression.find(self.primary_key_name) > -1:
-                    if self.expression.find(self.param_source_table) < 0:
-                        if self.expression.find(' "' + self.primary_key_name + '" ') > -1:
-                            self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
-                        elif self.expression.find(" " + self.primary_key_name + " ") > -1:
-                            self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
-                elif len(existing_fields) >= 1:
-                    if self.expression.find(self.param_source_table) < 0:
-                        for field_name in existing_fields:
-                            if self.expression.find(' "' + field_name + '" ') > -1:
-                                self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
-                            elif self.expression.find(" " + field_name + " ") > -1:
-                                self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
+
+                if is_field_expression[0] == True:
+                    self.is_field_expression = is_field_expression
+
+                if QgsExpression(self.expression).isField() is False:
+                    
+                    print(self.expression)
+                    existing_fields = [x for x in self.source_layer_fields_names if self.expression.find(x) > -1]
+                    if len(existing_fields) == 0 and self.expression.find(self.primary_key_name) > -1:
+                        if self.expression.find(self.param_source_table) < 0:
+                            if self.expression.find(' "' + self.primary_key_name + '" ') > -1:
+                                self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                            elif self.expression.find(" " + self.primary_key_name + " ") > -1:
+                                self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                    elif len(existing_fields) >= 1:
+                        if self.expression.find(self.param_source_table) < 0:
+                            for field_name in existing_fields:
+                                if self.expression.find(' "' + field_name + '" ') > -1:
+                                    self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                                elif self.expression.find(" " + field_name + " ") > -1:
+                                    self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
 
 
-                if param_old_subset != '' and param_combine_operator != '':
+                    if param_old_subset != '' and param_combine_operator != '':
 
-                    result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                        combine_operator=param_combine_operator,
-                                                                                                                        expression=self.expression))
-                else:
-                    result = self.source_layer.setSubsetString(self.expression)
+                        result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                            combine_operator=param_combine_operator,
+                                                                                                                            expression=self.expression))
+                    else:
+                        result = self.source_layer.setSubsetString(self.expression)
 
 
         if result is False:
@@ -665,7 +641,7 @@ class FilterEngineTask(QgsTask):
                 geometries.append(geometry)
 
         collected_geometry = QgsGeometry().collectGeometry(geometries)
-        self.spatialite_source_geom = collected_geometry.asWkt()
+        self.spatialite_source_geom = collected_geometry.asWkt().strip()
 
 
     def prepare_ogr_source_geom(self):
@@ -680,7 +656,7 @@ class FilterEngineTask(QgsTask):
                 'JOIN_STYLE': 2,
                 'MITER_LIMIT': 2,
                 'SEGMENTS': 5,
-                'OUTPUT': 'TEMPORARY_OUTPUT'
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
             }
 
             self.outputs['alg_params_buffer'] = processing.run('qgis:buffer', alg_params_buffer)
@@ -738,15 +714,24 @@ class FilterEngineTask(QgsTask):
 
         elif self.param_source_provider_type == 'spatialite' or layer_provider_type == 'spatialite':
 
-            
+            spatialite_sub_expression_array = []
+            for postgis_predicate in postgis_predicates:
+                spatialite_sub_expression_array.append(postgis_predicate + '(ST_GeomFromText(\'{source_sub_expression_geom}\'),"{distant_geometry_field}")'.format(source_sub_expression_geom=self.spatialite_source_geom,
+                                                                                                                                                    distant_geometry_field=param_distant_geometry_field))
+            if len(spatialite_sub_expression_array) > 1:
+                param_spatialite_sub_expression = self.param_source_geom_operator.join(spatialite_sub_expression_array)
+            else:
+                param_spatialite_sub_expression = spatialite_sub_expression_array[0]
 
-            if len(postgis_predicates) == 1:
-                param_postgis_sub_expression = postgis_predicates[0] + '({source_sub_expression_geom},"{distant_geometry_field}")'
+            param_expression = 'SELECT {postgis_sub_expression}'.format(postgis_sub_expression=param_spatialite_sub_expression)
 
-            elif len(postgis_predicates) > 1:
-                postgis_sub_expression_array = []
-                for postgis_predicate in postgis_predicates:
-                    postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},"{distant_table}"."geom")')
+            print(param_expression)
+            if param_old_subset != '' and param_combine_operator != '':
+                result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                              combine_operator=param_combine_operator,
+                                                                                              expression=param_expression))
+            else:
+                result = layer.setSubsetString(param_expression)              
 
 
         elif self.param_source_provider_type == 'ogr' or layer_provider_type == 'ogr':
@@ -754,7 +739,7 @@ class FilterEngineTask(QgsTask):
             features_list = []
             alg_params_select = {
                 'INPUT': layer,
-                'INTERSECT': self.ogr_source_geom,
+                'INTERSECT': self.ogr_source_geom if self.ogr_source_geom != None else self.source_layer,
                 'METHOD': 0,
                 'PREDICATE': [int(predicate) for predicate in self.current_predicates]
             }
@@ -768,18 +753,19 @@ class FilterEngineTask(QgsTask):
 
             if len(features_ids) > 0:
                 if param_distant_primary_key_is_numeric == True:
-                    param_expression = param_distant_primary_key_name + " IN (" + ", ".join(features_ids) + ")"
+                    param_expression = '"{distant_table}"."{distant_primary_key_name}" IN '.format(distant_table=param_distant_table, distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
                 else:
-                    param_expression = param_distant_primary_key_name + " IN (\'" + "\', \'".join(features_ids) + "\')"
+                    param_expression = '"{distant_table}"."{distant_primary_key_name}" IN '.format(distant_table=param_distant_table, distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
 
                 if QgsExpression(param_expression).isValid():
 
                     if param_old_subset != '' and param_combine_operator != '':
-                        result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                    combine_operator=param_combine_operator,
-                                                                                                    expression=param_expression))
+
+                        result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                            combine_operator=param_combine_operator,
+                                                                                                                            expression=param_expression))
                     else:
-                        result = layer.setSubsetString(param_expression)
+                        result = self.source_layer.setSubsetString(param_expression)
 
         return result    
 
