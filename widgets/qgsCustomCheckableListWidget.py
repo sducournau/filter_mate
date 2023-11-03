@@ -337,6 +337,7 @@ class QgsCustomCheckableListWidget(QWidget):
             self.layer = layer
 
             self.manage_list_widgets()
+            
 
             self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
 
@@ -345,11 +346,16 @@ class QgsCustomCheckableListWidget(QWidget):
 
             if self.list_widgets[self.layer.id()].getExpression() != layer_props["exploring"]["multiple_selection_expression"]:
                 self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+            elif layer_props["infos"]["is_already_subset"] != self.list_widgets[self.layer.id()].getSubsetState():
+                if self.layer.featureCount() != self.list_widgets[self.layer.id()].getListCount():
+                    self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
             else:
                 description = 'Selecting feature'
                 action = 'updateFeatures'
                 self.build_task(description, action, True)
                 self.launch_task(action)
+            
+            self.list_widgets[self.layer.id()].setSubsetState(layer_props["infos"]["is_already_subset"])
 
 
     def setFilterExpression(self, filter_expression):
@@ -493,6 +499,7 @@ class ListWidgetWrapper(QListWidget):
         super(ListWidgetWrapper, self).__init__(parent)
 
         self.setMinimumHeight(100)
+        self.subset_state = False
         self.filter_expression = ''
         self.identifier_field_name = ''
         self.filter_text = ''
@@ -502,6 +509,9 @@ class ListWidgetWrapper(QListWidget):
         self.visible_features_list = []
         self.selected_features_list = []
         self.limit = 1000
+
+    def setSubsetState(self, subset_state):
+        self.subset_state = subset_state
 
     def setFilterExpression(self, filter_expression):
         self.filter_expression = filter_expression
@@ -529,6 +539,9 @@ class ListWidgetWrapper(QListWidget):
     
     def setLimit(self, limit):
         self.limit = limit
+
+    def getSubsetState(self):
+        return self.subset_state
 
     def getFilterExpression(self):
         return self.filter_expression

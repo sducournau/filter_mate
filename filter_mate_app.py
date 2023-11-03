@@ -378,6 +378,7 @@ class FilterMateApp:
            
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
+        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
 
 
 
@@ -500,11 +501,12 @@ class FilterEngineTask(QgsTask):
                                     param_old_subset = layer.subsetString()
 
                         if param_old_subset != '' and param_combine_operator != '':
-                            """If we add the current expression to the previous expression"""
-                            print('(' + param_old_subset + ') ' + param_combine_operator + ' ' + self.expression)
-                            layer.setSubsetString('(' + param_old_subset + ') ' + param_combine_operator + ' ' + self.expression)
+
+                            result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                                combine_operator=param_combine_operator,
+                                                                                                                                expression=self.expression))
                         else:
-                            layer.setSubsetString(self.expression)
+                            result = self.source_layer.setSubsetString(self.expression)
 
         return result
     
@@ -568,9 +570,10 @@ class FilterEngineTask(QgsTask):
 
 
                 if param_old_subset != '' and param_combine_operator != '':
-        
-                    result = self.source_layer.setSubsetString('(' + param_old_subset + ') ' + param_combine_operator + ' ' + self.expression)
-                    
+
+                    result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                        combine_operator=param_combine_operator,
+                                                                                                                        expression=self.expression))
                 else:
                     result = self.source_layer.setSubsetString(self.expression)
 
