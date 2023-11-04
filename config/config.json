@@ -20,32 +20,32 @@
             },
             "ICONS": {
                 "ACTION": {
-                    "PushButton_FILTER": "filter.png",
-                    "PushButton_UNFILTER": "unfilter.png",
-                    "PushButton_EXPORT": "export.png"
+                    "FILTER": "filter.png",
+                    "UNFILTER": "unfilter.png",
+                    "EXPORT": "export.png"
                 },
                 "EXPLORING": {
-                    "PushButton_IDENTIFY": "identify.png",
-                    "PushButton_ZOOM": "zoom.png",
-                    "PushButton_SELECTING": "select_black.png",
-                    "PushButton_TRACKING": "track.png",
-                    "PushButton_LINKING": "link.png",
-                    "PushButton_SAVING": "auto_save.png"
+                    "IDENTIFY": "identify.png",
+                    "ZOOM": "zoom.png",
+                    "IS_SELECTING": "select_black.png",
+                    "IS_TRACKING": "track.png",
+                    "IS_LINKING": "link.png",
+                    "IS_SAVING": "auto_save.png"
                 },
                 "FILTERING": {
-                    "PushButton_AUTO_CURRENT_LAYER": "auto_layer_black.png",
-                    "PushButton_LAYERS_TO_FILTER": "layers.png",
-                    "PushButton_COMBINE_OPERATOR": "add.png",
-                    "PushButton_GEOMETRIC_PREDICATES": "geo_predicates.png",
-                    "PushButton_BUFFER": "geo_tampon.png"
+                    "AUTO_CURRENT_LAYER": "auto_layer_black.png",
+                    "HAS_LAYERS_TO_FILTER": "layers.png",
+                    "HAS_COMBINE_OPERATOR": "add.png",
+                    "HAS_GEOMETRIC_PREDICATES": "geo_predicates.png",
+                    "HAS_BUFFER": "geo_tampon.png"
                 },
                 "EXPORTING": {
-                    "PushButton_LAYERS": "layers.png",
-                    "PushButton_PROJECTION": "projection_black.png",
-                    "PushButton_STYLES": "styles_black.png",
-                    "PushButton_DATATYPE": "datatype.png",
-                    "PushButton_OUTPUT_FOLDER": "folder_white.png",
-                    "PushButton_ZIP": "zip.png"
+                    "HAS_LAYERS": "layers.png",
+                    "HAS_PROJECTION": "projection_black.png",
+                    "HAS_STYLES": "styles_black.png",
+                    "HAS_DATATYPE": "datatype.png",
+                    "HAS_OUTPUT_FOLDER": "folder_white.png",
+                    "HAS_ZIP": "zip.png"
                 }
             }
         },

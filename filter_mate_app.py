@@ -28,11 +28,17 @@ class FilterMateApp:
         self.iface = iface
         self.dockwidget = None
         self.flags = {}
+        
+        self.plugin_dir = plugin_dir
         self.appTasks = {"filter":None,"unfilter":None,"export":None}
         self.tasks_descriptions = {'filter':'Filtering data',
                                     'unfilter':'Unfiltering data',
                                     'export':'Exporting data'}
-        self.plugin_dir = plugin_dir
+        
+        self.json_template_layer_infos = '{"subset_history":[],"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
+        self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
+
         self.run()
 
 
@@ -92,6 +98,10 @@ class FilterMateApp:
                     else:
                         layer.saveNamedStyle(os.path.dirname(layer.styleURI())  + 'FilterMate_style_{}.qml'.format(layer.name()))
 
+        CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
+        self.dockwidget.reload_configuration_model()
+
+
 
     def remove_layer_projectCustomProperties(self, layer_id):
         
@@ -127,28 +137,23 @@ class FilterMateApp:
         if self.dockwidget != None:
 
             widgets_to_stop =   [
-                                    ["SINGLE_SELECTION","ComboBox_FeaturePickerWidget"],
-                                    ["SINGLE_SELECTION","ComboBox_FieldExpressionWidget"],
-                                    ["MULTIPLE_SELECTION","ComboBox_CustomCheckableComboBox"],
-                                    ["MULTIPLE_SELECTION","ComboBox_FieldExpressionWidget"],
-                                    ["CUSTOM_SELECTION","ComboBox_FieldExpressionWidget"],
-                                    ["FILTERING","QgsDoubleSpinBox_BUFFER"],
-                                    ["FILTERING","ComboBox_LAYERS_TO_FILTER"],
-                                    ["FILTERING","ComboBox_CURRENT_LAYER"]
+                                    ["SINGLE_SELECTION","FEATURES"],
+                                    ["SINGLE_SELECTION","EXPRESSION"],
+                                    ["MULTIPLE_SELECTION","FEATURES"],
+                                    ["MULTIPLE_SELECTION","EXPRESSION"],
+                                    ["CUSTOM_SELECTION","EXPRESSION"],
+                                    ["FILTERING","BUFFER"],
+                                    ["FILTERING","GEOMETRIC_PREDICATES"],
+                                    ["FILTERING","PREDICATES_OPERATOR"],
+                                    ["FILTERING","COMBINE_OPERATOR"],
+                                    ["FILTERING","LAYERS_TO_FILTER"],
+                                    ["FILTERING","CURRENT_LAYER"]
                                 ]
         
             for widget_path in widgets_to_stop:
                 state = self.dockwidget.manageSignal(widget_path)
                 if state == True:
                     raise SignalStateChangeError(state, self.widgets, widget_path)
-
-
-
-        self.flags['is_managing_project_layers'] = True
-
-        self.json_template_layer_infos = '{"has_combined_filter_logic":false,"combined_filter_logic":"","subset_history":[],"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
-        self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linked":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
 
         for layer in layers:
             if action == 'add':     
@@ -164,6 +169,8 @@ class FilterMateApp:
 
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
             
+            CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
+            self.dockwidget.reload_configuration_model()
 
 
     def check_dict_structure(self, input, reference):
@@ -391,7 +398,9 @@ class FilterEngineTask(QgsTask):
         self.expression = None
         self.is_field_expression = None
 
+
         self.param_source_provider_type = None
+        self.param_combine_operator = None
         self.param_buffer_value = None
         self.param_source_schema = None
         self.param_source_table = None
@@ -487,17 +496,14 @@ class FilterEngineTask(QgsTask):
                     field_idx = layer.fields().indexOf(self.is_field_expression[1])
                     if field_idx >= 0:
                         param_old_subset = ''
-                        param_combine_operator = ''
-                        if layer_prop["has_combined_filter_logic"] == True:
-                            if layer_prop["combined_filter_logic"] != '':
-                                param_combine_operator = layer_prop["combined_filter_logic"]
-                                if layer_prop["is_already_subset"] == True:
-                                    param_old_subset = layer.subsetString()
+                        if self.param_combine_operator != '':
+                            if layer_prop["is_already_subset"] == True:
+                                param_old_subset = layer.subsetString()
 
-                        if param_old_subset != '' and param_combine_operator != '':
+                        if param_old_subset != '' and self.param_combine_operator != '':
 
                             result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                                combine_operator=param_combine_operator,
+                                                                                                                                combine_operator=self.param_combine_operator,
                                                                                                                                 expression=self.expression))
                         else:
                             result = self.source_layer.setSubsetString(self.expression)
@@ -508,7 +514,6 @@ class FilterEngineTask(QgsTask):
     def execute_source_layer_filtering(self):
         """Manage the creation of the origin filtering expression"""
         result = False
-        param_combine_operator = ''
         param_old_subset = ''
 
         self.param_source_provider_type = self.task_parameters["infos"]["layer_provider_type"]
@@ -517,9 +522,9 @@ class FilterEngineTask(QgsTask):
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
-        if self.task_parameters["infos"]["has_combined_filter_logic"] == True:
-            if self.task_parameters["infos"]["combined_filter_logic"] != '':
-                param_combine_operator = self.task_parameters["infos"]["combined_filter_logic"]
+        if self.task_parameters["infos"]["has_combine_operator"] == True:
+            if self.task_parameters["infos"]["combine_operator"] != '':
+                self.param_combine_operator = self.task_parameters["infos"]["combine_operator"]
                 if self.task_parameters["infos"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
 
@@ -551,10 +556,10 @@ class FilterEngineTask(QgsTask):
                                     self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
 
 
-                    if param_old_subset != '' and param_combine_operator != '':
+                    if param_old_subset != '' and self.param_combine_operator != '':
 
                         result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                            combine_operator=param_combine_operator,
+                                                                                                                            combine_operator=self.param_combine_operator,
                                                                                                                             expression=self.expression))
                     else:
                         result = self.source_layer.setSubsetString(self.expression)
@@ -573,10 +578,10 @@ class FilterEngineTask(QgsTask):
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
 
 
-                if param_old_subset != '' and param_combine_operator != '':
+                if param_old_subset != '' and self.param_combine_operator != '':
 
                     result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                        combine_operator=param_combine_operator,
+                                                                                                                        combine_operator=self.param_combine_operator,
                                                                                                                         expression=self.expression))
                 else:
                     result = self.source_layer.setSubsetString(self.expression)
@@ -669,12 +674,9 @@ class FilterEngineTask(QgsTask):
         postgis_predicates = list(self.current_predicates.values())
 
         param_old_subset = ''
-        param_combine_operator = ''
-        if layer_props["has_combined_filter_logic"] == True:
-            if layer_props["combined_filter_logic"] != '':
-                param_combine_operator = layer_props["combined_filter_logic"]
-                if layer_props["is_already_subset"] == True:
-                    param_old_subset = layer.subsetString()
+        if self.param_combine_operator != '':
+            if layer_props["is_already_subset"] == True:
+                param_old_subset = layer.subsetString()
 
         param_distant_schema = layer_props["layer_schema"]
         param_distant_table = layer_props["layer_name"]
@@ -704,9 +706,9 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                                             postgis_sub_expression=param_postgis_sub_expression,
                                                                                                                                                                                                                                                                             source_subset=self.expression)
             print(param_expression)
-            if param_old_subset != '' and param_combine_operator != '':
+            if param_old_subset != '' and self.param_combine_operator != '':
                 result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                              combine_operator=param_combine_operator,
+                                                                                              combine_operator=self.param_combine_operator,
                                                                                               expression=param_expression))
             else:
                 result = layer.setSubsetString(param_expression)
@@ -726,9 +728,9 @@ class FilterEngineTask(QgsTask):
             param_expression = 'SELECT {postgis_sub_expression}'.format(postgis_sub_expression=param_spatialite_sub_expression)
 
             print(param_expression)
-            if param_old_subset != '' and param_combine_operator != '':
+            if param_old_subset != '' and self.param_combine_operator != '':
                 result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                              combine_operator=param_combine_operator,
+                                                                                              combine_operator=self.param_combine_operator,
                                                                                               expression=param_expression))
             else:
                 result = layer.setSubsetString(param_expression)              
@@ -759,10 +761,10 @@ class FilterEngineTask(QgsTask):
 
                 if QgsExpression(param_expression).isValid():
 
-                    if param_old_subset != '' and param_combine_operator != '':
+                    if param_old_subset != '' and self.param_combine_operator != '':
 
                         result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                            combine_operator=param_combine_operator,
+                                                                                                                            combine_operator=self.param_combine_operator,
                                                                                                                             expression=param_expression))
                     else:
                         result = self.source_layer.setSubsetString(param_expression)

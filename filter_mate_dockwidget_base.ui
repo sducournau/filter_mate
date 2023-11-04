@@ -1011,17 +1011,20 @@ color:black;
              <property name="checkable">
               <bool>true</bool>
              </property>
-             <property name="collapsed">
+             <property name="checked">
               <bool>false</bool>
+             </property>
+             <property name="collapsed">
+              <bool>true</bool>
              </property>
              <property name="syncGroup">
-              <string>exploring_GroupBox</string>
+              <string/>
              </property>
              <property name="saveCollapsedState">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <property name="saveCheckedState">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <layout class="QGridLayout" name="gridLayout_10">
               <property name="sizeConstraint">
@@ -1253,19 +1256,19 @@ QComboBox QAbstractItemView {
               <bool>true</bool>
              </property>
              <property name="checked">
-              <bool>false</bool>
-             </property>
-             <property name="collapsed">
               <bool>true</bool>
              </property>
+             <property name="collapsed">
+              <bool>false</bool>
+             </property>
              <property name="syncGroup">
-              <string>exploring_GroupBox</string>
+              <string/>
              </property>
              <property name="saveCollapsedState">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <property name="saveCheckedState">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <layout class="QGridLayout" name="gridLayout_12">
               <property name="sizeConstraint">
@@ -1279,7 +1282,7 @@ QComboBox QAbstractItemView {
                 <item>
                  <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_multiple_selection">
                   <property name="enabled">
-                   <bool>false</bool>
+                   <bool>true</bool>
                   </property>
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -1363,6 +1366,9 @@ QComboBox QAbstractItemView {
              <property name="cursor">
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
+             <property name="styleSheet">
+              <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+             </property>
              <property name="title">
               <string>CUSTOM SELECTION</string>
              </property>
@@ -1376,13 +1382,13 @@ QComboBox QAbstractItemView {
               <bool>true</bool>
              </property>
              <property name="syncGroup">
-              <string>exploring_GroupBox</string>
+              <string/>
              </property>
              <property name="saveCollapsedState">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <property name="saveCheckedState">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_4">
               <item>
