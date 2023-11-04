@@ -522,10 +522,10 @@ class FilterEngineTask(QgsTask):
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
-        if self.task_parameters["infos"]["has_combine_operator"] == True:
-            if self.task_parameters["infos"]["combine_operator"] != '':
-                self.param_combine_operator = self.task_parameters["infos"]["combine_operator"]
-                if self.task_parameters["infos"]["is_already_subset"] == True:
+        if self.task_parameters["filtering"]["has_combine_operator"] == True:
+            if self.task_parameters["filtering"]["combine_operator"] != '':
+                self.param_combine_operator = self.task_parameters["filtering"]["combine_operator"]
+                if self.task_parameters["filtering"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
 
         if self.task_parameters["task"]["expression"] != None:
