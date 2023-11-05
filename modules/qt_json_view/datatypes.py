@@ -83,28 +83,28 @@ class DataType(object):
 # -----------------------------------------------------------------------------
 # Default Types
 # -----------------------------------------------------------------------------
-class CustomQStandardItem(QtGui.QStandardItem):
-    TypeQgsColorButton = QgsColorButton()
+# class CustomQStandardItem(QtGui.QStandardItem):
+#     TypeQgsColorButton = QgsColorButton()
 
-    def clone(self):
-        return CustomQStandardItem()
+#     def clone(self):
+#         return CustomQStandardItem()
 
-    def type(self):
-        return self.data(QtCore.Qt.UserRole + 1000)
+#     def type(self):
+#         return self.data(QtCore.Qt.UserRole + 1000)
 
-    def setType(self, value):
-        self.wrapped_widget = value
-        self.setData(self.wrapped_widget, QtCore.Qt.UserRole + 1000)
+#     def setType(self, value):
+#         self.wrapped_widget = value
+#         self.setData(self.wrapped_widget, QtCore.Qt.UserRole + 1000)
 
-    def setColor(self, color):
-        if self.wrapped_widget == None:
-            self.wrapped_widget = self.data(QtCore.Qt.UserRole + 1000)
-        self.wrapped_widget.setColor(QtGui.QColor(color))
+#     def setColor(self, color):
+#         if self.wrapped_widget == None:
+#             self.wrapped_widget = self.data(QtCore.Qt.UserRole + 1000)
+#         self.wrapped_widget.setColor(QtGui.QColor(color))
 
-    def getColor(self, color):
-        if self.wrapped_widget == None:
-            self.wrapped_widget = self.data(QtCore.Qt.UserRole + 1000)
-        self.wrapped_widget.color().name()
+#     def getColor(self, color):
+#         if self.wrapped_widget == None:
+#             self.wrapped_widget = self.data(QtCore.Qt.UserRole + 1000)
+#         self.wrapped_widget.color().name()
         
 
 class NoneType(DataType):
@@ -112,9 +112,10 @@ class NoneType(DataType):
 
     def matches(self, data):
         return data is None
+    
 
     def value_item(self, value, model, key=None):
-        item = super(NoneType, self).value_item(value, model, key)
+        item = QtGui.QStandardItem()
         item.setData('None', QtCore.Qt.DisplayRole)
         return item
 
@@ -128,6 +129,28 @@ class NoneType(DataType):
             data[key] = value
         elif isinstance(data, list):
             data.append(value)
+
+# class NoneType(DataType):
+#     """None"""
+
+#     def matches(self, data):
+#         return data is None
+
+#     def value_item(self, value, model, key=None):
+#         item = super(NoneType, self).value_item(value, model, key)
+#         item.setData('None', QtCore.Qt.DisplayRole)
+#         return item
+
+#     def serialize(self, model, item, data, parent):
+#         value_item = parent.child(item.row(), 1)
+#         value = value_item.data(QtCore.Qt.DisplayRole)
+#         value = value if value != 'None' else None
+#         if isinstance(data, dict):
+#             key_item = parent.child(item.row(), 0)
+#             key = key_item.data(QtCore.Qt.DisplayRole)
+#             data[key] = value
+#         elif isinstance(data, list):
+#             data.append(value)
 
 
 # class ColorType(DataType):

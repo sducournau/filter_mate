@@ -308,6 +308,10 @@ class FilterMateApp:
         
         task_parameters, current_layer = self.get_task_parameters(task_name)
 
+        if task_name == 'filter':
+            if len(task_parameters["task"]['features']) == 0 or task_parameters["task"]['expression'] == None:
+                return
+
         self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
 
         self.appTasks[task_name].taskCompleted.connect(partial(self.task_postprocessing, task_name, current_layer, task_parameters))
@@ -602,6 +606,9 @@ class FilterEngineTask(QgsTask):
             self.param_buffer_value = float(self.task_parameters["filtering"]["buffer"]) 
         
         provider_list = self.provider_list + [self.param_source_provider_type]
+        provider_list = list(dict.fromkeys(provider_list))
+
+        print(provider_list)
 
         if 'postgresql' in provider_list:
             self.prepare_postgresql_source_geom()
@@ -666,6 +673,8 @@ class FilterEngineTask(QgsTask):
 
             self.outputs['alg_params_buffer'] = processing.run('qgis:buffer', alg_params_buffer)
             self.ogr_source_geom = self.outputs['alg_params_buffer']['OUTPUT']
+        else:
+            self.ogr_source_geom = self.source_layer
 
 
     def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
@@ -741,9 +750,9 @@ class FilterEngineTask(QgsTask):
             features_list = []
             alg_params_select = {
                 'INPUT': layer,
-                'INTERSECT': self.ogr_source_geom if self.ogr_source_geom != None else self.source_layer,
+                'INTERSECT': self.ogr_source_geom,
                 'METHOD': 0,
-                'PREDICATE': [int(predicate) for predicate in self.current_predicates]
+                'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
             }
             processing.run("qgis:selectbylocation", alg_params_select)
 
@@ -753,11 +762,13 @@ class FilterEngineTask(QgsTask):
             layer.removeSelection()
             features_ids = [str(feature[param_distant_primary_key_name]) for feature in features_list]
 
+
             if len(features_ids) > 0:
                 if param_distant_primary_key_is_numeric == True:
-                    param_expression = '"{distant_table}"."{distant_primary_key_name}" IN '.format(distant_table=param_distant_table, distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
+                    param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
                 else:
-                    param_expression = '"{distant_table}"."{distant_primary_key_name}" IN '.format(distant_table=param_distant_table, distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
+                    param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
+
 
                 if QgsExpression(param_expression).isValid():
 
