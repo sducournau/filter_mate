@@ -71,7 +71,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets_initialized = False
         self.current_exploring_groupbox = None
         self.current_layer = self.iface.activeLayer()
-
+        self.CONFIG_DATA = CONFIG_DATA
         self.setupUi(self)
         self.setupUiCustom()
         self.dockwidget_widgets_configuration()
@@ -250,23 +250,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets_initialized = True
 
     def reload_configuration_model(self):
-        self.config_model = JsonModel(data=CONFIG_DATA, editable_keys=True, editable_values=True)
-        self.config_view.setModel(self.config_model)
-        self.save_configuration_model()
+        try:
+            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True)
+            self.config_view.setModel(self.config_model)
+            self.save_configuration_model()
+        except:
+            pass
 
 
     def save_configuration_model(self):
-        CONFIG_DATA = self.widgets["DOCK"]["CONFIGURATION_TREE_VIEW"]["WIDGET"].model.serialize()
-        COLORS = CONFIG_DATA['DOCKWIDGET']['COLORS']
+        # CONFIG_DATA = self.widgets["DOCK"]["CONFIGURATION_TREE_VIEW"]["WIDGET"].model.serialize()
+        # COLORS = CONFIG_DATA['DOCKWIDGET']['COLORS']
 
         with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
-            json.dump(CONFIG_DATA, outfile)
+            json.dump(self.CONFIG_DATA, outfile)
 
 
     def manage_configuration_model(self):
         """Manage the qtreeview model configuration"""
 
-        self.config_model = JsonModel(data=CONFIG_DATA, editable_keys=True, editable_values=True)
+        self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True)
 
 
         self.config_view = JsonView(self.config_model, self.plugin_dir)
@@ -295,7 +298,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def set_widget_icon(self, widget_path, widget_type):
 
-        file = CONFIG_DATA["DOCKWIDGET"][widget_type]["ICONS"][widget_path[0]][widget_path[1]]
+        file = self.CONFIG_DATA["DOCKWIDGET"][widget_type]["ICONS"][widget_path[0]][widget_path[1]]
         file_path = os.path.join(self.plugin_dir, "icons", file)
         icon = QtGui.QIcon(file_path)
         self.widgets[widget_path[0]][widget_path[1]]["ICON"] = file_path
@@ -521,7 +524,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                             marging: 25px 10px 10px 10px;
                                             color:{};""".format(COLORS["BACKGROUND"][0],COLORS["FONT"][0]))
         
-        pushButton_style = json.dumps(CONFIG_DATA["DOCKWIDGET"]["PushButton"]["STYLE"])[1:-1].replace(': {', ' {').replace('\"', '').replace(',', '')
+        pushButton_style = json.dumps(self.CONFIG_DATA["DOCKWIDGET"]["PushButton"]["STYLE"])[1:-1].replace(': {', ' {').replace('\"', '').replace(',', '')
 
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:

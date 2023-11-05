@@ -98,7 +98,7 @@ class FilterMateApp:
                     else:
                         layer.saveNamedStyle(os.path.dirname(layer.styleURI())  + 'FilterMate_style_{}.qml'.format(layer.name()))
 
-        CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
+        self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
         self.dockwidget.reload_configuration_model()
 
 
@@ -169,7 +169,7 @@ class FilterMateApp:
 
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
             
-            CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
+            self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
             self.dockwidget.reload_configuration_model()
 
 
@@ -774,13 +774,13 @@ class FilterEngineTask(QgsTask):
 
                     if param_old_subset != '' and self.param_combine_operator != '':
 
-                        result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                        result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
                                                                                                                             combine_operator=self.param_combine_operator,
                                                                                                                             expression=param_expression))
                     else:
-                        result = self.source_layer.setSubsetString(param_expression)
+                        result = layer.setSubsetString(param_expression)
 
-        return result    
+        return result
 
 
     def execute_unfiltering(self):
