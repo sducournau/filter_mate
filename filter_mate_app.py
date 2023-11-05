@@ -28,7 +28,7 @@ class FilterMateApp:
         self.iface = iface
         self.dockwidget = None
         self.flags = {}
-        
+        self.CONFIG_DATA = CONFIG_DATA
         self.plugin_dir = plugin_dir
         self.appTasks = {"filter":None,"unfilter":None,"export":None}
         self.tasks_descriptions = {'filter':'Filtering data',
@@ -48,11 +48,13 @@ class FilterMateApp:
             
 
             init_layers = list(PROJECT.mapLayers().values())
-            #self.remove_projectCustomProperties_layers_all()
+
+            if self.CONFIG_DATA["APP"]["FRESH_RELOAD"] is True:
+                self.remove_projectCustomProperties_layers_all()
 
             self.manage_project_layers(init_layers, 'add')
 
-            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir)
+            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA)
 
             # show the dockwidget
             # TODO: fix to allow choice of dock location
@@ -130,6 +132,7 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/filtering")
             except:
                 pass
+        self.CONFIG_DATA["LAYERS"] = []
 
 
     def manage_project_layers(self, layers, action):
@@ -298,7 +301,7 @@ class FilterMateApp:
         new_field = QgsField('ID', QVariant.LongLong)
         layer.addExpressionField('@row_number', new_field)
 
-        return 'ID', new_field.id(), new_field.typeName(), True
+        return 'ID', layer.fields().indexFromName('ID'), new_field.typeName(), True
 
 
     def manage_task(self, task_name):
@@ -373,13 +376,18 @@ class FilterMateApp:
                                 print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
                             elif task_name == 'unfilter':
                                 if len(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"]) > 0:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = [subset_history for subset_history in self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] if subset_history["source_layer"] != current_layer.id()]
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].pop()
                         else:
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
                             self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
+
+                        # for i, layer_infos in enumerate(self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]):
+                        #     if layer_infos["layer_id"] == layer.id():
+                        #         self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"][i] = self.PROJECT_LAYERS[layer.id()]["infos"]
            
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
+         
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
 
         if task_name == 'filter':
@@ -404,6 +412,7 @@ class FilterEngineTask(QgsTask):
 
 
         self.param_source_provider_type = None
+        self.has_combine_operator = None
         self.param_combine_operator = None
         self.param_buffer_value = None
         self.param_source_schema = None
@@ -524,6 +533,7 @@ class FilterEngineTask(QgsTask):
         self.param_source_schema = self.task_parameters["infos"]["layer_schema"]
         self.param_source_table = self.task_parameters["infos"]["layer_name"]
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
+        self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
         if self.task_parameters["filtering"]["has_combine_operator"] == True:
@@ -560,7 +570,7 @@ class FilterEngineTask(QgsTask):
                                     self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
 
 
-                    if param_old_subset != '' and self.param_combine_operator != '':
+                    if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
 
                         result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
                                                                                                                             combine_operator=self.param_combine_operator,
@@ -582,7 +592,7 @@ class FilterEngineTask(QgsTask):
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
 
 
-                if param_old_subset != '' and self.param_combine_operator != '':
+                if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
 
                     result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
                                                                                                                         combine_operator=self.param_combine_operator,
@@ -715,7 +725,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                                             postgis_sub_expression=param_postgis_sub_expression,
                                                                                                                                                                                                                                                                             source_subset=self.expression)
             print(param_expression)
-            if param_old_subset != '' and self.param_combine_operator != '':
+            if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
                 result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
                                                                                               combine_operator=self.param_combine_operator,
                                                                                               expression=param_expression))
@@ -737,7 +747,7 @@ class FilterEngineTask(QgsTask):
             param_expression = 'SELECT {postgis_sub_expression}'.format(postgis_sub_expression=param_spatialite_sub_expression)
 
             print(param_expression)
-            if param_old_subset != '' and self.param_combine_operator != '':
+            if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
                 result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
                                                                                               combine_operator=self.param_combine_operator,
                                                                                               expression=param_expression))
@@ -772,7 +782,7 @@ class FilterEngineTask(QgsTask):
 
                 if QgsExpression(param_expression).isValid():
 
-                    if param_old_subset != '' and self.param_combine_operator != '':
+                    if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
 
                         result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
                                                                                                                             combine_operator=self.param_combine_operator,

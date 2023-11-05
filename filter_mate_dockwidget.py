@@ -52,7 +52,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     reinitializingLayerOnError = pyqtSignal(str)
 
-    def __init__(self, project_layers, plugin_dir, parent=None):
+    def __init__(self, project_layers, plugin_dir, config_data, parent=None):
         """Constructor."""
         super(FilterMateDockWidget, self).__init__(parent)
         
@@ -71,7 +71,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets_initialized = False
         self.current_exploring_groupbox = None
         self.current_layer = self.iface.activeLayer()
-        self.CONFIG_DATA = CONFIG_DATA
+        self.CONFIG_DATA = config_data
         self.setupUi(self)
         self.setupUiCustom()
         self.dockwidget_widgets_configuration()
@@ -166,7 +166,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                         "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_saving")),
                                         "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
                                         "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
-                                        "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
+                                        "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
                                         "buffer":(("filtering","has_buffer"),("filtering","buffer"))
                                         }
 
@@ -223,7 +223,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='combine_operator': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates_operator, "SIGNALS":[("currentTextChanged", lambda state, x='geometric_predicates_operator': self.layer_property_changed(x, state))]},
-                                    "BUFFER":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("textChanged", lambda state, x='buffer': self.layer_property_changed(x, state))]}
+                                    "BUFFER":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("valueChanged", lambda state, x='buffer': self.layer_property_changed(x, state))]}
                                     }
         
         self.widgets["EXPORTING"] = {
@@ -674,8 +674,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         state = None
         flag_value_changed = False
 
-        if isinstance(input_data, dict) or isinstance(input_data, list):
+        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
             if len(input_data) >= 0:
+                state = True
+            else:
+                state = False
+        elif isinstance(input_data, int) or isinstance(input_data, float):
+            if int(input_data) >= 0:
                 state = True
             else:
                 state = False
@@ -709,7 +714,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     custom_function["ON_FALSE"]
 
         else:
-            if index == 0:
+            widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
+            if widget_type == 'PushButton':
                 if layer_props[property_path[0]][property_path[1]] is not state and state is True:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = state
                     flag_value_changed = True
@@ -726,6 +732,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.properties_group_state_changed(properties_tuples)
 
             else:    
+                print(input_property, input_data, state, custom_function)
                 if layer_props[properties_tuples[0][0]][properties_tuples[0][1]] is state and state is True:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = custom_function["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_function else input_data
                     flag_value_changed = True
@@ -784,7 +791,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if state is False:
                 widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
                 signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
-                if widget_type == 'CheckableComboBox':
+                if widget_type == 'PushButton':
+                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
+                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
+                elif widget_type == 'CheckableComboBox':
                     self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
                     self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
                 elif widget_type == 'ComboBox':
@@ -854,7 +864,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exploring_features_changed(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
-
+        
         layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
         features, expression = self.getExploringFeatures(input, identify_by_primary_key_name, custom_expression)
 
@@ -932,10 +942,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def exploring_groupbox_changed(self, groupbox, state=None):
 
 
-        state = self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-        if state == True:
-            raise SignalStateChangeError(state, ["SINGLE_SELECTION","FEATURES"])
-
         if groupbox == "single_selection":
   
             if self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
@@ -955,6 +961,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
                 self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
+                self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect')
+                
                 if self.current_layer != None:
                     self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature())
 
@@ -979,7 +987,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
                 self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
-
+                self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
 
                 if self.current_layer != None:
                     self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
@@ -1003,13 +1011,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                 self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
+                self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
+
                 if self.current_layer != None:
                     self.exploring_custom_selection()
 
 
-        state = self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect')
-        if state == False:
-            raise SignalStateChangeError(state, ["SINGLE_SELECTION","FEATURES"])
 
         
 
@@ -1041,8 +1048,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         
         for widget_path in widgets_to_stop:
             state = self.manageSignal(widget_path)
-            if state == True:
-                raise SignalStateChangeError(state, widget_path)
+            # if state == True:
+            #     raise SignalStateChangeError(state, widget_path)
 
         if self.auto_change_current_layer_flag == True:
             widget_path = ["QGIS","LAYER_TREE_VIEW"]
@@ -1107,8 +1114,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         for widget_path in widgets_to_stop:
             state = self.manageSignal(widget_path)
-            if state == False:
-                raise SignalStateChangeError(state, widget_path)
+            # if state == False:
+            #     raise SignalStateChangeError(state, widget_path)
 
         if self.auto_change_current_layer_flag == True:
             if self.iface.activeLayer().id() != self.current_layer.id():
@@ -1119,7 +1126,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if state == False:
                 raise SignalStateChangeError(state, widget_path)
     
-        self.exploring_link_widgets()   
+        self.exploring_link_widgets()
+        self.exploring_groupbox_changed(self.current_exploring_groupbox)
 
 
     def exploring_link_widgets(self, expression=None):
@@ -1128,8 +1136,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             return
         
         state = self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-        if state == True:
-            raise SignalStateChangeError(state, ["SINGLE_SELECTION","FEATURES"])
+        # if state == True:
+        #     raise SignalStateChangeError(state, ["SINGLE_SELECTION","FEATURES"])
         
 
         layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
@@ -1158,8 +1166,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
 
         state = self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect')
-        if state == False:
-            raise SignalStateChangeError(state, ["SINGLE_SELECTION","FEATURES"])
+        # if state == False:
+        #     raise SignalStateChangeError(state, ["SINGLE_SELECTION","FEATURES"])
         
 
     def zooming_to_features(self, features):
@@ -1292,6 +1300,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         event.accept()
 
     def launchTaskEvent(self, event):
+        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.launchingTask.emit(event)
     
     def reinitializeLayerOnErrorEvent(self, event):
