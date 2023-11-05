@@ -1,12 +1,14 @@
 from functools import partial
 import re
 import webbrowser
+import os
+from shutil import copyfile
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets
 
 
 TypeRole = QtCore.Qt.UserRole + 1
-
+PLUGIN_DIR = None
 
 class DataType(object):
     """Base class for data types."""
@@ -371,11 +373,82 @@ class FilepathType(DataType):
                 return True
         return False
 
+    def value_item(self, value, model, key):
+        """Item representing a value."""
+        value_item = super(FilepathTypeImages, self).value_item(value, model, key)
+        if os.path.exists(value) == True:
+            if os.path.isdir(value) == True:
+                value_item.setData(value, QtCore.Qt.DisplayRole)
+            elif os.path.isfile(value) == True:
+                value_item.setData(os.path.basename(value), QtCore.Qt.DisplayRole)
+                value_item.setData(os.path.normcase(value), QtCore.Qt.UserRole)
+        return value_item
+
+
     def actions(self, index):
-        explore = QtWidgets.QAction('Explore ...', None)
+        view = QtWidgets.QAction('View', None)
+        self.change = QtWidgets.QAction('Change', None)
         path = index.data(QtCore.Qt.DisplayRole)
-        explore.triggered.connect(partial(webbrowser.open, path))
-        return [explore]
+        view.triggered.connect(partial(webbrowser.open, path))
+        self.change.triggered.connect(partial(self.change_path, path, index))
+        return [view, self.change]
+    
+    def change_path(self, input_path, index):
+        new_path = None
+        filename = None
+        if os.path.exists(input_path) == True:
+            if os.path.isdir(input_path) == True:
+                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getExistingDirectory(None, 'Select a folder', input_path)))
+            elif os.path.isfile(input_path) == True:
+                extension = os.path.basename(input_path).split('.')[-1]
+                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
+                filename = os.path.basename(new_path)  
+            if new_path != None:
+                if filename != None:
+                    self.change.setData([filename, new_path])
+                else:
+                    self.change.setData([new_path])
+
+
+class FilepathTypeImages(DataType):
+    """Files and paths can be opened."""
+
+    REGEX = re.compile(r'(\.png)|(\.jpg)|(\.jpeg)|(\.gif)$')
+
+    def matches(self, data):
+        if isinstance(data, str) or isinstance(data, unicode):
+            if self.REGEX.search(data) is not None:
+                return True
+        return False
+
+    def value_item(self, value, model, key):
+        """Item representing a value."""
+        value_item = super(FilepathTypeImages, self).value_item(value, model, key)
+        value_item.setData(value, QtCore.Qt.DisplayRole)
+        value_item.setData(os.path.normcase(os.path.join(PLUGIN_DIR, "icons", value)), QtCore.Qt.UserRole)
+        return value_item
+
+    def actions(self, index):
+        view = QtWidgets.QAction('View', None)
+        self.change = QtWidgets.QAction('Change', None)
+        path_view = index.data(QtCore.Qt.UserRole)
+        path_change = os.path.normcase(os.path.join(PLUGIN_DIR, "icons"))
+        view.triggered.connect(partial(webbrowser.open, path_view))
+        self.change.triggered.connect(partial(self.change_icon, path_change, index))
+        return [view, self.change]
+        
+
+    def change_icon(self, folder_path, index):
+        filepath = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select an icon', folder_path, 'Images (*.png *.jpg *.jpeg *.gif)')[0]))
+        if filepath:
+            new_filepath = filepath
+            filename = os.path.basename(filepath)
+            if filepath.find(folder_path) < 0:
+                new_filepath = os.path.join(folder_path, filename)
+                copyfile(filepath, new_filepath)
+            self.change.setData([filename, new_filepath])
+
+
 
 
 class ChoicesType(DataType):
@@ -434,6 +507,7 @@ class ChoicesType(DataType):
 DATA_TYPES = [
     NoneType(),
     UrlType(),
+    FilepathTypeImages(),
     FilepathType(),
     StrType(),
     IntType(),
@@ -451,3 +525,7 @@ def match_type(data):
     for type_ in DATA_TYPES:
         if type_.matches(data):
             return type_
+
+def set_plugin_dir(plugin_dir):
+    global PLUGIN_DIR
+    PLUGIN_DIR = plugin_dir

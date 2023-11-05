@@ -1,6 +1,6 @@
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 import json
-from .datatypes import match_type, TypeRole, ListType, DictType
+from .datatypes import set_plugin_dir, match_type, TypeRole, ListType, DictType
 
 class InputWindow(QtWidgets.QDialog):
     """Main Window."""
@@ -38,15 +38,18 @@ class JsonModel(QtGui.QStandardItemModel):
             self, parent=None,
             data=None,
             editable_keys=False,
-            editable_values=False):
+            editable_values=False,
+            plugin_dir=None):
         super(JsonModel, self).__init__(parent=parent)
+        self.plugin_dir = plugin_dir
+        set_plugin_dir(self.plugin_dir)
         if data is not None:
             self.init(data, editable_keys, editable_values)
 
     def init(self, data, editable_keys=False, editable_values=False):
         """Convert the data to items and populate the model."""
         self.clear()
-        self.setHorizontalHeaderLabels(['Propriété', 'Valeur'])
+        self.setHorizontalHeaderLabels(['Property', 'Value'])
         self.editable_keys = editable_keys
         self.editable_values = editable_values
         parent = self.invisibleRootItem()

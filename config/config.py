@@ -25,7 +25,7 @@ ROOT = PROJECT.layerTreeRoot()
 DIR_CONFIG = os.path.normpath(os.path.dirname(__file__))
 PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
 if PATH_ABSOLUTE_PROJECT =='./':
-    PATH_ABSOLUTE_PROJECT = os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop')
+    PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
 
 
 CONFIG_DATA = None

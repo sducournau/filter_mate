@@ -6,6 +6,7 @@ from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpre
 from qgis.utils import *
 from qgis.utils import iface
 
+import zipfile
 import os.path
 from pathlib import Path
 import re
@@ -33,12 +34,13 @@ class FilterMateApp:
         self.appTasks = {"filter":None,"unfilter":None,"export":None}
         self.tasks_descriptions = {'filter':'Filtering data',
                                     'unfilter':'Unfiltering data',
+                                    'reset':'Reseting data',
                                     'export':'Exporting data'}
         
         self.json_template_layer_infos = '{"subset_history":[],"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
-
+        self.json_template_layer_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
         self.run()
 
 
@@ -76,7 +78,7 @@ class FilterMateApp:
 
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
-        # self.managerWidgets.model.dataChanged.connect(self.qtree_signal)
+        # 
         # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
 
@@ -94,6 +96,7 @@ class FilterMateApp:
                     layer.setCustomProperty("filterMate/infos", json.dumps(self.PROJECT_LAYERS[layer_id]["infos"]))
                     layer.setCustomProperty("filterMate/exploring", json.dumps(self.PROJECT_LAYERS[layer_id]["exploring"]))
                     layer.setCustomProperty("filterMate/filtering", json.dumps(self.PROJECT_LAYERS[layer_id]["filtering"]))
+                    layer.setCustomProperty("filterMate/exporting", json.dumps(self.PROJECT_LAYERS[layer_id]["exporting"]))
                     
                     if layer.listStylesInDatabase()[0] > -1:
                        layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
@@ -114,6 +117,7 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/infos")
                 layer.removeCustomProperty("filterMate/exploring")
                 layer.removeCustomProperty("filterMate/filtering")
+                layer.removeCustomProperty("filterMate/exporting")
                 self.remove_project_layer(layer_id)
                 self.add_project_layer(layer)
 
@@ -130,6 +134,7 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/infos")
                 layer.removeCustomProperty("filterMate/exploring")
                 layer.removeCustomProperty("filterMate/filtering")
+                layer.removeCustomProperty("filterMate/exporting")
             except:
                 pass
         self.CONFIG_DATA["LAYERS"] = []
@@ -246,22 +251,29 @@ class FilterMateApp:
                 new_layer_infos = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer_provider_type, layer.sourceCrs().authid(), layer.id(), source_schema, layer.name(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
                 new_layer_exploring = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
                 new_layer_filtering = json.loads(self.json_template_layer_filtering)
+                new_layer_exporting = json.loads(self.json_template_layer_exporting)
 
 
-                if "filterMate/infos" in layer.customPropertyKeys() and "filterMate/exploring" in layer.customPropertyKeys() and "filterMate/filtering" in layer.customPropertyKeys():
+                if "filterMate/infos" in layer.customPropertyKeys():
                     existing_layer_infos = json.loads(layer.customProperty("filterMate/infos"))
                     layer_infos = self.check_dict_structure(existing_layer_infos, new_layer_infos)
+                if "filterMate/exploring" in layer.customPropertyKeys():
                     existing_layer_exploring = json.loads(layer.customProperty("filterMate/exploring"))
                     layer_exploring = self.check_dict_structure(existing_layer_exploring, new_layer_exploring)
+                if "filterMate/filtering" in layer.customPropertyKeys():
                     existing_layer_filtering = json.loads(layer.customProperty("filterMate/filtering"))
                     layer_filtering = self.check_dict_structure(existing_layer_filtering, new_layer_filtering)
+                if "filterMate/exporting" in layer.customPropertyKeys():
+                    existing_layer_exporting = json.loads(layer.customProperty("filterMate/exporting"))
+                    layer_exporting = self.check_dict_structure(existing_layer_exporting, new_layer_exporting)
 
                 else:
                     layer_infos = new_layer_infos
                     layer_exploring = new_layer_exploring
                     layer_filtering = new_layer_filtering
+                    layer_exporting = new_layer_exporting
 
-                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "exploring": layer_exploring, "filtering": layer_filtering}
+                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "exploring": layer_exploring, "filtering": layer_filtering, "exporting": layer_exporting}
 
     def remove_project_layer(self, layer_id):
         try:
@@ -345,6 +357,11 @@ class FilterMateApp:
 
             task_parameters["task"] = {"features": features, "expression": expression}
             return task_parameters, current_layer
+        
+        elif task_name == 'reset':
+
+            task_parameters["task"] = {"features": features, "expression": expression}
+            return task_parameters, current_layer
 
         elif task_name == 'export':
             return task_parameters, current_layer
@@ -355,10 +372,26 @@ class FilterMateApp:
         if current_layer.subsetString() != '':
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
             if task_name == 'filter':
+
+                if isinstance(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"], list):
+                    pass
+                else:
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
+
                 self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":current_layer.subsetString()})
+
             elif task_name == 'unfilter':
+
+                if isinstance(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"], list):
+                    pass
+                else:
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
+
                 if len(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"]) > 0:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = [subset_history for subset_history in self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] if subset_history["source_layer"] != current_layer.id()]
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].pop()
+                else:
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
+                    
         else:
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
@@ -372,18 +405,31 @@ class FilterMateApp:
                         if layer.subsetString() != '':
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
                             if task_name == 'filter':
+
+                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list):
+                                    pass
+                                else:
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
+
                                 self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":layer.subsetString()})
                                 print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
+
                             elif task_name == 'unfilter':
+
+                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list):
+                                    pass
+                                else:
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
+
                                 if len(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"]) > 0:
                                     self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].pop()
+                                else:
+                                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
                         else:
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
                             self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
 
-                        # for i, layer_infos in enumerate(self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]):
-                        #     if layer_infos["layer_id"] == layer.id():
-                        #         self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"][i] = self.PROJECT_LAYERS[layer.id()]["infos"]
+
            
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
@@ -465,11 +511,17 @@ class FilterEngineTask(QgsTask):
 
                 self.execute_unfiltering()
 
+            elif self.task_action == 'reset':
+                """We will reset the layers"""
+
+                self.execute_reseting()
 
             elif self.task_action == 'export':
                 """We will export layers"""
-
-                self.execute_exporting()
+                if self.task_parameters["exporting"]["has_layers_to_export"] == True:
+                    self.execute_exporting()
+                else:
+                    return False
                 
             return True
     
@@ -819,38 +871,110 @@ class FilterEngineTask(QgsTask):
         return True
 
 
+    def execute_reseting(self):
+
+        self.source_layer.setSubsetString('')
+
+        for layer_provider_type in self.layers:
+            for layer, layer_props in self.layers[layer_provider_type]:
+                layer.setSubsetString('')
+
+
+        return True
+
+
     def execute_exporting(self):
         """Main function to export the selected layers to the right format with their associated styles"""
+        self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
+        layers_to_export = None
+        projection_to_export = None
+        styles_to_export = 'qlm'
+        datatype_to_export = 'GeoPackage'
+        output_folder_to_export = PATH_ABSOLUTE_PROJECT
+        zip_to_export = None
 
-        format = self.dockwidget.comboBox_export_type.currentText()
-        output = {}
-        name = str(self.dockwidget.lineEdit_export.text()) if self.dockwidget.lineEdit_export.text() != '' else 'output'
-        crs = self.dockwidget.mQgsProjectionSelectionWidget.crs()
-        if format == 'GeoPackage':
-            alg_parameters_export = {
-                'LAYERS': [PROJECT.mapLayersByName(layer)[0] for layer in self.dockwidget.comboBox_select_layers.checkedItems()],
-                'OVERWRITE':True,
-                'SAVE_STYLES':True,
-                'OUTPUT':PATH_ABSOLUTE_PROJECT + '\{name}.{format}'.format(name=name,format='gpkg')
+        if self.task_parameters["exporting"]["has_layers_to_export"] is True:
+            if self.task_parameters["exporting"]["layers_to_export"] != None and len(self.task_parameters["exporting"]["layers_to_export"]) > 0:
+                layers_to_export = [re.search('.* ', layer).group().strip() for layer in self.task_parameters["exporting"]["layers_to_export"] if re.search('.* ', layer) != None]
 
-                }
-            print(PATH_ABSOLUTE_PROJECT + '\{name}.{format}'.format(name=name,format='gpkg'))
-            output = processing.run("qgis:package", alg_parameters_export)
 
-        else:
-            if not os.path.isdir(PATH_ABSOLUTE_PROJECT + os.sep + name):
-                os.mkdir(PATH_ABSOLUTE_PROJECT + os.sep + name)
+        if self.task_parameters["exporting"]["has_projection_to_export"] is True:
+            if self.task_parameters["exporting"]["projection_to_export"] != None and self.task_parameters["exporting"]["projection_to_export"] != '':
+                self.coordinateReferenceSystem.createFromWkt(self.task_parameters["exporting"]["projection_to_export"])
+                projection_to_export = self.coordinateReferenceSystem
+     
+        if self.task_parameters["exporting"]["has_styles_to_export"] is True:
+            if self.task_parameters["exporting"]["styles_to_export"] != None and self.task_parameters["exporting"]["styles_to_export"] != '':
+                styles_to_export = self.task_parameters["exporting"]["styles_to_export"]
 
-            for layer in self.dockwidget.comboBox_select_layers.checkedItems():
-                if self.isCanceled():
-                    print('Cancel')
-                    return False
-                QgsVectorFileWriter.writeAsVectorFormat(PROJECT.mapLayersByName(layer)[0], PATH_ABSOLUTE_PROJECT + os.sep + name + os.sep + PROJECT.mapLayersByName(layer)[0].name(), "UTF-8", crs, format)
-                if format != 'XLSX':
-                    PROJECT.mapLayersByName(layer)[0].saveNamedStyle(PATH_ABSOLUTE_PROJECT + os.sep + name + os.sep + PROJECT.mapLayersByName(layer)[0].name() + '.qml')
+        if self.task_parameters["exporting"]["has_datatype_to_export"] is True:
+            if self.task_parameters["exporting"]["datatype_to_export"] != None and self.task_parameters["exporting"]["datatype_to_export"] != '':
+                datatype_to_export = self.task_parameters["exporting"]["datatype_to_export"]
+
+        if self.task_parameters["exporting"]["has_output_folder_to_export"] is True:
+            if self.task_parameters["exporting"]["output_folder_to_export"] != None and self.task_parameters["exporting"]["output_folder_to_export"] != '':
+                output_folder_to_export = self.task_parameters["exporting"]["output_folder_to_export"]
+
+        if self.task_parameters["exporting"]["has_zip_to_export"] is True:
+            if self.task_parameters["exporting"]["zip_to_export"] != None and self.task_parameters["exporting"]["zip_to_export"] != '':
+                zip_to_export = self.task_parameters["exporting"]["zip_to_export"]
+
+        if layers_to_export != None:
+            if datatype_to_export.upper() == 'GEOPACKAGE':
+                alg_parameters_export = {
+                    'LAYERS': [PROJECT.mapLayersByName(layer)[0] for layer in layers_to_export],
+                    'OVERWRITE':True,
+                    'SAVE_STYLES':self.task_parameters["exporting"]["has_styles_to_export"],
+                    'OUTPUT':output_folder_to_export
+
+                    }
+                output = processing.run("qgis:package", alg_parameters_export)
+
+            else:
+                if os.path.exists(output_folder_to_export):
+                    if os.path.isdir(output_folder_to_export) and len(layers_to_export) > 1:
+            
+                        for layer_name in layers_to_export:
+                            layer = PROJECT.mapLayersByName(layer_name)[0]
+                            if projection_to_export == None:
+                                current_projection_to_export = layer.sourceCrs()
+                            else:
+                                current_projection_to_export = projection_to_export
+                            QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
+                            if datatype_to_export.upper() != 'XLSX':
+                                if self.task_parameters["exporting"]["has_styles_to_export"] is True:
+                                    layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name, styles_to_export)))
+
+                elif len(layers_to_export) == 1:
+                    layer_name = layers_to_export[0]
+                    layer = PROJECT.mapLayersByName(layer_name)[0]
+                    if projection_to_export == None:
+                        current_projection_to_export = layer.sourceCrs()
+                    else:
+                        current_projection_to_export = projection_to_export
+                    QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
+                    if datatype_to_export.upper() != 'XLSX':
+                        if self.task_parameters["exporting"]["has_styles_to_export"] is True:
+                            layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , '.', styles_to_export)))
+
+
+            if zip_to_export != None:
+                directory, zipfile = os.path.split(output_folder_to_export)
+                if os.path.exists(directory) and os.path.isdir(directory):
+                    self.zipfolder(zip_to_export, output_folder_to_export)
 
         return True
     
+    def zipfolder(self, foldername, target_dir):            
+        zipobj = zipfile.ZipFile(foldername + '.zip', 'w', zipfile.ZIP_DEFLATED)
+        rootlen = len(target_dir) + 1
+        if os.path.isfile(target_dir):
+            zipobj.write(target_dir)
+        else:
+            for base, dirs, files in os.walk(target_dir):
+                for file in files:
+                    fn = os.path.join(base, file)
+                    zipobj.write(fn, fn[rootlen:])
 
     def cancel(self):
         QgsMessageLog.logMessage(

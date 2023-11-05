@@ -27,38 +27,38 @@ class JsonView(QtWidgets.QTreeView):
     def leaveEvent(self, QEvent):
         self.onLeaveEvent.emit()
 
-    def checkDrag(self):
-        pos = QCursor.pos()
-        # slightly move the mouse to trigger dragMoveEvent
-        QCursor.setPos(pos + QPoint(1, 1))
-        # restore the previous position
-        QCursor.setPos(pos)
+    # def checkDrag(self):
+    #     pos = QCursor.pos()
+    #     # slightly move the mouse to trigger dragMoveEvent
+    #     QCursor.setPos(pos + QPoint(1, 1))
+    #     # restore the previous position
+    #     QCursor.setPos(pos)
 
 
-    def mouseMoveEvent(self, event):
-        if event.buttons() != Qt.RightButton:
-            return
-        if ((event.pos() - self.dragStartPosition).manhattanLength() < QApplication.startDragDistance()):
-            return
+    # def mouseMoveEvent(self, event):
+    #     if event.buttons() != Qt.RightButton:
+    #         return
+    #     if ((event.pos() - self.dragStartPosition).manhattanLength() < QApplication.startDragDistance()):
+    #         return
 
-        # a local timer, it will be deleted when the function returns
-        dragTimer = QTimer(interval=100, timeout=self.checkDrag)
-        dragTimer.start()
-        self.startDrag(Qt.CopyAction)
+    #     # a local timer, it will be deleted when the function returns
+    #     dragTimer = QTimer(interval=100, timeout=self.checkDrag)
+    #     dragTimer.start()
+    #     self.startDrag(Qt.CopyAction)
 
-    def dragMoveEvent(self, event):
-        print(event)
-        print(event.mimeData())
-        print(event.mimeData().urls())
-        if not event.mimeData().hasUrls():
-            event.ignore()
-            return
-        event.setDropAction(Qt.CopyAction)
+    # def dragMoveEvent(self, event):
+    #     print(event)
+    #     print(event.mimeData())
+    #     print(event.mimeData().urls())
+    #     if not event.mimeData().hasUrls():
+    #         event.ignore()
+    #         return
+    #     event.setDropAction(Qt.CopyAction)
         
-        for url in event.mimeData().urls():
-            if os.path.isfile(url):
-                copyfile(url, self.plugin_dir + '/icons/' + os.path.basename(url))
-        event.accept()
+    #     for url in event.mimeData().urls():
+    #         if os.path.isfile(url):
+    #             copyfile(url, self.plugin_dir + '/icons/' + os.path.basename(url))
+    #     event.accept()
 
 
     
@@ -69,29 +69,37 @@ class JsonView(QtWidgets.QTreeView):
         data = index.data(TypeRole)
         if data is None:
             return
-        for action in data.actions(index):
-            menu.addAction(action)
-        action = menu.exec_(self.viewport().mapToGlobal(position))
-        if action:
+        custom_actions = data.actions(index)
+        if custom_actions != None and len(custom_actions) > 0:
+            menu.addActions(custom_actions)
+        returned_action = menu.exec_(self.viewport().mapToGlobal(position))
+        if returned_action:
+            action_data = returned_action.data()
             indexes = self.selectedIndexes()
             item = self.model.itemFromIndex(index)
+            if returned_action.text() == "Change":
+                if action_data != None:
+                    if len(action_data) == 1:
+                        item.setData(action_data[0], QtCore.Qt.DisplayRole)
+                    elif len(action_data) == 2:
+                        item.setData(action_data[0], QtCore.Qt.DisplayRole)
+                        item.setData(action_data[1], QtCore.Qt.UserRole)
 
-
-            if action.text() == "Rename":
+            if returned_action.text() == "Rename":
                 self.edit(index)
 
-            if action.text() == "Add child":
+            if returned_action.text() == "Add child":
 
                 self.model.addData(item)
 
-            if action.text() == "Insert sibling up":
+            if returned_action.text() == "Insert sibling up":
                 self.model.addData(item,'up')
 
 
-            if action.text() == "Insert sibling down":
+            if returned_action.text() == "Insert sibling down":
                 self.model.addData(item,'down')
 
 
-            if action.text() == "Remove":
+            if returned_action.text() == "Remove":
 
                 self.model.removeData(item)
