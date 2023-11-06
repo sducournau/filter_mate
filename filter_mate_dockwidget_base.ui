@@ -1367,7 +1367,7 @@ QComboBox QAbstractItemView {
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="styleSheet">
-              <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+              <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
              </property>
              <property name="title">
               <string>CUSTOM SELECTION</string>
@@ -3565,7 +3565,7 @@ QComboBox QAbstractItemView {
                 </property>
                 <item>
                  <property name="text">
-                  <string>QGIS QML</string>
+                  <string>QML</string>
                  </property>
                 </item>
                 <item>
@@ -3655,34 +3655,12 @@ QComboBox QAbstractItemView {
 
 </string>
                 </property>
+                <property name="editable">
+                 <bool>true</bool>
+                </property>
                 <property name="maxVisibleItems">
                  <number>20</number>
                 </property>
-                <item>
-                 <property name="text">
-                  <string>GeoPackage</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>GeoJson</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>ESRI Shapefile</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>KML</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>XLSX</string>
-                 </property>
-                </item>
                </widget>
               </item>
               <item>

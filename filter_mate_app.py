@@ -133,6 +133,10 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/filtering")
             except:
                 pass
+            try:
+                layer.removeCustomProperty("filterMate/exporting")
+            except:
+                pass
         self.CONFIG_DATA["LAYERS"] = []
 
 
@@ -881,15 +885,18 @@ class FilterEngineTask(QgsTask):
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         layers_to_export = None
         projection_to_export = None
-        styles_to_export = 'qlm'
-        datatype_to_export = 'GeoPackage'
+        styles_to_export = None
+        datatype_to_export = None
         output_folder_to_export = PATH_ABSOLUTE_PROJECT
         zip_to_export = None
 
         if self.task_parameters["task"]["exporting"]["has_layers_to_export"] is True:
             if self.task_parameters["task"]["exporting"]["layers_to_export"] != None and len(self.task_parameters["task"]["exporting"]["layers_to_export"]) > 0:
                 layers_to_export = [re.search('.* ', layer).group().strip() for layer in self.task_parameters["task"]["exporting"]["layers_to_export"] if re.search('.* ', layer) != None]
-
+            else:
+                return False
+        else:
+            return False
 
         if self.task_parameters["task"]["exporting"]["has_projection_to_export"] is True:
             if self.task_parameters["task"]["exporting"]["projection_to_export"] != None and self.task_parameters["task"]["exporting"]["projection_to_export"] != '':
@@ -898,11 +905,15 @@ class FilterEngineTask(QgsTask):
      
         if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
             if self.task_parameters["task"]["exporting"]["styles_to_export"] != None and self.task_parameters["task"]["exporting"]["styles_to_export"] != '':
-                styles_to_export = self.task_parameters["task"]["exporting"]["styles_to_export"]
+                styles_to_export = self.task_parameters["task"]["exporting"]["styles_to_export"].lower()
 
         if self.task_parameters["task"]["exporting"]["has_datatype_to_export"] is True:
             if self.task_parameters["task"]["exporting"]["datatype_to_export"] != None and self.task_parameters["task"]["exporting"]["datatype_to_export"] != '':
                 datatype_to_export = self.task_parameters["task"]["exporting"]["datatype_to_export"]
+            else:
+                return False
+        else:
+            return False
 
         if self.task_parameters["task"]["exporting"]["has_output_folder_to_export"] is True:
             if self.task_parameters["task"]["exporting"]["output_folder_to_export"] != None and self.task_parameters["task"]["exporting"]["output_folder_to_export"] != '':
@@ -913,7 +924,7 @@ class FilterEngineTask(QgsTask):
                 zip_to_export = self.task_parameters["task"]["exporting"]["zip_to_export"]
 
         if layers_to_export != None:
-            if datatype_to_export.upper() == 'GEOPACKAGE':
+            if datatype_to_export == 'GPKG':
                 alg_parameters_export = {
                     'LAYERS': [PROJECT.mapLayersByName(layer)[0] for layer in layers_to_export],
                     'OVERWRITE':True,
@@ -934,9 +945,9 @@ class FilterEngineTask(QgsTask):
                             else:
                                 current_projection_to_export = projection_to_export
                             QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
-                            if datatype_to_export.upper() != 'XLSX':
+                            if datatype_to_export != 'XLSX':
                                 if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
-                                    layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name, styles_to_export)))
+                                    layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name + '.{}'.format(styles_to_export))))
 
                 elif len(layers_to_export) == 1:
                     layer_name = layers_to_export[0]
@@ -946,9 +957,9 @@ class FilterEngineTask(QgsTask):
                     else:
                         current_projection_to_export = projection_to_export
                     QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
-                    if datatype_to_export.upper() != 'XLSX':
+                    if datatype_to_export != 'XLSX':
                         if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
-                            layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , '.', styles_to_export)))
+                            layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export + '.{}'.format(styles_to_export))))
 
 
             if zip_to_export != None:
@@ -958,16 +969,22 @@ class FilterEngineTask(QgsTask):
 
         return True
     
-    def zipfolder(self, foldername, target_dir):            
-        zipobj = zipfile.ZipFile(foldername + '.zip', 'w', zipfile.ZIP_DEFLATED)
-        rootlen = len(target_dir) + 1
-        if os.path.isfile(target_dir):
-            zipobj.write(target_dir)
-        else:
-            for base, dirs, files in os.walk(target_dir):
-                for file in files:
-                    fn = os.path.join(base, file)
-                    zipobj.write(fn, fn[rootlen:])
+    def zipfolder(self, zip_file, target_dir):   
+
+        if os.path.exists(target_dir):
+            zip_file = zip_file + '.zip' if '.zip' not in os.path.basename(zip_file) else zip_file
+            directory = Path(target_dir)
+
+            with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zipobj:
+        
+                if os.path.isfile(target_dir):
+                    zipobj.write(target_dir, arcname=Path(target_dir).relative_to(directory))
+                elif os.path.isdir(target_dir):
+                    for base, dirs, files in os.walk(target_dir):
+                        for file in files:
+                            if '.zip' not in file:
+                                fn = os.path.join(base, file)
+                                zipobj.write(fn, arcname=Path(fn).relative_to(directory))
 
     def cancel(self):
         QgsMessageLog.logMessage(
