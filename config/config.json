@@ -1,1 +1,81 @@
-{"DOCKWIDGET": {"PushButton": {"STYLE": {"QPushButton": {"border-radius": "10px;", "padding": "10px 10px 10px 10px;"}, "QPushButton:hover": {"background-color": "#CCCCCC;"}, "QPushButton:pressed": {"background-color": "#CCCCCC;", "border": "2px solid black;"}, "QPushButton:checked": {"background-color": "#CCCCCC;", "border": "2px solid black;"}}, "ICONS": {"ACTION": {"FILTER": "filter.png", "UNFILTER": "unfilter.png", "RESET": "reset.png", "EXPORT": "export.png"}, "EXPLORING": {"IDENTIFY": "identify_alt.png", "ZOOM": "zoom.png", "IS_SELECTING": "select_black.png", "IS_TRACKING": "track.png", "IS_LINKING": "link.png", "IS_SAVING": "auto_save.png"}, "FILTERING": {"AUTO_CURRENT_LAYER": "auto_layer_white.png", "HAS_LAYERS_TO_FILTER": "layers.png", "HAS_COMBINE_OPERATOR": "add_multi.png", "HAS_GEOMETRIC_PREDICATES": "geo_predicates.png", "HAS_BUFFER": "geo_tampon.png"}, "EXPORTING": {"HAS_LAYERS_TO_EXPORT": "layers.png", "HAS_PROJECTION_TO_EXPORT": "projection_black.png", "HAS_STYLES_TO_EXPORT": "styles_black.png", "HAS_DATATYPE_TO_EXPORT": "datatype.png", "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png", "HAS_ZIP_TO_EXPORT": "zip.png"}}}, "COLORS": {"BACKGROUND": ["white", "#CCCCCC", "#F0F0F0"], "FONT": ["black", "black"]}}, "LAYERS": [], "APP": {"GITHUB_PAGE": "https://sducournau.github.io/filter_mate/", "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate", "QGIS_PLUGIN_REPOSITORY": "", "FRESH_RELOAD": true, "ICON": "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icon.png", "choice": {"choices": ["C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png", "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\add.png", "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\styles_2.png"], "value": "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png"}}}
+{
+    "DOCKWIDGET": {
+        "PushButton": {
+            "STYLE": {
+                "QPushButton": {
+                    "border-radius": "10px;",
+                    "padding": "10px 10px 10px 10px;"
+                },
+                "QPushButton:hover": {
+                    "background-color": "#CCCCCC;"
+                },
+                "QPushButton:pressed": {
+                    "background-color": "#CCCCCC;",
+                    "border": "2px solid black;"
+                },
+                "QPushButton:checked": {
+                    "background-color": "#CCCCCC;",
+                    "border": "2px solid black;"
+                }
+            },
+            "ICONS": {
+                "ACTION": {
+                    "FILTER": "filter.png",
+                    "UNFILTER": "unfilter.png",
+                    "RESET": "reset.png",
+                    "EXPORT": "export.png"
+                },
+                "EXPLORING": {
+                    "IDENTIFY": "identify_alt.png",
+                    "ZOOM": "zoom.png",
+                    "IS_SELECTING": "select_black.png",
+                    "IS_TRACKING": "track.png",
+                    "IS_LINKING": "link.png",
+                    "IS_SAVING": "auto_save.png"
+                },
+                "FILTERING": {
+                    "AUTO_CURRENT_LAYER": "auto_layer_white.png",
+                    "HAS_LAYERS_TO_FILTER": "layers.png",
+                    "HAS_COMBINE_OPERATOR": "add_multi.png",
+                    "HAS_GEOMETRIC_PREDICATES": "geo_predicates.png",
+                    "HAS_BUFFER": "geo_tampon.png"
+                },
+                "EXPORTING": {
+                    "HAS_LAYERS_TO_EXPORT": "layers.png",
+                    "HAS_PROJECTION_TO_EXPORT": "projection_black.png",
+                    "HAS_STYLES_TO_EXPORT": "styles_black.png",
+                    "HAS_DATATYPE_TO_EXPORT": "datatype.png",
+                    "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png",
+                    "HAS_ZIP_TO_EXPORT": "zip.png"
+                }
+            }
+        },
+        "COLORS": {
+            "BACKGROUND": [
+                "white",
+                "#CCCCCC",
+                "#F0F0F0"
+            ],
+            "FONT": [
+                "black",
+                "black"
+            ]
+        }
+    },
+    "LAYERS": [],
+    "APP": {
+        "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
+        "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
+        "QGIS_PLUGIN_REPOSITORY": "",
+        "FRESH_RELOAD": true,
+        "ICON": "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icon.png",
+        "choice": {
+            "choices": [
+                "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png",
+                "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\add.png",
+                "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\styles_2.png"
+            ],
+            "value": "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins\\filter_mate\\icons\\logo.png"
+        }
+    }
+}

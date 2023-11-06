@@ -67,12 +67,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         self.auto_change_current_layer_flag = False
 
-        self.properties_tuples_dict = None
+        self.layer_properties_tuples_dict = None
+        self.export_properties_tuples_dict = None
+        
         self.widgets = None
         self.widgets_initialized = False
         self.current_exploring_groupbox = None
         self.current_layer = self.iface.activeLayer()
         self.CONFIG_DATA = config_data
+
+        self.json_template_layer_exporting = '{"exporting":{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" } }'
+        self.project_props = json.loads(self.json_template_layer_exporting)
         self.setupUi(self)
         self.setupUiCustom()
         self.dockwidget_widgets_configuration()
@@ -163,20 +168,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def dockwidget_widgets_configuration(self):
 
-        self.properties_tuples_dict =   {
-                                        "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_saving")),
-                                        "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
-                                        "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
-                                        "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
-                                        "buffer":(("filtering","has_buffer"),("filtering","buffer")),
-                                        "layers_to_export":(("exporting","has_layers_to_export"),("exporting","layers_to_export")),
-                                        "projection_to_export":(("exporting","has_projection_to_export"),("exporting","projection_to_export")),
-                                        "styles_to_export":(("exporting","has_styles_to_export"),("exporting","styles_to_export")),
-                                        "datatype_to_export":(("exporting","has_datatype_to_export"),("exporting","datatype_to_export")),
-                                        "output_folder_to_export":(("exporting","has_output_folder_to_export"),("exporting","output_folder_to_export")),
-                                        "zip_to_export":(("exporting","has_zip_to_export"),("exporting","zip_to_export"))
-                                        }
-
+        self.layer_properties_tuples_dict =   {
+                                                "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_saving")),
+                                                "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
+                                                "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
+                                                "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
+                                                "buffer":(("filtering","has_buffer"),("filtering","buffer"))
+                                                }
+        
+        self.export_properties_tuples_dict =   {
+                                                "layers_to_export":(("exporting","has_layers_to_export"),("exporting","layers_to_export")),
+                                                "projection_to_export":(("exporting","has_projection_to_export"),("exporting","projection_to_export")),
+                                                "styles_to_export":(("exporting","has_styles_to_export"),("exporting","styles_to_export")),
+                                                "datatype_to_export":(("exporting","has_datatype_to_export"),("exporting","datatype_to_export")),
+                                                "output_folder_to_export":(("exporting","has_output_folder_to_export"),("exporting","output_folder_to_export")),
+                                                "zip_to_export":(("exporting","has_zip_to_export"),("exporting","zip_to_export"))
+                                                }
 
         self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "SINGLE_SELECTION":{}, "MULTIPLE_SELECTION":{}, "CUSTOM_SELECTION":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
             
@@ -235,18 +242,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     }
         
         self.widgets["EXPORTING"] = {
-                                    "HAS_LAYERS_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_layers, "SIGNALS":[("clicked", lambda state, x='has_layers_to_export': self.layer_property_changed(x, state))], "ICON":None},
-                                    "HAS_PROJECTION_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_projection, "SIGNALS":[("clicked", lambda state, x='has_projection_to_export': self.layer_property_changed(x, state))], "ICON":None},
-                                    "HAS_STYLES_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_styles, "SIGNALS":[("clicked", lambda state, x='has_styles_to_export': self.layer_property_changed(x, state))], "ICON":None},
-                                    "HAS_DATATYPE_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", lambda state, x='has_datatype_to_export': self.layer_property_changed(x, state))], "ICON":None},
-                                    "HAS_OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", lambda state, x='has_output_folder_to_export', custom_function={"ON_CHANGE": lambda x: self.dialog_export_output_path()}: self.layer_property_changed(x, state, custom_function))], "ICON":None},
-                                    "HAS_ZIP_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", lambda state, x='has_zip_to_export', custom_function={"ON_CHANGE": lambda x: self.dialog_export_output_pathzip()}: self.layer_property_changed(x, state, custom_function))], "ICON":None},
-                                    "LAYERS_TO_EXPORT":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_exporting_layers, "SIGNALS":[("checkedItemsChanged", lambda state, x='layers_to_export': self.layer_property_changed(x, state))]},
-                                    "PROJECTION_TO_EXPORT":{"TYPE":"QgsProjectionSelectionWidget", "WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", lambda state, x='projection_to_export', custom_function={"CUSTOM_DATA": lambda x: self.get_current_crs_as_wkt()}: self.layer_property_changed(x, state, custom_function))]},
-                                    "STYLES_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", lambda state, x='styles_to_export': self.layer_property_changed(x, state))]},
-                                    "DATATYPE_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_datatype, "SIGNALS":[("currentTextChanged", lambda state, x='datatype_to_export': self.layer_property_changed(x, state))]},
-                                    "OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_output_folder, "SIGNALS":[("textEdited", lambda state, x='output_folder_to_export', custom_function={"ON_CHANGE": lambda x: self.reset_export_output_path()}: self.layer_property_changed(x, state, custom_function))]},
-                                    "ZIP_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_zip, "SIGNALS":[("textEdited", lambda state, x='zip_to_export', custom_function={"ON_CHANGE": lambda x: self.reset_export_output_pathzip()}: self.layer_property_changed(x, state, custom_function))]}
+                                    "HAS_LAYERS_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_layers, "SIGNALS":[("clicked", lambda state, x='has_layers_to_export': self.project_property_changed(x, state))], "ICON":None},
+                                    "HAS_PROJECTION_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_projection, "SIGNALS":[("clicked", lambda state, x='has_projection_to_export': self.project_property_changed(x, state))], "ICON":None},
+                                    "HAS_STYLES_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_styles, "SIGNALS":[("clicked", lambda state, x='has_styles_to_export': self.project_property_changed(x, state))], "ICON":None},
+                                    "HAS_DATATYPE_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", lambda state, x='has_datatype_to_export': self.project_property_changed(x, state))], "ICON":None},
+                                    "HAS_OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", lambda state, x='has_output_folder_to_export', custom_function={"ON_CHANGE": lambda x: self.dialog_export_output_path()}: self.project_property_changed(x, state, custom_function))], "ICON":None},
+                                    "HAS_ZIP_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", lambda state, x='has_zip_to_export', custom_function={"ON_CHANGE": lambda x: self.dialog_export_output_pathzip()}: self.project_property_changed(x, state, custom_function))], "ICON":None},
+                                    "LAYERS_TO_EXPORT":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_exporting_layers, "SIGNALS":[("checkedItemsChanged", lambda state, x='layers_to_export': self.project_property_changed(x, state))]},
+                                    "PROJECTION_TO_EXPORT":{"TYPE":"QgsProjectionSelectionWidget", "WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", lambda state, x='projection_to_export', custom_function={"CUSTOM_DATA": lambda x: self.get_current_crs_as_wkt()}: self.project_property_changed(x, state, custom_function))]},
+                                    "STYLES_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", lambda state, x='styles_to_export': self.project_property_changed(x, state))]},
+                                    "DATATYPE_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_datatype, "SIGNALS":[("currentTextChanged", lambda state, x='datatype_to_export': self.project_property_changed(x, state))]},
+                                    "OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_output_folder, "SIGNALS":[("textEdited", lambda state, x='output_folder_to_export', custom_function={"ON_CHANGE": lambda x: self.reset_export_output_path()}: self.project_property_changed(x, state, custom_function))]},
+                                    "ZIP_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_zip, "SIGNALS":[("textEdited", lambda state, x='zip_to_export', custom_function={"ON_CHANGE": lambda x: self.reset_export_output_pathzip()}: self.project_property_changed(x, state, custom_function))]}
                                     }
             
 
@@ -708,6 +715,88 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].selectAllOptions()
             
 
+    def project_property_changed(self, input_property, input_data=None, custom_function={}):
+        
+        properties_group_key = None
+        property_path = None
+        index = None
+        state = None
+        flag_value_changed = False
+
+        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
+            if len(input_data) >= 0:
+                state = True
+            else:
+                state = False
+        elif isinstance(input_data, int) or isinstance(input_data, float):
+            if int(input_data) >= 0:
+                state = True
+            else:
+                state = False
+        elif isinstance(input_data, bool):
+            state = input_data
+        
+
+        for properties_tuples_key in self.export_properties_tuples_dict:
+            if input_property.find(properties_tuples_key) >= 0:
+                properties_group_key = properties_tuples_key
+                properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]
+                for i, property_tuple in enumerate(properties_tuples):
+                    if property_tuple[1] == input_property:
+                        property_path = property_tuple
+                        index = i
+                        break
+                break
+
+        widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
+        if widget_type == 'PushButton':
+            if self.project_props[property_path[0]][property_path[1]] is not state and state is True:
+                self.project_props[property_path[0]][property_path[1]] = state
+                flag_value_changed = True
+                if "ON_TRUE" in custom_function:
+                    custom_function["ON_TRUE"]
+
+            elif self.project_props[property_path[0]][property_path[1]] is not state and state is False:
+                self.project_props[property_path[0]][property_path[1]] = state
+                flag_value_changed = True
+                if "ON_FALSE" in custom_function:
+                    custom_function["ON_FALSE"]
+
+            if flag_value_changed is True:
+                self.properties_group_state_changed(properties_tuples)
+
+        else:    
+            print(input_property, input_data, state, custom_function)
+            if self.project_props[properties_tuples[0][0]][properties_tuples[0][1]] is state and state is True:
+                self.project_props[property_path[0]][property_path[1]] = custom_function["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_function else input_data
+                flag_value_changed = True
+                if "ON_TRUE" in custom_function:
+                    custom_function["ON_TRUE"]
+
+
+
+
+        if flag_value_changed is True:
+            if "ON_CHANGE" in custom_function:
+                custom_function["ON_CHANGE"]
+
+        for i, property_tuple in enumerate(properties_tuples):
+            widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
+            if widget_type == 'PushButton':
+                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(self.project_props[property_tuple[0]][property_tuple[1]])
+            elif widget_type == 'CheckableComboBox':
+                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(self.project_props[property_tuple[0]][property_tuple[1]])
+            elif widget_type == 'CustomCheckableComboBox':
+                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
+            elif widget_type == 'ComboBox':
+                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentText(self.project_props[property_tuple[0]][property_tuple[1]])
+            elif widget_type == 'QgsDoubleSpinBox':
+                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(self.project_props[property_tuple[0]][property_tuple[1]])
+            elif widget_type == 'LineEdit':
+                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(self.project_props[property_tuple[0]][property_tuple[1]])
+            elif widget_type == 'QgsProjectionSelectionWidget':
+                self.coordinateReferenceSystem.createFromWkt(self.project_props[property_tuple[0]][property_tuple[1]])
+                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(self.coordinateReferenceSystem)
 
 
 
@@ -737,10 +826,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             state = input_data
         
 
-        for properties_tuples_key in self.properties_tuples_dict:
+        for properties_tuples_key in self.layer_properties_tuples_dict:
             if input_property.find(properties_tuples_key) >= 0:
                 properties_group_key = properties_tuples_key
-                properties_tuples = self.properties_tuples_dict[properties_tuples_key]
+                properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
                 for i, property_tuple in enumerate(properties_tuples):
                     if property_tuple[1] == input_property:
                         property_path = property_tuple
@@ -846,25 +935,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if state is False:
                 widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
                 signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
-                if widget_type == 'PushButton':
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
-                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
-                elif widget_type == 'CheckableComboBox':
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
-                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
-                elif widget_type == 'ComboBox':
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(0)
-                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
-                elif widget_type == 'QgsDoubleSpinBox':
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
-                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
-                elif widget_type == 'LineEdit':
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
-                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
-                elif widget_type == 'QgsProjectionSelectionWidget':
-                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
-                    self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
+
+                if group_enabled_property in self.layer_properties_tuples_dict:
+                    if widget_type == 'PushButton':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
+                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
+                    elif widget_type == 'CheckableComboBox':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
+                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
+                    elif widget_type == 'ComboBox':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(0)
+                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
+                    elif widget_type == 'QgsDoubleSpinBox':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
+                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
+                    elif widget_type == 'LineEdit':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
+                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
+                    elif widget_type == 'QgsProjectionSelectionWidget':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
+                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
                 
+                elif group_enabled_property in self.export_properties_tuples_dict:
+                    if widget_type == 'PushButton':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
+                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
+                    elif widget_type == 'CheckableComboBox':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
+                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
+                    elif widget_type == 'ComboBox':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(0)
+                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
+                    elif widget_type == 'QgsDoubleSpinBox':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
+                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
+                    elif widget_type == 'LineEdit':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
+                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
+                    elif widget_type == 'QgsProjectionSelectionWidget':
+                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
+                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
+
+
+
                 signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
 
             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(state)
@@ -1156,8 +1269,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
 
 
-        for properties_tuples_key in self.properties_tuples_dict:
-            properties_tuples = self.properties_tuples_dict[properties_tuples_key]
+        for properties_tuples_key in self.layer_properties_tuples_dict:
+            properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
             for i, property_tuple in enumerate(properties_tuples):
                 widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
                 if widget_type == 'PushButton':
@@ -1176,9 +1289,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.coordinateReferenceSystem.createFromWkt(layer_props[property_tuple[0]][property_tuple[1]])
                     self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(self.coordinateReferenceSystem)
 
-        for properties_group in self.properties_tuples_dict:
+        for properties_group in self.layer_properties_tuples_dict:
             if properties_group != 'is':
-                self.properties_group_state_changed(self.properties_tuples_dict[properties_group])
+                self.properties_group_state_changed(self.layer_properties_tuples_dict[properties_group])
 
         self.filtering_populate_layers_chekableCombobox()
 
@@ -1306,27 +1419,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if isinstance(project_layers, dict) and len(project_layers) > 0:
             self.PROJECT_LAYERS = project_layers
         
+
+
+        
         layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]) if layer.id() == self.current_layer.id()]
         if len(layers) == 0:
             self.current_layer = self.iface.activeLayer()
             
         self.exporting_populate_layers_chekableCombobox()
         self.current_layer_changed(self.current_layer)
-        self.layer_property_changed('layers_to_filter')
+        self.layer_property_changed('layers_to_filter')  
 
 
-    def dialog_export_output_path(self):
 
-        path = None
+              
+    def dialog_export_output_path(self, state):
+
+        path = ''
+        datatype = ''
+
         if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() == True:  
             datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText()
 
-        if self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked() == True:
+        if state == True:
 
             if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked() == True:
 
                 layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
-                if len(layers) == 1:
+                if len(layers) == 1 and datatype != '':
 
                     layer = layers[0]
                     regexp_layer = re.search('.* ', layer)
@@ -1349,40 +1469,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if path != None and path != '':
                 path = os.path.normcase(path)
                 self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setText(path)
-                return path
             else:
                 self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
         else:
             self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
 
-        return ''
+        self.project_property_changed('has_output_folder_to_export', state)
+        self.project_property_changed('output_folder_to_export', path)
+
 
     def reset_export_output_path(self):
 
         if str(self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text()) == '':
             self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
             self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
+            self.project_property_changed('has_output_folder_to_export', False)
+            self.project_property_changed('output_folder_to_export', '')
 
+    def dialog_export_output_pathzip(self, state):
 
-    def dialog_export_output_pathzip(self):
+        path = ''
 
-        path = None
+        if state == True:
 
-        if self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked() == True:
-
-            
             path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
 
             if path != None and path != '':
                 path = os.path.normcase(path)
                 self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].setText(path)
-                return path
             else:
                 self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
         else:
             self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-        
-        return ''
+            
+        self.project_property_changed('has_zip_to_export', state)
+        self.project_property_changed('zip_to_export', path)
 
 
     def reset_export_output_pathzip(self):
@@ -1390,6 +1511,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if str(self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text()) == '':
             self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
             self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
+            self.project_property_changed('has_zip_to_export', False)
+            self.project_property_changed('zip_to_export', '')
 
 
     def setProjectLayersEvent(self, event):

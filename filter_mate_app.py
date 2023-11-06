@@ -40,7 +40,6 @@ class FilterMateApp:
         self.json_template_layer_infos = '{"subset_history":[],"is_already_subset":false,"layer_geometry_type":"%s","layer_provider_type":"%s","layer_crs":"%s","layer_id":"%s","layer_schema":"%s","layer_name":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
-        self.json_template_layer_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
         self.run()
 
 
@@ -96,7 +95,6 @@ class FilterMateApp:
                     layer.setCustomProperty("filterMate/infos", json.dumps(self.PROJECT_LAYERS[layer_id]["infos"]))
                     layer.setCustomProperty("filterMate/exploring", json.dumps(self.PROJECT_LAYERS[layer_id]["exploring"]))
                     layer.setCustomProperty("filterMate/filtering", json.dumps(self.PROJECT_LAYERS[layer_id]["filtering"]))
-                    layer.setCustomProperty("filterMate/exporting", json.dumps(self.PROJECT_LAYERS[layer_id]["exporting"]))
                     
                     if layer.listStylesInDatabase()[0] > -1:
                        layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
@@ -117,7 +115,6 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/infos")
                 layer.removeCustomProperty("filterMate/exploring")
                 layer.removeCustomProperty("filterMate/filtering")
-                layer.removeCustomProperty("filterMate/exporting")
                 self.remove_project_layer(layer_id)
                 self.add_project_layer(layer)
 
@@ -134,7 +131,6 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/infos")
                 layer.removeCustomProperty("filterMate/exploring")
                 layer.removeCustomProperty("filterMate/filtering")
-                layer.removeCustomProperty("filterMate/exporting")
             except:
                 pass
         self.CONFIG_DATA["LAYERS"] = []
@@ -251,7 +247,6 @@ class FilterMateApp:
                 new_layer_infos = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer_provider_type, layer.sourceCrs().authid(), layer.id(), source_schema, layer.name(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
                 new_layer_exploring = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
                 new_layer_filtering = json.loads(self.json_template_layer_filtering)
-                new_layer_exporting = json.loads(self.json_template_layer_exporting)
 
 
                 if "filterMate/infos" in layer.customPropertyKeys():
@@ -263,17 +258,13 @@ class FilterMateApp:
                 if "filterMate/filtering" in layer.customPropertyKeys():
                     existing_layer_filtering = json.loads(layer.customProperty("filterMate/filtering"))
                     layer_filtering = self.check_dict_structure(existing_layer_filtering, new_layer_filtering)
-                if "filterMate/exporting" in layer.customPropertyKeys():
-                    existing_layer_exporting = json.loads(layer.customProperty("filterMate/exporting"))
-                    layer_exporting = self.check_dict_structure(existing_layer_exporting, new_layer_exporting)
 
                 else:
                     layer_infos = new_layer_infos
                     layer_exploring = new_layer_exploring
                     layer_filtering = new_layer_filtering
-                    layer_exporting = new_layer_exporting
 
-                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "exploring": layer_exploring, "filtering": layer_filtering, "exporting": layer_exporting}
+                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "exploring": layer_exploring, "filtering": layer_filtering}
 
     def remove_project_layer(self, layer_id):
         try:
@@ -364,6 +355,8 @@ class FilterMateApp:
             return task_parameters, current_layer
 
         elif task_name == 'export':
+            
+            task_parameters["task"] = self.dockwidget.project_props
             return task_parameters, current_layer
             
 
@@ -518,7 +511,7 @@ class FilterEngineTask(QgsTask):
 
             elif self.task_action == 'export':
                 """We will export layers"""
-                if self.task_parameters["exporting"]["has_layers_to_export"] == True:
+                if self.task_parameters["task"]["exporting"]["has_layers_to_export"] == True:
                     self.execute_exporting()
                 else:
                     return False
@@ -893,38 +886,38 @@ class FilterEngineTask(QgsTask):
         output_folder_to_export = PATH_ABSOLUTE_PROJECT
         zip_to_export = None
 
-        if self.task_parameters["exporting"]["has_layers_to_export"] is True:
-            if self.task_parameters["exporting"]["layers_to_export"] != None and len(self.task_parameters["exporting"]["layers_to_export"]) > 0:
-                layers_to_export = [re.search('.* ', layer).group().strip() for layer in self.task_parameters["exporting"]["layers_to_export"] if re.search('.* ', layer) != None]
+        if self.task_parameters["task"]["exporting"]["has_layers_to_export"] is True:
+            if self.task_parameters["task"]["exporting"]["layers_to_export"] != None and len(self.task_parameters["task"]["exporting"]["layers_to_export"]) > 0:
+                layers_to_export = [re.search('.* ', layer).group().strip() for layer in self.task_parameters["task"]["exporting"]["layers_to_export"] if re.search('.* ', layer) != None]
 
 
-        if self.task_parameters["exporting"]["has_projection_to_export"] is True:
-            if self.task_parameters["exporting"]["projection_to_export"] != None and self.task_parameters["exporting"]["projection_to_export"] != '':
-                self.coordinateReferenceSystem.createFromWkt(self.task_parameters["exporting"]["projection_to_export"])
+        if self.task_parameters["task"]["exporting"]["has_projection_to_export"] is True:
+            if self.task_parameters["task"]["exporting"]["projection_to_export"] != None and self.task_parameters["task"]["exporting"]["projection_to_export"] != '':
+                self.coordinateReferenceSystem.createFromWkt(self.task_parameters["task"]["exporting"]["projection_to_export"])
                 projection_to_export = self.coordinateReferenceSystem
      
-        if self.task_parameters["exporting"]["has_styles_to_export"] is True:
-            if self.task_parameters["exporting"]["styles_to_export"] != None and self.task_parameters["exporting"]["styles_to_export"] != '':
-                styles_to_export = self.task_parameters["exporting"]["styles_to_export"]
+        if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
+            if self.task_parameters["task"]["exporting"]["styles_to_export"] != None and self.task_parameters["task"]["exporting"]["styles_to_export"] != '':
+                styles_to_export = self.task_parameters["task"]["exporting"]["styles_to_export"]
 
-        if self.task_parameters["exporting"]["has_datatype_to_export"] is True:
-            if self.task_parameters["exporting"]["datatype_to_export"] != None and self.task_parameters["exporting"]["datatype_to_export"] != '':
-                datatype_to_export = self.task_parameters["exporting"]["datatype_to_export"]
+        if self.task_parameters["task"]["exporting"]["has_datatype_to_export"] is True:
+            if self.task_parameters["task"]["exporting"]["datatype_to_export"] != None and self.task_parameters["task"]["exporting"]["datatype_to_export"] != '':
+                datatype_to_export = self.task_parameters["task"]["exporting"]["datatype_to_export"]
 
-        if self.task_parameters["exporting"]["has_output_folder_to_export"] is True:
-            if self.task_parameters["exporting"]["output_folder_to_export"] != None and self.task_parameters["exporting"]["output_folder_to_export"] != '':
-                output_folder_to_export = self.task_parameters["exporting"]["output_folder_to_export"]
+        if self.task_parameters["task"]["exporting"]["has_output_folder_to_export"] is True:
+            if self.task_parameters["task"]["exporting"]["output_folder_to_export"] != None and self.task_parameters["task"]["exporting"]["output_folder_to_export"] != '':
+                output_folder_to_export = self.task_parameters["task"]["exporting"]["output_folder_to_export"]
 
-        if self.task_parameters["exporting"]["has_zip_to_export"] is True:
-            if self.task_parameters["exporting"]["zip_to_export"] != None and self.task_parameters["exporting"]["zip_to_export"] != '':
-                zip_to_export = self.task_parameters["exporting"]["zip_to_export"]
+        if self.task_parameters["task"]["exporting"]["has_zip_to_export"] is True:
+            if self.task_parameters["task"]["exporting"]["zip_to_export"] != None and self.task_parameters["task"]["exporting"]["zip_to_export"] != '':
+                zip_to_export = self.task_parameters["task"]["exporting"]["zip_to_export"]
 
         if layers_to_export != None:
             if datatype_to_export.upper() == 'GEOPACKAGE':
                 alg_parameters_export = {
                     'LAYERS': [PROJECT.mapLayersByName(layer)[0] for layer in layers_to_export],
                     'OVERWRITE':True,
-                    'SAVE_STYLES':self.task_parameters["exporting"]["has_styles_to_export"],
+                    'SAVE_STYLES':self.task_parameters["task"]["exporting"]["has_styles_to_export"],
                     'OUTPUT':output_folder_to_export
 
                     }
@@ -942,7 +935,7 @@ class FilterEngineTask(QgsTask):
                                 current_projection_to_export = projection_to_export
                             QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
                             if datatype_to_export.upper() != 'XLSX':
-                                if self.task_parameters["exporting"]["has_styles_to_export"] is True:
+                                if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
                                     layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name, styles_to_export)))
 
                 elif len(layers_to_export) == 1:
@@ -954,7 +947,7 @@ class FilterEngineTask(QgsTask):
                         current_projection_to_export = projection_to_export
                     QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
                     if datatype_to_export.upper() != 'XLSX':
-                        if self.task_parameters["exporting"]["has_styles_to_export"] is True:
+                        if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
                             layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , '.', styles_to_export)))
 
 
