@@ -296,7 +296,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def reload_configuration_model(self):
         self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True, plugin_dir=self.plugin_dir)
         self.config_view.setModel(self.config_model)
-        self.save_configuration_model()
+        json_object = json.dumps(self.CONFIG_DATA, indent=4)
+
+        with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
+            outfile.write(json_object)
 
 
     def save_configuration_model(self):
@@ -305,8 +308,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         except:
             pass
 
+        json_object = json.dumps(self.CONFIG_DATA, indent=4)
+
         with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
-            json.dumps(self.CONFIG_DATA, outfile)
+            outfile.write(json_object)
 
 
     def manage_configuration_model(self):
