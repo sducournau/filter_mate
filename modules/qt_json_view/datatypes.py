@@ -112,6 +112,8 @@ class StrType(DataType):
     """Strings and unicodes"""
 
     def matches(self, data):
+        # if data == None:
+        #     data = 'None'
         return isinstance(data, str) or isinstance(data, unicode)
 
 
@@ -365,17 +367,19 @@ class UrlType(DataType):
 class FilepathType(DataType):
     """Files and paths can be opened."""
 
-    REGEX = re.compile(r'(\/.*)|([A-Z]:\\.*)')
+    POSITIVE_REGEX = re.compile(r'(\/.*)|([A-Za-z]:\\.*)')
+    NEGATIVE_REGEX = re.compile(r'(\.png)|(\.jpg)|(\.jpeg)|(\.gif)$')
 
     def matches(self, data):
         if isinstance(data, str) or isinstance(data, unicode):
-            if self.REGEX.match(data) is not None:
-                return True
+            if self.POSITIVE_REGEX.search(data) is not None:
+                if self.NEGATIVE_REGEX.search(data) is None:
+                    return True
         return False
 
     def value_item(self, value, model, key):
         """Item representing a value."""
-        value_item = super(FilepathTypeImages, self).value_item(value, model, key)
+        value_item = super(FilepathType, self).value_item(value, model, key)
         if os.path.exists(value) == True:
             if os.path.isdir(value) == True:
                 value_item.setData(value, QtCore.Qt.DisplayRole)
@@ -396,18 +400,22 @@ class FilepathType(DataType):
     def change_path(self, input_path, index):
         new_path = None
         filename = None
-        if os.path.exists(input_path) == True:
-            if os.path.isdir(input_path) == True:
-                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getExistingDirectory(None, 'Select a folder', input_path)))
-            elif os.path.isfile(input_path) == True:
+        if os.path.isdir(input_path) == True:
+            new_path = os.path.normcase(str(QtWidgets.QFileDialog.getExistingDirectory(None, 'Select a folder', input_path)))
+        else:
+            if os.path.exists(input_path) == True:
                 extension = os.path.basename(input_path).split('.')[-1]
                 new_path = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
-                filename = os.path.basename(new_path)  
-            if new_path != None:
-                if filename != None:
-                    self.change.setData([filename, new_path])
-                else:
-                    self.change.setData([new_path])
+                filename = os.path.basename(new_path)
+            else:
+                extension = os.path.basename(input_path).split('.')[-1]
+                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getSaveFileName(None, 'Save to a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
+                filename = os.path.basename(new_path)
+        if new_path != None:
+            if filename != None:
+                self.change.setData([filename, new_path])
+            else:
+                self.change.setData([new_path])
 
 
 class FilepathTypeImages(DataType):

@@ -69,37 +69,37 @@ class JsonView(QtWidgets.QTreeView):
         data = index.data(TypeRole)
         if data is None:
             return
-        custom_actions = data.actions(index)
-        if custom_actions != None and len(custom_actions) > 0:
-            menu.addActions(custom_actions)
-        returned_action = menu.exec_(self.viewport().mapToGlobal(position))
-        if returned_action:
-            action_data = returned_action.data()
-            indexes = self.selectedIndexes()
+        actions = data.actions(index)
+        if actions != None and len(actions) > 0:
+            menu.addActions(actions)
+        action = menu.exec_(self.viewport().mapToGlobal(position))
+        if action:
+            action_data = action.data()
             item = self.model.itemFromIndex(index)
-            if returned_action.text() == "Change":
-                if action_data != None:
-                    if len(action_data) == 1:
+
+            if action_data != None:
+                if action.text() == "Change":
+                    if len(action_data) == 2:
                         item.setData(action_data[0], QtCore.Qt.DisplayRole)
-                    elif len(action_data) == 2:
+                    elif len(action_data) == 3:
                         item.setData(action_data[0], QtCore.Qt.DisplayRole)
                         item.setData(action_data[1], QtCore.Qt.UserRole)
 
-            if returned_action.text() == "Rename":
+            if action.text() == "Rename":
                 self.edit(index)
 
-            if returned_action.text() == "Add child":
+            if action.text() == "Add child":
 
                 self.model.addData(item)
 
-            if returned_action.text() == "Insert sibling up":
+            if action.text() == "Insert sibling up":
                 self.model.addData(item,'up')
 
 
-            if returned_action.text() == "Insert sibling down":
+            if action.text() == "Insert sibling down":
                 self.model.addData(item,'down')
 
 
-            if returned_action.text() == "Remove":
+            if action.text() == "Remove":
 
                 self.model.removeData(item)

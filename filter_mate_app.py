@@ -101,8 +101,8 @@ class FilterMateApp:
                     else:
                         layer.saveNamedStyle(os.path.dirname(layer.styleURI())  + 'FilterMate_style_{}.qml'.format(layer.name()))
 
-        self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
-        self.dockwidget.reload_configuration_model()
+        # self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
+        # self.dockwidget.reload_configuration_model()
 
 
 
@@ -133,11 +133,7 @@ class FilterMateApp:
                 layer.removeCustomProperty("filterMate/filtering")
             except:
                 pass
-            try:
-                layer.removeCustomProperty("filterMate/exporting")
-            except:
-                pass
-        self.CONFIG_DATA["LAYERS"] = []
+        #self.CONFIG_DATA["LAYERS"] = []
 
 
     def manage_project_layers(self, layers, action):
@@ -145,7 +141,6 @@ class FilterMateApp:
         if self.dockwidget != None:
 
             widgets_to_stop =   [
-                                    ["SINGLE_SELECTION","FEATURES"],
                                     ["SINGLE_SELECTION","EXPRESSION"],
                                     ["MULTIPLE_SELECTION","FEATURES"],
                                     ["MULTIPLE_SELECTION","EXPRESSION"],
@@ -177,8 +172,8 @@ class FilterMateApp:
 
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
             
-            self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
-            self.dockwidget.reload_configuration_model()
+            # self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
+            # self.dockwidget.reload_configuration_model()
 
 
     def check_dict_structure(self, input, reference):
@@ -470,7 +465,7 @@ class FilterEngineTask(QgsTask):
 
         self.current_predicates = {}
         self.outputs = {}
-
+        self.message = None
         self.predicates = {"Intersect":"ST_Intersects","Contain":"ST_Contains","Disjoint":"ST_Disjoint","Equal":"ST_Equals","Touch":"ST_Touches","Overlap":"ST_Overlaps","Are within":"ST_Within","Cross":"ST_Crosses"}
 
     def run(self):
@@ -889,6 +884,8 @@ class FilterEngineTask(QgsTask):
         datatype_to_export = None
         output_folder_to_export = PATH_ABSOLUTE_PROJECT
         zip_to_export = None
+        result = None
+        zip_result = None
 
         if self.task_parameters["task"]["exporting"]["has_layers_to_export"] is True:
             if self.task_parameters["task"]["exporting"]["layers_to_export"] != None and len(self.task_parameters["task"]["exporting"]["layers_to_export"]) > 0:
@@ -944,7 +941,7 @@ class FilterEngineTask(QgsTask):
                                 current_projection_to_export = layer.sourceCrs()
                             else:
                                 current_projection_to_export = projection_to_export
-                            QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
+                            result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
                             if datatype_to_export != 'XLSX':
                                 if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
                                     layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name + '.{}'.format(styles_to_export))))
@@ -956,16 +953,25 @@ class FilterEngineTask(QgsTask):
                         current_projection_to_export = layer.sourceCrs()
                     else:
                         current_projection_to_export = projection_to_export
-                    QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
+                    result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
                     if datatype_to_export != 'XLSX':
                         if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
                             layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export + '.{}'.format(styles_to_export))))
 
+            
 
+            print(result)
             if zip_to_export != None:
                 directory, zipfile = os.path.split(output_folder_to_export)
                 if os.path.exists(directory) and os.path.isdir(directory):
-                    self.zipfolder(zip_to_export, output_folder_to_export)
+                    zip_result = self.zipfolder(zip_to_export, output_folder_to_export)
+
+            if list(result)[0] == 0:
+                self.message = 'Layer(s) has been exported to <a href="file:///{}">{}</a>'.format(output_folder_to_export, output_folder_to_export)
+            if zip_result is True:
+                self.message = self.message + ' and ' + 'Zip file has been exported to <a href="file:///{}">{}</a>'.format(zip_to_export, zip_to_export)
+
+            
 
         return True
     
@@ -985,6 +991,7 @@ class FilterEngineTask(QgsTask):
                             if '.zip' not in file:
                                 fn = os.path.join(base, file)
                                 zipobj.write(fn, arcname=Path(fn).relative_to(directory))
+                return True
 
     def cancel(self):
         QgsMessageLog.logMessage(
@@ -1001,6 +1008,9 @@ class FilterEngineTask(QgsTask):
             else:
                 iface.messageBar().pushMessage('Errors occured')
                 print(self.exception)
+        else:
+            if self.message != None:
+                iface.messageBar().pushMessage(self.message, Qgis.Success, 50)
 
 
 class barProgress:

@@ -41,6 +41,3 @@ CONFIG_DATA = None
 
 with open(DIR_CONFIG +  os.sep + 'config.json') as f:
   CONFIG_DATA = json.load(f)
-
-
-COLORS = CONFIG_DATA['DOCKWIDGET']['COLORS']
