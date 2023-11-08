@@ -89,7 +89,9 @@ class NoneType(DataType):
     """None"""
 
     def matches(self, data):
-        return data is None
+        if data == None:
+            data = 'None'
+        return data
 
     def value_item(self, value, model, key=None):
         item = super(NoneType, self).value_item(value, model, key)
@@ -112,8 +114,6 @@ class StrType(DataType):
     """Strings and unicodes"""
 
     def matches(self, data):
-        # if data == None:
-        #     data = 'None'
         return isinstance(data, str) or isinstance(data, unicode)
 
 

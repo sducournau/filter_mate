@@ -326,6 +326,7 @@ class FilterMateApp:
 
     def get_task_parameters(self, task_name):
 
+        self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
         current_layer = self.dockwidget.current_layer
         
         if current_layer.id() in self.PROJECT_LAYERS.keys():
@@ -374,13 +375,11 @@ class FilterMateApp:
 
             elif task_name == 'unfilter':
 
-                if isinstance(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"], list):
-                    pass
-                else:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
+                if isinstance(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"], list) is False:
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = list(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"])
 
                 if len(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"]) > 0:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].pop()
+                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].pop()
                 else:
                     self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
                     
@@ -398,29 +397,25 @@ class FilterMateApp:
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
                             if task_name == 'filter':
 
-                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list):
-                                    pass
-                                else:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
+                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list) is False:
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = list(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
 
                                 self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":layer.subsetString()})
-                                print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
 
                             elif task_name == 'unfilter':
 
-                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list):
-                                    pass
-                                else:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
+                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list) is False:
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = list(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
 
                                 if len(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"]) > 0:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].pop()
+                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].pop()
                                 else:
                                     self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
                         else:
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
                             self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
-
+                            
+                        print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
 
            
         self.iface.mapCanvas().refreshAllLayers()
@@ -428,7 +423,7 @@ class FilterMateApp:
          
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
 
-        if task_name == 'filter':
+        if task_name == 'filter' or task_name == 'unfilter':
             self.dockwidget.exploring_zoom_clicked()
 
 
@@ -459,6 +454,10 @@ class FilterEngineTask(QgsTask):
         self.param_source_geom_operator = None
         self.param_source_subset = None
 
+        self.has_to_reproject_source_layer = False
+        self.source_crs = None
+        self.source_layer_srid = None
+
         self.postgresql_source_geom = None
         self.spatialite_source_geom = None
         self.ogr_source_geom = None
@@ -476,7 +475,14 @@ class FilterEngineTask(QgsTask):
             layers = [layer for layer in PROJECT.mapLayersByName(self.task_parameters["infos"]["layer_name"]) if layer.id() == self.task_parameters["infos"]["layer_id"]]
             if len(layers) == 1:
                 self.source_layer = layers[0]
+                self.source_crs = self.source_layer.sourceCrs()
+                source_crs_distance_unit = self.source_crs.mapUnits()
 
+                if source_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown']:
+                    self.source_layer_srid = self.source_crs.postgisSrid()
+                else:
+                    self.has_to_reproject_source_layer = True
+                    self.source_layer_srid = 3857
 
             """We split the selected layers to be filtered in two categories sql and others"""
             self.layers = {}
@@ -684,13 +690,18 @@ class FilterEngineTask(QgsTask):
 
     def prepare_postgresql_source_geom(self):
 
+        self.postgresql_source_geom = '"{source_table}"."{source_geom}"'.format(source_table=self.param_source_table,
+                                                                                source_geom=self.param_source_geom)
+
+        if self.has_to_reproject_source_layer is True:
+            self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                                source_layer_srid=self.source_layer_srid)
+            
+
         if self.param_buffer_value != None:
-            self.postgresql_source_geom = 'ST_Buffer("{source_table}"."{source_geom}", {buffer_value})'.format(source_table=self.param_source_table,
-                                                                                                               source_geom=self.param_source_geom,
-                                                                                                               buffer_value=self.param_buffer_value)
-        else:
-            self.postgresql_source_geom = '"{source_table}"."{source_geom}"'.format(source_table=self.param_source_table,
-                                                                                    source_geom=self.param_source_geom)
+            self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                        buffer_value=self.param_buffer_value)
+
 
 
     def prepare_spatialite_source_geom(self):
@@ -698,10 +709,15 @@ class FilterEngineTask(QgsTask):
         raw_geometries = [feature.geometry() for feature in self.task_parameters["task"]["features"] if feature.hasGeometry()]
         geometries = []
 
+        if self.has_to_reproject_source_layer is True:
+            transform = QgsCoordinateTransform(QgsCoordinateReferenceSystem("{source_epsg}".format(source_epsg=self.source_crs.authid())), QgsCoordinateReferenceSystem("EPSG:{dest_epsg_id}".format(dest_epsg_id=str(self.source_layer_srid))), PROJECT)
+
         for geometry in raw_geometries:
             if geometry.isEmpty() is False:
                 if geometry.isMultipart():
                     geometry.convertToSingleType()
+                if self.has_to_reproject_source_layer is True:
+                    geometry.transform(transform)
                 if self.param_buffer_value != None:
                     geometry = geometry.buffer(self.param_buffer_value, 5)
                 geometries.append(geometry)
@@ -712,23 +728,36 @@ class FilterEngineTask(QgsTask):
 
     def prepare_ogr_source_geom(self):
 
+        layer = self.source_layer
+
+        if self.has_to_reproject_source_layer is True:
+        
+            alg_source_layer_params_reprojectlayer = {
+                'INPUT': layer,
+                'TARGET_CRS': 'EPSG:{dest_epsg_id}'.format(dest_epsg_id=str(self.source_layer_srid)),
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+            }
+            self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_source_layer_params_reprojectlayer)
+            layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
+
+
         if self.param_buffer_value != None:
 
-            alg_params_buffer = {
+            alg_source_layer_params_buffer = {
                 'DISSOLVE': True,
                 'DISTANCE': self.param_buffer_value,
                 'END_CAP_STYLE': 2,
-                'INPUT': self.source_layer,
+                'INPUT': layer,
                 'JOIN_STYLE': 2,
                 'MITER_LIMIT': 2,
                 'SEGMENTS': 5,
                 'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
             }
 
-            self.outputs['alg_params_buffer'] = processing.run('qgis:buffer', alg_params_buffer)
-            self.ogr_source_geom = self.outputs['alg_params_buffer']['OUTPUT']
+            self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_source_layer_params_buffer)
+            self.ogr_source_geom = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
         else:
-            self.ogr_source_geom = self.source_layer
+            self.ogr_source_geom = layer
 
 
     def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
@@ -747,14 +776,46 @@ class FilterEngineTask(QgsTask):
         param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
         param_distant_geometry_field = layer_props["geometry_field"]
 
+        param_has_to_reproject_layer = False
+        param_layer_crs = layer.sourceCrs()
+        param_layer_crs_distance_unit = param_layer_crs.mapUnits()
+        if param_layer_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown']:
+
+            param_layer_srid = param_layer_crs.postgisSrid()
+
+            if param_layer_srid != self.source_layer_srid:
+
+                param_has_to_reproject_layer = True
+                if self.has_to_reproject_source_layer is True:
+                    param_layer_srid = 3857
+                else:
+                    param_layer_srid = self.source_layer_srid
+        else:
+
+            param_has_to_reproject_layer = True
+            if self.has_to_reproject_source_layer is True:
+                param_layer_srid = 3857
+            else:
+                param_layer_srid = self.source_layer_srid
+
 
         if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
 
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
-                postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},"{distant_table}"."{distant_geometry_field}")'.format(source_sub_expression_geom=self.postgresql_source_geom,
-                                                                                                                                                                distant_table=param_distant_table,
-                                                                                                                                                                distant_geometry_field=param_distant_geometry_field))
+                
+                param_distant_geom_expression = '"{distant_table}"."{distant_geometry_field}"'.format(distant_table=param_distant_table,
+                                                                                                        distant_geometry_field=param_distant_geometry_field)
+                if param_has_to_reproject_layer:
+
+                    param_distant_geom_expression = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid})'.format(param_distant_geom_expression=param_distant_geom_expression,
+                                                                                                                              param_layer_srid=param_layer_srid)
+                    
+                    
+
+                postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},{param_distant_geom_expression})'.format(source_sub_expression_geom=self.postgresql_source_geom,
+                                                                                                                                                    param_distant_geom_expression=param_distant_geom_expression)
+                                                                                                                                                    )
             
             if len(postgis_sub_expression_array) > 1:
                 param_postgis_sub_expression = self.param_source_geom_operator.join(postgis_sub_expression_array)
@@ -781,8 +842,18 @@ class FilterEngineTask(QgsTask):
 
             spatialite_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
-                spatialite_sub_expression_array.append(postgis_predicate + '(ST_GeomFromText(\'{source_sub_expression_geom}\'),"{distant_geometry_field}")'.format(source_sub_expression_geom=self.spatialite_source_geom,
-                                                                                                                                                    distant_geometry_field=param_distant_geometry_field))
+
+                param_distant_geometry_field = "{distant_geometry_field}".format(distant_geometry_field=param_distant_geometry_field)
+
+                if param_has_to_reproject_layer:
+                    param_distant_geometry_field = 'ST_Transform({param_distant_geometry_field}, {param_layer_srid})'.format(param_distant_geometry_field=param_distant_geometry_field,
+                                                                                                                            param_layer_srid=param_layer_srid
+                                                                                                                            )
+
+                spatialite_sub_expression_array.append(postgis_predicate + '(ST_GeomFromText(\'{source_sub_expression_geom}\'),{param_distant_geometry_field})'.format(source_sub_expression_geom=self.spatialite_source_geom,
+                                                                                                                                                                        param_distant_geometry_field=param_distant_geometry_field)
+                                                                                                                                                                        )
+                
             if len(spatialite_sub_expression_array) > 1:
                 param_spatialite_sub_expression = self.param_source_geom_operator.join(spatialite_sub_expression_array)
             else:
@@ -801,20 +872,34 @@ class FilterEngineTask(QgsTask):
 
         elif self.param_source_provider_type == 'ogr' or layer_provider_type == 'ogr':
 
+            current_layer = layer
+
+            if param_has_to_reproject_layer:
+
+                alg_layer_params_reprojectlayer = {
+                    'INPUT': current_layer,
+                    'TARGET_CRS': 'EPSG:{dest_epsg_id}'.format(dest_epsg_id=str(param_layer_srid)),
+                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+                }
+                self.outputs['alg_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_layer_params_reprojectlayer)
+                current_layer = self.outputs['alg_layer_params_reprojectlayer']['OUTPUT']
+
+
             features_list = []
             alg_params_select = {
-                'INPUT': layer,
+                'INPUT': current_layer,
                 'INTERSECT': self.ogr_source_geom,
                 'METHOD': 0,
                 'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
             }
             processing.run("qgis:selectbylocation", alg_params_select)
 
-            for feature in layer.selectedFeatures():
-                features_list.append(feature)
+            features_ids = []
+            for feature in current_layer.selectedFeatures():
+                features_ids.append(str(feature[param_distant_primary_key_name]))
 
+            current_layer.removeSelection()
             layer.removeSelection()
-            features_ids = [str(feature[param_distant_primary_key_name]) for feature in features_list]
 
 
             if len(features_ids) > 0:
@@ -839,24 +924,17 @@ class FilterEngineTask(QgsTask):
 
     def execute_unfiltering(self):
 
+        print(self.task_parameters)
+
         if len(self.task_parameters["infos"]["subset_history"]) > 1:
-            if self.task_parameters["infos"]["subset_history"][-1]["source_layer"] == self.source_layer.id():
-                self.source_layer.setSubsetString(self.task_parameters["infos"]["subset_history"][-2]["subset_string"])
-            else:
-                self.source_layer.setSubsetString('')
+            self.source_layer.setSubsetString(self.task_parameters["infos"]["subset_history"][-2]["subset_string"])
         else:
             self.source_layer.setSubsetString('')
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
                 if len(layer_props["subset_history"]) > 1:
-                    print(self.source_layer.id())
-                    print(layer, layer_props["subset_history"])
-                    if layer_props["subset_history"][-1]["source_layer"] == self.source_layer.id():
-                        print(layer_props["subset_history"][-2]["subset_string"])
-                        layer.setSubsetString(layer_props["subset_history"][-2]["subset_string"])
-                    else:
-                        layer.setSubsetString('')
+                    layer.setSubsetString(layer_props["subset_history"][-2]["subset_string"])
                 else:
                     layer.setSubsetString('')
 
@@ -960,7 +1038,7 @@ class FilterEngineTask(QgsTask):
 
             
 
-            print(result)
+
             if zip_to_export != None:
                 directory, zipfile = os.path.split(output_folder_to_export)
                 if os.path.exists(directory) and os.path.isdir(directory):

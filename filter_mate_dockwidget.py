@@ -190,9 +190,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "SINGLE_SELECTION":{}, "MULTIPLE_SELECTION":{}, "CUSTOM_SELECTION":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
             
         self.widgets["DOCK"] = {
-                                "SINGLE_SELECTION":{"TYPE":"GroupBox", "WIDGET":self.mGroupBox_exploring_single_selection, "SIGNALS":[("stateChanged", lambda state, x='single_selection': self.exploring_groupbox_changed(x, state))]},
-                                "MULTIPLE_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_multiple_selection, "SIGNALS":[("stateChanged", lambda state, x='multiple_selection': self.exploring_groupbox_changed(x, state))]},
-                                "CUSTOM_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("stateChanged", lambda state, x='custom_selection': self.exploring_groupbox_changed(x, state))]},
+                                "SINGLE_SELECTION":{"TYPE":"GroupBox", "WIDGET":self.mGroupBox_exploring_single_selection, "SIGNALS":[("stateChanged", lambda state, x='single_selection': self.exploring_groupbox_changed(x))]},
+                                "MULTIPLE_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_multiple_selection, "SIGNALS":[("stateChanged", lambda state, x='multiple_selection': self.exploring_groupbox_changed(x))]},
+                                "CUSTOM_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("stateChanged", lambda state, x='custom_selection': self.exploring_groupbox_changed(x))]},
                                 "CONFIGURATION_TREE_VIEW":{"TYPE":"TreeView","WIDGET":self.config_view, "SIGNALS":[("collapsed", None),("expanded", None)]},
                                 "CONFIGURATION_MODEL":{"TYPE":"QStandardItemModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", self.data_changed_configuration_model)]},
                                 "TOOLS":{"TYPE":"ToolBox","WIDGET":self.toolBox_tabTools, "SIGNALS":[("currentChanged", self.select_tabTools_index)]}
@@ -206,12 +206,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                 }        
 
         self.widgets["SINGLE_SELECTION"] = {
-                                            "FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed)]},
+                                            "FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed),("filterExpressionChanged", self.exploring_source_params_changed)]},
                                             "EXPRESSION":{"TYPE":"ComboBox", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
                                             }
         
         self.widgets["MULTIPLE_SELECTION"] = {
-                                            "FEATURES":{"TYPE":"CustomCheckableComboBox", "WIDGET":self.customCheckableComboBox_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_link_widgets)]},
+                                            "FEATURES":{"TYPE":"CustomCheckableComboBox", "WIDGET":self.customCheckableComboBox_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]},
                                             "EXPRESSION":{"TYPE":"ComboBox", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
                                             }
         
@@ -226,7 +226,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x=self.current_layer.id(): self.reinitializeLayerOnErrorEvent(x)}: self.layer_property_changed(x, state, custom_functions))], "ICON":None}
+                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x : self.reinitializeLayerOnErrorEvent()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None}
                                     }
 
 
@@ -269,44 +269,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def data_changed_configuration_model(self, input_data=None):
 
-        print('data_changed_configuration_model', input_data)
-        index = input_data.index()
-        item = input_data
+        if self.widgets_initialized is True:
 
-        item_key = self.config_view.model.itemFromIndex(index.siblingAtColumn(0))
+            print('data_changed_configuration_model', input_data)
+            index = input_data.index()
+            item = input_data
 
-        items_keys_values_path = []
+            item_key = self.config_view.model.itemFromIndex(index.siblingAtColumn(0))
 
-        while item_key != None:
-            items_keys_values_path.append(item_key.data(QtCore.Qt.DisplayRole))
-            item_key = item_key.parent()
+            items_keys_values_path = []
 
-        items_keys_values_path.reverse()
+            while item_key != None:
+                items_keys_values_path.append(item_key.data(QtCore.Qt.DisplayRole))
+                item_key = item_key.parent()
 
-        if 'ICONS' in items_keys_values_path:
-            self.set_widget_icon(items_keys_values_path)
+            items_keys_values_path.reverse()
 
-        self.save_configuration_model()
+            if 'ICONS' in items_keys_values_path:
+                self.set_widget_icon(items_keys_values_path)
+
+            self.save_configuration_model()
 
 
 
     def reload_configuration_model(self):
-        self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True, plugin_dir=self.plugin_dir)
-        self.config_view.setModel(self.config_model)
-        json_object = json.dumps(self.CONFIG_DATA, indent=4)
 
-        with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
-            outfile.write(json_object)
+        if self.widgets_initialized is True:
+
+            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True, plugin_dir=self.plugin_dir)
+            self.config_view.setModel(self.config_model)
+            json_object = json.dumps(self.CONFIG_DATA, indent=4)
+
+            with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
+                outfile.write(json_object)
 
 
     def save_configuration_model(self):
-        self.CONFIG_DATA = self.config_model.serialize()
-        json_object = json.dumps(self.CONFIG_DATA, indent=4)
 
-        print('save_configuration_model')
+        if self.widgets_initialized is True:
 
-        with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
-            outfile.write(json_object)
+            self.CONFIG_DATA = self.config_model.serialize()
+            json_object = json.dumps(self.CONFIG_DATA, indent=4)
+
+            print('save_configuration_model')
+
+            with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
+                outfile.write(json_object)
 
 
     def manage_configuration_model(self):
@@ -341,129 +349,124 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def set_widget_icon(self, config_widget_path):
 
-        if len(config_widget_path) == 5:
-            file = self.CONFIG_DATA[config_widget_path[0]][config_widget_path[1]][config_widget_path[2]][config_widget_path[3]][config_widget_path[4]]
-            file_path = os.path.join(self.plugin_dir, "icons", file)
-            icon = QtGui.QIcon(file_path)
-            self.widgets[config_widget_path[3]][config_widget_path[4]]["ICON"] = file_path
-            self.widgets[config_widget_path[3]][config_widget_path[4]]["WIDGET"].setIcon(icon)
+        if self.widgets_initialized is True:
+
+            if len(config_widget_path) == 5:
+                file = self.CONFIG_DATA[config_widget_path[0]][config_widget_path[1]][config_widget_path[2]][config_widget_path[3]][config_widget_path[4]]
+                file_path = os.path.join(self.plugin_dir, "icons", file)
+                icon = QtGui.QIcon(file_path)
+                self.widgets[config_widget_path[3]][config_widget_path[4]]["ICON"] = file_path
+                self.widgets[config_widget_path[3]][config_widget_path[4]]["WIDGET"].setIcon(icon)
 
 
     def icon_per_geometry_type(self, geometry_type):
-        """Return the icon for a geometry type.
 
-        If not found, it will return the default icon.
+        if self.widgets_initialized is True:
 
-        :param geometry_type: The geometry as a string.
-        :type geometry_type: basestring
-
-        :return: The icon.
-        :rtype: QIcon
-        """
-
-        if geometry_type == 'GeometryType.Polygon':
-            return QgsLayerItem.iconPolygon()
-        elif geometry_type == 'GeometryType.Point':
-            return QgsLayerItem.iconPoint()
-        elif geometry_type == 'GeometryType.Line':
-            return QgsLayerItem.iconLine()
-        elif geometry_type == 'GeometryType.UnknownGeometry':
-            return QgsLayerItem.iconTable()
-        else:
-            return QgsLayerItem.iconDefault()
+            if geometry_type == 'GeometryType.Polygon':
+                return QgsLayerItem.iconPolygon()
+            elif geometry_type == 'GeometryType.Point':
+                return QgsLayerItem.iconPoint()
+            elif geometry_type == 'GeometryType.Line':
+                return QgsLayerItem.iconLine()
+            elif geometry_type == 'GeometryType.UnknownGeometry':
+                return QgsLayerItem.iconTable()
+            else:
+                return QgsLayerItem.iconDefault()
         
     def populate_predicates_chekableCombobox(self):
 
-        self.predicats = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
-        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].clear()
-        self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicats)
+        if self.widgets_initialized is True:
+
+            self.predicats = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
+            self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].clear()
+            self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicats)
 
     def filtering_populate_layers_chekableCombobox(self):
-        try:    
-            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].clear()
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
-            if layer_props["filtering"]["has_layers_to_filter"] == True:
-                i = 0
-                for key in self.PROJECT_LAYERS:
-                    if self.PROJECT_LAYERS[key]["infos"]["is_already_subset"] is False:
-                        self.PROJECT_LAYERS[key]["infos"]["subset_history"] = []
+        if self.widgets_initialized is True:
 
-                    layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
-                    layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
-                    layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
-                    layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+            try:    
+                self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].clear()
+                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
-                    if key != self.current_layer.id():
-                        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs))
-                        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)
-                        if len(layer_props["filtering"]["layers_to_filter"]) > 0:
-                            if layer_id in list(layer_info["layer_id"] for layer_info in list(layer_props["filtering"]["layers_to_filter"])):
-                                self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Checked)
+                if layer_props["filtering"]["has_layers_to_filter"] == True:
+                    i = 0
+                    for key in self.PROJECT_LAYERS:
+                        if self.PROJECT_LAYERS[key]["infos"]["is_already_subset"] is False:
+                            self.PROJECT_LAYERS[key]["infos"]["subset_history"] = []
+
+                        layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
+                        layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
+                        layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
+                        layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+
+                        if key != self.current_layer.id():
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs))
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)
+                            if len(layer_props["filtering"]["layers_to_filter"]) > 0:
+                                if layer_id in list(layer_info["layer_id"] for layer_info in list(layer_props["filtering"]["layers_to_filter"])):
+                                    self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Checked)
+                                else:
+                                    self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)   
                             else:
-                                self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)   
-                        else:
+                                self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
+                            i += 1    
+                else:
+                    i = 0
+                    for key in self.PROJECT_LAYERS:
+                        layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
+                        layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
+                        layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
+                        layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+                        
+                        if key != self.current_layer.id():
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)             
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
-                        i += 1    
-            else:
-                i = 0
-                for key in self.PROJECT_LAYERS:
-                    layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
-                    layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
-                    layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
-                    layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
-                    
-                    if key != self.current_layer.id():
-                        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs), self.PROJECT_LAYERS[key]["infos"])
-                        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemData(i, json.dumps(self.PROJECT_LAYERS[key]["infos"]), Qt.UserRole)             
-                        self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
-                        i += 1    
-        
-        except Exception as e:
-            self.exception = e
-            print(self.exception)
-            self.reinitializeLayerOnErrorEvent(self.current_layer.id())
+                            i += 1    
+            
+            except Exception as e:
+                self.exception = e
+                print(self.exception)
+                self.reinitializeLayerOnErrorEvent(self.current_layer.id())
 
     def exporting_populate_combobox(self):
 
-        
-        layers_to_export = []
-        datatype_to_export = ''
+        if self.widgets_initialized is True:
 
-        if self.project_props['exporting']['has_layers_to_export'] is True:
-            layers_to_export = self.project_props['exporting']['layers_to_export']
+            layers_to_export = []
+            datatype_to_export = ''
 
-        if self.project_props['exporting']['has_layers_to_export'] is True:
-            datatype_to_export = self.project_props['exporting']['datatype_to_export']
+            if self.project_props['exporting']['has_layers_to_export'] is True:
+                layers_to_export = self.project_props['exporting']['layers_to_export']
+
+            if self.project_props['exporting']['has_layers_to_export'] is True:
+                datatype_to_export = self.project_props['exporting']['datatype_to_export']
 
 
-        self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
-        for i, key in enumerate(self.PROJECT_LAYERS):
-            layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
-            layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
-            layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
-            layer_name = layer_name + ' [%s]' % (layer_crs)
-            self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, self.PROJECT_LAYERS[key]["infos"])
-            if layer_name in layers_to_export:
-                self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].setItemCheckState(i, Qt.Checked)
+            self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
+            for i, key in enumerate(self.PROJECT_LAYERS):
+                layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
+                layer_crs = self.PROJECT_LAYERS[key]["infos"]["layer_crs"]
+                layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+                layer_name = layer_name + ' [%s]' % (layer_crs)
+                self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, self.PROJECT_LAYERS[key]["infos"])
+                if layer_name in layers_to_export:
+                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].setItemCheckState(i, Qt.Checked)
+                else:
+                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
+            
+            ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
+            ogr_driver_list.sort()
+            self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].clear()
+            self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].addItems(ogr_driver_list)
+
+            if datatype_to_export != '':
+                self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText(datatype_to_export))
             else:
-                self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].setItemCheckState(i, Qt.Unchecked)
-        
-        ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
-        ogr_driver_list.sort()
-        self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].clear()
-        self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].addItems(ogr_driver_list)
+                self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText('GPKG'))
 
-        if datatype_to_export != '':
-            self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText(datatype_to_export))
-        else:
-            self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText('GPKG'))
-
-
-
-
-
-        
 
     def manage_ui_style(self):
 
@@ -720,390 +723,415 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def manage_interactions(self):
 
+        if self.widgets_initialized is True:
 
-        """INIT"""
+            """INIT"""
 
-        self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
-        self.widgets["FILTERING"]["BUFFER"]["WIDGET"].setExpressionsEnabled(True)
-        self.widgets["FILTERING"]["BUFFER"]["WIDGET"].setClearValue(0.0)
-        self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].setCrs(PROJECT.crs())
-
-
-        """SET INTERACTIONS"""
-        for widget_group in self.widgets:
-            if widget_group != 'QGIS':
-                for widget in self.widgets[widget_group]:
-                    if widget_group != 'DOCK' or (widget_group == 'EXPORTING' and ('OUTPUT' in widget or 'ZIP' in widget)):
-                        self.manageSignal([widget_group, widget], 'connect')
+            self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
+            self.widgets["FILTERING"]["BUFFER"]["WIDGET"].setExpressionsEnabled(True)
+            self.widgets["FILTERING"]["BUFFER"]["WIDGET"].setClearValue(0.0)
+            self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].setCrs(PROJECT.crs())
 
 
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='single_selection': self.exploring_groupbox_changed(x, state))
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='multiple_selection': self.exploring_groupbox_changed(x, state))
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='custom_selection': self.exploring_groupbox_changed(x, state))
-        self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentChanged.connect(self.select_tabTools_index)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].itemChanged.connect(self.data_changed_configuration_model)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].dataChanged.connect(self.save_configuration_model)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsInserted.connect(self.save_configuration_model)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsRemoved.connect(self.save_configuration_model)
+            """SET INTERACTIONS"""
+            for widget_group in self.widgets:
+                if widget_group != 'QGIS':
+                    for widget in self.widgets[widget_group]:
+                        if widget_group != 'DOCK' or (widget_group == 'EXPORTING' and ('OUTPUT' in widget or 'ZIP' in widget)):
+                            self.manageSignal([widget_group, widget], 'connect')
 
-        self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_path)
-        self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_path)
-        self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_pathzip)
-        self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_pathzip)
 
-        if 'EXPORT' in self.CONFIG_DATA:
-            if len(list(self.CONFIG_DATA["EXPORT"])) > 0:
-                self.project_props['exporting'] = self.CONFIG_DATA["EXPORT"]
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='single_selection': self.exploring_groupbox_changed(x))
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='multiple_selection': self.exploring_groupbox_changed(x))
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='custom_selection': self.exploring_groupbox_changed(x))
+            self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentChanged.connect(self.select_tabTools_index)
+            self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].itemChanged.connect(self.data_changed_configuration_model)
+            self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].dataChanged.connect(self.save_configuration_model)
+            self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsInserted.connect(self.save_configuration_model)
+            self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsRemoved.connect(self.save_configuration_model)
+
+            self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_path)
+            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_path)
+            self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_pathzip)
+            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_pathzip)
+
+            if 'EXPORT' in self.CONFIG_DATA:
+                if len(list(self.CONFIG_DATA["EXPORT"])) > 0:
+                    self.project_props['exporting'] = self.CONFIG_DATA["EXPORT"]
+                else:
+                    self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
             else:
                 self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
-        else:
-             self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
-        
+            
 
-        if self.current_layer != None:
-            self.populate_predicates_chekableCombobox()
-            self.exporting_populate_combobox()
-            self.set_exporting_properties()
-            self.select_tabTools_index(self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex())
-            self.filtering_populate_layers_chekableCombobox()
-            self.filtering_auto_current_layer_changed()
-            self.exploring_groupbox_init()
-            self.current_layer_changed(self.current_layer)
+            if self.current_layer != None:
+                self.populate_predicates_chekableCombobox()
+                self.exporting_populate_combobox()
+                self.set_exporting_properties()
+                self.select_tabTools_index(self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex())
+                self.filtering_populate_layers_chekableCombobox()
+                self.filtering_auto_current_layer_changed()
+                self.exploring_groupbox_init()
+                self.current_layer_changed(self.current_layer)
 
 
     def select_tabTools_index(self, i):
-        """Keep the current tab index updated"""
-        self.tabTools_current_index = i
-        if self.tabTools_current_index == 1:
-            self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
-        else:
-            self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
+        
+        if self.widgets_initialized is True:
 
-        self.set_exporting_properties()
+            self.tabTools_current_index = i
+            if self.tabTools_current_index == 1:
+                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
+            else:
+                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
+
+            self.set_exporting_properties()
 
 
     def exploring_groupbox_init(self):
 
-        if self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
-            exploring_groupbox = "single_selection"
+        if self.widgets_initialized is True:
 
-        elif self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
-            exploring_groupbox = "multiple_selection"  
+            if self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
+                exploring_groupbox = "single_selection"
 
-        elif self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
-            exploring_groupbox = "custom_selection"
+            elif self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
+                exploring_groupbox = "multiple_selection"  
 
-        self.exploring_groupbox_changed(exploring_groupbox)
+            elif self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
+                exploring_groupbox = "custom_selection"
+
+            self.exploring_groupbox_changed(exploring_groupbox)
 
     def exploring_groupbox_changed(self, groupbox, state=None):
+        
+        if self.widgets_initialized is True:
+
+            if groupbox == "single_selection":
+    
+                if self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
+
+                    self.current_exploring_groupbox = "single_selection"
+
+                    self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect', 'featureChanged')
+                    self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+
+                    self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
+                    self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
+
+                    self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+                    self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+
+                    self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+                    self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+
+                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
+                    self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+                    
+                    if self.current_layer != None:
+                        self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature())
 
 
-        if groupbox == "single_selection":
-  
-            if self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].isCollapsed() is False:
 
-                self.current_exploring_groupbox = "single_selection"
+            elif groupbox == "multiple_selection":
 
-                self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect')
-                self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+                if self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
+                    
+                    self.current_exploring_groupbox = "multiple_selection"
 
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
+                    self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
+                    self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'updatingCheckedItemList')
 
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+                    self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
+                    self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
 
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+                    self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+                    self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
-                self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
-                
-                if self.current_layer != None:
-                    self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature())
+                    self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+                    self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
 
+                    self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
+                    self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
+                    layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+                    self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
 
-        elif groupbox == "multiple_selection":
-
-            if self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].isCollapsed() is False:
-                
-                self.current_exploring_groupbox = "multiple_selection"
-
-                self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-                self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'updatingCheckedItemList')
-
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
-
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
-
-                self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
-                self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
-
-                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-
-                if self.current_layer != None:
-                    self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+                    if self.current_layer != None:
+                        self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
 
 
-        elif groupbox == "custom_selection":
+            elif groupbox == "custom_selection":
 
-            if self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
-                
-                self.current_exploring_groupbox = "custom_selection"
-                
-                self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-                self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+                if self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isChecked() is True or self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].isCollapsed() is False:
+                    
+                    self.current_exploring_groupbox = "custom_selection"
+                    
+                    self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
+                    self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
 
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
+                    self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
+                    self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
 
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+                    self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+                    self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
+                    self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+                    self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+                    self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
-                if self.current_layer != None:
-                    self.exploring_custom_selection()
+                    if self.current_layer != None:
+                        self.exploring_custom_selection()
 
 
     def exploring_identify_clicked(self):
 
-        #self.exploring_groupbox_init()
+        if self.widgets_initialized is True:
 
-        if self.current_exploring_groupbox == "single_selection":
-            input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
-            features, expression = self.get_exploring_features(input, True)
+            if self.current_exploring_groupbox == "single_selection":
+                input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
+                features, expression = self.get_exploring_features(input, True)
 
-        elif self.current_exploring_groupbox == "multiple_selection":
-            input = self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].checkedItems()
-            features, expression = self.get_exploring_features(input, True)
+            elif self.current_exploring_groupbox == "multiple_selection":
+                input = self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].checkedItems()
+                features, expression = self.get_exploring_features(input, True)
 
-        elif self.current_exploring_groupbox == "custom_selection":
-            features, expression = self.exploring_custom_selection()
-        
-        if len(features) == 0:
-            return
-        else:
-            self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
+            elif self.current_exploring_groupbox == "custom_selection":
+                features, expression = self.exploring_custom_selection()
+            
+            if len(features) == 0:
+                return
+            else:
+                self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
 
 
     def exploring_zoom_clicked(self):
 
-        features, expression = self.get_current_features()
-        
-        if len(features) == 0:
-            return
-        else:
-            self.zooming_to_features(features)
+        if self.widgets_initialized is True:
+
+            features, expression = self.get_current_features()
+            
+            if len(features) == 0:
+                return
+            else:
+                self.zooming_to_features(features)
 
 
     def zooming_to_features(self, features):
-        features_with_geometry = [feature for feature in features if feature.hasGeometry()]
+        
+        if self.widgets_initialized is True:
 
-        if len(features_with_geometry) == 1:
-            feature = features_with_geometry[0]
+            features_with_geometry = [feature for feature in features if feature.hasGeometry()]
 
-            if str(feature.geometry().type()) == 'GeometryType.Point':
-                box = feature.geometry().buffer(50,5).boundingBox()
+            if len(features_with_geometry) == 1:
+                feature = features_with_geometry[0]
+
+                if str(feature.geometry().type()) == 'GeometryType.Point':
+                    box = feature.geometry().buffer(50,5).boundingBox()
+                else:
+                    box = feature.geometry().boundingBox()
+
+                self.iface.mapCanvas().zoomToFeatureExtent(box)
             else:
-                box = feature.geometry().boundingBox()
+                self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [feature.id() for feature in features_with_geometry])
 
-            self.iface.mapCanvas().zoomToFeatureExtent(box)
-        else:
-            self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [feature.id() for feature in features_with_geometry])
-
-        self.iface.mapCanvas().refresh()
+            self.iface.mapCanvas().refresh()
 
 
 
     def exploring_source_params_changed(self, expression=None):
 
-        #self.exploring_groupbox_init()
+        if self.widgets_initialized is True:
 
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()] 
-        flag_value_changed = False
-        
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()] 
+            flag_value_changed = False
 
-        if self.current_exploring_groupbox == "single_selection":
+            if self.current_exploring_groupbox == "single_selection":
 
-            if expression != None:
-                layer_props["exploring"]["single_selection_expression"] = expression
-                self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = layer_props["exploring"]["single_selection_expression"]
+                if expression != None:
+                    layer_props["exploring"]["single_selection_expression"] = expression
+                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = layer_props["exploring"]["single_selection_expression"]
+                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setDisplayExpression(expression)
 
-            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setDisplayExpression(expression)
+            elif self.current_exploring_groupbox == "multiple_selection":
 
-        elif self.current_exploring_groupbox == "multiple_selection":
-
-            if expression != None:  
-                layer_props["exploring"]["multiple_selection_expression"] = expression   
-                self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = layer_props["exploring"]["multiple_selection_expression"]
+                if expression != None:  
+                    layer_props["exploring"]["multiple_selection_expression"] = expression   
+                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = layer_props["exploring"]["multiple_selection_expression"]
+                
+                self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
                 self.exploring_link_widgets()
 
-            self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-            
+            elif self.current_exploring_groupbox == "custom_selection":
 
+                if expression != None:
+                    layer_props["exploring"]["custom_selection_expression"] = expression 
+                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["custom_selection_expression"] = layer_props["exploring"]["custom_selection_expression"]
+                    self.exploring_link_widgets(expression)
 
-        elif self.current_exploring_groupbox == "custom_selection":
+            self.get_current_features()
 
-            if expression != None:
-                layer_props["exploring"]["custom_selection_expression"] = expression 
-                self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["custom_selection_expression"] = layer_props["exploring"]["custom_selection_expression"]
-                self.exploring_link_widgets(expression)
-
-        self.get_current_features()
-
-        self.setProjectLayersEvent(self.PROJECT_LAYERS)
+            self.setProjectLayersEvent(self.PROJECT_LAYERS)
  
 
 
     def exploring_custom_selection(self):
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        expression = layer_props["exploring"]["custom_selection_expression"]
-        features = []
-        if QgsExpression(expression).isField() is False:
-            features = self.exploring_features_changed([], False, expression)
-        return features, expression
+
+        if self.widgets_initialized is True:
+
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            expression = layer_props["exploring"]["custom_selection_expression"]
+            features = []
+            if QgsExpression(expression).isField() is False:
+                features = self.exploring_features_changed([], False, expression)
+            return features, expression
     
+
     def exploring_deselect_features(self):
-        if self.current_layer == None:
-            return
+
+        if self.widgets_initialized is True:
+
+            if self.current_layer == None:
+                return
+            
+            self.current_layer.removeSelection()
         
-        self.current_layer.removeSelection()
-        
-
-    def exploring_link_widgets(self, expression=None):
-
-        if self.current_layer == None:
-            return
-        
-
-
-        #self.exploring_groupbox_init()
-
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        custom_filter = None
-
-        if layer_props["exploring"]["is_linking"] == True:
-            if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
-                if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
-                    custom_filter = layer_props["exploring"]["custom_selection_expression"]
-                    self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
-            if expression != None:
-                self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
-            elif self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures() != False:
-                features, expression = self.get_exploring_features(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
-                if len(features) > 0 and expression != None:
-                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
-            elif self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentVisibleFeatures() != False:
-                features, expression = self.get_exploring_features(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentVisibleFeatures(), True)
-                if len(features) > 0 and expression != None:
-                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
-            elif custom_filter != None:
-                self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
-           
-        else:
-            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
-            self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
-
 
     def get_current_features(self):
 
-        #self.exploring_groupbox_init()
+        if self.widgets_initialized is True:
 
-        if self.current_exploring_groupbox == "single_selection":
-            input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
-            features, expression = self.get_exploring_features(input, True)
 
-        elif self.current_exploring_groupbox == "multiple_selection":
-            input = self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].checkedItems()
-            features, expression = self.get_exploring_features(input, True)
 
-        elif self.current_exploring_groupbox == "custom_selection":
-            features, expression = self.exploring_custom_selection()
-            
-        return features, expression
+            if self.current_exploring_groupbox == "single_selection":
+                input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
+                features, expression = self.get_exploring_features(input, True)
+
+            elif self.current_exploring_groupbox == "multiple_selection":
+                input = self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].checkedItems()
+                features, expression = self.get_exploring_features(input, True)
+
+            elif self.current_exploring_groupbox == "custom_selection":
+                features, expression = self.exploring_custom_selection()
+                
+            return features, expression
     
     def exploring_features_changed(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
+        if self.widgets_initialized is True:
+            
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
 
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
+            if self.current_exploring_groupbox == 'multiple_selection':
+                self.exploring_link_widgets()
 
-        self.current_layer.removeSelection()
-
-        if len(features) == 0:
-            return features
-    
-        if layer_props["exploring"]["is_selecting"] == True:
             self.current_layer.removeSelection()
-            self.current_layer.select([feature.id() for feature in features])
 
-        if layer_props["exploring"]["is_tracking"] == True:
-            self.zooming_to_features(features)  
+            if len(features) == 0:
+                return features
+        
+            if layer_props["exploring"]["is_selecting"] == True:
+                self.current_layer.removeSelection()
+                self.current_layer.select([feature.id() for feature in features])
 
-        return features
+            if layer_props["exploring"]["is_tracking"] == True:
+                self.zooming_to_features(features)  
+
+            return features
 
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
-        if self.current_layer == None:
-            return
-        
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        features = []
-        expression = None
+        if self.widgets_initialized is True:
 
-        if isinstance(input, QgsFeature):
-            if identify_by_primary_key_name is True:
-                if layer_props["infos"]["primary_key_is_numeric"] is True: 
-                    expression = layer_props["infos"]["primary_key_name"] + " = {}".format(input[layer_props["infos"]["primary_key_name"]])
-                else:
-                    expression = layer_props["infos"]["primary_key_name"] + " = '{}'".format(input[layer_props["infos"]["primary_key_name"]])
-
-        elif isinstance(input, list):
-            if len(input) == 0 and custom_expression == None:
-                return features, expression
+            if self.current_layer == None:
+                return
             
-            if identify_by_primary_key_name is True:
-                if layer_props["infos"]["primary_key_is_numeric"] is True:
-                    input_ids = [str(feat[1]) for feat in input]  
-                    expression = layer_props["infos"]["primary_key_name"] + " IN (" + ", ".join(input_ids) + ")"
-                else:
-                    input_ids = [str(feat[1]) for feat in input]
-                    expression = layer_props["infos"]["primary_key_name"] + " IN (\'" + "\', \'".join(input_ids) + "\')"
-            
-        if custom_expression != None:
-                expression = custom_expression
-
-        if QgsExpression(expression).isValid():
-
-            features_iterator = self.current_layer.getFeatures(QgsFeatureRequest(QgsExpression(expression)))
-            done_looping = False
-            
-            while not done_looping:
-                try:
-                    feature = next(features_iterator)
-                    features.append(feature)
-                except StopIteration:
-                    done_looping = True
-        else:
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            features = []
             expression = None
 
-        return features, expression
+            if isinstance(input, QgsFeature):
+                if identify_by_primary_key_name is True:
+                    if layer_props["infos"]["primary_key_is_numeric"] is True: 
+                        expression = layer_props["infos"]["primary_key_name"] + " = {}".format(input[layer_props["infos"]["primary_key_name"]])
+                    else:
+                        expression = layer_props["infos"]["primary_key_name"] + " = '{}'".format(input[layer_props["infos"]["primary_key_name"]])
+                else:
+                    features = [input]
+
+            elif isinstance(input, list):
+                if len(input) == 0 and custom_expression == None:
+                    return features, expression
+                
+                if identify_by_primary_key_name is True:
+                    if layer_props["infos"]["primary_key_is_numeric"] is True:
+                        input_ids = [str(feat[1]) for feat in input]  
+                        expression = layer_props["infos"]["primary_key_name"] + " IN (" + ", ".join(input_ids) + ")"
+                    else:
+                        input_ids = [str(feat[1]) for feat in input]
+                        expression = layer_props["infos"]["primary_key_name"] + " IN (\'" + "\', \'".join(input_ids) + "\')"
+                
+            if custom_expression != None:
+                    expression = custom_expression
+
+            if QgsExpression(expression).isValid():
+
+                features_iterator = self.current_layer.getFeatures(QgsFeatureRequest(QgsExpression(expression)))
+                done_looping = False
+                
+                while not done_looping:
+                    try:
+                        feature = next(features_iterator)
+                        features.append(feature)
+                    except StopIteration:
+                        done_looping = True
+            else:
+                expression = None
+
+            return features, expression
+        
     
+    def exploring_link_widgets(self, expression=None):
+
+        if self.widgets_initialized is True:
+
+            if self.current_layer == None:
+                return
+
+
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            custom_filter = None
+
+            if layer_props["exploring"]["is_linking"] == True:
+                if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
+                    if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
+                        custom_filter = layer_props["exploring"]["custom_selection_expression"]
+                        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
+                if expression != None:
+                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
+                elif self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures() != False:
+                    features, expression = self.get_exploring_features(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+                    if len(features) > 0 and expression != None:
+                        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
+                elif self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentVisibleFeatures() != False:
+                    features, expression = self.get_exploring_features(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentVisibleFeatures(), True)
+                    if len(features) > 0 and expression != None:
+                        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
+                elif custom_filter != None:
+                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
+            
+            else:
+                self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
+                self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
+
 
     def get_layers_to_filter(self):
+
         if self.widgets_initialized is True:
+
             checked_list_data = []
             for i in range(self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].count()):
                 if self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemCheckState(i) == Qt.Checked:
@@ -1116,504 +1144,555 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
     def get_current_crs_as_wkt(self):
-        return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().toWkt() 
+        
+        if self.widgets_initialized is True:
+
+            return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().toWkt() 
 
 
     def current_layer_changed(self, layer):
-        if self.widgets_initialized is False:
-            return
 
-        self.current_layer = layer  
+        if self.widgets_initialized is True:
 
-        if self.current_layer == None:
-            return
-        
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-    
+            self.current_layer = layer  
 
-        widgets_to_stop =   [
-                                ["SINGLE_SELECTION","EXPRESSION"],
-                                ["MULTIPLE_SELECTION","FEATURES"],
-                                ["MULTIPLE_SELECTION","EXPRESSION"],
-                                ["CUSTOM_SELECTION","EXPRESSION"],
-                                ["FILTERING","BUFFER"],
-                                ["FILTERING","GEOMETRIC_PREDICATES"],
-                                ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
-                                ["FILTERING","COMBINE_OPERATOR"],
-                                ["FILTERING","LAYERS_TO_FILTER"],
-                                ["FILTERING","CURRENT_LAYER"]
-                            ]
-        
-        for widget_path in widgets_to_stop:
-            state = self.manageSignal(widget_path)
-            # if state == True:
-            #     raise SignalStateChangeError(state, widget_path)
-
-        if self.auto_change_current_layer_flag == True:
-            widget_path = ["QGIS","LAYER_TREE_VIEW"]
-            state = self.manageSignal(widget_path)
-            if state == True:
-                raise SignalStateChangeError(state, widget_path)
-
-
-
-
-
-        currentLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-        if currentLayer != None and currentLayer.id() != self.current_layer.id():
-            self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
-
-
-        """SINGLE SELECTION"""
-
-        self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-        self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
-
-        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer)
-        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFetchGeometry(True)
-        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setShowBrowserButtons(True)
-
-
-        """MULTIPLE SELECTION"""
-        
-        self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-        self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
-
-        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-
-
-        """CUSTOM SELECTION"""
-
-        self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-        self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
-
-
-        for properties_tuples_key in self.layer_properties_tuples_dict:
-            properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
-            for i, property_tuple in enumerate(properties_tuples):
-                widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
-                if widget_type == 'PushButton':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(layer_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'CheckableComboBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(layer_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'CustomCheckableComboBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
-                elif widget_type == 'ComboBox':
-                     self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
-                elif widget_type == 'QgsDoubleSpinBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'LineEdit':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(layer_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'QgsProjectionSelectionWidget':
-                    self.coordinateReferenceSystem.createFromWkt(layer_props[property_tuple[0]][property_tuple[1]])
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(self.coordinateReferenceSystem)
-
-        for properties_group in self.layer_properties_tuples_dict:
-            if properties_group != 'is':
-                self.properties_group_state_changed(self.layer_properties_tuples_dict[properties_group], properties_group)
-
-        self.filtering_populate_layers_chekableCombobox()
-
-        for widget_path in widgets_to_stop:
-            state = self.manageSignal(widget_path)
-            # if state == False:
-            #     raise SignalStateChangeError(state, widget_path)
-
-        if self.auto_change_current_layer_flag == True:
-            if self.iface.activeLayer().id() != self.current_layer.id():
-                self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
-
-            widget_path = ["QGIS","LAYER_TREE_VIEW"]
-            state = self.manageSignal(widget_path)
-            if state == False:
-                raise SignalStateChangeError(state, widget_path)
+            if self.current_layer == None:
+                return
             
-        self.exploring_groupbox_init()
-        self.exploring_link_widgets()
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        
+
+            widgets_to_stop =   [
+                                    ["SINGLE_SELECTION","EXPRESSION"],
+                                    ["MULTIPLE_SELECTION","FEATURES"],
+                                    ["MULTIPLE_SELECTION","EXPRESSION"],
+                                    ["CUSTOM_SELECTION","EXPRESSION"],
+                                    ["FILTERING","BUFFER"],
+                                    ["FILTERING","GEOMETRIC_PREDICATES"],
+                                    ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
+                                    ["FILTERING","COMBINE_OPERATOR"],
+                                    ["FILTERING","LAYERS_TO_FILTER"],
+                                    ["FILTERING","CURRENT_LAYER"]
+                                ]
+            
+            for widget_path in widgets_to_stop:
+                state = self.manageSignal(widget_path)
+                # if state == True:
+                #     raise SignalStateChangeError(state, widget_path)
+
+            if self.auto_change_current_layer_flag == True:
+                widget_path = ["QGIS","LAYER_TREE_VIEW"]
+                state = self.manageSignal(widget_path)
+                if state == True:
+                    raise SignalStateChangeError(state, widget_path)
+
+
+
+
+
+            currentLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
+            if currentLayer != None and currentLayer.id() != self.current_layer.id():
+                self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
+
+
+            """SINGLE SELECTION"""
+
+            self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
+
+            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFetchGeometry(True)
+            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setShowBrowserButtons(True)
+
+
+            """MULTIPLE SELECTION"""
+            
+            self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
+
+            self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+
+
+            """CUSTOM SELECTION"""
+
+            self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
+
+
+            for properties_tuples_key in self.layer_properties_tuples_dict:
+                properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
+                for i, property_tuple in enumerate(properties_tuples):
+                    widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
+                    if widget_type == 'PushButton':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(layer_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'CheckableComboBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(layer_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'CustomCheckableComboBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
+                    elif widget_type == 'ComboBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
+                    elif widget_type == 'QgsDoubleSpinBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'LineEdit':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(layer_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'QgsProjectionSelectionWidget':
+                        self.coordinateReferenceSystem.createFromWkt(layer_props[property_tuple[0]][property_tuple[1]])
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(self.coordinateReferenceSystem)
+
+            for properties_group in self.layer_properties_tuples_dict:
+                if properties_group != 'is':
+                    self.properties_group_state_changed(self.layer_properties_tuples_dict[properties_group], properties_group)
+
+            self.filtering_populate_layers_chekableCombobox()
+
+            for widget_path in widgets_to_stop:
+                state = self.manageSignal(widget_path)
+                # if state == False:
+                #     raise SignalStateChangeError(state, widget_path)
+
+            if self.auto_change_current_layer_flag == True:
+                if self.iface.activeLayer().id() != self.current_layer.id():
+                    self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
+
+                widget_path = ["QGIS","LAYER_TREE_VIEW"]
+                state = self.manageSignal(widget_path)
+                if state == False:
+                    raise SignalStateChangeError(state, widget_path)
+                
+            self.exploring_groupbox_init()
+            self.exploring_link_widgets()
         
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
 
+        if self.widgets_initialized is True:
 
-        properties_group_key = None
-        property_path = None
-        index = None
-        state = None
-        flag_value_changed = False
+            properties_group_key = None
+            property_path = None
+            index = None
+            state = None
+            flag_value_changed = False
 
-        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
-            if len(input_data) >= 0:
-                state = True
-            else:
-                state = False
-        elif isinstance(input_data, int) or isinstance(input_data, float):
-            if int(input_data) >= 0:
-                state = True
-            else:
-                state = False
-        elif isinstance(input_data, bool):
-            state = input_data
-        
-
-        for properties_tuples_key in self.export_properties_tuples_dict:
-            if input_property.find(properties_tuples_key) >= 0:
-                properties_group_key = properties_tuples_key
-                properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]
-                for i, property_tuple in enumerate(properties_tuples):
-                    if property_tuple[1] == input_property:
-                        property_path = property_tuple
-                        index = i
-                        break
-                break
-           
-        widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-        if widget_type == 'PushButton':
-            if self.project_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
-                self.project_props[property_path[0]][property_path[1]] = input_data
-                flag_value_changed = True
-                if "ON_TRUE" in custom_functions:
-                    custom_functions["ON_TRUE"]
-
-            elif self.project_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
-                self.project_props[property_path[0]][property_path[1]] = input_data
-                flag_value_changed = True
-                if "ON_FALSE" in custom_functions:
-                    custom_functions["ON_FALSE"]
-
+            if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
+                if len(input_data) >= 0:
+                    state = True
+                else:
+                    state = False
+            elif isinstance(input_data, int) or isinstance(input_data, float):
+                if int(input_data) >= 0:
+                    state = True
+                else:
+                    state = False
+            elif isinstance(input_data, bool):
+                state = input_data
             
+
+            for properties_tuples_key in self.export_properties_tuples_dict:
+                if input_property.find(properties_tuples_key) >= 0:
+                    properties_group_key = properties_tuples_key
+                    properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]
+                    for i, property_tuple in enumerate(properties_tuples):
+                        if property_tuple[1] == input_property:
+                            property_path = property_tuple
+                            index = i
+                            break
+                    break
+            
+            widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
+            if widget_type == 'PushButton':
+                if self.project_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
+                    self.project_props[property_path[0]][property_path[1]] = input_data
+                    flag_value_changed = True
+                    if "ON_TRUE" in custom_functions:
+                        custom_functions["ON_TRUE"](0)
+
+                elif self.project_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
+                    self.project_props[property_path[0]][property_path[1]] = input_data
+                    flag_value_changed = True
+                    if "ON_FALSE" in custom_functions:
+                        custom_functions["ON_FALSE"](0)
+
+                
+                if flag_value_changed is True:
+                    self.properties_group_state_changed(properties_tuples, properties_group_key)
+
+            else:    
+                
+                if self.project_props[properties_tuples[0][0]][properties_tuples[0][1]] is state and state is True:
+                    self.project_props[property_path[0]][property_path[1]] = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
+                    flag_value_changed = True
+                    if "ON_TRUE" in custom_functions:
+                        custom_functions["ON_TRUE"](0)
+
             if flag_value_changed is True:
-                self.properties_group_state_changed(properties_tuples, properties_group_key)
-
-        else:    
-            
-            if self.project_props[properties_tuples[0][0]][properties_tuples[0][1]] is state and state is True:
-                self.project_props[property_path[0]][property_path[1]] = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
-                flag_value_changed = True
-                if "ON_TRUE" in custom_functions:
-                    custom_functions["ON_TRUE"]
-
-        if flag_value_changed is True:
-            if "ON_CHANGE" in custom_functions:
-                custom_functions["ON_CHANGE"]
-            self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
-            self.reload_configuration_model()
+                if "ON_CHANGE" in custom_functions:
+                    custom_functions["ON_CHANGE"](0)
+                self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
+                self.reload_configuration_model()
 
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
-
-        if self.current_layer == None:
-            return
         
-        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-        properties_group_key = None
-        property_path = None
-        index = None
-        state = None
-        flag_value_changed = False
+        if self.widgets_initialized is True:
 
-        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
-            if len(input_data) >= 0:
-                state = True
-            else:
-                state = False
-        elif isinstance(input_data, int) or isinstance(input_data, float):
-            if int(input_data) >= 0:
-                state = True
-            else:
-                state = False
-        elif isinstance(input_data, bool):
-            state = input_data
-        
+            if self.current_layer == None:
+                return
+            
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            properties_group_key = None
+            property_path = None
+            index = None
+            state = None
+            flag_value_changed = False
 
-        for properties_tuples_key in self.layer_properties_tuples_dict:
-            if input_property.find(properties_tuples_key) >= 0:
-                properties_group_key = properties_tuples_key
-                properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
-                for i, property_tuple in enumerate(properties_tuples):
-                    if property_tuple[1] == input_property:
-                        property_path = property_tuple
-                        index = i
-                        break
-                break
+            if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
+                if len(input_data) >= 0:
+                    state = True
+                else:
+                    state = False
+            elif isinstance(input_data, int) or isinstance(input_data, float):
+                if int(input_data) >= 0:
+                    state = True
+                else:
+                    state = False
+            elif isinstance(input_data, bool):
+                state = input_data
+            
 
-        if properties_group_key == 'is':
+            for properties_tuples_key in self.layer_properties_tuples_dict:
+                if input_property.find(properties_tuples_key) >= 0:
+                    properties_group_key = properties_tuples_key
+                    properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
+                    for i, property_tuple in enumerate(properties_tuples):
+                        if property_tuple[1] == input_property:
+                            property_path = property_tuple
+                            index = i
+                            break
+                    break
 
-            if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
-                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                flag_value_changed = True
-                if "ON_TRUE" in custom_functions:
-                    custom_functions["ON_TRUE"]
+            if properties_group_key == 'is':
 
-            elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
-                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                flag_value_changed = True
-                if "ON_FALSE" in custom_functions:
-                    custom_functions["ON_FALSE"]
-
-        else:
-            widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-            if widget_type == 'PushButton':
                 if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
                     if "ON_TRUE" in custom_functions:
-                        custom_functions["ON_TRUE"]
+                        custom_functions["ON_TRUE"](0)
 
                 elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
                     if "ON_FALSE" in custom_functions:
-                        custom_functions["ON_FALSE"]
+                        custom_functions["ON_FALSE"](0) 
 
-                if flag_value_changed is True:
-                    self.properties_group_state_changed(properties_tuples, properties_group_key)
+            else:
+                widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
+                if widget_type == 'PushButton':
+                    if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                        flag_value_changed = True
+                        if "ON_TRUE" in custom_functions:
+                            custom_functions["ON_TRUE"](0)
 
-            else:    
-                if layer_props[properties_tuples[0][0]][properties_tuples[0][1]] is state and state is True:
-                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
-                    flag_value_changed = True
-                    if "ON_TRUE" in custom_functions:
-                        custom_functions["ON_TRUE"]
+                    elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                        flag_value_changed = True
+                        if "ON_FALSE" in custom_functions:
+                            custom_functions["ON_FALSE"](0)
+
+                    if flag_value_changed is True:
+                        self.properties_group_state_changed(properties_tuples, properties_group_key)
+
+                else:    
+                    if layer_props[properties_tuples[0][0]][properties_tuples[0][1]] is state and state is True:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
+                        flag_value_changed = True
+                        if "ON_TRUE" in custom_functions:
+                            custom_functions["ON_TRUE"](0)
 
 
 
 
-        if flag_value_changed is True:
-            if "ON_CHANGE" in custom_functions:
-                custom_functions["ON_CHANGE"]
-            self.setProjectLayersEvent(self.PROJECT_LAYERS)
+            if flag_value_changed is True:
+                if "ON_CHANGE" in custom_functions:
+                    custom_functions["ON_CHANGE"](0)
+                self.setProjectLayersEvent(self.PROJECT_LAYERS)
 
 
     def set_exporting_properties(self):
 
-        widgets_to_stop =   [
-                                ["EXPORTING","HAS_LAYERS_TO_EXPORT"],
-                                ["EXPORTING","HAS_PROJECTION_TO_EXPORT"],
-                                ["EXPORTING","HAS_STYLES_TO_EXPORT"],
-                                ["EXPORTING","HAS_DATATYPE_TO_EXPORT"],
-                                ["EXPORTING","LAYERS_TO_EXPORT"],
-                                ["EXPORTING","PROJECTION_TO_EXPORT"],
-                                ["EXPORTING","STYLES_TO_EXPORT"],
-                                ["EXPORTING","DATATYPE_TO_EXPORT"]
-                            ]
-        
-        for widget_path in widgets_to_stop:
-            self.manageSignal(widget_path)
+        if self.widgets_initialized is True:
 
-        for properties_tuples_key in self.export_properties_tuples_dict:
-            properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]    
-            for i, property_tuple in enumerate(properties_tuples):
-                widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
-                if widget_type == 'PushButton':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(self.project_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'CheckableComboBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(self.project_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'CustomCheckableComboBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
-                elif widget_type == 'ComboBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(self.project_props[property_tuple[0]][property_tuple[1]]))
-                elif widget_type == 'QgsDoubleSpinBox':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(self.project_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'LineEdit':
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(self.project_props[property_tuple[0]][property_tuple[1]])
-                elif widget_type == 'QgsProjectionSelectionWidget':
-                    self.coordinateReferenceSystem.createFromWkt(self.project_props[property_tuple[0]][property_tuple[1]])
-                    self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(self.coordinateReferenceSystem)
+            widgets_to_stop =   [
+                                    ["EXPORTING","HAS_LAYERS_TO_EXPORT"],
+                                    ["EXPORTING","HAS_PROJECTION_TO_EXPORT"],
+                                    ["EXPORTING","HAS_STYLES_TO_EXPORT"],
+                                    ["EXPORTING","HAS_DATATYPE_TO_EXPORT"],
+                                    ["EXPORTING","LAYERS_TO_EXPORT"],
+                                    ["EXPORTING","PROJECTION_TO_EXPORT"],
+                                    ["EXPORTING","STYLES_TO_EXPORT"],
+                                    ["EXPORTING","DATATYPE_TO_EXPORT"]
+                                ]
+            
+            for widget_path in widgets_to_stop:
+                self.manageSignal(widget_path)
 
-        for widget_path in widgets_to_stop:
-            self.manageSignal(widget_path)
+            for properties_tuples_key in self.export_properties_tuples_dict:
+                properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]    
+                for i, property_tuple in enumerate(properties_tuples):
+                    widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
+                    if widget_type == 'PushButton':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(self.project_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'CheckableComboBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(self.project_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'CustomCheckableComboBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
+                    elif widget_type == 'ComboBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(self.project_props[property_tuple[0]][property_tuple[1]]))
+                    elif widget_type == 'QgsDoubleSpinBox':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(self.project_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'LineEdit':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(self.project_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'QgsProjectionSelectionWidget':
+                        self.coordinateReferenceSystem.createFromWkt(self.project_props[property_tuple[0]][property_tuple[1]])
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCrs(self.coordinateReferenceSystem)
 
-        self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
-        self.reload_configuration_model()
+            for widget_path in widgets_to_stop:
+                self.manageSignal(widget_path)
+
+            self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
+            self.reload_configuration_model()
 
 
 
     def properties_group_state_changed(self, tuple_group, group_name):
-        
-        group_enabled_property = tuple_group[0]
-        state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
 
-        for tuple in tuple_group[1:]:
-            if state is False:
-                widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
-                signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
+        if self.widgets_initialized is True:
 
-                if group_name in self.layer_properties_tuples_dict:
-                    if widget_type == 'PushButton':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
-                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
-                    elif widget_type == 'CheckableComboBox':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
-                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
-                    elif widget_type == 'ComboBox':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(0)
-                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
-                    elif widget_type == 'QgsDoubleSpinBox':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
-                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
-                    elif widget_type == 'LineEdit':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
-                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
-                    elif widget_type == 'QgsProjectionSelectionWidget':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
-                        self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
-                
-                elif group_name in self.export_properties_tuples_dict:
-                    if widget_type == 'PushButton':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
-                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
-                    elif widget_type == 'CheckableComboBox':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
-                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
-                    elif widget_type == 'ComboBox':
-                        index = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].findText('GPKG')
-                        if index < 0:
-                            index = 0
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(index)
-                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
-                    elif widget_type == 'QgsDoubleSpinBox':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
-                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
-                    elif widget_type == 'LineEdit':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
-                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
-                    elif widget_type == 'QgsProjectionSelectionWidget':
-                        self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
-                        self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
+            group_enabled_property = tuple_group[0]
+            state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
+
+            for tuple in tuple_group[1:]:
+                if state is False:
+                    widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
+                    signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
+
+                    if group_name in self.layer_properties_tuples_dict:
+                        if widget_type == 'PushButton':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
+                        elif widget_type == 'CheckableComboBox':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
+                        elif widget_type == 'ComboBox':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(0)
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
+                        elif widget_type == 'QgsDoubleSpinBox':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
+                        elif widget_type == 'LineEdit':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
+                        elif widget_type == 'QgsProjectionSelectionWidget':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
+                    
+                    elif group_name in self.export_properties_tuples_dict:
+                        if widget_type == 'PushButton':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setChecked(state)
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].isChecked()
+                        elif widget_type == 'CheckableComboBox':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].deselectAllOptions()
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].checkedItems()
+                        elif widget_type == 'ComboBox':
+                            index = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].findText('GPKG')
+                            if index < 0:
+                                index = 0
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(index)
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
+                        elif widget_type == 'QgsDoubleSpinBox':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
+                        elif widget_type == 'LineEdit':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
+                        elif widget_type == 'QgsProjectionSelectionWidget':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCrs(PROJECT.crs())
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].crs().toWkt()
 
 
 
-                signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
+                    signal_status = self.manageSignal([tuple[0].upper(),tuple[1].upper()])
 
-            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(state)
+                self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(state)
 
               
-    def dialog_export_output_path(self, state):
+    def dialog_export_output_path(self):
 
-        path = ''
-        datatype = ''
+        if self.widgets_initialized is True:
 
-        if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() == True:  
-            datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText()
+            path = ''
+            datatype = ''
 
-        if state == True:
+            state = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked()
 
-            if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked() == True:
+            if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() == True:  
+                datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText()
 
-                layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
-                if len(layers) == 1 and datatype != '':
+            if state == True:
 
-                    layer = layers[0]
-                    regexp_layer = re.search('.* ', layer)
-                    if regexp_layer != None:
-                        layer = regexp_layer.group()
-                    path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '_' + layer.strip()) ,'*.{}'.format(datatype))[0])
+                if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked() == True:
 
-                elif datatype.upper() == 'GPKG':
+                    layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
+                    if len(layers) == 1 and datatype != '':
 
-                    path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '.gpkg') ,'*.gpkg')[0])
-                
+                        layer = layers[0]
+                        regexp_layer = re.search('.* ', layer)
+                        if regexp_layer != None:
+                            layer = regexp_layer.group()
+                        path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '_' + layer.strip()) ,'*.{}'.format(datatype))[0])
+
+                    elif datatype.upper() == 'GPKG':
+
+                        path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '.gpkg') ,'*.gpkg')[0])
+                    
+                    else:
+                    
+                        path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
+
                 else:
                 
                     path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
 
+                if path != None and path != '':
+                    path = os.path.normcase(path)
+                    self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setText(path)
+                else:
+                    state = False
+                    self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
             else:
-            
-                path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
-
-            if path != None and path != '':
-                path = os.path.normcase(path)
-                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setText(path)
-            else:
-                state = False
                 self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
-        else:
-            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
 
-        self.project_property_changed('has_output_folder_to_export', state)
-        self.project_property_changed('output_folder_to_export', path)
+            self.project_property_changed('has_output_folder_to_export', state)
+            self.project_property_changed('output_folder_to_export', path)
 
 
     def reset_export_output_path(self):
 
-        if str(self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text()) == '':
-            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
-            self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
-            self.project_property_changed('has_output_folder_to_export', False)
-            self.project_property_changed('output_folder_to_export', '')
+        if self.widgets_initialized is True:
 
-    def dialog_export_output_pathzip(self, state):
+            if str(self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text()) == '':
+                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
+                self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
+                self.project_property_changed('has_output_folder_to_export', False)
+                self.project_property_changed('output_folder_to_export', '')
 
-        path = ''
+    def dialog_export_output_pathzip(self):
 
-        if state == True:
-
-            path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
-
-            if path != None and path != '':
-                path = os.path.normcase(path)
-                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].setText(path)
-            else:
-                state = False
-                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-        else:
-            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+        if self.widgets_initialized is True:
             
-        self.project_property_changed('has_zip_to_export', state)
-        self.project_property_changed('zip_to_export', path)
+            path = ''
+            state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
+
+            if state == True:
+
+                path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
+
+                if path != None and path != '':
+                    path = os.path.normcase(path)
+                    self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].setText(path)
+                else:
+                    state = False
+                    self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+            else:
+                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+                
+            self.project_property_changed('has_zip_to_export', state)
+            self.project_property_changed('zip_to_export', path)
 
 
     def reset_export_output_pathzip(self):
 
-        if str(self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text()) == '':
-            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-            self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
-            self.project_property_changed('has_zip_to_export', False)
-            self.project_property_changed('zip_to_export', '')
+        if self.widgets_initialized is True:
+                
+            if str(self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text()) == '':
+                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
+                self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
+                self.project_property_changed('has_zip_to_export', False)
+                self.project_property_changed('zip_to_export', '')
 
     def filtering_auto_current_layer_changed(self):
-        if self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].isChecked() is True:
-            self.auto_change_current_layer_flag = True
-            state = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
-            if state == False:
-                raise SignalStateChangeError(state, ["QGIS","LAYER_TREE_VIEW"], 'connect')
-        else:
-            self.auto_change_current_layer_flag = False
-            state = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'disconnect')
-            if state == True:
-                raise SignalStateChangeError(state, ["QGIS","LAYER_TREE_VIEW"], 'disconnect')
+
+        if self.widgets_initialized is True:
+
+            if self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].isChecked() is True:
+                self.auto_change_current_layer_flag = True
+                state = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
+                if state == False:
+                    raise SignalStateChangeError(state, ["QGIS","LAYER_TREE_VIEW"], 'connect')
+            else:
+                self.auto_change_current_layer_flag = False
+                state = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'disconnect')
+                if state == True:
+                    raise SignalStateChangeError(state, ["QGIS","LAYER_TREE_VIEW"], 'disconnect')
 
     def get_project_layers_from_app(self, project_layers):
-        if isinstance(project_layers, dict) and len(project_layers) > 0:
-            self.PROJECT_LAYERS = project_layers
-        
-        layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]) if layer.id() == self.current_layer.id()]
-        if len(layers) == 0:
-            self.current_layer = self.iface.activeLayer()
-            
-        self.exporting_populate_combobox()
-        self.current_layer_changed(self.current_layer)
-        self.layer_property_changed('layers_to_filter')
+
+        if self.widgets_initialized is True:
+
+            if isinstance(project_layers, dict) and len(project_layers) > 0:
+
+                if len(self.PROJECT_LAYERS) != len(project_layers):
+                    self.PROJECT_LAYERS = project_layers
+                    self.filtering_populate_layers_chekableCombobox()
+                    self.exporting_populate_combobox()
+                    layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]) if layer.id() == self.current_layer.id()]
+                    if len(layers) == 0:
+                        self.current_layer = self.iface.activeLayer()
+                        self.current_layer_changed(self.current_layer)
+
+                else:
+                    self.PROJECT_LAYERS = project_layers
+
+            self.filtering_populate_layers_chekableCombobox()        
+            self.exploring_groupbox_init()
+            self.exploring_source_params_changed()
+
 
 
     def setProjectLayersEvent(self, event):
-        self.settingProjectLayers.emit(event)
+
+        if self.widgets_initialized is True:
+
+            self.settingProjectLayers.emit(event)
     
     def getProjectLayersEvent(self, event):
-        self.gettingProjectLayers.emit()
+
+        if self.widgets_initialized is True:
+
+            self.gettingProjectLayers.emit()
 
     def closeEvent(self, event):
-        self.closingPlugin.emit()
-        event.accept()
+
+        if self.widgets_initialized is True:
+
+            self.closingPlugin.emit()
+            event.accept()
 
     def launchTaskEvent(self, event):
-        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
-        self.launchingTask.emit(event)
+
+        if self.widgets_initialized is True:
+
+            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
+            self.launchingTask.emit(event)
     
     def reinitializeLayerOnErrorEvent(self, event):
-        self.reinitializingLayerOnError.emit(event)
+
+        if self.widgets_initialized is True:
+
+            event = self.current_layer.id()    
+            self.reinitializingLayerOnError.emit(event)
 
 class CustomIdentifyTool(QgsIdentifyMenu):
     
