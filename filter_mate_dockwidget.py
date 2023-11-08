@@ -737,7 +737,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             for widget_group in self.widgets:
                 if widget_group != 'QGIS':
                     for widget in self.widgets[widget_group]:
-                        if widget_group != 'DOCK' or (widget_group == 'EXPORTING' and ('OUTPUT' in widget or 'ZIP' in widget)):
+                        if widget_group != 'DOCK':
                             self.manageSignal([widget_group, widget], 'connect')
 
 
@@ -750,10 +750,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsInserted.connect(self.save_configuration_model)
             self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsRemoved.connect(self.save_configuration_model)
 
-            self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_path)
-            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_path)
-            self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_pathzip)
-            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_pathzip)
+            # self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_path)
+            # self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_path)
+            # self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].clicked.connect(self.dialog_export_output_pathzip)
+            # self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].textEdited.connect(self.reset_export_output_pathzip)
 
             if 'EXPORT' in self.CONFIG_DATA:
                 if len(list(self.CONFIG_DATA["EXPORT"])) > 0:
@@ -803,7 +803,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             self.exploring_groupbox_changed(exploring_groupbox)
 
-    def exploring_groupbox_changed(self, groupbox, state=None):
+    def exploring_groupbox_changed(self, groupbox):
         
         if self.widgets_initialized is True:
 

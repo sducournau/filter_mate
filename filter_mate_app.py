@@ -154,9 +154,8 @@ class FilterMateApp:
                                 ]
         
             for widget_path in widgets_to_stop:
-                state = self.dockwidget.manageSignal(widget_path)
-                if state == True:
-                    raise SignalStateChangeError(state, self.widgets, widget_path)
+                self.dockwidget.manageSignal(widget_path, 'disconnect')
+
 
         for layer in layers:
             if action == 'add':     
@@ -166,9 +165,7 @@ class FilterMateApp:
 
         if self.dockwidget != None:
             for widget_path in widgets_to_stop:
-                state = self.dockwidget.manageSignal(widget_path)
-                if state == False:
-                    raise SignalStateChangeError(state, self.widgets, widget_path)
+                self.dockwidget.manageSignal(widget_path, 'connect')
 
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
             
@@ -414,7 +411,7 @@ class FilterMateApp:
                         else:
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
                             self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
-                            
+
                         print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
 
            
@@ -478,7 +475,7 @@ class FilterEngineTask(QgsTask):
                 self.source_crs = self.source_layer.sourceCrs()
                 source_crs_distance_unit = self.source_crs.mapUnits()
 
-                if source_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown']:
+                if source_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] and self.source_crs.isGeographic() is False:
                     self.source_layer_srid = self.source_crs.postgisSrid()
                 else:
                     self.has_to_reproject_source_layer = True
@@ -779,7 +776,7 @@ class FilterEngineTask(QgsTask):
         param_has_to_reproject_layer = False
         param_layer_crs = layer.sourceCrs()
         param_layer_crs_distance_unit = param_layer_crs.mapUnits()
-        if param_layer_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown']:
+        if param_layer_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] and param_layer_crs.isGeographic() is False:
 
             param_layer_srid = param_layer_crs.postgisSrid()
 
@@ -836,6 +833,28 @@ class FilterEngineTask(QgsTask):
                                                                                               expression=param_expression))
             else:
                 result = layer.setSubsetString(param_expression)
+
+            if param_has_to_reproject_layer:
+
+                features_ids = []
+                for feature in layer.getFeatures():
+                    features_ids.append(str(feature[param_distant_primary_key_name]))
+
+                if len(features_ids) > 0:
+                    if param_distant_primary_key_is_numeric == True:
+                        param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
+                    else:
+                        param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
+
+                    if QgsExpression(param_expression).isValid():
+
+                        if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
+
+                            result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                                combine_operator=self.param_combine_operator,
+                                                                                                                                expression=param_expression))
+                        else:
+                            result = layer.setSubsetString(param_expression)
     
 
         elif self.param_source_provider_type == 'spatialite' or layer_provider_type == 'spatialite':
