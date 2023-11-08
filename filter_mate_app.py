@@ -141,16 +141,17 @@ class FilterMateApp:
         if self.dockwidget != None:
 
             widgets_to_stop =   [
+                                    ["SINGLE_SELECTION","FEATURES"],
                                     ["SINGLE_SELECTION","EXPRESSION"],
                                     ["MULTIPLE_SELECTION","FEATURES"],
                                     ["MULTIPLE_SELECTION","EXPRESSION"],
                                     ["CUSTOM_SELECTION","EXPRESSION"],
-                                    ["FILTERING","BUFFER"],
-                                    ["FILTERING","GEOMETRIC_PREDICATES"],
-                                    ["FILTERING","PREDICATES_OPERATOR"],
-                                    ["FILTERING","COMBINE_OPERATOR"],
+                                    ["FILTERING","CURRENT_LAYER"],
                                     ["FILTERING","LAYERS_TO_FILTER"],
-                                    ["FILTERING","CURRENT_LAYER"]
+                                    ["FILTERING","COMBINE_OPERATOR"],
+                                    ["FILTERING","GEOMETRIC_PREDICATES"],
+                                    ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
+                                    ["FILTERING","BUFFER"]
                                 ]
         
             for widget_path in widgets_to_stop:
