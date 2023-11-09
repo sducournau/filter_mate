@@ -651,7 +651,7 @@ class FilterEngineTask(QgsTask):
         if self.param_buffer_value != None:
 
             alg_source_layer_params_buffer = {
-                'DISSOLVE': True,
+                'DISSOLVE': False,
                 'DISTANCE': self.param_buffer_value,
                 'END_CAP_STYLE': 2,
                 'INPUT': layer,
@@ -734,8 +734,10 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                                             source_subset=self.expression)
 
             
-
             result = layer.setSubsetString(param_expression)
+
+            if result is False:
+                print(param_expression)
 
             param_layer_feature_count = layer.featureCount()
 
@@ -755,78 +757,8 @@ class FilterEngineTask(QgsTask):
 
                         result = layer.setSubsetString(param_expression)
     
-
-        # elif self.param_source_provider_type == 'spatialite' or layer_provider_type == 'spatialite':
-                
-        #     if param_has_to_reproject_layer is True:
-        #         raw_geometries = [feature.geometry() for feature in layer.getFeatures() if feature.hasGeometry()]
-        #         geometries = []
-        #         transform = QgsCoordinateTransform(QgsCoordinateReferenceSystem(self.source_crs.authid()), QgsCoordinateReferenceSystem( self.source_layer_crs_authid), PROJECT)
-
-        #         for geometry in raw_geometries:
-        #             if geometry.isEmpty() is False:
-        #                 if geometry.isMultipart():
-        #                     geometry.convertToSingleType()
-        #                 if param_has_to_reproject_layer is True:
-        #                     geometry.transform(transform)
-        #                 if self.param_buffer_value != None:
-        #                     geometry = geometry.buffer(self.param_buffer_value, 5)
-        #                 geometries.append(geometry)
-
-        #         collected_geometry = QgsGeometry().collectGeometry(geometries)
-
-        #         param_distant_geometry_wkt = collected_geometry.asWkt().strip()
-        #         param_distant_expression_geom = '(ST_GeomFromText(\'{source_sub_expression_geom}\'),ST_GeomFromText(\'{distant_geometry_wkt}))'.format(source_sub_expression_geom=self.spatialite_source_geom,
-        #                                                                                                                                                 distant_geometry_wkt=param_distant_geometry_wkt)
-
-        #     else:
-        #         param_distant_expression_geom = '(ST_GeomFromText(\'{source_sub_expression_geom}\'),"{distant_table}"."{distant_geometry_field}")'.format(source_sub_expression_geom=self.spatialite_source_geom,
-        #                                                                                                                                                     distant_table=param_distant_table,
-        #                                                                                                                                                     distant_geometry_field=param_distant_geometry_field)
-
-        #     spatialite_sub_expression_array = []
-        #     for postgis_predicate in postgis_predicates:
-
-        #         spatialite_sub_expression_array.append(postgis_predicate + '{param_distant_expression_geom}'.format(param_distant_expression_geom=param_distant_expression_geom))
-            
-        #     if len(spatialite_sub_expression_array) > 1:
-        #         param_spatialite_sub_expression = self.param_source_geom_operator.join(spatialite_sub_expression_array)
-        #     else:
-        #         param_spatialite_sub_expression = spatialite_sub_expression_array[0]
-
-        #     param_expression = 'SELECT {postgis_sub_expression}'.format(postgis_sub_expression=param_spatialite_sub_expression)
-
-        #     #print(param_expression)
-        #     if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
-        #         result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-        #                                                                                       combine_operator=self.param_combine_operator,
-        #                                                                                       expression=param_expression))
-        #     else:
-        #         result = layer.setSubsetString(param_expression) 
-
-        #     param_layer_feature_count = layer.featureCount()
-
-        #     if self.has_feature_count_limit is True and param_layer_feature_count > self.feature_count_limit:
-
-        #         features_ids = []
-        #         for feature in layer.getFeatures():
-        #             features_ids.append(str(feature[param_distant_primary_key_name]))
-
-        #         if len(features_ids) > 0:
-        #             if param_distant_primary_key_is_numeric == True:
-        #                 param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
-        #             else:
-        #                 param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
-
-        #             if QgsExpression(param_expression).isValid():
-
-        #                 if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
-
-        #                     result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-        #                                                                                                                         combine_operator=self.param_combine_operator,
-        #                                                                                                                         expression=param_expression))
-        #                 else:
-        #                     result = layer.setSubsetString(param_expression)
+                        if result is False:
+                            print(param_expression)
 
         if result is False:
 
@@ -856,21 +788,28 @@ class FilterEngineTask(QgsTask):
             for feature in current_layer.selectedFeatures():
                 features_ids.append(str(feature[param_distant_primary_key_name]))
 
+            print(current_layer)
+
             current_layer.removeSelection()
             layer.removeSelection()
-
+            print(features_ids)
 
             if len(features_ids) > 0:
                 if param_distant_primary_key_is_numeric == True:
                     param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
                 else:
                     param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
-
+                
+                print(layer)
+                print(param_expression)
 
                 if QgsExpression(param_expression).isValid():
 
                     result = layer.setSubsetString(param_expression)
-
+    
+                    if result is False:
+                        print(param_expression)
+                        
         return result
     
     def manage_distant_layers_geometric_filtering(self):
