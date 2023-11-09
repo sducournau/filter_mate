@@ -339,7 +339,6 @@ class FilterMateApp:
         sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
                                                                                                                                                                             table=table,
                                                                                                                                                                             primary_key_name=primary_key_name)
-        print(sql_statement)
 
         alg_params_postgisexecutesql = {
             "DATABASE": 'LOCAL',
@@ -474,8 +473,6 @@ class FilterMateApp:
 
                         if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                             self.create_spatial_index_for_layer(layer)
-
-                        print(layer, self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
 
            
         self.iface.mapCanvas().refreshAllLayers()
@@ -735,13 +732,10 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                                             source_table=self.param_source_table,
                                                                                                                                                                                                                                                                             postgis_sub_expression=param_postgis_sub_expression,
                                                                                                                                                                                                                                                                             source_subset=self.expression)
-            print(param_expression)
-            if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
-                result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                              combine_operator=self.param_combine_operator,
-                                                                                              expression=param_expression))
-            else:
-                result = layer.setSubsetString(param_expression)
+
+            
+
+            result = layer.setSubsetString(param_expression)
 
             param_layer_feature_count = layer.featureCount()
 
@@ -759,24 +753,16 @@ class FilterEngineTask(QgsTask):
 
                     if QgsExpression(param_expression).isValid():
 
-                        if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
-
-                            result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                                combine_operator=self.param_combine_operator,
-                                                                                                                                expression=param_expression))
-                        else:
-                            result = layer.setSubsetString(param_expression)
+                        result = layer.setSubsetString(param_expression)
     
 
         # elif self.param_source_provider_type == 'spatialite' or layer_provider_type == 'spatialite':
+                
+        #     if param_has_to_reproject_layer is True:
+        #         raw_geometries = [feature.geometry() for feature in layer.getFeatures() if feature.hasGeometry()]
+        #         geometries = []
+        #         transform = QgsCoordinateTransform(QgsCoordinateReferenceSystem(self.source_crs.authid()), QgsCoordinateReferenceSystem( self.source_layer_crs_authid), PROJECT)
 
-        #     if self.param_source_provider_type == 'spatialite': 
-        #         if param_has_to_reproject_layer is True:
-        #             transform = QgsCoordinateTransform(QgsCoordinateReferenceSystem(self.source_crs.authid()), QgsCoordinateReferenceSystem( self.source_layer_crs_authid), PROJECT)
-        #             raw_geometries = [feature.geometry() for feature in layer.getFeatures() if feature.hasGeometry()]
-        #             geometries = []
-
-        #     if self.param_source_provider_type == 'spatialite' or param_has_to_reproject_layer is True:
         #         for geometry in raw_geometries:
         #             if geometry.isEmpty() is False:
         #                 if geometry.isMultipart():
@@ -810,7 +796,7 @@ class FilterEngineTask(QgsTask):
 
         #     param_expression = 'SELECT {postgis_sub_expression}'.format(postgis_sub_expression=param_spatialite_sub_expression)
 
-        #     print(param_expression)
+        #     #print(param_expression)
         #     if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
         #         result = layer.setSubsetString('({old_subset}) {combine_operator} {expression}'.format(old_subset=param_old_subset,
         #                                                                                       combine_operator=self.param_combine_operator,
@@ -842,7 +828,7 @@ class FilterEngineTask(QgsTask):
         #                 else:
         #                     result = layer.setSubsetString(param_expression)
 
-        elif self.param_source_provider_type in ('ogr','spatialite') or layer_provider_type in ('ogr','spatialite'):
+        if result is False:
 
             current_layer = layer
 
@@ -883,13 +869,7 @@ class FilterEngineTask(QgsTask):
 
                 if QgsExpression(param_expression).isValid():
 
-                    if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
-
-                        result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                            combine_operator=self.param_combine_operator,
-                                                                                                                            expression=param_expression))
-                    else:
-                        result = layer.setSubsetString(param_expression)
+                    result = layer.setSubsetString(param_expression)
 
         return result
     
@@ -913,7 +893,7 @@ class FilterEngineTask(QgsTask):
             self.prepare_postgresql_source_geom()
 
         if 'spatialite' in provider_list:
-            self.prepare_spatialite_source_geom()
+            self.prepare_ogr_source_geom()
 
         if 'ogr' in provider_list:
             self.prepare_ogr_source_geom()
@@ -943,7 +923,7 @@ class FilterEngineTask(QgsTask):
         if self.task_parameters["filtering"]["has_combine_operator"] == True:
             if self.task_parameters["filtering"]["combine_operator"] != '':
                 self.param_combine_operator = self.task_parameters["filtering"]["combine_operator"]
-                if self.task_parameters["filtering"]["is_already_subset"] == True:
+                if self.task_parameters["infos"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
 
         if self.task_parameters["task"]["expression"] != None:
@@ -963,16 +943,24 @@ class FilterEngineTask(QgsTask):
                     if self.expression.find(self.primary_key_name) > -1:
                         if self.expression.find(self.param_source_table) < 0:
                             if self.expression.find(' "' + self.primary_key_name + '" ') > -1:
-                                self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                                if self.param_source_provider_type == 'postgresql':
+                                    self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
                             elif self.expression.find(" " + self.primary_key_name + " ") > -1:
-                                self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                                if self.param_source_provider_type == 'postgresql':
+                                    self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
+                                else:
+                                    self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=self.primary_key_name))
                     elif len(existing_fields) >= 1:
                         if self.expression.find(self.param_source_table) < 0:
                             for field_name in existing_fields:
                                 if self.expression.find(' "' + field_name + '" ') > -1:
-                                    self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                                    if self.param_source_provider_type == 'postgresql':
+                                        self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
                                 elif self.expression.find(" " + field_name + " ") > -1:
-                                    self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                                    if self.param_source_provider_type == 'postgresql':
+                                        self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
+                                    else:
+                                        self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
 
                     print(self.expression)
 

@@ -591,10 +591,12 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.setBaseSize(30, 0)
         self.setMinimumHeight(30)
         self.setMaximumHeight(30)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        self.setMaximumWidth(16777215)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setCursor(Qt.PointingHandCursor)
 
-        font = QFont("Segoe UI", 8, QFont.Bold)
+        font = QFont("Segoe UI", 8)
+        font.setBold(True)
         self.setFont(font)
 
         #self.view().pressed.connect(self.handleItemPressed)
@@ -644,7 +646,6 @@ class QgsCheckableComboBoxLayer(QComboBox):
     def addItem(self, icon, text, data=None):
 
         item = QStandardItem()
-        #item.setSizeHint(QtCore.QSize(50, 30))
         item.setCheckable(True)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
         item.setData(Qt.Unchecked, Qt.CheckStateRole)
