@@ -260,6 +260,19 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     def __init__(self, parent=None):
         self.parent = parent
         QDialog.__init__(self)
+
+
+
+        self.setMinimumWidth(30)
+        self.setMaximumWidth(16777215)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.setCursor(Qt.PointingHandCursor)
+
+        font = QFont("Segoe UI Semibold", 8)
+        font.setBold(True)
+        self.setFont(font)
+
+
         self.layout = QVBoxLayout(self)
         self.filter_le = QLineEdit(self)
         self.filter_le.setPlaceholderText('Type to filter...')
@@ -268,6 +281,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         self.layout.addWidget(self.filter_le)
         self.layout.addWidget(self.items_le)
+
+
+
 
         self.context_menu = QMenu(self)
         self.action_check_all = QAction('Select All', self)
@@ -602,12 +618,13 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.parent = parent
         self.setBaseSize(30, 0)
         self.setMinimumHeight(30)
+        self.setMinimumWidth(30)
         self.setMaximumHeight(30)
         self.setMaximumWidth(16777215)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setCursor(Qt.PointingHandCursor)
 
-        font = QFont("Segoe UI", 8)
+        font = QFont("Segoe UI Semibold", 8)
         font.setBold(True)
         self.setFont(font)
 

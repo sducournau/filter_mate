@@ -694,12 +694,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             }"""
 
         
-        groupbox_style = """QGroupBox
+        frame_style =    """QFrame
                             {
                             background-color: {color_1};
                             border-color: rgb(0, 0, 0);
                             border-radius:6px;
-                            padding: 10px 10px 10px 10px;
+                            padding: 5px 5px 5px 5px;
+                            marging: 5px 5px 5px 5px;
                             color:{color_3}
                             }
                             QgsExpressionBuilderWidget
@@ -711,7 +712,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             color:{color_3}
                             }"""
 
-
+        collapsibleGroupBox_style =  """QgsCollapsibleGroupBox
+                                        {
+                                        background-color: {color_1};
+                                        border-color: rgb(0, 0, 0);
+                                        border-radius:6px;
+                                        padding: 10px 10px 10px 10px;
+                                        color:{color_3}
+                                        }""" 
+        
         lineEdit_style = """
                                 background-color: {color_2};
                                 color:{color_1};
@@ -735,15 +744,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                         height:40px;
                                     }"""
 
+        splitter_style = """QSplitter::handle {
+                            background: {color_1};
+                            }
+                            QSplitter::handle:hover {
+                            background: {color_2};
+                            }"""
+
         comboBox_style = comboBox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][2]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
 
-        dock_style = dock_style.replace("{color}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][2])
+        dock_style = dock_style.replace("{color}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
 
-        groupbox_style = groupbox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
+        frame_actions_style = frame_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
+
+        frame_style = frame_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
+        
+        collapsibleGroupBox_style = collapsibleGroupBox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
 
         lineEdit_style = lineEdit_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
 
+        splitter_style = splitter_style.replace("{color_1}", self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1]).replace("{color_2}", self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][3])
 
+        
         # self.toolBox_tabWidgets.setStyleSheet("""background-color: {};
         #                                                 border-color: rgb(0, 0, 0);
         #                                                 border-radius:6px;
@@ -770,7 +792,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                                         padding: 10px 10px 10px 10px;
                                                         color:{};""".format(self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0],self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][0]))
         
-        self.group_exploring.setStyleSheet(groupbox_style)
+        self.splitter.setStyleSheet(splitter_style)
+        self.frame_actions.setStyleSheet(frame_actions_style)
+        self.frame_exploring.setStyleSheet(frame_style)
+        self.frame_toolset.setStyleSheet(frame_style)
+
+        self.mGroupBox_exploring_single_selection.setStyleSheet(collapsibleGroupBox_style)
+        self.mGroupBox_exploring_multiple_selection.setStyleSheet(collapsibleGroupBox_style)
+        self.mGroupBox_exploring_custom_selection.setStyleSheet(collapsibleGroupBox_style)
+
 
         self.CONFIGURATION.setStyleSheet("""background-color: {};
                                             border-color: rgb(0, 0, 0);
@@ -793,7 +823,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("LineEdit") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("PropertyOverrideButton") >= 0 or self.widgets[widget_group][widget_name]["TYPE"].find("QgsProjectionSelectionWidget") >= 0:
+                elif self.widgets[widget_group][widget_name]["TYPE"].find("PropertyOverrideButton") >= 0:
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
+                elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsProjectionSelectionWidget") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                 
 
