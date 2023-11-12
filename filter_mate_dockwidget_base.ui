@@ -1042,7 +1042,7 @@ color:black;
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>0</width>
+                    <width>90</width>
                     <height>30</height>
                    </size>
                   </property>
@@ -1116,7 +1116,7 @@ QComboBox QAbstractItemView {
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>0</width>
+                    <width>90</width>
                     <height>30</height>
                    </size>
                   </property>
@@ -1292,7 +1292,7 @@ QComboBox QAbstractItemView {
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>0</width>
+                    <width>90</width>
                     <height>30</height>
                    </size>
                   </property>
@@ -1367,7 +1367,7 @@ QComboBox QAbstractItemView {
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="styleSheet">
-              <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+              <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
              </property>
              <property name="title">
               <string>CUSTOM SELECTION</string>
@@ -1406,7 +1406,7 @@ QComboBox QAbstractItemView {
                   </property>
                   <property name="minimumSize">
                    <size>
-                    <width>0</width>
+                    <width>90</width>
                     <height>30</height>
                    </size>
                   </property>
@@ -1557,633 +1557,649 @@ color:black;
            <x>0</x>
            <y>0</y>
            <width>387</width>
-           <height>534</height>
+           <height>530</height>
           </rect>
          </property>
          <attribute name="label">
           <string>FILTERING</string>
          </attribute>
-         <layout class="QVBoxLayout" name="verticalLayout_12">
+         <layout class="QHBoxLayout" name="horizontalLayout_5">
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_2">
-            <item>
-             <widget class="QWidget" name="widget_2" native="true">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>90</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="maximumSize">
-               <size>
-                <width>90</width>
-                <height>16777215</height>
-               </size>
-              </property>
-              <property name="baseSize">
-               <size>
-                <width>90</width>
-                <height>0</height>
-               </size>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">QWidget {
+           <widget class="QWidget" name="widget_2" native="true">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="baseSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QWidget {
 background: #F0F0F0;
 border-radius:6px;
 padding: 3px 3px 3px 3px;
 color:black;
 }</string>
-              </property>
-              <layout class="QVBoxLayout" name="verticalLayout_10">
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_10">
+             <item>
+              <layout class="QVBoxLayout" name="verticalLayout_filtering_keys">
                <item>
-                <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_2">
-                 <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="baseSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="font">
-                    <font>
-                     <family>Segoe UI</family>
-                    </font>
-                   </property>
-                   <property name="cursor">
-                    <cursorShape>PointingHandCursor</cursorShape>
-                   </property>
-                   <property name="mouseTracking">
-                    <bool>true</bool>
-                   </property>
-                   <property name="focusPolicy">
-                    <enum>Qt::ClickFocus</enum>
-                   </property>
-                   <property name="layoutDirection">
-                    <enum>Qt::LeftToRight</enum>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                   <property name="iconSize">
-                    <size>
-                     <width>35</width>
-                     <height>35</height>
-                    </size>
-                   </property>
-                   <property name="checkable">
-                    <bool>true</bool>
-                   </property>
-                   <property name="flat">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_20">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                  </spacer>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="baseSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="font">
-                    <font>
-                     <family>Segoe UI</family>
-                    </font>
-                   </property>
-                   <property name="cursor">
-                    <cursorShape>PointingHandCursor</cursorShape>
-                   </property>
-                   <property name="mouseTracking">
-                    <bool>true</bool>
-                   </property>
-                   <property name="focusPolicy">
-                    <enum>Qt::ClickFocus</enum>
-                   </property>
-                   <property name="toolTip">
-                    <string>Filtrage multicouche</string>
-                   </property>
-                   <property name="layoutDirection">
-                    <enum>Qt::LeftToRight</enum>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                   <property name="iconSize">
-                    <size>
-                     <width>35</width>
-                     <height>35</height>
-                    </size>
-                   </property>
-                   <property name="checkable">
-                    <bool>true</bool>
-                   </property>
-                   <property name="flat">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_23">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                  </spacer>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="baseSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="font">
-                    <font>
-                     <family>Segoe UI</family>
-                    </font>
-                   </property>
-                   <property name="cursor">
-                    <cursorShape>PointingHandCursor</cursorShape>
-                   </property>
-                   <property name="mouseTracking">
-                    <bool>true</bool>
-                   </property>
-                   <property name="focusPolicy">
-                    <enum>Qt::ClickFocus</enum>
-                   </property>
-                   <property name="toolTip">
-                    <string>Filtrage additif pour la couche sélectionnée</string>
-                   </property>
-                   <property name="layoutDirection">
-                    <enum>Qt::LeftToRight</enum>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                   <property name="iconSize">
-                    <size>
-                     <width>35</width>
-                     <height>35</height>
-                    </size>
-                   </property>
-                   <property name="checkable">
-                    <bool>true</bool>
-                   </property>
-                   <property name="flat">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_22">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                  </spacer>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_geometric_predicates">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="baseSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="palette">
-                    <palette>
-                     <active>
-                      <colorrole role="WindowText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Button">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Text">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="ButtonText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Base">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Window">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="PlaceholderText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                     </active>
-                     <inactive>
-                      <colorrole role="WindowText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Button">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Text">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="ButtonText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Base">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Window">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="PlaceholderText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                     </inactive>
-                     <disabled>
-                      <colorrole role="WindowText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Button">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Text">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="ButtonText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Base">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="Window">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>240</red>
-                         <green>240</green>
-                         <blue>240</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                      <colorrole role="PlaceholderText">
-                       <brush brushstyle="SolidPattern">
-                        <color alpha="255">
-                         <red>0</red>
-                         <green>0</green>
-                         <blue>0</blue>
-                        </color>
-                       </brush>
-                      </colorrole>
-                     </disabled>
-                    </palette>
-                   </property>
-                   <property name="font">
-                    <font>
-                     <family>Segoe UI</family>
-                    </font>
-                   </property>
-                   <property name="cursor">
-                    <cursorShape>PointingHandCursor</cursorShape>
-                   </property>
-                   <property name="mouseTracking">
-                    <bool>true</bool>
-                   </property>
-                   <property name="focusPolicy">
-                    <enum>Qt::ClickFocus</enum>
-                   </property>
-                   <property name="toolTip">
-                    <string>Filtrage géospatial</string>
-                   </property>
-                   <property name="layoutDirection">
-                    <enum>Qt::LeftToRight</enum>
-                   </property>
-                   <property name="styleSheet">
-                    <string notr="true"/>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                   <property name="iconSize">
-                    <size>
-                     <width>35</width>
-                     <height>35</height>
-                    </size>
-                   </property>
-                   <property name="checkable">
-                    <bool>true</bool>
-                   </property>
-                   <property name="flat">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_24">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>40</height>
-                    </size>
-                   </property>
-                  </spacer>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton_checkable_filtering_buffer">
-                   <property name="enabled">
-                    <bool>false</bool>
-                   </property>
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="baseSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="font">
-                    <font>
-                     <family>Segoe UI</family>
-                    </font>
-                   </property>
-                   <property name="cursor">
-                    <cursorShape>PointingHandCursor</cursorShape>
-                   </property>
-                   <property name="mouseTracking">
-                    <bool>true</bool>
-                   </property>
-                   <property name="focusPolicy">
-                    <enum>Qt::ClickFocus</enum>
-                   </property>
-                   <property name="toolTip">
-                    <string>Tampon</string>
-                   </property>
-                   <property name="layoutDirection">
-                    <enum>Qt::LeftToRight</enum>
-                   </property>
-                   <property name="styleSheet">
-                    <string notr="true"/>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                   <property name="iconSize">
-                    <size>
-                     <width>35</width>
-                     <height>35</height>
-                    </size>
-                   </property>
-                   <property name="checkable">
-                    <bool>true</bool>
-                   </property>
-                   <property name="flat">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
+                <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="baseSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                  </font>
+                 </property>
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="focusPolicy">
+                  <enum>Qt::ClickFocus</enum>
+                 </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="iconSize">
+                  <size>
+                   <width>35</width>
+                   <height>35</height>
+                  </size>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="flat">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="verticalSpacer_20">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="baseSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                  </font>
+                 </property>
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="focusPolicy">
+                  <enum>Qt::ClickFocus</enum>
+                 </property>
+                 <property name="toolTip">
+                  <string>Filtrage multicouche</string>
+                 </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="iconSize">
+                  <size>
+                   <width>35</width>
+                   <height>35</height>
+                  </size>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="flat">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="verticalSpacer_23">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="baseSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                  </font>
+                 </property>
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="focusPolicy">
+                  <enum>Qt::ClickFocus</enum>
+                 </property>
+                 <property name="toolTip">
+                  <string>Filtrage additif pour la couche sélectionnée</string>
+                 </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="iconSize">
+                  <size>
+                   <width>35</width>
+                   <height>35</height>
+                  </size>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="flat">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="verticalSpacer_22">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_checkable_filtering_geometric_predicates">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="baseSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="palette">
+                  <palette>
+                   <active>
+                    <colorrole role="WindowText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Button">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="ButtonText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Base">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Window">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="PlaceholderText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </active>
+                   <inactive>
+                    <colorrole role="WindowText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Button">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="ButtonText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Base">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Window">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="PlaceholderText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </inactive>
+                   <disabled>
+                    <colorrole role="WindowText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Button">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Text">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="ButtonText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Base">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="Window">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>240</red>
+                       <green>240</green>
+                       <blue>240</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                    <colorrole role="PlaceholderText">
+                     <brush brushstyle="SolidPattern">
+                      <color alpha="255">
+                       <red>0</red>
+                       <green>0</green>
+                       <blue>0</blue>
+                      </color>
+                     </brush>
+                    </colorrole>
+                   </disabled>
+                  </palette>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                  </font>
+                 </property>
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="focusPolicy">
+                  <enum>Qt::ClickFocus</enum>
+                 </property>
+                 <property name="toolTip">
+                  <string>Filtrage géospatial</string>
+                 </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true"/>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="iconSize">
+                  <size>
+                   <width>35</width>
+                   <height>35</height>
+                  </size>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="flat">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="verticalSpacer_24">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QPushButton" name="pushButton_checkable_filtering_buffer">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="baseSize">
+                  <size>
+                   <width>0</width>
+                   <height>50</height>
+                  </size>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                  </font>
+                 </property>
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="mouseTracking">
+                  <bool>true</bool>
+                 </property>
+                 <property name="focusPolicy">
+                  <enum>Qt::ClickFocus</enum>
+                 </property>
+                 <property name="toolTip">
+                  <string>Tampon</string>
+                 </property>
+                 <property name="layoutDirection">
+                  <enum>Qt::LeftToRight</enum>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true"/>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="iconSize">
+                  <size>
+                   <width>35</width>
+                   <height>35</height>
+                  </size>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="flat">
+                  <bool>true</bool>
+                 </property>
+                </widget>
                </item>
               </layout>
-             </widget>
-            </item>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Fixed</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_filtering_values">
             <item>
-             <spacer name="horizontalSpacer_2">
+             <spacer name="verticalSpacer_12">
               <property name="orientation">
-               <enum>Qt::Horizontal</enum>
+               <enum>Qt::Vertical</enum>
               </property>
               <property name="sizeType">
                <enum>QSizePolicy::Fixed</enum>
@@ -2197,431 +2213,440 @@ color:black;
              </spacer>
             </item>
             <item>
-             <layout class="QVBoxLayout" name="verticalLayout_filtering_values">
+             <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="baseSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <family>Segoe UI</family>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QComboBox
+{
+ background-color:#bdc3c7;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QComboBox:hover
+{
+
+border: 2px solid black;
+
+}
+
+QComboBox QAbstractItemView {
+
+  background: #bdc3c7;
+  selection-background-color: #34495e;
+	color:black;
+}
+
+
+
+
+</string>
+              </property>
+              <property name="maxVisibleItems">
+               <number>20</number>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="showCrs">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_11">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_8">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboBox_filtering_current_layer_combine_operator">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="baseSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <family>Segoe UI</family>
+                <pointsize>8</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="mouseTracking">
+               <bool>true</bool>
+              </property>
+              <property name="tabletTracking">
+               <bool>true</bool>
+              </property>
+              <property name="toolTip">
+               <string>Couche de l'expression</string>
+              </property>
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QComboBox
+{
+ background-color:#bdc3c7;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QComboBox:hover
+{
+
+border: 2px solid black;
+
+}
+
+QComboBox QAbstractItemView {
+
+  background: #bdc3c7;
+  selection-background-color: #34495e;
+	color:black;
+}
+
+
+
+
+</string>
+              </property>
+              <property name="maxVisibleItems">
+               <number>20</number>
+              </property>
               <item>
-               <spacer name="verticalSpacer_12">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeType">
-                 <enum>QSizePolicy::Fixed</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>20</height>
-                 </size>
-                </property>
-               </spacer>
+               <property name="text">
+                <string>AND</string>
+               </property>
               </item>
               <item>
-               <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>240</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>16777215</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="baseSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <family>Segoe UI</family>
-                  <weight>75</weight>
-                  <bold>true</bold>
-                 </font>
-                </property>
+               <property name="text">
+                <string>AND NOT</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>OR</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_10">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="baseSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <family>Segoe UI</family>
+                <pointsize>8</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="mouseTracking">
+               <bool>true</bool>
+              </property>
+              <property name="toolTip">
+               <string>Prédicat géométrique</string>
+              </property>
+              <property name="layoutDirection">
+               <enum>Qt::LeftToRight</enum>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QComboBox
+{
+ background-color:#bdc3c7;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QComboBox:hover
+{
+
+border: 2px solid black;
+
+}
+
+QComboBox QAbstractItemView {
+
+  background: #bdc3c7;
+  selection-background-color: #34495e;
+	color:black;
+}
+
+
+
+
+</string>
+              </property>
+              <property name="maxVisibleItems">
+               <number>20</number>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="separator">
+               <string>, </string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboBox_filtering_geometric_predicates_operator">
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="baseSize">
+               <size>
+                <width>0</width>
+                <height>30</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <family>Segoe UI</family>
+                <pointsize>8</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="cursor">
+               <cursorShape>PointingHandCursor</cursorShape>
+              </property>
+              <property name="tabletTracking">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QComboBox
+{
+ background-color:#bdc3c7;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QComboBox:hover
+{
+
+border: 2px solid black;
+
+}
+
+QComboBox QAbstractItemView {
+
+  background: #bdc3c7;
+  selection-background-color: #34495e;
+	color:black;
+}
+
+
+
+
+</string>
+              </property>
+              <property name="editable">
+               <bool>false</bool>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>16</width>
+                <height>16</height>
+               </size>
+              </property>
+              <item>
+               <property name="text">
+                <string>AND</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>OR</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <spacer name="verticalSpacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <widget class="QgsPropertyOverrideButton" name="mPropertyOverrideButton_filtering_buffer_property">
                 <property name="cursor">
                  <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="layoutDirection">
-                 <enum>Qt::LeftToRight</enum>
+                 <enum>Qt::RightToLeft</enum>
                 </property>
-                <property name="styleSheet">
-                 <string notr="true">QComboBox
-{
- background-color:#bdc3c7;
-border: 1px solid black;
-border-radius: 3px;
-padding: 3px 3px 3px 3px;
-color:black;
-
-}
-
-QComboBox:hover
-{
-
-border: 2px solid black;
-
-}
-
-QComboBox QAbstractItemView {
-
-  background: #bdc3c7;
-  selection-background-color: #34495e;
-	color:black;
-}
-
-
-
-
-</string>
+                <property name="popupMode">
+                 <enum>QToolButton::InstantPopup</enum>
                 </property>
-                <property name="maxVisibleItems">
-                 <number>20</number>
+                <property name="toolButtonStyle">
+                 <enum>Qt::ToolButtonFollowStyle</enum>
                 </property>
-                <property name="iconSize">
-                 <size>
-                  <width>20</width>
-                  <height>20</height>
-                 </size>
-                </property>
-                <property name="showCrs">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <spacer name="verticalSpacer_11">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item>
-               <spacer name="verticalSpacer_8">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item>
-               <widget class="QComboBox" name="comboBox_filtering_current_layer_combine_operator">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>240</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>16777215</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="baseSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <family>Segoe UI</family>
-                  <pointsize>8</pointsize>
-                  <weight>75</weight>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="cursor">
-                 <cursorShape>PointingHandCursor</cursorShape>
-                </property>
-                <property name="mouseTracking">
-                 <bool>true</bool>
-                </property>
-                <property name="tabletTracking">
-                 <bool>true</bool>
-                </property>
-                <property name="toolTip">
-                 <string>Couche de l'expression</string>
-                </property>
-                <property name="layoutDirection">
-                 <enum>Qt::LeftToRight</enum>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">QComboBox
-{
- background-color:#bdc3c7;
-border: 1px solid black;
-border-radius: 3px;
-padding: 3px 3px 3px 3px;
-color:black;
-
-}
-
-QComboBox:hover
-{
-
-border: 2px solid black;
-
-}
-
-QComboBox QAbstractItemView {
-
-  background: #bdc3c7;
-  selection-background-color: #34495e;
-	color:black;
-}
-
-
-
-
-</string>
-                </property>
-                <property name="maxVisibleItems">
-                 <number>20</number>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>AND</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>AND NOT</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>OR</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item>
-               <spacer name="verticalSpacer_10">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
-              </item>
-              <item>
-               <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>240</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>16777215</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="baseSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <family>Segoe UI</family>
-                  <pointsize>8</pointsize>
-                  <weight>75</weight>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="cursor">
-                 <cursorShape>PointingHandCursor</cursorShape>
-                </property>
-                <property name="mouseTracking">
-                 <bool>true</bool>
-                </property>
-                <property name="toolTip">
-                 <string>Prédicat géométrique</string>
-                </property>
-                <property name="layoutDirection">
-                 <enum>Qt::LeftToRight</enum>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">QComboBox
-{
- background-color:#bdc3c7;
-border: 1px solid black;
-border-radius: 3px;
-padding: 3px 3px 3px 3px;
-color:black;
-
-}
-
-QComboBox:hover
-{
-
-border: 2px solid black;
-
-}
-
-QComboBox QAbstractItemView {
-
-  background: #bdc3c7;
-  selection-background-color: #34495e;
-	color:black;
-}
-
-
-
-
-</string>
-                </property>
-                <property name="maxVisibleItems">
-                 <number>20</number>
-                </property>
-                <property name="iconSize">
-                 <size>
-                  <width>20</width>
-                  <height>20</height>
-                 </size>
-                </property>
-                <property name="separator">
-                 <string>, </string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QComboBox" name="comboBox_filtering_geometric_predicates_operator">
-                <property name="minimumSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="maximumSize">
-                 <size>
-                  <width>16777215</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="baseSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <family>Segoe UI</family>
-                  <pointsize>8</pointsize>
-                  <weight>75</weight>
-                  <bold>true</bold>
-                 </font>
-                </property>
-                <property name="cursor">
-                 <cursorShape>PointingHandCursor</cursorShape>
-                </property>
-                <property name="tabletTracking">
-                 <bool>true</bool>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">QComboBox
-{
- background-color:#bdc3c7;
-border: 1px solid black;
-border-radius: 3px;
-padding: 3px 3px 3px 3px;
-color:black;
-
-}
-
-QComboBox:hover
-{
-
-border: 2px solid black;
-
-}
-
-QComboBox QAbstractItemView {
-
-  background: #bdc3c7;
-  selection-background-color: #34495e;
-	color:black;
-}
-
-
-
-
-</string>
-                </property>
-                <property name="editable">
+                <property name="autoRaise">
                  <bool>false</bool>
                 </property>
-                <property name="iconSize">
-                 <size>
-                  <width>16</width>
-                  <height>16</height>
-                 </size>
+                <property name="arrowType">
+                 <enum>Qt::RightArrow</enum>
                 </property>
-                <item>
-                 <property name="text">
-                  <string>AND</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>OR</string>
-                 </property>
-                </item>
+                <property name="active">
+                 <bool>false</bool>
+                </property>
                </widget>
-              </item>
-              <item>
-               <spacer name="verticalSpacer">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
-                 <size>
-                  <width>20</width>
-                  <height>40</height>
-                 </size>
-                </property>
-               </spacer>
               </item>
               <item>
                <widget class="QgsDoubleSpinBox" name="mQgsDoubleSpinBox_filtering_buffer">
@@ -2633,7 +2658,7 @@ QComboBox QAbstractItemView {
                 </property>
                 <property name="minimumSize">
                  <size>
-                  <width>240</width>
+                  <width>90</width>
                   <height>30</height>
                  </size>
                 </property>
@@ -2686,14 +2711,20 @@ border: 2px solid black;
 
 </string>
                 </property>
+                <property name="accelerated">
+                 <bool>true</bool>
+                </property>
+                <property name="correctionMode">
+                 <enum>QAbstractSpinBox::CorrectToNearestValue</enum>
+                </property>
                 <property name="showGroupSeparator" stdset="0">
-                 <bool>false</bool>
+                 <bool>true</bool>
                 </property>
                 <property name="suffix">
                  <string> m</string>
                 </property>
                 <property name="maximum">
-                 <double>1000.000000000000000</double>
+                 <double>1000000.000000000000000</double>
                 </property>
                 <property name="singleStep">
                  <double>0.100000000000000</double>
@@ -2707,22 +2738,81 @@ border: 2px solid black;
                </widget>
               </item>
               <item>
-               <spacer name="verticalSpacer_25">
-                <property name="orientation">
-                 <enum>Qt::Vertical</enum>
+               <widget class="QLineEdit" name="lineEdit_filtering_buffer_expression">
+                <property name="enabled">
+                 <bool>true</bool>
                 </property>
-                <property name="sizeType">
-                 <enum>QSizePolicy::Fixed</enum>
-                </property>
-                <property name="sizeHint" stdset="0">
+                <property name="minimumSize">
                  <size>
-                  <width>20</width>
-                  <height>20</height>
+                  <width>90</width>
+                  <height>30</height>
                  </size>
                 </property>
-               </spacer>
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>30</height>
+                 </size>
+                </property>
+                <property name="baseSize">
+                 <size>
+                  <width>0</width>
+                  <height>30</height>
+                 </size>
+                </property>
+                <property name="font">
+                 <font>
+                  <family>Segoe UI</family>
+                  <weight>75</weight>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QLineEdit
+{
+ background-color:white;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QLineEdit:hover
+{
+
+border: 2px solid black;
+
+}
+
+
+</string>
+                </property>
+                <property name="readOnly">
+                 <bool>false</bool>
+                </property>
+                <property name="clearButtonEnabled">
+                 <bool>true</bool>
+                </property>
+               </widget>
               </item>
              </layout>
+            </item>
+            <item>
+             <spacer name="verticalSpacer_9">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Fixed</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
             </item>
            </layout>
           </item>
@@ -2734,7 +2824,7 @@ border: 2px solid black;
            <x>0</x>
            <y>0</y>
            <width>387</width>
-           <height>534</height>
+           <height>530</height>
           </rect>
          </property>
          <attribute name="label">
@@ -3551,6 +3641,9 @@ border: 2px solid black;
 
 </string>
                 </property>
+                <property name="clearButtonEnabled">
+                 <bool>true</bool>
+                </property>
                </widget>
               </item>
               <item>
@@ -3627,7 +3720,7 @@ border: 2px solid black;
                  <string/>
                 </property>
                 <property name="clearButtonEnabled">
-                 <bool>false</bool>
+                 <bool>true</bool>
                 </property>
                </widget>
               </item>
@@ -3659,7 +3752,7 @@ border: 2px solid black;
            <x>0</x>
            <y>0</y>
            <width>387</width>
-           <height>534</height>
+           <height>530</height>
           </rect>
          </property>
          <attribute name="label">
@@ -3667,7 +3760,11 @@ border: 2px solid black;
          </attribute>
          <layout class="QGridLayout" name="gridLayout_5">
           <item row="0" column="0">
-           <layout class="QGridLayout" name="formLayout_configuration"/>
+           <layout class="QGridLayout" name="formLayout_configuration">
+            <item row="0" column="0">
+             <widget class="QgsAuthConfigSelect" name="mAuthConfigSelect"/>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -3954,6 +4051,11 @@ border: 2px solid black;
  </widget>
  <customwidgets>
   <customwidget>
+   <class>QgsAuthConfigSelect</class>
+   <extends>QWidget</extends>
+   <header>qgsauthconfigselect.h</header>
+  </customwidget>
+  <customwidget>
    <class>QgsCheckableComboBox</class>
    <extends>QComboBox</extends>
    <header>qgscheckablecombobox.h</header>
@@ -3988,6 +4090,11 @@ border: 2px solid black;
    <class>QgsProjectionSelectionWidget</class>
    <extends>QWidget</extends>
    <header>qgsprojectionselectionwidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>QgsPropertyOverrideButton</class>
+   <extends>QToolButton</extends>
+   <header>qgspropertyoverridebutton.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

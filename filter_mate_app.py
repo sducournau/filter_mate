@@ -41,7 +41,7 @@ class FilterMateApp:
         
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
         self.run()
 
 
@@ -126,7 +126,7 @@ class FilterMateApp:
             
             if len(layers) > 0:
                 layer = layers[0]
-                layer_scope = QgsExpressionContextUtils.layerScope(layer) 
+                 
 
                 if custom_variable == None or (isinstance(custom_variable, tuple) and len(custom_variable) == 0):
                     for key_group in ("infos", "exploring", "filtering"):
@@ -218,7 +218,9 @@ class FilterMateApp:
                                     ["FILTERING","COMBINE_OPERATOR"],
                                     ["FILTERING","GEOMETRIC_PREDICATES"],
                                     ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
-                                    ["FILTERING","BUFFER"]
+                                    ["FILTERING","BUFFER"],
+                                    ["FILTERING","BUFFER_PROPERTY"],
+                                    ["FILTERING","BUFFER_EXPRESSION"]
                                 ]
         
             for widget_path in widgets_to_stop:
@@ -579,6 +581,7 @@ class FilterEngineTask(QgsTask):
         self.param_source_provider_type = None
         self.has_combine_operator = None
         self.param_combine_operator = None
+        self.param_buffer_expression = None
         self.param_buffer_value = None
         self.param_source_schema = None
         self.param_source_table = None
@@ -733,7 +736,7 @@ class FilterEngineTask(QgsTask):
 
             alg_source_layer_params_buffer = {
                 'DISSOLVE': False,
-                'DISTANCE': QgsExpression(self.param_buffer_value) if QgsExpression(self.param_buffer_value).isValid() else float(self.param_buffer_value),
+                'DISTANCE': QgsProperty.fromExpression(self.param_buffer_expression) if self.param_buffer_expression != '' else float(self.param_buffer_value),
                 'END_CAP_STYLE': 0,
                 'INPUT': layer,
                 'JOIN_STYLE': 0,
@@ -789,7 +792,7 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql' and self.has_combine_operator is False:
+        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql' and self.has_combine_operator is False and self.param_buffer_expression == None:
 
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
@@ -911,8 +914,16 @@ class FilterEngineTask(QgsTask):
         self.param_source_geom_operator = ' ' + self.task_parameters["filtering"]["geometric_predicates_operator"] + ' '
         self.param_source_subset = self.expression
 
-        if self.task_parameters["filtering"]["has_buffer"]:
-            self.param_buffer_value = self.task_parameters["filtering"]["buffer"]
+
+
+        if self.task_parameters["filtering"]["has_buffer"] is True:
+            if self.task_parameters["filtering"]["buffer_property"] is True:
+                if self.task_parameters["filtering"]["buffer_expression"] != '':
+                    self.param_buffer_expression = self.task_parameters["filtering"]["buffer_expression"]
+                else:
+                    self.param_buffer_value = self.task_parameters["filtering"]["buffer"]
+            else:
+                self.param_buffer_value = self.task_parameters["filtering"]["buffer"]  
 
         
         provider_list = self.provider_list + [self.param_source_provider_type]
@@ -920,13 +931,13 @@ class FilterEngineTask(QgsTask):
 
         print(provider_list)
 
-        if 'postgresql' in provider_list:
+        if 'postgresql' in provider_list and self.param_buffer_expression == None:
             self.prepare_postgresql_source_geom()
 
         if 'spatialite' in provider_list:
             self.prepare_ogr_source_geom()
 
-        if 'ogr' in provider_list:
+        if 'ogr' in provider_list or self.param_buffer_expression != None:
             self.prepare_ogr_source_geom()
 
         i = 1
