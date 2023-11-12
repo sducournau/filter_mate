@@ -39,7 +39,7 @@ class FilterMateApp:
                                     'reset':'Reseting data',
                                     'export':'Exporting data'}
         
-        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s }'
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0 }'
         self.run()
@@ -52,10 +52,12 @@ class FilterMateApp:
 
             init_layers = list(PROJECT.mapLayers().values())
 
-            if self.CONFIG_DATA["APP"]["FRESH_RELOAD"] is True:
-                self.remove_projectCustomProperties_layers_all()
+            if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True:
+                self.remove_variables_from_all_layers()
 
             self.manage_project_layers(init_layers, 'add')
+
+
 
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA)
 
@@ -67,13 +69,13 @@ class FilterMateApp:
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
 
-        PROJECT.layersAdded.connect(partial(self.manage_project_layers, 'add'))
-        PROJECT.layersWillBeRemoved.connect(partial(self.manage_project_layers, 'remove'))
+        PROJECT.layersAdded.connect(lambda layers, x='add': self.manage_project_layers(layers, x))
+        PROJECT.layersWillBeRemoved.connect(lambda layers, x='remove': self.manage_project_layers(layers, x))
 
         
         self.dockwidget.launchingTask.connect(self.manage_task)
-        self.dockwidget.reinitializingLayerOnError.connect(self.remove_layer_projectCustomProperties)
-        self.dockwidget.settingProjectLayers.connect(self.save_projectCustomProperties_layers)
+        self.dockwidget.reinitializingLayerOnError.connect(self.remove_variables_from_layer_id)
+        self.dockwidget.settingLayerVariable.connect(self.save_variables_from_layer_id)
 
 
 
@@ -83,70 +85,129 @@ class FilterMateApp:
         # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
 
+    def can_cast(self, dest_type, source_value):
+        try:
+            dest_type(source_value)
+            return True
+        except:
+            return False
 
 
-    def save_projectCustomProperties_layers(self, project_layers):
-        if isinstance(project_layers, dict):
-            self.PROJECT_LAYERS = project_layers
-        
-        for layer_id in self.PROJECT_LAYERS.keys():
-            if self.PROJECT_LAYERS[layer_id]["exploring"]["is_saving"] == True:
+
+    def return_typped_value(self, value_as_string):
+        value_typped= None
+
+        if value_as_string == None or value_as_string == '':   
+            value_typped = str('')
+        elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
+            value_typped = dict(value_as_string)
+        elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
+            value_typped = list(value_as_string)
+        elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
+            value_typped = bool(value_as_string)
+        elif self.can_cast(float, value_as_string) is True and len(str(value_as_string).split('.')) > 1:
+            value_typped = float(value_as_string)
+        elif self.can_cast(int, value_as_string) is True:
+            value_typped = int(value_as_string)
+        else:
+            value_typped = str(value_as_string)
+
+        return value_typped
+
+
+
+    def save_variables_from_layer_id(self, layer_id, custom_variable=None):
+
+        if self.dockwidget != None:    
+            self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
+
+        if layer_id in self.PROJECT_LAYERS.keys():
+            layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
+            
+            if len(layers) > 0:
+                layer = layers[0]
+                layer_scope = QgsExpressionContextUtils.layerScope(layer) 
+
+                if custom_variable == None or (isinstance(custom_variable, tuple) and len(custom_variable) == 0):
+                    for key_group in ("infos", "exploring", "filtering"):
+                        for key, value in self.PROJECT_LAYERS[layer_id][key_group].items():
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, str(value))
+                            #layer_scope.setVariable(variable_key, value, True)
+                
+                elif isinstance(custom_variable, tuple) and len(custom_variable) == 2:
+                    if custom_variable[0] in ("infos", "exploring", "filtering"):
+                        if custom_variable[0] in self.PROJECT_LAYERS[layer_id] and custom_variable[1] in self.PROJECT_LAYERS[layer_id][custom_variable[0]]:
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=custom_variable[0], key=custom_variable[1])
+                            value = self.PROJECT_LAYERS[layer_id][custom_variable[0]][custom_variable[1]]
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, str(value))
+                            #layer_scope.setVariable(variable_key, value, True)
+
+
+    def save_style_from_layer_id(self, layer_id):
+
+        if self.dockwidget != None:    
+            self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
+
+        if layer_id in self.PROJECT_LAYERS.keys():
+            if self.PROJECT_LAYERS[layer_id]["exploring"]["is_saving"] is True:
                 layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
-                if len(layers) == 1:
+                print("save_projectCustomProperties_from_layer_id", layers)
+                if len(layers) > 0:
                     layer = layers[0]
-                    layer.setCustomProperty("filterMate/infos", json.dumps(self.PROJECT_LAYERS[layer_id]["infos"]))
-                    layer.setCustomProperty("filterMate/exploring", json.dumps(self.PROJECT_LAYERS[layer_id]["exploring"]))
-                    layer.setCustomProperty("filterMate/filtering", json.dumps(self.PROJECT_LAYERS[layer_id]["filtering"]))
-                    
-                    if layer.listStylesInDatabase()[0] > -1:
-                       layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
-                    else:
-                        layer.saveNamedStyle(os.path.dirname(layer.styleURI())  + 'FilterMate_style_{}.qml'.format(layer.name()))
 
-        # self.dockwidget.CONFIG_DATA["LAYERS"] = self.PROJECT_LAYERS
-        # self.dockwidget.reload_configuration_model()
+                    try:
+                        layer.deleteStyleFromDatabase(name="FilterMate_style_{}".format(layer.name()))
+                        result = layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
+                        print("save_projectCustomProperties_from_layer_id", result)
+                    except:
+                        layer_path = layer.source().split('|')[0]
+                        layer.saveNamedStyle(os.path.normcase(os.path.join(os.path.split(layer_path)[0], 'FilterMate_style_{}.qml'.format(layer.name()))))
 
 
 
-    def remove_layer_projectCustomProperties(self, layer_id):
-        
+    def remove_variables_from_layer_id(self, layer_id, action='reset'):
+
+        if self.dockwidget != None:    
+            self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
+
         if layer_id in self.PROJECT_LAYERS:
             layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
-            if len(layers) == 1:
+            if len(layers) > 0:
                 layer = layers[0]
-                layer.removeCustomProperty("filterMate/infos")
-                layer.removeCustomProperty("filterMate/exploring")
-                layer.removeCustomProperty("filterMate/filtering")
-                self.remove_project_layer(layer_id)
-                self.add_project_layer(layer)
+                layer_scope = QgsExpressionContextUtils.layerScope(layer)    
+
+                for key_group in ("infos", "exploring", "filtering"):
+                    for key in self.PROJECT_LAYERS[layer_id][key_group]:
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                        layer_scope.removeVariable(variable_key)
+                QgsExpressionContextUtils.setLayerVariables(layer, {})
+                if action == 'reset':
+                    self.add_project_layer(layer)
 
 
-        if self.dockwidget != None:
-            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS) 
+        if self.dockwidget != None and action == 'reset':
+            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
                     
 
-    def remove_projectCustomProperties_layers_all(self):
+    def remove_variables_from_all_layers(self):
         init_layers = list(PROJECT.mapLayers().values())
     
         for layer in init_layers:
             try:
-                layer.removeCustomProperty("filterMate/infos")
-                layer.removeCustomProperty("filterMate/exploring")
-                layer.removeCustomProperty("filterMate/filtering")
+                QgsExpressionContextUtils.setLayerVariables(layer, {})
             except:
                 pass
-        #self.CONFIG_DATA["LAYERS"] = []
 
 
     def manage_project_layers(self, layers, action):
-
-
 
         if self.dockwidget != None:
 
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
 
             widgets_to_stop =   [
+                                    ["QGIS","LAYER_TREE_VIEW"],
                                     ["SINGLE_SELECTION","FEATURES"],
                                     ["SINGLE_SELECTION","EXPRESSION"],
                                     ["MULTIPLE_SELECTION","FEATURES"],
@@ -171,8 +232,6 @@ class FilterMateApp:
                 self.remove_project_layer(layer)
 
         self.PROJECT_LAYERS = dict(OrderedDict(sorted(self.PROJECT_LAYERS.items(), key = lambda layer: (getitem(layer[1]['infos'], 'layer_geometry_type'), getitem(layer[1]['infos'], 'layer_name')))))
-
-        # self.PROJECT_LAYERS = sorted(self.PROJECT_LAYERS.items(), key=lambda layer: (layer[1]['infos']['layer_geometry_type'], layer[1]['infos']['layer_name']))
 
         if self.dockwidget != None:
             for widget_path in widgets_to_stop:
@@ -214,7 +273,10 @@ class FilterMateApp:
                 primary_key_name, primary_key_idx, primary_key_type, primary_key_is_numeric = self.search_primary_key_from_layer(layer)
                 source_schema = 'NULL'
                 geometry_field = 'NULL'
-
+                init = True
+                new_layer_variables = {}
+                existing_layer_variables = {}
+                layer_variables = {}
 
                 if layer.providerType() == 'ogr':
 
@@ -251,47 +313,55 @@ class FilterMateApp:
                 elif layer_provider_type == 'ogr':
                     geometry_field = '_ogr_geometry_'
 
-                new_layer_infos = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
-                new_layer_exploring = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
-                new_layer_filtering = json.loads(self.json_template_layer_filtering)
+                new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
+                new_layer_variables["exploring"] = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
+                new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
+        
+                layer_scope = QgsExpressionContextUtils.layerScope(layer)
 
+                for key_group in ("infos", "exploring", "filtering"):
+                    existing_layer_variables[key_group] = {}
+                    for key in new_layer_variables[key_group]:
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
 
-                if "filterMate/infos" in layer.customPropertyKeys():
-                    existing_layer_infos = json.loads(layer.customProperty("filterMate/infos"))
-                    layer_infos = self.check_dict_structure(existing_layer_infos, new_layer_infos)
-                if "filterMate/exploring" in layer.customPropertyKeys():
-                    existing_layer_exploring = json.loads(layer.customProperty("filterMate/exploring"))
-                    layer_exploring = self.check_dict_structure(existing_layer_exploring, new_layer_exploring)
-                if "filterMate/filtering" in layer.customPropertyKeys():
-                    existing_layer_filtering = json.loads(layer.customProperty("filterMate/filtering"))
-                    layer_filtering = self.check_dict_structure(existing_layer_filtering, new_layer_filtering)
+                        if layer_scope.hasVariable(variable_key) is True:
+                            value = layer_scope.variable(variable_key)
+                            typped_value = self.return_typped_value(value)
+                            existing_layer_variables[key_group][key] = typped_value
+                        else:
+                            if key in new_layer_variables[key_group]:
+                                value = new_layer_variables[key_group][key]
+                                existing_layer_variables[key_group][key] = value
+                
+                layer_variables["infos"] = existing_layer_variables["infos"]
+                layer_variables["exploring"] = existing_layer_variables["exploring"]
+                layer_variables["filtering"] = existing_layer_variables["filtering"]    
 
-                else:
-                    layer_infos = new_layer_infos
-                    layer_exploring = new_layer_exploring
-                    layer_filtering = new_layer_filtering
+                if (layer_provider_type != layer_variables["infos"]["layer_provider_type"]) or (layer.name() != layer_variables["infos"]["layer_name"]) or (source_schema != layer_variables["infos"]["layer_schema"]) or (primary_key_name != layer_variables["infos"]["primary_key_name"]):
+                    layer_variables["infos"] = new_layer_variables["infos"]
 
-                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_infos, "exploring": layer_exploring, "filtering": layer_filtering}
+                self.PROJECT_LAYERS[str(layer.id())] = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}
+                self.PROJECT_LAYERS[str(layer.id())]["infos"]["layer_id"] = layer.id()
 
                 if layer_provider_type == 'postgresql':
                     self.create_spatial_index_for_postgresql_layer(layer)
                 else:
                     self.create_spatial_index_for_layer(layer)
 
-    def remove_project_layer(self, layer_id):
+                self.save_variables_from_layer_id(layer.id())
 
-        layers = list(PROJECT.mapLayers().values())
-        if self.dockwidget.current_layer.id() == layer_id:
-            layers.remove(self.dockwidget.current_layer)
+    def remove_project_layer(self, layer_to_remove_id):
 
-            layer_props = self.PROJECT_LAYERS[layers[0].id()]
-            self.dockwidget.mFieldExpressionWidget_exploring_custom_selection.setLayer(layers[0])
-            self.dockwidget.mFieldExpressionWidget_exploring_multiple_selection.setLayer(layers[0])
-            self.dockwidget.mFieldExpressionWidget_exploring_single_selection.setLayer(layers[0])
-            self.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(layers[0])
-            self.dockwidget.customCheckableComboBox_exploring_multiple_selection.setLayer(layers[0], layer_props)
+        if isinstance(layer_to_remove_id, str):
 
-        del self.PROJECT_LAYERS[layer_id]
+            self.save_variables_from_layer_id(layer_to_remove_id)    
+            self.save_style_from_layer_id(layer_to_remove_id)
+
+            if layer_to_remove_id in self.PROJECT_LAYERS:
+                self.dockwidget.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].remove_list_widget(layer_to_remove_id)
+                del self.PROJECT_LAYERS[layer_to_remove_id]
+
+        
 
     def search_primary_key_from_layer(self, layer):
         """For each layer we search the primary key"""
@@ -331,7 +401,7 @@ class FilterMateApp:
 
         md = QgsProviderRegistry.instance().providerMetadata('postgres')
         database = md.createConnection('LOCAL')
-
+        postgresql_named_connection = self.CONFIG_DATA["APP"]["POSTGRESQL_CONNECTION_NAME"]
 
         sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});\r\n'.format(schema=schema,
                                                                                                                                                         table=table,
@@ -341,7 +411,7 @@ class FilterMateApp:
                                                                                                                                                                             primary_key_name=primary_key_name)
 
         alg_params_postgisexecutesql = {
-            "DATABASE": 'LOCAL',
+            "DATABASE": postgresql_named_connection,
             "SQL": sql_statement
         }
         processing.run('qgis:postgisexecutesql', alg_params_postgisexecutesql)
@@ -360,6 +430,9 @@ class FilterMateApp:
         """Manage the different tasks"""
 
         assert task_name in list(self.tasks_descriptions.keys())
+
+        if self.dockwidget.current_layer == None:
+            return
         
         task_parameters, current_layer = self.get_task_parameters(task_name)
 
@@ -496,7 +569,8 @@ class FilterEngineTask(QgsTask):
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
-        
+        self.layers_count = None
+
         self.expression = None
         self.is_field_expression = None
 
@@ -529,14 +603,14 @@ class FilterEngineTask(QgsTask):
         """Main function that run the right method from init parameters"""
 
         try:
-
+            self.layers_count = 1    
             layers = [layer for layer in PROJECT.mapLayersByName(self.task_parameters["infos"]["layer_name"]) if layer.id() == self.task_parameters["infos"]["layer_id"]]
-            if len(layers) == 1:
+            if len(layers) > 0:
                 self.source_layer = layers[0]
                 self.source_crs = self.source_layer.sourceCrs()
                 source_crs_distance_unit = self.source_crs.mapUnits()
                 self.source_layer_crs_authid = self.task_parameters["infos"]["layer_crs_authid"]
-
+                
                 if source_crs_distance_unit in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] or self.source_crs.isGeographic() is True:
                     self.has_to_reproject_source_layer = True
                     self.source_layer_crs_authid = "EPSG:3857"
@@ -556,10 +630,12 @@ class FilterEngineTask(QgsTask):
                         self.layers[layer_props["layer_provider_type"]] = []
 
                     layers = [layer for layer in PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
-                    if len(layers) == 1:
+                    if len(layers) > 0:
                         self.layers[layer_props["layer_provider_type"]].append([layers[0], layer_props])
+                        self.layers_count += 1
     
                 self.provider_list = list(self.layers)
+        
 
             if self.task_action == 'filter':
                 """We will filter layers"""
@@ -647,24 +723,35 @@ class FilterEngineTask(QgsTask):
             self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_source_layer_params_reprojectlayer)
             layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
 
+            alg_params_createspatialindex = {
+                "INPUT": layer
+            }
+            processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+
 
         if self.param_buffer_value != None:
 
             alg_source_layer_params_buffer = {
                 'DISSOLVE': False,
-                'DISTANCE': self.param_buffer_value,
-                'END_CAP_STYLE': 2,
+                'DISTANCE': QgsExpression(self.param_buffer_value) if QgsExpression(self.param_buffer_value).isValid() else float(self.param_buffer_value),
+                'END_CAP_STYLE': 0,
                 'INPUT': layer,
-                'JOIN_STYLE': 2,
+                'JOIN_STYLE': 0,
                 'MITER_LIMIT': 2,
                 'SEGMENTS': 5,
                 'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
             }
 
             self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_source_layer_params_buffer)
-            self.ogr_source_geom = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
-        else:
-            self.ogr_source_geom = layer
+            layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']   
+
+            alg_params_createspatialindex = {
+                "INPUT": layer
+            }
+            processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+
+
+        self.ogr_source_geom = layer
 
         print("prepare_ogr_source_geom", self.ogr_source_geom) 
 
@@ -702,7 +789,7 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
+        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql' and self.has_combine_operator is False:
 
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
@@ -774,6 +861,11 @@ class FilterEngineTask(QgsTask):
                 self.outputs['alg_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_layer_params_reprojectlayer)
                 current_layer = self.outputs['alg_layer_params_reprojectlayer']['OUTPUT']
 
+                alg_params_createspatialindex = {
+                    "INPUT": current_layer
+                }
+                processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+
 
             features_list = []
             alg_params_select = {
@@ -788,11 +880,11 @@ class FilterEngineTask(QgsTask):
             for feature in current_layer.selectedFeatures():
                 features_ids.append(str(feature[param_distant_primary_key_name]))
 
-            print(current_layer)
+
 
             current_layer.removeSelection()
             layer.removeSelection()
-            print(features_ids)
+
 
             if len(features_ids) > 0:
                 if param_distant_primary_key_is_numeric == True:
@@ -800,8 +892,7 @@ class FilterEngineTask(QgsTask):
                 else:
                     param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
                 
-                print(layer)
-                print(param_expression)
+
 
                 if QgsExpression(param_expression).isValid():
 
@@ -821,7 +912,8 @@ class FilterEngineTask(QgsTask):
         self.param_source_subset = self.expression
 
         if self.task_parameters["filtering"]["has_buffer"]:
-            self.param_buffer_value = float(self.task_parameters["filtering"]["buffer"]) 
+            self.param_buffer_value = self.task_parameters["filtering"]["buffer"]
+
         
         provider_list = self.provider_list + [self.param_source_provider_type]
         provider_list = list(dict.fromkeys(provider_list))
@@ -837,6 +929,7 @@ class FilterEngineTask(QgsTask):
         if 'ogr' in provider_list:
             self.prepare_ogr_source_geom()
 
+        i = 1
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
@@ -844,8 +937,11 @@ class FilterEngineTask(QgsTask):
                     print(layer.name(), 'has been filtered')
                 else:
                     print(layer.name(), 'errors occured')
+                i += 1
+                self.setProgress((i/self.layers_count)*100)
 
-
+                
+        return True
 
     def execute_source_layer_filtering(self):
         """Manage the creation of the origin filtering expression"""
@@ -859,7 +955,7 @@ class FilterEngineTask(QgsTask):
         self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
-        if self.task_parameters["filtering"]["has_combine_operator"] == True:
+        if self.has_combine_operator == True:
             if self.task_parameters["filtering"]["combine_operator"] != '':
                 self.param_combine_operator = self.task_parameters["filtering"]["combine_operator"]
                 if self.task_parameters["infos"]["is_already_subset"] == True:
@@ -901,15 +997,9 @@ class FilterEngineTask(QgsTask):
                                     else:
                                         self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
 
-                    print(self.expression)
 
-                    if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
 
-                        result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                            combine_operator=self.param_combine_operator,
-                                                                                                                            expression=self.expression))
-                    else:
-                        result = self.source_layer.setSubsetString(self.expression)
+                    result = self.source_layer.setSubsetString(self.expression)
 
         if result is False:
             self.is_field_expression = None    
@@ -922,15 +1012,8 @@ class FilterEngineTask(QgsTask):
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(" + ", ".join(features_ids) + ")"
                 else:
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
-
-
-                if param_old_subset != '' and self.has_combine_operator == True and self.param_combine_operator != '':
-
-                    result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                        combine_operator=self.param_combine_operator,
-                                                                                                                        expression=self.expression))
-                else:
-                    result = self.source_layer.setSubsetString(self.expression)
+                
+                result = self.source_layer.setSubsetString(self.expression)
  
         return result
     
@@ -942,6 +1025,11 @@ class FilterEngineTask(QgsTask):
        
         result = self.execute_source_layer_filtering()
 
+        
+        if result is True:
+            result = self.setProgress((1/self.layers_count)*100)
+
+        
 
         if self.task_parameters["filtering"]["has_geometric_predicates"] == True:
 
@@ -984,11 +1072,13 @@ class FilterEngineTask(QgsTask):
     def execute_unfiltering(self):
 
         print(self.task_parameters)
-
+        i = 1
         if len(self.task_parameters["infos"]["subset_history"]) > 1:
             self.source_layer.setSubsetString(self.task_parameters["infos"]["subset_history"][-2]["subset_string"])
         else:
             self.source_layer.setSubsetString('')
+        self.setProgress((i/self.layers_count)*100)
+
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
@@ -996,6 +1086,9 @@ class FilterEngineTask(QgsTask):
                     layer.setSubsetString(layer_props["subset_history"][-2]["subset_string"])
                 else:
                     layer.setSubsetString('')
+                i += 1
+                self.setProgress((i/self.layers_count)*100)
+
 
         return True
 

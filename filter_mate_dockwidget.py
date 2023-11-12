@@ -50,7 +50,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     launchingTask = pyqtSignal(str)
 
     gettingProjectLayers = pyqtSignal()
-    settingProjectLayers = pyqtSignal(dict)
+    settingLayerVariable = pyqtSignal(str, tuple)
 
     reinitializingLayerOnError = pyqtSignal(str)
 
@@ -59,30 +59,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         super(FilterMateDockWidget, self).__init__(parent)
         
         self.exception = None
-
-        self.plugin_dir = plugin_dir
         self.iface = iface
 
+        self.plugin_dir = plugin_dir
+        self.CONFIG_DATA = config_data
         self.PROJECT_LAYERS = project_layers
-        
-        self.tabTools_current_index = 0
 
-        self.auto_change_current_layer_flag = False
+        self.current_layer = None
+        self.link_legend_layers_and_current_layer_flag = False
+        if len(list(self.PROJECT_LAYERS)) > 0:
+            self.init_layer = self.iface.activeLayer() if self.iface.activeLayer() != None else list(PROJECT.mapLayers().values())[0]
+            self.has_loaded_layers = True
+        else:
+            self.init_layer = None
+            self.has_loaded_layers = False
 
-        self.layer_properties_tuples_dict = None
-        self.export_properties_tuples_dict = None
-        
         self.widgets = None
         self.widgets_initialized = False
         self.current_exploring_groupbox = None
-        self.current_layer = self.iface.activeLayer()
-        self.CONFIG_DATA = config_data
+        self.tabTools_current_index = 0
 
+        self.predicates = None
         self.project_props = {"exporting":{}}
+        self.layer_properties_tuples_dict = None
+        self.export_properties_tuples_dict = None
         self.json_template_layer_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
         self.json_template_layer_filtering = '{"feature_limit": 10000}'
-        self.predicates = None
-
 
         self.setupUi(self)
         self.manage_configuration_model()
@@ -129,10 +131,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     current_triggered_function = signal[1]
                     state = self.changeSignalState(widget_path, current_signal_name, current_triggered_function, custom_action)
         
-        return state
-        
         if state == None:
             raise SignalStateChangeError(state, widget_path)
+
+        return state
+        
+
         
 
     def changeSignalState(self, widget_path, current_signal_name, current_triggered_function, custom_action=None):
@@ -178,7 +182,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
         if 'EXPORT' in self.CONFIG_DATA:
-            if len(list(self.CONFIG_DATA["EXPORT"])) > 0:
+            if len(list(self.CONFIG_DATA["EXPORT"])) > 0 and isinstance(self.CONFIG_DATA["EXPORT"], dict):
                 self.project_props['exporting'] = self.CONFIG_DATA["EXPORT"]
             else:
                 self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
@@ -186,17 +190,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
 
         if 'FILTER' in self.CONFIG_DATA:
-            if len(list(self.CONFIG_DATA["FILTER"])) > 0:
+            if len(list(self.CONFIG_DATA["FILTER"])) > 0 and isinstance(self.CONFIG_DATA["FILTER"], dict):
                 self.project_props['filtering'] = self.CONFIG_DATA["FILTER"]
             else:
                 self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
         else:
             self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
 
+        if 'APP' in self.CONFIG_DATA:
+            if len(list(self.CONFIG_DATA["APP"])) > 0 and isinstance(self.CONFIG_DATA["APP"], dict):
+                if "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG" in self.CONFIG_DATA["APP"] and isinstance(self.CONFIG_DATA["APP"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"], bool):
+                    self.link_legend_layers_and_current_layer_flag = self.CONFIG_DATA["APP"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
 
-        self.filtering_populate_layers_chekableCombobox()
-        self.populate_predicates_chekableCombobox()
-        self.exporting_populate_combobox()
+        
 
         self.layout = self.verticalLayout_filtering_values
         self.layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
@@ -253,7 +259,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                             }
         
         self.widgets["MULTIPLE_SELECTION"] = {
-                                            "FEATURES":{"TYPE":"CustomCheckableComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]},
+                                            "FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]},
                                             "EXPRESSION":{"TYPE":"ComboBox", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
                                             }
         
@@ -273,17 +279,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
         self.widgets["FILTERING"] = {
-                                    "AUTO_CURRENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", self.filtering_auto_current_layer_changed)], "ICON":None},
+                                    "AUTO_CURRENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", lambda state: self.filtering_auto_current_layer_changed(state))], "ICON":None},
                                     "HAS_LAYERS_TO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_layers_to_filter, "SIGNALS":[("clicked", lambda state, x='has_layers_to_filter': self.layer_property_changed(x, state))], "ICON":None},
                                     "HAS_COMBINE_OPERATOR":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", lambda state, x='has_combine_operator': self.layer_property_changed(x, state))], "ICON":None},
                                     "HAS_GEOMETRIC_PREDICATES":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", lambda state, x='has_geometric_predicates': self.layer_property_changed(x, state))], "ICON":None},
                                     "HAS_BUFFER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer, "SIGNALS":[("clicked", lambda state, x='has_buffer': self.layer_property_changed(x, state))], "ICON":None},
                                     "CURRENT_LAYER":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
-                                    "LAYERS_TO_FILTER":{"TYPE":"CustomCheckableComboBox", "WIDGET":self.checkableComboBoxLayer_filtering_layers_to_filter, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_filter(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_filter()}, x='layers_to_filter': self.layer_property_changed(x, state, custom_functions))]},
+                                    "LAYERS_TO_FILTER":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_filtering_layers_to_filter, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_filter(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_filter()}, x='layers_to_filter': self.layer_property_changed(x, state, custom_functions))]},
                                     "COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='combine_operator': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates_operator, "SIGNALS":[("currentTextChanged", lambda state, x='geometric_predicates_operator': self.layer_property_changed(x, state))]},
-                                    "BUFFER":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("valueChanged", lambda state, x='buffer': self.layer_property_changed(x, state))]}
+                                    "BUFFER":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("textChanged", lambda state, x='buffer': self.layer_property_changed(x, state))]}
                                     }
         
         self.widgets["EXPORTING"] = {
@@ -293,7 +299,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "HAS_DATATYPE_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", lambda state, x='has_datatype_to_export': self.project_property_changed(x, state))], "ICON":None},
                                     "HAS_OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", lambda state, x='has_output_folder_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_path()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_ZIP_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", lambda state, x='has_zip_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_pathzip()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "LAYERS_TO_EXPORT":{"TYPE":"CheckableComboBox", "WIDGET":self.checkableComboBoxLayer_exporting_layers, "SIGNALS":[("checkedItemsChanged", lambda state, x='layers_to_export': self.project_property_changed(x, state))]},
+                                    "LAYERS_TO_EXPORT":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_exporting_layers, "SIGNALS":[("checkedItemsChanged", lambda state, x='layers_to_export': self.project_property_changed(x, state))]},
                                     "PROJECTION_TO_EXPORT":{"TYPE":"QgsProjectionSelectionWidget", "WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", lambda state, x='projection_to_export', custom_functions={"CUSTOM_DATA": lambda x: self.get_current_crs_authid()}: self.project_property_changed(x, state, custom_functions))]},
                                     "STYLES_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", lambda state, x='styles_to_export': self.project_property_changed(x, state))]},
                                     "DATATYPE_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_datatype, "SIGNALS":[("currentTextChanged", lambda state, x='datatype_to_export': self.project_property_changed(x, state))]},
@@ -403,34 +409,36 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def icon_per_geometry_type(self, geometry_type):
 
-        if self.widgets_initialized is True:
-
-
-            if geometry_type == 'GeometryType.Line':
-                return QgsLayerItem.iconLine()
-            elif geometry_type == 'GeometryType.Point':
-                return QgsLayerItem.iconPoint()
-            elif geometry_type == 'GeometryType.Polygon':
-                return QgsLayerItem.iconPolygon()
-            elif geometry_type == 'GeometryType.UnknownGeometry':
-                return QgsLayerItem.iconTable()
-            else:
-                return QgsLayerItem.iconDefault()
+        if geometry_type == 'GeometryType.Line':
+            return QgsLayerItem.iconLine()
+        elif geometry_type == 'GeometryType.Point':
+            return QgsLayerItem.iconPoint()
+        elif geometry_type == 'GeometryType.Polygon':
+            return QgsLayerItem.iconPolygon()
+        elif geometry_type == 'GeometryType.UnknownGeometry':
+            return QgsLayerItem.iconTable()
+        else:
+            return QgsLayerItem.iconDefault()
         
-    def populate_predicates_chekableCombobox(self):
-
+    def filtering_populate_predicates_chekableCombobox(self):
 
         self.predicates = ["Intersect","Contain","Disjoint","Equal","Touch","Overlap","Are within","Cross"]
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].clear()
         self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].addItems(self.predicates)
 
-    def filtering_populate_layers_chekableCombobox(self):
+
+    def filtering_populate_layers_chekableCombobox(self, layer=None):
+
 
         if self.widgets_initialized is True:
 
+            if layer == None:
+                layer = self.current_layer
+            else:
+                assert isinstance(layer, QgsVectorLayer)
             try:    
                 self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].clear()
-                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+                layer_props = self.PROJECT_LAYERS[layer.id()]
 
                 if layer_props["filtering"]["has_layers_to_filter"] == True:
                     i = 0
@@ -444,7 +452,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         layer_crs_authid = self.PROJECT_LAYERS[key]["infos"]["layer_crs_authid"]
                         layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
 
-                        if key != self.current_layer.id():
+                        if key != layer.id():
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), json.dumps(self.PROJECT_LAYERS[key]["infos"]))
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             if len(layer_props["filtering"]["layers_to_filter"]) > 0:
@@ -463,7 +471,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         layer_crs_authid = self.PROJECT_LAYERS[key]["infos"]["layer_crs_authid"]
                         layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
                         
-                        if key != self.current_layer.id():
+                        if key != layer.id():
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), self.PROJECT_LAYERS[key]["infos"])
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             item.setCheckState(Qt.Unchecked)
@@ -472,11 +480,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             except Exception as e:
                 self.exception = e
                 print(self.exception)
-                self.reinitializeLayerOnErrorEvent(self.current_layer.id())
+                self.reinitializeLayerOnErrorEvent()
 
     def exporting_populate_combobox(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             layers_to_export = []
             datatype_to_export = ''
@@ -762,7 +770,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("LineEdit") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
+                
 
+    def set_widgets_enabled_state(self, state):
+        for widget_group in self.widgets:
+            for widget_name in self.widgets[widget_group]:
+                if self.widgets[widget_group][widget_name]["TYPE"] in ("PushButton","ComboBox","CheckableComboBox","CustomCheckableLayerComboBox","CustomCheckableFeatureComboBox","FeatureComboBox","LineEdit","QgsProjectionSelectionWidget","QgsDoubleSpinBox"):
+                    self.widgets[widget_group][widget_name]["WIDGET"].setEnabled(state)
+
+
+    def connect_widgets_signals(self):
+        """SET INTERACTIONS"""
+        for widget_group in self.widgets:
+            if widget_group != 'QGIS':
+                for widget in self.widgets[widget_group]:
+                    if widget_group != 'DOCK':
+                        self.manageSignal([widget_group, widget], 'connect')
+
+
+    def disconnect_widgets_signals(self):
+        """SET INTERACTIONS"""
+        for widget_group in self.widgets:
+            if widget_group != 'QGIS':
+                for widget in self.widgets[widget_group]:
+                    if widget_group != 'DOCK':
+                        self.manageSignal([widget_group, widget], 'disconnect')
 
 
     def manage_interactions(self):
@@ -775,14 +807,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets["FILTERING"]["BUFFER"]["WIDGET"].setExpressionsEnabled(True)
         self.widgets["FILTERING"]["BUFFER"]["WIDGET"].setClearValue(0.0)
         self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].setCrs(PROJECT.crs())
+        self.set_widgets_enabled_state(self.has_loaded_layers)
+        self.filtering_populate_predicates_chekableCombobox()    
 
-
-        """SET INTERACTIONS"""
-        for widget_group in self.widgets:
-            if widget_group != 'QGIS':
-                for widget in self.widgets[widget_group]:
-                    if widget_group != 'DOCK':
-                        self.manageSignal([widget_group, widget], 'connect')
+        if self.has_loaded_layers is True:
+            self.connect_widgets_signals()
 
 
         self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='single_selection': self.exploring_groupbox_changed(x))
@@ -798,15 +827,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         # self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].contextMenuEvent
 
 
-
-        if self.current_layer != None:
+        if self.init_layer != None and isinstance(self.init_layer, QgsVectorLayer):
+            self.exporting_populate_combobox()
             self.set_exporting_properties()
-            self.select_tabTools_index(self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex())
+            self.current_layer_changed(self.init_layer)
             self.filtering_auto_current_layer_changed()
-            self.exploring_groupbox_init()
-            self.current_layer_changed(self.current_layer)
 
-
+            
     def select_tabTools_index(self, i):
         
         if self.widgets_initialized is True:
@@ -845,9 +872,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                     self.current_exploring_groupbox = "single_selection"
 
-                    self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect', 'featureChanged')
-                    self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
-
                     self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
                     self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
 
@@ -856,11 +880,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                     self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
                     self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
-
-                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
-                    self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
                     
+
                     if self.current_layer != None:
+                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect', 'featureChanged')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+
+                        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
+                        self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+
                         self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature())
 
 
@@ -871,8 +899,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     
                     self.current_exploring_groupbox = "multiple_selection"
 
-                    self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
-                    self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'updatingCheckedItemList')
+
 
                     self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
                     self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
@@ -883,13 +910,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
                     self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                    self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
-                    self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
-                    layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                    self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
 
                     if self.current_layer != None:
+                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'updatingCheckedItemList')
+
+                        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
+                        self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+
+                        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+                        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+
                         self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
 
 
@@ -899,9 +931,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     
                     self.current_exploring_groupbox = "custom_selection"
                     
-                    self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
-                    self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
-
                     self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
                     self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
 
@@ -911,15 +940,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
                     self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
 
-                    self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+
 
                     if self.current_layer != None:
+                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+
+                        self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
                         self.exploring_custom_selection()
 
 
     def exploring_identify_clicked(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
@@ -940,7 +973,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exploring_zoom_clicked(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             features, expression = self.get_current_features()
             
@@ -952,7 +985,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def zooming_to_features(self, features):
         
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             features_with_geometry = [feature for feature in features if feature.hasGeometry()]
 
@@ -974,7 +1007,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exploring_source_params_changed(self, expression=None):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()] 
             flag_value_changed = False
@@ -1004,13 +1037,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             self.get_current_features()
 
-            self.setProjectLayersEvent(self.PROJECT_LAYERS)
  
 
 
     def exploring_custom_selection(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             expression = layer_props["exploring"]["custom_selection_expression"]
@@ -1022,7 +1054,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exploring_deselect_features(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_layer == None:
                 return
@@ -1032,9 +1064,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def get_current_features(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
-
+            features = []    
+            expression = ''
 
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
@@ -1051,7 +1084,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     
     def exploring_features_changed(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
             
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
@@ -1076,7 +1109,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_layer == None:
                 return
@@ -1128,11 +1161,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     
     def exploring_link_widgets(self, expression=None):
 
-        if self.widgets_initialized is True:
-
-            if self.current_layer == None:
-                return
-
+        if self.widgets_initialized is True and self.current_layer != None:
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
@@ -1162,7 +1191,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def get_layers_to_filter(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             checked_list_data = []
             for i in range(self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].count()):
@@ -1177,7 +1206,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def get_current_crs_authid(self):
         
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().authid()
 
@@ -1186,11 +1215,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         if self.widgets_initialized is True:
 
-            self.current_layer = layer  
+            if self.current_layer != None:
+                self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["is_current_layer"] = False
 
-            if self.current_layer == None:
+            if layer != None: 
+                self.PROJECT_LAYERS[layer.id()]["infos"]["is_current_layer"] = True    
+                self.current_layer = layer
+            else:
                 return
-            
+
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
         
 
@@ -1208,22 +1241,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                 ]
             
             for widget_path in widgets_to_stop:
-                state = self.manageSignal(widget_path)
-                # if state == True:
-                #     raise SignalStateChangeError(state, widget_path)
+                self.manageSignal(widget_path)
 
-            if self.auto_change_current_layer_flag == True:
+            if self.link_legend_layers_and_current_layer_flag is True:
                 widget_path = ["QGIS","LAYER_TREE_VIEW"]
-                state = self.manageSignal(widget_path)
-                if state == True:
-                    raise SignalStateChangeError(state, widget_path)
+                self.manageSignal(widget_path)
 
 
 
 
 
-            currentLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-            if currentLayer != None and currentLayer.id() != self.current_layer.id():
+
+            lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
+            if lastLayer != None and lastLayer.id() != self.current_layer.id():
                 self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
 
 
@@ -1265,7 +1295,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     elif widget_type == 'ComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
                     elif widget_type == 'QgsDoubleSpinBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpressionsEnabled(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'LineEdit':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'QgsProjectionSelectionWidget':
@@ -1280,27 +1310,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.filtering_populate_layers_chekableCombobox()
 
             for widget_path in widgets_to_stop:
-                state = self.manageSignal(widget_path)
-                # if state == False:
-                #     raise SignalStateChangeError(state, widget_path)
+                self.manageSignal(widget_path)
 
-            if self.auto_change_current_layer_flag == True:
-                if self.iface.activeLayer().id() != self.current_layer.id():
+            if self.link_legend_layers_and_current_layer_flag is True:
+                if self.iface.activeLayer() != None and self.iface.activeLayer().id() != self.current_layer.id():
                     self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
 
                 widget_path = ["QGIS","LAYER_TREE_VIEW"]
-                state = self.manageSignal(widget_path)
-                if state == False:
-                    raise SignalStateChangeError(state, widget_path)
+                self.manageSignal(widget_path)
                 
-            self.exploring_groupbox_init()
             self.exploring_link_widgets()
         
 
 
     def project_property_changed(self, input_property, input_data=None, custom_functions={}):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             properties_group_key = None
             property_path = None
@@ -1368,7 +1393,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
         
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_layer == None:
                 return
@@ -1450,12 +1475,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if flag_value_changed is True:
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
-                self.setProjectLayersEvent(self.PROJECT_LAYERS)
+
+                self.setLayerVariableEvent(self.current_layer.id(), tuple(property_path))
 
 
     def set_exporting_properties(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             widgets_to_stop =   [
                                     ["EXPORTING","HAS_LAYERS_TO_EXPORT"],
@@ -1484,7 +1510,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     elif widget_type == 'ComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(self.project_props[property_tuple[0]][property_tuple[1]]))
                     elif widget_type == 'QgsDoubleSpinBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(self.project_props[property_tuple[0]][property_tuple[1]])
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpressionsEnabled(self.project_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'LineEdit':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(self.project_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'QgsProjectionSelectionWidget':
@@ -1502,7 +1528,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def properties_group_state_changed(self, tuple_group, group_name):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             group_enabled_property = tuple_group[0]
             state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
@@ -1524,7 +1550,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
                         elif widget_type == 'QgsDoubleSpinBox':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
-                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
                         elif widget_type == 'LineEdit':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
                             self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
@@ -1547,7 +1573,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
                         elif widget_type == 'QgsDoubleSpinBox':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
-                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
+                            self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
                         elif widget_type == 'LineEdit':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setText('')
                             self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].text()
@@ -1564,7 +1590,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
               
     def dialog_export_output_path(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             path = ''
             datatype = ''
@@ -1614,7 +1640,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def reset_export_output_path(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             if str(self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text()) == '':
                 self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
@@ -1624,7 +1650,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def dialog_export_output_pathzip(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
             
             path = ''
             state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
@@ -1648,7 +1674,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def reset_export_output_pathzip(self):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
                 
             if str(self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text()) == '':
                 self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
@@ -1656,48 +1682,68 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.project_property_changed('has_zip_to_export', False)
                 self.project_property_changed('zip_to_export', '')
 
-    def filtering_auto_current_layer_changed(self):
+    def filtering_auto_current_layer_changed(self, state=None):
 
-        if self.widgets_initialized is True:
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
 
-            if self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].isChecked() is True:
-                self.auto_change_current_layer_flag = True
-                state = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
-                if state == False:
-                    raise SignalStateChangeError(state, ["QGIS","LAYER_TREE_VIEW"], 'connect')
-            else:
-                self.auto_change_current_layer_flag = False
-                state = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'disconnect')
-                if state == True:
-                    raise SignalStateChangeError(state, ["QGIS","LAYER_TREE_VIEW"], 'disconnect')
+            if state == None:
+                state = self.link_legend_layers_and_current_layer_flag
+            # else:
+            #     state = self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].isChecked()
+
+            self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
+
+            if state is True:
+                self.link_legend_layers_and_current_layer_flag = state
+                self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
+
+            elif state is False:
+                self.link_legend_layers_and_current_layer_flag = state
+                self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'disconnect')
+
 
     def get_project_layers_from_app(self, project_layers):
 
+        layer = None
+
         if self.widgets_initialized is True:
 
-            if len(project_layers) > 0:
+            self.PROJECT_LAYERS = project_layers
 
-                if len(self.PROJECT_LAYERS) != len(project_layers):
-                    self.PROJECT_LAYERS = project_layers
+            if len(list(self.PROJECT_LAYERS)) > 0:
+
+                if self.current_layer != None:
                     layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]) if layer.id() == self.current_layer.id()]
                     if len(layers) == 0:
-                        self.current_layer = self.iface.activeLayer()
-                        self.current_layer_changed(self.current_layer)
-
+                        layer = self.iface.activeLayer()
                 else:
-                    self.PROJECT_LAYERS = project_layers
+                    layer = self.iface.activeLayer()
 
-            self.filtering_populate_layers_chekableCombobox()        
-            self.exploring_groupbox_init()
-            self.exploring_source_params_changed()
+                if self.has_loaded_layers is False:
+                    self.has_loaded_layers = True
+                    self.connect_widgets_signals()
+                    self.set_widgets_enabled_state(self.has_loaded_layers)
+        
+            else:
+                self.has_loaded_layers = False
+                self.disconnect_widgets_signals()
+                self.set_widgets_enabled_state(self.has_loaded_layers)
+
+            
+            if layer != None and isinstance(layer, QgsVectorLayer):
+                print("get_project_layers_from_app", self.PROJECT_LAYERS)
+                self.exporting_populate_combobox()
+                self.set_exporting_properties()
+                self.current_layer_changed(layer)
+                self.filtering_auto_current_layer_changed()
+                self.exploring_source_params_changed()
 
 
-
-    def setProjectLayersEvent(self, event):
+    def setLayerVariableEvent(self, layer_id, path):
 
         if self.widgets_initialized is True:
 
-            self.settingProjectLayers.emit(event)
+            self.settingLayerVariable.emit(layer_id, path)
     
     def getProjectLayersEvent(self, event):
 
@@ -1719,12 +1765,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
             self.launchingTask.emit(event)
     
-    def reinitializeLayerOnErrorEvent(self, event):
+    def reinitializeLayerOnErrorEvent(self, event=None):
 
         if self.widgets_initialized is True:
 
-            event = self.current_layer.id()    
-            self.reinitializingLayerOnError.emit(event)
+            data = self.current_layer.id()    
+            self.reinitializingLayerOnError.emit(data)
 
 class CustomIdentifyTool(QgsIdentifyMenu):
     

@@ -420,19 +420,23 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def connect_filter_lineEdit(self):
-        if self.layer != None:
-            if self.list_widgets[self.layer.id()].getListCount() == self.list_widgets[self.layer.id()].count():
-                try:
-                    self.filter_le.editingFinished.disconnect()
-                except:
-                    pass
-                self.filter_le.textChanged.connect(self.filter_items)
-            else:
-                try:
-                    self.filter_le.textChanged.disconnect()
-                except:
-                    pass
-                self.filter_le.editingFinished.connect(self.filter_items)
+        try:
+            if self.layer != None:
+                if self.layer.id() in self.list_widgets:
+                    if self.list_widgets[self.layer.id()].getListCount() == self.list_widgets[self.layer.id()].count():
+                        try:
+                            self.filter_le.editingFinished.disconnect()
+                        except:
+                            pass
+                        self.filter_le.textChanged.connect(self.filter_items)
+                    else:
+                        try:
+                            self.filter_le.textChanged.disconnect()
+                        except:
+                            pass
+                        self.filter_le.editingFinished.connect(self.filter_items)
+        except:
+            pass
 
 
     def manage_list_widgets(self):
@@ -443,6 +447,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             self.list_widgets[self.layer.id()].setVisible(True)
         else:
             self.add_list_widget()
+
+
+    def remove_list_widget(self, layer_id):
+        if layer_id in self.list_widgets:
+            del self.list_widgets[layer_id]
 
 
     def add_list_widget(self):
@@ -483,8 +492,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             self.tasks[action][self.layer.id()].begun.connect(lambda:  iface.messageBar().pushMessage(self.layer.name() + " : " + description))
 
     def launch_task(self, action):
-        self.tasks[action][self.layer.id()].taskCompleted.connect(self.connect_filter_lineEdit)
-        QgsApplication.taskManager().addTask(self.tasks[action][self.layer.id()])
+        try:
+            self.tasks[action][self.layer.id()].taskCompleted.connect(self.connect_filter_lineEdit)
+            QgsApplication.taskManager().addTask(self.tasks[action][self.layer.id()])
+        except:
+            pass
     
     def updatedCheckedItemListEvent(self, data, flag):
         self.list_widgets[self.layer.id()].setSelectedFeaturesList(data)
