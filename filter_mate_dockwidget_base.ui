@@ -1537,13 +1537,7 @@ QComboBox QAbstractItemView {
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
         <property name="styleSheet">
-         <string notr="true">background-color: #f4a261;
-border-color: rgb(0, 0, 0);
-border-radius:6px;
-padding: 3px 0px 3px 0px;
-color:black;
-
-</string>
+         <string notr="true"/>
         </property>
         <property name="frameShape">
          <enum>QFrame::Panel</enum>
@@ -1556,8 +1550,8 @@ color:black;
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>387</width>
-           <height>530</height>
+           <width>391</width>
+           <height>540</height>
           </rect>
          </property>
          <attribute name="label">

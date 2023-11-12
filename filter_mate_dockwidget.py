@@ -73,6 +73,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         else:
             self.init_layer = None
             self.has_loaded_layers = False
+        self.current_layer_all_features = None
 
         self.widgets = None
         self.widgets_initialized = False
@@ -683,7 +684,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         background: {color};
                         }""")
         
-        groupbox_style = """QGroupBox
+        expressionBuilder_style = """QgsExpressionBuilderWidget
                             {
                             background-color: {color_1};
                             border-color: rgb(0, 0, 0);
@@ -691,6 +692,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             padding: 10px 10px 10px 10px;
                             color:{color_3}
                             }"""
+
+        
+        groupbox_style = """QGroupBox
+                            {
+                            background-color: {color_1};
+                            border-color: rgb(0, 0, 0);
+                            border-radius:6px;
+                            padding: 10px 10px 10px 10px;
+                            color:{color_3}
+                            }
+                            QgsExpressionBuilderWidget
+                            {
+                            background-color: {color_1};
+                            border-color: rgb(0, 0, 0);
+                            border-radius:6px;
+                            padding: 10px 10px 10px 10px;
+                            color:{color_3}
+                            }"""
+
 
         lineEdit_style = """
                                 background-color: {color_2};
@@ -773,6 +793,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("LineEdit") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
+                elif self.widgets[widget_group][widget_name]["TYPE"].find("PropertyOverrideButton") >= 0 or self.widgets[widget_group][widget_name]["TYPE"].find("QgsProjectionSelectionWidget") >= 0:
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                 
 
     def set_widgets_enabled_state(self, state):
@@ -955,6 +977,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def exploring_identify_clicked(self):
 
+        features = []
+        expression = None
+
         if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_exploring_groupbox == "single_selection":
@@ -1052,6 +1077,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             features = []
             if QgsExpression(expression).isField() is False:
                 features = self.exploring_features_changed([], False, expression)
+            elif self.current_layer_all_features == None:
+                features_iterator = self.current_layer.getFeatures()
+                done_looping = False
+                
+                while not done_looping:
+                    try:
+                        feature = next(features_iterator)
+                        features.append(feature)
+                    except StopIteration:
+                        done_looping = True
+                self.current_layer_all_features = features
+            else:
+                features = self.current_layer_all_features
+
             return features, expression
     
 
@@ -1255,7 +1294,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
             self.current_buffer_property_has_been_init = False
-
+            self.current_layer_all_features = None
 
             lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
             if lastLayer != None and lastLayer.id() != self.current_layer.id():

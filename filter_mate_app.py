@@ -226,6 +226,8 @@ class FilterMateApp:
             for widget_path in widgets_to_stop:
                 self.dockwidget.manageSignal(widget_path, 'disconnect')
 
+            if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
+                self.remove_variables_from_all_layers()
 
         for layer in layers:
             if action == 'add':     
@@ -715,6 +717,7 @@ class FilterEngineTask(QgsTask):
     def prepare_ogr_source_geom(self):
 
         layer = self.source_layer
+        param_buffer_distance = None 
 
         if self.has_to_reproject_source_layer is True:
         
@@ -732,11 +735,16 @@ class FilterEngineTask(QgsTask):
             processing.run('qgis:createspatialindex', alg_params_createspatialindex)
 
 
-        if self.param_buffer_value != None:
+        if self.param_buffer_value != None or self.param_buffer_expression != None:
+
+            if self.param_buffer_expression != None and self.param_buffer_expression != '':    
+                param_buffer_distance = QgsProperty.fromExpression(self.param_buffer_expression)
+            else:
+                param_buffer_distance = float(self.param_buffer_value)   
 
             alg_source_layer_params_buffer = {
                 'DISSOLVE': False,
-                'DISTANCE': QgsProperty.fromExpression(self.param_buffer_expression) if self.param_buffer_expression != '' else float(self.param_buffer_value),
+                'DISTANCE': param_buffer_distance,
                 'END_CAP_STYLE': 0,
                 'INPUT': layer,
                 'JOIN_STYLE': 0,
