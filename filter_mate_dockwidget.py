@@ -26,7 +26,7 @@ import json
 import re
 from functools import partial
 from osgeo import ogr
-from qgis.PyQt import QtGui, QtWidgets, uic
+from qgis.PyQt import QtGui, QtWidgets, QtCore, uic
 from qgis.PyQt.QtCore import *
 from qgis.PyQt.QtGui import *
 from qgis.PyQt.QtWidgets import *
@@ -811,23 +811,70 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         
 
         pushButton_config_path = ['DOCKWIDGET', 'PushButton']
-        pushButton_style = json.dumps(self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]]["STYLE"])[1:-1].replace(': {', ' {').replace('\"', '').replace(',', '')
-        
+        pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]]
+        pushButton_style = json.dumps(pushButton_config["STYLE"])[1:-1].replace(': {', ' {').replace('\"', '').replace(',', '')
+        icons_sizes = {}
+        icon_size = 20
+        if "ICONS_SIZES" in pushButton_config:
+            if "ACTION" in pushButton_config["ICONS_SIZES"]:
+                icons_sizes["ACTION"] = pushButton_config["ICONS_SIZES"]["ACTION"]
+            if "OTHERS" in pushButton_config["ICONS_SIZES"]:
+                icons_sizes["OTHERS"] = pushButton_config["ICONS_SIZES"]["OTHERS"]
+
+
+        font = QFont("Segoe UI Semibold", 8)
+        font.setBold(True)
 
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
                 if self.widgets[widget_group][widget_name]["TYPE"] == "PushButton":
                     self.set_widget_icon(pushButton_config_path + ["ICONS", widget_group, widget_name])
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(pushButton_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
+                    if widget_group in icons_sizes:
+                        icon_size = icons_sizes[widget_group]    
+                    else:
+                        icon_size = icons_sizes["OTHERS"]
+
+                    self.widgets[widget_group][widget_name]["WIDGET"].setIconSize(QtCore.QSize(icon_size, icon_size))
+                    self.widgets[widget_group][widget_name]["WIDGET"].setMinimumHeight(icon_size*2)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setMaximumHeight(icon_size*2)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setMinimumWidth(icon_size*2)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setMaximumWidth(icon_size*2)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("ComboBox") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("LineEdit") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.IBeamCursor)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("PropertyOverrideButton") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsProjectionSelectionWidget") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 
+        icon_size = icons_sizes["OTHERS"]
+        for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
+            # widget.setMinimumHeight(icon_size*2)
+            # widget.setMaximumHeight(icon_size*2)
+            widget.setMinimumWidth(icon_size*3)
+            widget.setMaximumWidth(icon_size*3)
+            widget.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        
+        icon_size = icons_sizes["ACTION"]
+        self.frame_actions.setMinimumHeight(icon_size*3)
+        self.frame_actions.setMaximumHeight(icon_size*3)
+        self.frame_actions.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        
+        
+        
 
     def set_widgets_enabled_state(self, state):
         for widget_group in self.widgets:

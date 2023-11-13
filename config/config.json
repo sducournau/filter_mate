@@ -19,6 +19,10 @@
                     "border": "2px solid black;"
                 }
             },
+            "ICONS_SIZES": {
+                "ACTION": 25,
+                "OTHERS": 20
+            },
             "ICONS": {
                 "ACTION": {
                     "FILTER": "filter.png",
