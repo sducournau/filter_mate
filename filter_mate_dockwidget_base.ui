@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>421</width>
-    <height>836</height>
+    <height>939</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -2941,9 +2941,9 @@ border: 2px solid black;
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-51</y>
-               <width>371</width>
-               <height>278</height>
+               <y>0</y>
+               <width>381</width>
+               <height>290</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -3875,7 +3875,7 @@ border: 2px solid black;
                <x>0</x>
                <y>0</y>
                <width>381</width>
-               <height>227</height>
+               <height>290</height>
               </rect>
              </property>
              <attribute name="icon">

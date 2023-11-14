@@ -1538,7 +1538,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if self.current_layer == None:
                 return
             
-            print(input_property, input_data)
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             properties_group_key = None
             property_path = None
@@ -1759,10 +1758,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 expression.prepare(expression_context)
                 if expression.isField() is False and expression.isValid() is True:
                     results = expression.evaluate()
-                    print(results)
                     if isinstance(results, list):
-                        for result in results:
-                            print(result)
                         property = QgsProperty.fromExpression(layer_props["filtering"]["buffer_expression"])
 
 
@@ -1822,7 +1818,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_expression"] = self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].toProperty().asExpression()
 
             if layer_props["filtering"]["buffer_property"] is False:
-                print(layer_props["filtering"])
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_expression"] = ''
                 self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
                 self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].setActive(False)
@@ -1974,7 +1969,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             
             if layer != None and isinstance(layer, QgsVectorLayer):
-                print("get_project_layers_from_app", self.PROJECT_LAYERS)
                 self.exporting_populate_combobox()
                 self.set_exporting_properties()
                 self.current_layer_changed(layer)

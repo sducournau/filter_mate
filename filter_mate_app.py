@@ -743,7 +743,7 @@ class FilterEngineTask(QgsTask):
                 param_buffer_distance = float(self.param_buffer_value)   
 
             alg_source_layer_params_buffer = {
-                'DISSOLVE': False,
+                'DISSOLVE': True,
                 'DISTANCE': param_buffer_distance,
                 'END_CAP_STYLE': 0,
                 'INPUT': layer,
@@ -937,8 +937,6 @@ class FilterEngineTask(QgsTask):
         provider_list = self.provider_list + [self.param_source_provider_type]
         provider_list = list(dict.fromkeys(provider_list))
 
-        print(provider_list)
-
         if 'postgresql' in provider_list and self.param_buffer_expression == None:
             self.prepare_postgresql_source_geom()
 
@@ -1090,7 +1088,6 @@ class FilterEngineTask(QgsTask):
 
     def execute_unfiltering(self):
 
-        print(self.task_parameters)
         i = 1
         if len(self.task_parameters["infos"]["subset_history"]) > 1:
             self.source_layer.setSubsetString(self.task_parameters["infos"]["subset_history"][-2]["subset_string"])
