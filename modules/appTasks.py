@@ -1220,10 +1220,9 @@ class LayersManagementEngineTask(QgsTask):
             type_returned = str
         elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
             value_typped = dict(value_as_string)
-            print(value_typped)
             type_returned = dict
         elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
-            value_typped = json.loads(value_as_string)
+            value_typped = list(value_as_string)
             type_returned = list
         elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
             value_typped = bool(value_as_string)

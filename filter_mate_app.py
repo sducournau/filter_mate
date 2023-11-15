@@ -145,11 +145,16 @@ class FilterMateApp:
                 if len(task_parameters["task"]['features']) == 0 or task_parameters["task"]['expression'] == None:
                     return
                 
+            layers = []
             self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
             layers_props = [layer_infos for layer_infos in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]]
             layers_ids = [layer_props["layer_id"] for layer_props in layers_props]
-            layers = [PROJECT.mapLayersByName(layer_props["layer_name"]) for layer_props in layers_props]
-            layers = [layer for layer in layers if layer.id() in layers_ids]
+            for layer_props in layers_props:
+                temp_layers = PROJECT.mapLayersByName(layer_props["layer_name"])
+                for temp_layer in temp_layers:
+                    if temp_layer.id() in layers_ids: 
+                        layers.append(temp_layer)
+
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
             self.appTasks[task_name].taskCompleted.connect(partial(self.filter_engine_task_completed, task_name, current_layer, task_parameters)) 
 
