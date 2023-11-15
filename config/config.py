@@ -41,3 +41,5 @@ CONFIG_DATA = None
 
 with open(DIR_CONFIG +  os.sep + 'config.json') as f:
   CONFIG_DATA = json.load(f)
+
+RESULT_PROJECT_LAYERS = {}

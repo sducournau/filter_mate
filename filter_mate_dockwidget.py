@@ -50,9 +50,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     launchingTask = pyqtSignal(str)
 
     gettingProjectLayers = pyqtSignal()
-    settingLayerVariable = pyqtSignal(str, tuple)
 
-    reinitializingLayerOnError = pyqtSignal(str)
+    settingLayerVariable = pyqtSignal(str, tuple)
+    resettingLayerVariableOnError = pyqtSignal(str, tuple)
 
     def __init__(self, project_layers, plugin_dir, config_data, parent=None):
         """Constructor."""
@@ -249,10 +249,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                 }   
 
         self.widgets["ACTION"] = {
-                                "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(x))], "ICON":None},
-                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(x))], "ICON":None},
-                                "RESET":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_reset, "SIGNALS":[("clicked", lambda state, x='reset': self.launchTaskEvent(x))], "ICON":None},
-                                "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(x))], "ICON":None}
+                                "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(state, x))], "ICON":None},
+                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
+                                "RESET":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_reset, "SIGNALS":[("clicked", lambda state, x='reset': self.launchTaskEvent(state, x))], "ICON":None},
+                                "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None}
                                 }        
 
         self.widgets["SINGLE_SELECTION"] = {
@@ -276,7 +276,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x : self.reinitializeLayerOnErrorEvent()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None}
+                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x : self.resetLayerVariableOnErrorEvent()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None}
                                     }
 
 
@@ -484,7 +484,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             except Exception as e:
                 self.exception = e
                 print(self.exception)
-                self.reinitializeLayerOnErrorEvent()
+                self.resetLayerVariableOnErrorEvent(layer.id(), self.exception)
 
     def exporting_populate_combobox(self):
 
@@ -1336,11 +1336,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         if self.widgets_initialized is True:
 
-            if self.current_layer != None:
-                self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["is_current_layer"] = False
 
-            if layer != None: 
-                self.PROJECT_LAYERS[layer.id()]["infos"]["is_current_layer"] = True    
+            if layer != None:  
                 self.current_layer = layer
             else:
                 return
@@ -1967,7 +1964,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.disconnect_widgets_signals()
                 self.set_widgets_enabled_state(self.has_loaded_layers)
 
-            
             if layer != None and isinstance(layer, QgsVectorLayer):
                 self.exporting_populate_combobox()
                 self.set_exporting_properties()
@@ -1976,12 +1972,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.exploring_source_params_changed()
 
 
-    def setLayerVariableEvent(self, layer_id, path):
+    def setLayerVariableEvent(self, layer_id=None, path=()):
 
         if self.widgets_initialized is True:
+            if layer_id == None:
+                layer_id = self.current_layer.id()
 
             self.settingLayerVariable.emit(layer_id, path)
-    
+
+    def resetLayerVariableOnErrorEvent(self, layer_id=None, path=()):
+
+        if self.widgets_initialized is True:
+            if layer_id == None:
+                layer_id = self.current_layer.id()
+
+            self.resettingLayerVariableOnError.emit(layer_id, path)
+
+
     def getProjectLayersEvent(self, event):
 
         if self.widgets_initialized is True:
@@ -1995,62 +2002,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.closingPlugin.emit()
             event.accept()
 
-    def launchTaskEvent(self, event):
+    def launchTaskEvent(self, state, task_name):
 
         if self.widgets_initialized is True:
 
             self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
-            self.launchingTask.emit(event)
+            self.launchingTask.emit(task_name)
     
-    def reinitializeLayerOnErrorEvent(self, event=None):
-
-        if self.widgets_initialized is True:
-
-            data = self.current_layer.id()    
-            self.reinitializingLayerOnError.emit(data)
-
-class CustomIdentifyTool(QgsIdentifyMenu):
-    
-    def __init__(self, iface):
-        self.iface = iface
-        self.canvas = self.iface.mapCanvas()
-        self.layer = self.iface.activeLayer()
-        self.features = []
-        self.features_result = []
-        QgsIdentifyMenu.__init__(self, self.canvas)
-        self.map_tool_identify = QgsMapToolIdentify(self.canvas)
-        self.iface.currentLayerChanged.connect(self.active_changed)
-        
-    def active_changed(self, layer):
-        if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
-            self.layer = layer
-            self.features = []
-            self.features_result = []
-
-    def setLayer(self, layer):
-        if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
-            self.layer = layer
-            self.features = []
-            self.features_result = []
-
-    def setFeatures(self, features):
-        self.features = features
-        self.features_result = []
-
-        if len(self.features) > 0:
-            for feature in self.features:
-                feature_point_XY = self.features[0].geometry().centroid().asPoint()    
-                self.features_result.append(self.map_tool_identify.IdentifyResult(self.layer, feature, self.map_tool_identify.derivedAttributesForPoint(QgsPoint(feature_point_XY))))
-
-            self.exec(self.features_result, feature_point_XY.toQPointF().toPoint())
-
-            
-    def canvasPressEvent(self, event):
-        results = self.identify(event.x(), event.y(), [self.layer], QgsMapToolIdentify.TopDownAll)
-        for i in range(len(results)):
-            print(results[i].mDerivedAttributes)
-        
-    def deactivate(self):
-        self.iface.currentLayerChanged.disconnect(self.active_changed)
 
 
