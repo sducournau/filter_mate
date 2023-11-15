@@ -94,6 +94,22 @@ class FilterMateApp:
         # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
 
+    def saving_layer_variable(self, layer, variable_key, value_typped, type_returned):
+
+        if type_returned in (list, dict):
+            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
+        else:
+            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+
+
+    def removing_layer_variable(self, layer, variable_key):
+
+        layer_scope = QgsExpressionContextUtils.layerScope(layer)
+
+        if variable_key == {}:
+            QgsExpressionContextUtils.setLayersVariable(layer, variable_key)
+        else:
+            layer_scope.removeVariable(variable_key)
 
 
     def dockwidget_change_widgets_signal(self, state):
@@ -169,10 +185,14 @@ class FilterMateApp:
                     if len(layers) > 0:
                         layer = layers[0]
                 self.appTasks[task_name].setDependentLayers([layer])
+            else:
+                self.appTasks[task_name].begun.connect(lambda state='disconnect': self.dockwidget_change_widgets_signal(state))
+                self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
             self.appTasks[task_name].resultingLayers.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
-            self.appTasks[task_name].begun.connect(lambda state='disconnect': self.dockwidget_change_widgets_signal(state))
-            self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
+            self.appTasks[task_name].savingLayerVariable.connect(lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned))
+            self.appTasks[task_name].removingLayerVariable.connect(lambda layer, variable_key: self.removing_layer_variable(layer, variable_key))
+
         
     
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
@@ -346,6 +366,13 @@ class FilterMateApp:
         if task_name == 'filter' or task_name == 'unfilter':
             self.dockwidget.exploring_zoom_clicked()
 
+    def create_spatial_index_for_layer(self, layer):    
+
+        alg_params_createspatialindex = {
+            "INPUT": layer
+        }
+        processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+    
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
 

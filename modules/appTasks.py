@@ -772,18 +772,12 @@ class FilterEngineTask(QgsTask):
 
 
 
-
-
-
-
-
-
-
-
 class LayersManagementEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
 
     resultingLayers = pyqtSignal(dict)
+    savingLayerVariable = pyqtSignal(QgsVectorLayer, str, object, type)
+    removingLayerVariable = pyqtSignal(QgsVectorLayer, object)
 
     def __init__(self, description, task_action, task_parameters):
 
@@ -1096,10 +1090,7 @@ class LayersManagementEngineTask(QgsTask):
                         for key, value in self.project_layers[layer_id][key_group].items():
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
                             value_typped, type_returned = self.return_typped_value(value)
-                            if type_returned in (list, dict):
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
-                            else:
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                            self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                             if self.isCanceled():
                                 return False
                 
@@ -1109,10 +1100,7 @@ class LayersManagementEngineTask(QgsTask):
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
                             value_typped, type_returned = self.return_typped_value(value)
-                            if type_returned in (list, dict):
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
-                            else:
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                            self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
 
         return True
     
@@ -1129,18 +1117,16 @@ class LayersManagementEngineTask(QgsTask):
             layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
 
             if len(layers) > 0:
-                layer = layers[0]
-
-                layer_scope = QgsExpressionContextUtils.layerScope(layer)    
+                layer = layers[0]  
 
                 if layer_property == None or (isinstance(layer_property, tuple) and len(layer_property) == 0):
-                    QgsExpressionContextUtils.setLayerVariables(layer, {})
+                   self.removingLayerVariable.emit(layer, {})
 
                 elif isinstance(layer_property, tuple) and len(layer_property) == 2:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
                         if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            layer_scope.removeVariable(variable_key)
+                            self.removingLayerVariable.emit(layer, variable_key)
                 
                 self.project_layers[layer_id] = self.add_project_layer(layer)
 
