@@ -311,26 +311,26 @@ class FilterEngineTask(QgsTask):
             if result is False:
                 print(param_expression)
 
-            param_layer_feature_count = layer.featureCount()
+                param_layer_feature_count = layer.featureCount()
 
-            if param_has_to_reproject_layer or (self.has_feature_count_limit is True and param_layer_feature_count > self.feature_count_limit):
+                if param_has_to_reproject_layer or (self.has_feature_count_limit is True and param_layer_feature_count > self.feature_count_limit):
 
-                features_ids = []
-                for feature in layer.getFeatures():
-                    features_ids.append(str(feature[param_distant_primary_key_name]))
+                    features_ids = []
+                    for feature in layer.getFeatures():
+                        features_ids.append(str(feature[param_distant_primary_key_name]))
 
-                if len(features_ids) > 0:
-                    if param_distant_primary_key_is_numeric == True:
-                        param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
-                    else:
-                        param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
+                    if len(features_ids) > 0:
+                        if param_distant_primary_key_is_numeric == True:
+                            param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
+                        else:
+                            param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
 
-                    if QgsExpression(param_expression).isValid():
+                        if QgsExpression(param_expression).isValid():
 
-                        result = layer.setSubsetString(param_expression)
-    
-                        if result is False:
-                            print(param_expression)
+                            result = layer.setSubsetString(param_expression)
+
+                            if result is False:
+                                print(param_expression)
 
         if result is False:
 
@@ -455,9 +455,9 @@ class FilterEngineTask(QgsTask):
 
         if self.task_parameters["task"]["expression"] != None:
             self.expression = self.task_parameters["task"]["expression"]
-            if QgsExpression(self.expression).isValid() is True:
-                
-                if QgsExpression(self.expression).isField() is False:
+            if QgsExpression(self.expression).isField() is False:
+
+                if QgsExpression(self.expression).isValid() is True:
 
                     self.expression = " " + self.expression
                     is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
@@ -491,11 +491,13 @@ class FilterEngineTask(QgsTask):
                                         self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
 
 
+                    if param_old_subset != '':
+                        result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=param_old_subset, param_combine_operator=self.param_combine_operator, expression=self.expression))
+                    else:
+                        result = self.source_layer.setSubsetString(self.expression)
 
-                    result = self.source_layer.setSubsetString(self.expression)
-
-                else:
-                    result = True
+            else:
+                result = True
 
         if result is False:
             self.is_field_expression = None    
@@ -509,7 +511,10 @@ class FilterEngineTask(QgsTask):
                 else:
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
                 
-                result = self.source_layer.setSubsetString(self.expression)
+                if param_old_subset != '':
+                    result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=param_old_subset, param_combine_operator=self.param_combine_operator, expression=self.expression))
+                else:
+                    result = self.source_layer.setSubsetString(self.expression)
  
         return result
     
@@ -1216,7 +1221,7 @@ class LayersManagementEngineTask(QgsTask):
             type_returned = dict
         elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
             if action == 'save':
-                value_typped = json.dumps(list(value_as_string))
+                value_typped = list(value_as_string)
             elif action == 'load':
                 value_typped = list(json.loads(value_as_string))
             type_returned = list
