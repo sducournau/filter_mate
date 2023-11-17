@@ -18,6 +18,7 @@ from functools import partial
 import json
 from .modules.customExceptions import *
 from .modules.appTasks import *
+from .resources import *
 
 # Import the code for the DockWidget
 from .filter_mate_dockwidget import FilterMateDockWidget
@@ -119,11 +120,11 @@ class FilterMateApp:
 
             widgets_to_stop =   [
                                     ["QGIS","LAYER_TREE_VIEW"],
-                                    ["SINGLE_SELECTION","FEATURES"],
-                                    ["SINGLE_SELECTION","EXPRESSION"],
-                                    ["MULTIPLE_SELECTION","FEATURES"],
-                                    ["MULTIPLE_SELECTION","EXPRESSION"],
-                                    ["CUSTOM_SELECTION","EXPRESSION"],
+                                    ["EXPLORING","SINGLE_SELECTION_FEATURES"],
+                                    ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
+                                    ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
+                                    ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
+                                    ["EXPLORING","CUSTOM_SELECTION_EXPRESSION"],
                                     ["FILTERING","CURRENT_LAYER"],
                                     ["FILTERING","LAYERS_TO_FILTER"],
                                     ["FILTERING","COMBINE_OPERATOR"],

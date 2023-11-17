@@ -20,6 +20,8 @@
  *                                                                         *
  ***************************************************************************/
 """
+
+from .filter_mate_dockwidget_base import Ui_filterMateDockWidgetBase
 from .config.config import *
 import os
 import json
@@ -35,16 +37,14 @@ from qgis.gui import *
 from qgis.utils import iface
 from qgis.PyQt.QtWidgets import QApplication, QVBoxLayout
 
+
 from .modules.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 from .modules.qt_json_view.model import JsonModel, JsonSortFilterProxyModel
 from .modules.qt_json_view.view import JsonView
 from .modules.customExceptions import *
 
-FORM_CLASS, _ = uic.loadUiType(os.path.join(
-    os.path.dirname(__file__), 'filter_mate_dockwidget_base.ui'))
 
-
-class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
+class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
@@ -222,6 +222,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         self.layer_properties_tuples_dict =   {
                                                 "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_saving")),
+                                                "exploring_selection":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
                                                 "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
                                                 "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
                                                 "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
@@ -255,20 +256,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                 "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None}
                                 }        
 
-        self.widgets["SINGLE_SELECTION"] = {
-                                            "FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed),("filterExpressionChanged", self.exploring_source_params_changed)]},
-                                            "EXPRESSION":{"TYPE":"ComboBox", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
-                                            }
-        
-        self.widgets["MULTIPLE_SELECTION"] = {
-                                            "FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]},
-                                            "EXPRESSION":{"TYPE":"ComboBox", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
-                                            }
-        
-        self.widgets["CUSTOM_SELECTION"] = {
-                                            "EXPRESSION":{"TYPE":"ComboBox", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", self.exploring_source_params_changed)]}
-                                            }
-
 
         self.widgets["EXPLORING"] = {
                                     "IDENTIFY":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_identify, "SIGNALS":[("clicked", self.exploring_identify_clicked)], "ICON":None},
@@ -276,7 +263,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x : self.resetLayerVariableOnErrorEvent()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None}
+                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x : self.resetLayerVariableOnErrorEvent()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    
+                                    "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed),("filterExpressionChanged", self.exploring_source_params_changed)]},
+                                    "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", lambda state, x='single_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]},
+                                    
+                                    "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]},
+                                    "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", lambda state, x='multiple_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]},
+                                    
+                                    "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", lambda state, x='custom_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]}
                                     }
 
 
@@ -847,6 +842,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                     self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
                     self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
+                elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsFieldExpressionWidget") >= 0:
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("LineEdit") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
                     self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.IBeamCursor)
@@ -987,17 +986,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     
 
                     if self.current_layer != None:
-                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect', 'featureChanged')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'filteringCheckedItemList')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect', 'updatingCheckedItemList')
 
-                        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
-                        self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
 
-                        self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature())
+                        self.exploring_features_changed(self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature())
                     else:
-                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect')
+                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
 
 
 
@@ -1021,19 +1020,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
                     if self.current_layer != None:
-                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect')
+                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect', 'featureChanged')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
 
-                        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
-                        self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
 
                         layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
 
-                        self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+                        self.exploring_features_changed(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
                     else:
-                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect')
+                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
 
             elif groupbox == "custom_selection":
 
@@ -1053,15 +1052,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
                     if self.current_layer != None:
-                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'filteringCheckedItemList')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
+                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect', 'featureChanged')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect', 'updatingCheckedItemList')
 
-                        self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
+                        self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
                         self.exploring_custom_selection()
                     else:
-                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect')
+                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
 
 
     def exploring_identify_clicked(self):
@@ -1072,11 +1071,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_exploring_groupbox == "single_selection":
-                input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
+                input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "multiple_selection":
-                input = self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].checkedItems()
+                input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "custom_selection":
@@ -1135,7 +1134,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if expression != None:
                     layer_props["exploring"]["single_selection_expression"] = expression
                     self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = layer_props["exploring"]["single_selection_expression"]
-                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setDisplayExpression(expression)
+                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
 
             elif self.current_exploring_groupbox == "multiple_selection":
 
@@ -1143,7 +1142,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     layer_props["exploring"]["multiple_selection_expression"] = expression   
                     self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = layer_props["exploring"]["multiple_selection_expression"]
                 
-                self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
                 self.exploring_link_widgets()
 
             elif self.current_exploring_groupbox == "custom_selection":
@@ -1202,11 +1201,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             expression = ''
 
             if self.current_exploring_groupbox == "single_selection":
-                input = self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature()
+                input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "multiple_selection":
-                input = self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].checkedItems()
+                input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "custom_selection":
@@ -1302,23 +1301,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
                     if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
                         custom_filter = layer_props["exploring"]["custom_selection_expression"]
-                        self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
                 if expression != None:
-                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
-                elif self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures() != False:
-                    features, expression = self.get_exploring_features(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
+                elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures() != False:
+                    features, expression = self.get_exploring_features(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
                     if len(features) > 0 and expression != None:
-                        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
-                elif self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentVisibleFeatures() != False:
-                    features, expression = self.get_exploring_features(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentVisibleFeatures(), True)
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
+                elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures() != False:
+                    features, expression = self.get_exploring_features(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures(), True)
                     if len(features) > 0 and expression != None:
-                        self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(expression)
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
                 elif custom_filter != None:
-                    self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
+                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
             
             else:
-                self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
-                self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setFilterExpression('')
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('')
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('')
 
 
     def get_layers_to_filter(self):
@@ -1357,10 +1356,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         
 
             widgets_to_stop =   [
-                                    ["SINGLE_SELECTION","EXPRESSION"],
-                                    ["MULTIPLE_SELECTION","FEATURES"],
-                                    ["MULTIPLE_SELECTION","EXPRESSION"],
-                                    ["CUSTOM_SELECTION","EXPRESSION"],
+                                    ["EXPLORING","SINGLE_SELECTION_FEATURES"],
+                                    ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
+                                    ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
+                                    ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
+                                    ["EXPLORING","CUSTOM_SELECTION_EXPRESSION"],
                                     ["FILTERING","BUFFER"],
                                     ["FILTERING","BUFFER_PROPERTY"],
                                     ["FILTERING","BUFFER_EXPRESSION"],
@@ -1390,27 +1390,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             """SINGLE SELECTION"""
 
-            self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
 
-            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setFetchGeometry(True)
-            self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setShowBrowserButtons(True)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
 
 
             """MULTIPLE SELECTION"""
             
-            self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
 
-            self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
 
 
             """CUSTOM SELECTION"""
 
-            self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
+            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
 
 
             for properties_tuples_key in self.layer_properties_tuples_dict:
@@ -1425,6 +1425,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
                     elif widget_type == 'ComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
+                    elif widget_type == 'QgsFieldExpressionWidget':
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpression(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].expression())
                     elif widget_type == 'QgsDoubleSpinBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'LineEdit':
@@ -1578,6 +1580,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             break
                     break
 
+            print(properties_group_key, properties_tuples, property_path, input_data)
+
+            
             if properties_group_key == 'is':
 
                 if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
@@ -1592,6 +1597,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     if "ON_FALSE" in custom_functions:
                         custom_functions["ON_FALSE"](0) 
 
+            elif properties_group_key == 'exploring_selection':
+                
+
+
+                if str(layer_props[property_path[0]][property_path[1]]) != input_data:
+                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                    flag_value_changed = True
+                    if "ON_TRUE" in custom_functions:
+                        custom_functions["ON_TRUE"](0)
+
+                    if flag_value_changed is True:
+                        self.properties_group_state_changed(properties_tuples, properties_group_key)
             else:
                 widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
                 if widget_type == 'PushButton':
@@ -1677,11 +1694,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def properties_group_state_changed(self, tuple_group, group_name):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-            group_enabled_property = tuple_group[0]
-            state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
-
-            for tuple in tuple_group[1:]:
+            if group_name != "exploring_selection":
+                group_enabled_property = tuple_group[0]
+                state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
+                tuple_group = tuple_group[1:]
+            for tuple in tuple_group:
+                if group_name == "exploring_selection":
+                    state = False if self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].expression() == '' else True
                 if state is False:
                     widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
                     self.manageSignal([tuple[0].upper(),tuple[1].upper()], 'disconnect')
@@ -1696,6 +1715,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         elif widget_type == 'ComboBox':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(0)
                             self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
+                        elif widget_type == 'QgsFieldExpressionWidget':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setField(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["primary_key_name"])
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].expression()
                         elif widget_type == 'QgsDoubleSpinBox':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
                             self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
@@ -1723,6 +1745,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                 index = 0
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setCurrentIndex(index)
                             self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].currentText()
+                        elif widget_type == 'QgsFieldExpressionWidget':
+                            self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setField(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["primary_key_name"])
+                            self.PROJECT_LAYERS[self.current_layer.id()][tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].expression()    
                         elif widget_type == 'QgsDoubleSpinBox':
                             self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].clearValue()
                             self.project_props[tuple[0]][tuple[1]] = self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].value()
@@ -1788,7 +1813,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             widgets_to_stop =   [
                                     ["FILTERING","BUFFER_PROPERTY"],
-                                     ["FILTERING","BUFFER_EXPRESSION"]
+                                    ["FILTERING","BUFFER_EXPRESSION"]
                                 ]
             
             for widget_path in widgets_to_stop:

@@ -1,4 +1,4 @@
-<RCC>
+<!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/plugins/filter_mate" >
         <file alias="icon.png">icon.png</file>
         <file alias="add_multi.png">icons/add_multi.png</file>
