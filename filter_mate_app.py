@@ -82,7 +82,7 @@ class FilterMateApp:
 
         self.MapLayerStore.layersAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
         self.MapLayerStore.layersWillBeRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
-        self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
+        # self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
         self.dockwidget.resettingLayerVariableOnError.connect(lambda layer_id, path, x='remove_layer_variable': self.manage_task(x, (layer_id, path)))
