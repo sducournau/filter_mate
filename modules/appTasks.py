@@ -454,15 +454,16 @@ class FilterEngineTask(QgsTask):
                     param_old_subset = self.source_layer.subsetString()
 
         if self.task_parameters["task"]["expression"] != None:
-            self.expression = " " + self.task_parameters["task"]["expression"]
+            self.expression = self.task_parameters["task"]["expression"]
             if QgsExpression(self.expression).isValid() is True:
                 
-                is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
-
-                if is_field_expression[0] == True:
-                    self.is_field_expression = is_field_expression
-
                 if QgsExpression(self.expression).isField() is False:
+
+                    self.expression = " " + self.expression
+                    is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
+
+                    if is_field_expression[0] == True:
+                        self.is_field_expression = is_field_expression
                     
                     fields_similar_to_primary_key_name = [x for x in self.source_layer_fields_names if self.primary_key_name.find(x) > -1]
                     fields_similar_to_primary_key_name_in_expression = [x for x in fields_similar_to_primary_key_name if self.expression.find(x) > -1]

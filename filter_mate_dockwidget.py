@@ -259,7 +259,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
         self.widgets["EXPLORING"] = {
                                     "IDENTIFY":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_identify, "SIGNALS":[("clicked", self.exploring_identify_clicked)], "ICON":None},
-                                    "ZOOM":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_zoom, "SIGNALS":[("clicked", self.exploring_zoom_clicked)], "ICON":None},
+                                    "ZOOM":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_zoom, "SIGNALS":[("clicked", lambda state: self.exploring_zoom_clicked())], "ICON":None},
                                     "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
@@ -1070,7 +1070,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer != None:
 
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()] 
+            features, expression = self.get_current_features()
+            
+            if len(features) == 0:
+                return
+            else:
+                self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
+
+
+    def get_current_features(self):
+
+        if self.widgets_initialized is True and self.current_layer != None:
+
+            features = []    
+            expression = ''
 
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
@@ -1081,15 +1094,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "custom_selection":
-                expression = layer_props["exploring"]["custom_selection_expression"]
+                expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
                 if QgsExpression(expression).isField() is False:
                     features, expression = self.exploring_custom_selection()
-            
-            if len(features) == 0:
-                return
-            else:
-                self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
 
+                
+            return features, expression
+        
 
     def exploring_zoom_clicked(self, features=[]):
 
@@ -1198,29 +1209,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
             self.current_layer.removeSelection()
         
 
-    def get_current_features(self):
 
-        if self.widgets_initialized is True and self.current_layer != None:
-
-            features = []    
-            expression = ''
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-
-            if self.current_exploring_groupbox == "single_selection":
-                input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-                features, expression = self.get_exploring_features(input, True)
-
-            elif self.current_exploring_groupbox == "multiple_selection":
-                input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
-                features, expression = self.get_exploring_features(input, True)
-
-            elif self.current_exploring_groupbox == "custom_selection":
-                expression = layer_props["exploring"]["custom_selection_expression"]
-                if QgsExpression(expression).isField() is False:
-                    features, expression = self.exploring_custom_selection()
-
-                
-            return features, expression
     
     def exploring_features_changed(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
