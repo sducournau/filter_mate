@@ -1070,6 +1070,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer != None:
 
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()] 
+
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
                 features, expression = self.get_exploring_features(input, True)
@@ -1079,7 +1081,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "custom_selection":
-                features, expression = self.exploring_custom_selection()
+                expression = layer_props["exploring"]["custom_selection_expression"]
+                if QgsExpression(expression).isField() is False:
+                    features, expression = self.exploring_custom_selection()
             
             if len(features) == 0:
                 return
@@ -1090,6 +1094,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
     def exploring_zoom_clicked(self, features=[]):
 
         if self.widgets_initialized is True and self.current_layer != None:
+
 
             if len(features) == 0:   
                 features, expression = self.get_current_features()
@@ -1199,6 +1204,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
             features = []    
             expression = ''
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
@@ -1209,7 +1215,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 features, expression = self.get_exploring_features(input, True)
 
             elif self.current_exploring_groupbox == "custom_selection":
-                features, expression = self.exploring_custom_selection()
+                expression = layer_props["exploring"]["custom_selection_expression"]
+                if QgsExpression(expression).isField() is False:
+                    features, expression = self.exploring_custom_selection()
+
                 
             return features, expression
     
@@ -1388,30 +1397,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
 
 
-            """SINGLE SELECTION"""
-
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
-
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
-
-
-            """MULTIPLE SELECTION"""
-            
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
-
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-
-
-            """CUSTOM SELECTION"""
-
-            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
-
 
             for properties_tuples_key in self.layer_properties_tuples_dict:
                 properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
@@ -1426,7 +1411,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                     elif widget_type == 'ComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
                     elif widget_type == 'QgsFieldExpressionWidget':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpression(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].expression())
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setLayer(self.current_layer)
+                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpression(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'QgsDoubleSpinBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'LineEdit':
@@ -1448,7 +1434,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                         
                         
                             
+            """SINGLE SELECTION"""
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
 
+
+            """MULTIPLE SELECTION"""
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
                                 
 
 

@@ -729,11 +729,10 @@ class FilterEngineTask(QgsTask):
 
 
     def cancel(self):
-        iface.messageBar().pushMessage(
+        QgsMessageLog.logMessage(
             '"{name}" task was canceled'.format(name=self.description()),
             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info)
         super().cancel()
-        self.finished(None)
 
 
     def finished(self, result):
@@ -1237,11 +1236,11 @@ class LayersManagementEngineTask(QgsTask):
 
 
     def cancel(self):
-        iface.messageBar().pushMessage(
+        QgsMessageLog.logMessage(
             '"{name}" task was canceled'.format(name=self.description()),
             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info)
         super().cancel()
-        self.finished(None)
+
 
     def finished(self, result):
         result_action = None
