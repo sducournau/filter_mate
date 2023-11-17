@@ -68,7 +68,8 @@ class FilterMateApp:
 
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA)
 
-            self.manage_task('add_layers', init_layers)
+            if init_layers != None and len(init_layers) > 0:
+                self.manage_task('add_layers', init_layers)
 
             # show the dockwidget
             # TODO: fix to allow choice of dock location
@@ -106,8 +107,8 @@ class FilterMateApp:
 
         layer_scope = QgsExpressionContextUtils.layerScope(layer)
 
-        if variable_key == {}:
-            QgsExpressionContextUtils.setLayersVariable(layer, variable_key)
+        if variable_key == '':
+            QgsExpressionContextUtils.setLayersVariable(layer, {})
         else:
             layer_scope.removeVariable(variable_key)
 
@@ -172,6 +173,7 @@ class FilterMateApp:
                         layers.append(temp_layer)
 
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
+            self.appTasks[task_name].returningSourceLayer.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
             self.appTasks[task_name].taskCompleted.connect(partial(self.filter_engine_task_completed, task_name, current_layer, task_parameters)) 
 
         else:
@@ -361,10 +363,23 @@ class FilterMateApp:
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
          
+        
+
+        features_iterator = current_layer.getFeatures()
+        done_looping = False
+        features = []
+
+        while not done_looping:
+            try:
+                feature = next(features_iterator)
+                features.append(feature)
+            except StopIteration:
+                done_looping = True
+   
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
 
         if task_name == 'filter' or task_name == 'unfilter':
-            self.dockwidget.exploring_zoom_clicked()
+            self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
 
     def create_spatial_index_for_layer(self, layer):    
 

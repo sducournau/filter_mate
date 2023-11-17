@@ -33,6 +33,8 @@ MESSAGE_TASKS_CATEGORIES = {
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
 
+    returningSourceLayer = pyqtSignal(QgsVectorLayer)
+
     def __init__(self, description, task_action, task_parameters):
 
         QgsTask.__init__(self, description, QgsTask.CanCancel)
@@ -139,6 +141,8 @@ class FilterEngineTask(QgsTask):
                 else:
                     return False
                 
+            self.returningSourceLayer.emit(self.source_layer)
+            
             return True
     
         except Exception as e:
@@ -777,7 +781,7 @@ class LayersManagementEngineTask(QgsTask):
 
     resultingLayers = pyqtSignal(dict)
     savingLayerVariable = pyqtSignal(QgsVectorLayer, str, object, type)
-    removingLayerVariable = pyqtSignal(QgsVectorLayer, object)
+    removingLayerVariable = pyqtSignal(QgsVectorLayer, str)
 
     def __init__(self, description, task_action, task_parameters):
 
@@ -945,7 +949,7 @@ class LayersManagementEngineTask(QgsTask):
 
                     if layer_scope.hasVariable(variable_key) is True:
                         value = layer_scope.variable(variable_key)
-                        typped_value = self.return_typped_value(value)
+                        typped_value, type_returned = self.return_typped_value(value)
                         existing_layer_variables[key_group][key] = typped_value
                     else:
                         if key in new_layer_variables[key_group]:
@@ -1120,7 +1124,7 @@ class LayersManagementEngineTask(QgsTask):
                 layer = layers[0]  
 
                 if layer_property == None or (isinstance(layer_property, tuple) and len(layer_property) == 0):
-                   self.removingLayerVariable.emit(layer, {})
+                   self.removingLayerVariable.emit(layer, '')
 
                 elif isinstance(layer_property, tuple) and len(layer_property) == 2:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
@@ -1205,10 +1209,10 @@ class LayersManagementEngineTask(QgsTask):
             value_typped = str('')
             type_returned = str
         elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
-            value_typped = dict(value_as_string)
+            value_typped = dict(json.loads(value_as_string))
             type_returned = dict
         elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
-            value_typped = list(value_as_string)
+            value_typped = list(json.loads(value_as_string))
             type_returned = list
         elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
             value_typped = bool(value_as_string)
@@ -1262,10 +1266,12 @@ class LayersManagementEngineTask(QgsTask):
 
                 elif message_category == 'ManageLayersProperties':
 
-                    if self.task_action == 'save_layer_variable':
-                        result_action = 'Properties saved for {} layer'.format(self.layer_id)
-                    elif self.task_action == 'remove_layer_variable':
-                        result_action = 'Properties removed for {} layer'.format(self.layer_id)
+                    if self.layer_property == None:
+
+                        if self.task_action == 'save_layer_variable':
+                            result_action = 'Properties saved for {} layer'.format(self.layer_id)
+                        elif self.task_action == 'remove_layer_variable':
+                            result_action = 'Properties removed for {} layer'.format(self.layer_id)
 
                     iface.messageBar().pushMessage(
                         'Layers list has been updated : {}'.format(result_action),

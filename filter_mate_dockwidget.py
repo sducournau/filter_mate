@@ -988,12 +988,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                     if self.current_layer != None:
                         self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'connect', 'featureChanged')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'filteringCheckedItemList')
                         self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
 
                         self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
                         self.widgets["SINGLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
 
                         self.exploring_features_changed(self.widgets["SINGLE_SELECTION"]["FEATURES"]["WIDGET"].feature())
+                    else:
+                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect')
 
 
 
@@ -1018,7 +1022,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                     if self.current_layer != None:
                         self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
-                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'updatingCheckedItemList')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect')
 
                         self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setEnabled(True)
                         self.widgets["MULTIPLE_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
@@ -1027,7 +1031,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
 
                         self.exploring_features_changed(self.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
-
+                    else:
+                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect')
 
             elif groupbox == "custom_selection":
 
@@ -1048,10 +1054,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
                     if self.current_layer != None:
                         self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect', 'featureChanged')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'connect', 'filteringCheckedItemList')
                         self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect', 'updatingCheckedItemList')
 
                         self.widgets["CUSTOM_SELECTION"]["EXPRESSION"]["WIDGET"].setEnabled(True)
                         self.exploring_custom_selection()
+                    else:
+                        self.manageSignal(["SINGLE_SELECTION","FEATURES"], 'disconnect')
+                        self.manageSignal(["MULTIPLE_SELECTION","FEATURES"], 'disconnect')
 
 
     def exploring_identify_clicked(self):
@@ -1078,11 +1088,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
 
 
-    def exploring_zoom_clicked(self):
+    def exploring_zoom_clicked(self, features=None):
 
         if self.widgets_initialized is True and self.current_layer != None:
 
-            features, expression = self.get_current_features()
+            if features == None:   
+                features, expression = self.get_current_features()
             
             if len(features) == 0:
                 return
@@ -1951,8 +1962,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]) if layer.id() == self.current_layer.id()]
                     if len(layers) == 0:
                         layer = self.iface.activeLayer()
-                else:
-                    layer = self.iface.activeLayer()
 
                 if self.has_loaded_layers is False:
                     self.has_loaded_layers = True
