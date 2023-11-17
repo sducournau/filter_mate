@@ -222,7 +222,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
         self.layer_properties_tuples_dict =   {
                                                 "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_saving")),
-                                                "exploring_selection":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
+                                                "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
                                                 "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
                                                 "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
                                                 "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
@@ -1087,11 +1087,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
 
 
-    def exploring_zoom_clicked(self, features=None):
+    def exploring_zoom_clicked(self, features=[]):
 
         if self.widgets_initialized is True and self.current_layer != None:
 
-            if features == None:   
+            if len(features) == 0:   
                 features, expression = self.get_current_features()
             
             if len(features) == 0:
@@ -1580,9 +1580,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                             break
                     break
 
-            print(properties_group_key, properties_tuples, property_path, input_data)
 
-            
             if properties_group_key == 'is':
 
                 if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
@@ -1597,7 +1595,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                     if "ON_FALSE" in custom_functions:
                         custom_functions["ON_FALSE"](0) 
 
-            elif properties_group_key == 'exploring_selection':
+            elif properties_group_key == 'selection_expression':
                 
 
 
@@ -1641,7 +1639,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
 
-                self.setLayerVariableEvent(self.current_layer.id(), tuple(property_path))
+                if layer_props["exploring"]["is_saving"] is True:
+                    self.setLayerVariableEvent(self.current_layer.id(), tuple(property_path))
 
 
     def set_exporting_properties(self):
@@ -1694,12 +1693,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
     def properties_group_state_changed(self, tuple_group, group_name):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
-            if group_name != "exploring_selection":
+            if group_name != "selection_expression":
                 group_enabled_property = tuple_group[0]
                 state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
                 tuple_group = tuple_group[1:]
             for tuple in tuple_group:
-                if group_name == "exploring_selection":
+                if group_name == "selection_expression":
                     state = False if self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].expression() == '' else True
                 if state is False:
                     widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
@@ -1997,6 +1996,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 self.has_loaded_layers = False
                 self.disconnect_widgets_signals()
                 self.set_widgets_enabled_state(self.has_loaded_layers)
+
+            self.exploring_groupbox_init()
 
             if layer != None and isinstance(layer, QgsVectorLayer):
                 self.exporting_populate_combobox()

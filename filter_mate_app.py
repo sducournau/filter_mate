@@ -174,9 +174,8 @@ class FilterMateApp:
                         layers.append(temp_layer)
 
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
-            self.appTasks[task_name].returningSourceLayer.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
-            self.appTasks[task_name].taskCompleted.connect(partial(self.filter_engine_task_completed, task_name, current_layer, task_parameters)) 
-
+            self.appTasks[task_name].taskCompleted.connect(lambda task_name=task_name, current_layer=current_layer, task_parameters=task_parameters: self.filter_engine_task_completed(task_name, current_layer, task_parameters))
+            
         else:
             self.appTasks[task_name] = LayersManagementEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
 
@@ -364,23 +363,23 @@ class FilterMateApp:
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
          
-        
-
-        features_iterator = current_layer.getFeatures()
-        done_looping = False
-        features = []
-
-        while not done_looping:
-            try:
-                feature = next(features_iterator)
-                features.append(feature)
-            except StopIteration:
-                done_looping = True
-   
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
 
+
         if task_name == 'filter' or task_name == 'unfilter':
+            features_iterator = current_layer.getFeatures()
+            done_looping = False
+            features = []
+
+            while not done_looping:
+                try:
+                    feature = next(features_iterator)
+                    features.append(feature)
+                except StopIteration:
+                    done_looping = True
             self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
+        
+        
 
     def create_spatial_index_for_layer(self, layer):    
 
@@ -396,12 +395,12 @@ class FilterMateApp:
 
         if self.dockwidget != None:
 
-            if task_name == 'remove_layers':
-                for layer_key in self.PROJECT_LAYERS.keys():
-                    self.dockwidget.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+            if task_name in ("add_layers","remove_layers","save_layer_variable","remove_layer_variable"):
+                if task_name == 'remove_layers':
+                    for layer_key in self.PROJECT_LAYERS.keys():
+                        self.dockwidget.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].remove_list_widget(layer_key)
 
-            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
-
+                self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
         
         
 

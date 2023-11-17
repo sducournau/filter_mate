@@ -33,8 +33,6 @@ MESSAGE_TASKS_CATEGORIES = {
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
 
-    returningSourceLayer = pyqtSignal(QgsVectorLayer)
-
     def __init__(self, description, task_action, task_parameters):
 
         QgsTask.__init__(self, description, QgsTask.CanCancel)
@@ -140,8 +138,6 @@ class FilterEngineTask(QgsTask):
                         return False
                 else:
                     return False
-                
-            self.returningSourceLayer.emit(self.source_layer)
             
             return True
     
@@ -441,7 +437,7 @@ class FilterEngineTask(QgsTask):
 
     def execute_source_layer_filtering(self):
         """Manage the creation of the origin filtering expression"""
-        result = False
+        result = True
         param_old_subset = ''
 
         self.param_source_provider_type = self.task_parameters["infos"]["layer_provider_type"]
@@ -496,6 +492,9 @@ class FilterEngineTask(QgsTask):
 
 
                     result = self.source_layer.setSubsetString(self.expression)
+
+                else:
+                    result = True
 
         if result is False:
             self.is_field_expression = None    
@@ -734,6 +733,7 @@ class FilterEngineTask(QgsTask):
             '"{name}" task was canceled'.format(name=self.description()),
             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info)
         super().cancel()
+        self.finished(None)
 
 
     def finished(self, result):
@@ -949,7 +949,7 @@ class LayersManagementEngineTask(QgsTask):
 
                     if layer_scope.hasVariable(variable_key) is True:
                         value = layer_scope.variable(variable_key)
-                        typped_value, type_returned = self.return_typped_value(value)
+                        typped_value, type_returned = self.return_typped_value(value, 'load')
                         existing_layer_variables[key_group][key] = typped_value
                     else:
                         if key in new_layer_variables[key_group]:
@@ -1093,7 +1093,7 @@ class LayersManagementEngineTask(QgsTask):
                     for key_group in ("infos", "exploring", "filtering"):
                         for key, value in self.project_layers[layer_id][key_group].items():
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
-                            value_typped, type_returned = self.return_typped_value(value)
+                            value_typped, type_returned = self.return_typped_value(value, 'save')
                             self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                             if self.isCanceled():
                                 return False
@@ -1103,7 +1103,7 @@ class LayersManagementEngineTask(QgsTask):
                         if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
-                            value_typped, type_returned = self.return_typped_value(value)
+                            value_typped, type_returned = self.return_typped_value(value, 'save')
                             self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
 
         return True
@@ -1201,7 +1201,7 @@ class LayersManagementEngineTask(QgsTask):
             return False
 
 
-    def return_typped_value(self, value_as_string):
+    def return_typped_value(self, value_as_string, action=None):
         value_typped= None
         type_returned = None
 
@@ -1209,10 +1209,16 @@ class LayersManagementEngineTask(QgsTask):
             value_typped = str('')
             type_returned = str
         elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
-            value_typped = dict(json.loads(value_as_string))
+            if action == 'save':
+                value_typped = json.dumps(dict(value_as_string))
+            elif action == 'load':
+                value_typped = dict(json.loads(value_as_string))
             type_returned = dict
         elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
-            value_typped = list(json.loads(value_as_string))
+            if action == 'save':
+                value_typped = json.dumps(list(value_as_string))
+            elif action == 'load':
+                value_typped = list(json.loads(value_as_string))
             type_returned = list
         elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
             value_typped = bool(value_as_string)
@@ -1235,7 +1241,7 @@ class LayersManagementEngineTask(QgsTask):
             '"{name}" task was canceled'.format(name=self.description()),
             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info)
         super().cancel()
-
+        self.finished(None)
 
     def finished(self, result):
         result_action = None
