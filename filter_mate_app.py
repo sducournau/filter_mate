@@ -85,7 +85,7 @@ class FilterMateApp:
         # self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
-        
+
         self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
         self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
         self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
@@ -387,7 +387,7 @@ class FilterMateApp:
 
             if layer_all_properties_flag is True:
                 for key_group in ("infos", "exploring", "filtering"):
-                    for key, value in self.project_layers[layer_id][key_group].items():
+                    for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
                         variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
                         value_typped, type_returned = self.return_typped_value(value, 'save')
                         if type_returned in (list, dict):
@@ -398,9 +398,9 @@ class FilterMateApp:
             else:
                 for layer_property in layer_properties:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
-                        if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
+                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
+                            value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
                             value_typped, type_returned = self.return_typped_value(value, 'save')
                             if type_returned in (list, dict):
                                 QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
@@ -428,7 +428,7 @@ class FilterMateApp:
             else:
                 for layer_property in layer_properties:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
-                        if layer_property[0] in self.PROJECT_LAYERS[layer_id] and layer_property[1] in self.PROJECT_LAYERS[layer_id][layer_property[0]]:
+                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             layer_scope.removeVariable(variable_key)
             
@@ -457,6 +457,47 @@ class FilterMateApp:
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
         
         
+    def can_cast(self, dest_type, source_value):
+        try:
+            dest_type(source_value)
+            return True
+        except:
+            return False
+
+
+    def return_typped_value(self, value_as_string, action=None):
+        value_typped= None
+        type_returned = None
+
+        if value_as_string == None or value_as_string == '':   
+            value_typped = str('')
+            type_returned = str
+        elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
+            if action == 'save':
+                value_typped = json.dumps(dict(value_as_string))
+            elif action == 'load':
+                value_typped = dict(json.loads(value_as_string))
+            type_returned = dict
+        elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
+            if action == 'save':
+                value_typped = list(value_as_string)
+            elif action == 'load':
+                value_typped = list(json.loads(value_as_string))
+            type_returned = list
+        elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
+            value_typped = bool(value_as_string)
+            type_returned = bool
+        elif self.can_cast(float, value_as_string) is True and len(str(value_as_string).split('.')) > 1:
+            value_typped = float(value_as_string)
+            type_returned = float
+        elif self.can_cast(int, value_as_string) is True:
+            value_typped = int(value_as_string)
+            type_returned = int
+        else:
+            value_typped = str(value_as_string)
+            type_returned = str
+
+        return value_typped, type_returned       
 
 # class barProgress:
 

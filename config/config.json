@@ -36,7 +36,7 @@
                     "IS_SELECTING": "select_black.png",
                     "IS_TRACKING": "track.png",
                     "IS_LINKING": "link.png",
-                    "IS_SAVING": {"ICON_ON_TRUE": "save_properties.png", "ICON_ON_FALSE": "reset_properties.png"}
+                    "CHANGE_ALL_LAYER_PROPERTIES": {"ICON_ON_TRUE": "save_properties.png", "ICON_ON_FALSE": "reset_properties.png"}
                 },
                 "FILTERING": {
                     "AUTO_CURRENT_LAYER": "auto_layer_white.png",

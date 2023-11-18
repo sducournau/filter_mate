@@ -424,10 +424,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def switch_widget_icon(self, widget_path, state):
         if state is True:
-            icon = QtGui.QIcon(self.widgets[widget_path[0]][widget_path[1]]["ICON_ON_TRUE"])
+            icon = QtGui.QIcon(self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_TRUE"])
         else:
-            icon = QtGui.QIcon(self.widgets[widget_path[0]][widget_path[1]]["ICON_ON_FALSE"])
-        self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].setIcon(icon)
+            icon = QtGui.QIcon(self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_FALSE"])
+        self.widgets[widget_path[0].upper()][widget_path[1].upper()]["WIDGET"].setIcon(icon)
 
 
     def icon_per_geometry_type(self, geometry_type):
@@ -1416,10 +1416,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 for i, property_tuple in enumerate(properties_tuples):
                     widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
                     if widget_type == 'PushButton':
-                        if layer_props[property_tuple[0]][property_tuple[1]] is True and "ICON_ON_TRUE" in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]:
-                            self.switch_widget_icon(properties_tuples, True)
-                        elif layer_props[property_tuple[0]][property_tuple[1]] is False and "ICON_ON_FALSE" in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]:
-                            self.switch_widget_icon(properties_tuples, False)
+
+                        if all(key in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()] for key in ["ICON_ON_TRUE", "ICON_ON_FALSE"]):
+                            self.switch_widget_icon(property_tuple, layer_props[property_tuple[0]][property_tuple[1]])
+
                         if self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].isCheckable():
                             self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'CheckableComboBox':
