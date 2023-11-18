@@ -36,7 +36,7 @@
                     "IS_SELECTING": "select_black.png",
                     "IS_TRACKING": "track.png",
                     "IS_LINKING": "link.png",
-                    "IS_SAVING": "auto_save.png"
+                    "IS_SAVING": {"ICON_ON_TRUE": "save_properties.png", "ICON_ON_FALSE": "reset_properties.png"}
                 },
                 "FILTERING": {
                     "AUTO_CURRENT_LAYER": "auto_layer_white.png",
@@ -74,7 +74,7 @@
         "has_projection_to_export": true,
         "projection_to_export": "EPSG:2154",
         "has_styles_to_export": true,
-        "styles_to_export": "QML",
+        "styles_to_export": "SLD",
         "has_datatype_to_export": true,
         "datatype_to_export": "GPSBabel",
         "has_output_folder_to_export": false,
@@ -91,7 +91,7 @@
         "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
         "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
         "POSTGRESQL_CONNECTION_NAME": "LOCAL",
-        "FRESH_RELOAD_FLAG": true,
+        "FRESH_RELOAD_FLAG": false,
         "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true
     }
 }

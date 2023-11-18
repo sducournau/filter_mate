@@ -21,7 +21,7 @@
  ***************************************************************************/
 """
 
-from .filter_mate_dockwidget_base import Ui_filterMateDockWidgetBase
+from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 from .config.config import *
 import os
 import json
@@ -44,15 +44,16 @@ from .modules.qt_json_view.view import JsonView
 from .modules.customExceptions import *
 
 
-class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
+class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
 
     gettingProjectLayers = pyqtSignal()
 
-    settingLayerVariable = pyqtSignal(str, tuple)
-    resettingLayerVariableOnError = pyqtSignal(str, tuple)
+    settingLayerVariable = pyqtSignal(QgsVectorLayer, list)
+    resettingLayerVariable = pyqtSignal(QgsVectorLayer, list)
+    resettingLayerVariableOnError = pyqtSignal(QgsVectorLayer, list)
 
     def __init__(self, project_layers, plugin_dir, config_data, parent=None):
         """Constructor."""
@@ -221,7 +222,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
     def dockwidget_widgets_configuration(self):
 
         self.layer_properties_tuples_dict =   {
-                                                "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_saving")),
+                                                "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","change_all_layer_properties")),
                                                 "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
                                                 "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
                                                 "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
@@ -244,8 +245,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                                 "SINGLE_SELECTION":{"TYPE":"GroupBox", "WIDGET":self.mGroupBox_exploring_single_selection, "SIGNALS":[("stateChanged", lambda state, x='single_selection': self.exploring_groupbox_changed(x))]},
                                 "MULTIPLE_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_multiple_selection, "SIGNALS":[("stateChanged", lambda state, x='multiple_selection': self.exploring_groupbox_changed(x))]},
                                 "CUSTOM_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("stateChanged", lambda state, x='custom_selection': self.exploring_groupbox_changed(x))]},
-                                "CONFIGURATION_TREE_VIEW":{"TYPE":"TreeView","WIDGET":self.config_view, "SIGNALS":[("collapsed", None),("expanded", None)]},
-                                "CONFIGURATION_MODEL":{"TYPE":"QStandardItemModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", self.data_changed_configuration_model)]},
+                                "CONFIGURATION_TREE_VIEW":{"TYPE":"JsonTreeView","WIDGET":self.config_view, "SIGNALS":[("collapsed", None),("expanded", None)]},
+                                "CONFIGURATION_MODEL":{"TYPE":"JsonModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", self.data_changed_configuration_model)]},
                                 "TOOLS":{"TYPE":"ToolBox","WIDGET":self.toolBox_tabTools, "SIGNALS":[("currentChanged", self.select_tabTools_index)]}
                                 }   
 
@@ -263,7 +264,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                                     "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_SAVING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_saving_parameters, "SIGNALS":[("clicked", lambda state, x='is_saving', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x : self.resetLayerVariableOnErrorEvent()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "CHANGE_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_change_all_layer_properties, "SIGNALS":[("clicked", lambda state, x='change_all_layer_properties', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON_ON_TRUE":None, "ICON_ON_FALSE":None},
                                     
                                     "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed),("filterExpressionChanged", self.exploring_source_params_changed)]},
                                     "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", lambda state, x='single_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]},
@@ -309,7 +310,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
     
         self.widgets["QGIS"] = {
-                                "LAYER_TREE_VIEW":{"TYPE":"TreeView", "WIDGET":self.iface.layerTreeView(), "SIGNALS":[("currentLayerChanged", self.current_layer_changed)]}
+                                "LAYER_TREE_VIEW":{"TYPE":"LayerTreeView", "WIDGET":self.iface.layerTreeView(), "SIGNALS":[("currentLayerChanged", self.current_layer_changed)]}
                                 }
         
         self.widgets_initialized = True
@@ -399,11 +400,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
         if self.widgets_initialized is True:
 
             if len(config_widget_path) == 5:
-                file = self.CONFIG_DATA[config_widget_path[0]][config_widget_path[1]][config_widget_path[2]][config_widget_path[3]][config_widget_path[4]]
-                file_path = os.path.join(self.plugin_dir, "icons", file)
+
+                config_path = self.CONFIG_DATA[config_widget_path[0]][config_widget_path[1]][config_widget_path[2]][config_widget_path[3]][config_widget_path[4]]
+
+                if isinstance(config_path, dict):
+                    if "ICON_ON_FALSE" in config_path:    
+                        file = config_path["ICON_ON_FALSE"]
+                        file_path = os.path.join(self.plugin_dir, "icons", file)
+                        self.widgets[config_widget_path[3]][config_widget_path[4]]["ICON_ON_FALSE"] = file_path
+
+                    if "ICON_ON_TRUE" in config_path:
+                        file = config_path["ICON_ON_TRUE"]
+                        file_path = os.path.join(self.plugin_dir, "icons", file)
+                        self.widgets[config_widget_path[3]][config_widget_path[4]]["ICON_ON_TRUE"] = file_path
+
+                elif isinstance(config_path, str):
+                    file_path = os.path.join(self.plugin_dir, "icons", config_path)
+                    self.widgets[config_widget_path[3]][config_widget_path[4]]["ICON"] = file_path
+
                 icon = QtGui.QIcon(file_path)
-                self.widgets[config_widget_path[3]][config_widget_path[4]]["ICON"] = file_path
                 self.widgets[config_widget_path[3]][config_widget_path[4]]["WIDGET"].setIcon(icon)
+
+
+    def switch_widget_icon(self, widget_path, state):
+        if state is True:
+            icon = QtGui.QIcon(self.widgets[widget_path[0]][widget_path[1]]["ICON_ON_TRUE"])
+        else:
+            icon = QtGui.QIcon(self.widgets[widget_path[0]][widget_path[1]]["ICON_ON_FALSE"])
+        self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].setIcon(icon)
 
 
     def icon_per_geometry_type(self, geometry_type):
@@ -479,7 +503,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
             except Exception as e:
                 self.exception = e
                 print(self.exception)
-                self.resetLayerVariableOnErrorEvent(layer.id(), self.exception)
+                self.resetLayerVariableOnErrorEvent(layer, self.exception)
 
     def exporting_populate_combobox(self):
 
@@ -878,7 +902,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
     def set_widgets_enabled_state(self, state):
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
-                if self.widgets[widget_group][widget_name]["TYPE"] in ("PushButton","ComboBox","CheckableComboBox","CustomCheckableLayerComboBox","CustomCheckableFeatureComboBox","FeatureComboBox","LineEdit","QgsProjectionSelectionWidget","QgsDoubleSpinBox"):
+                if self.widgets[widget_group][widget_name]["TYPE"] not in ("JsonTreeView","LayerTreeView","JsonModel","ToolBox"):
                     self.widgets[widget_group][widget_name]["WIDGET"].setEnabled(state)
 
 
@@ -1392,7 +1416,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 for i, property_tuple in enumerate(properties_tuples):
                     widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
                     if widget_type == 'PushButton':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(layer_props[property_tuple[0]][property_tuple[1]])
+                        if layer_props[property_tuple[0]][property_tuple[1]] is True and "ICON_ON_TRUE" in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]:
+                            self.switch_widget_icon(properties_tuples, True)
+                        elif layer_props[property_tuple[0]][property_tuple[1]] is False and "ICON_ON_FALSE" in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]:
+                            self.switch_widget_icon(properties_tuples, False)
+                        if self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].isCheckable():
+                            self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'CheckableComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'CustomCheckableComboBox':
@@ -1566,22 +1595,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
             if properties_group_key == 'is':
 
-                if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
-                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                    flag_value_changed = True
-                    if "ON_TRUE" in custom_functions:
-                        custom_functions["ON_TRUE"](0)
+                if property_path[1] == "change_all_layer_properties":
 
-                elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
-                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                    flag_value_changed = True
-                    if "ON_FALSE" in custom_functions:
-                        custom_functions["ON_FALSE"](0) 
+                    if layer_props[property_path[0]][property_path[1]] is True:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = False
+                        flag_value_changed = True
+                        if "ON_TRUE" in custom_functions:
+                            custom_functions["ON_TRUE"](0)
+                        self.switch_widget_icon(property_path, False)
+
+                    elif layer_props[property_path[0]][property_path[1]] is False:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = True
+                        flag_value_changed = True
+                        if "ON_FALSE" in custom_functions:
+                            custom_functions["ON_FALSE"](0)
+                        self.switch_widget_icon(property_path, True)
+
+                else:
+
+                    if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                        flag_value_changed = True
+                        if "ON_TRUE" in custom_functions:
+                            custom_functions["ON_TRUE"](0)
+
+                    elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                        flag_value_changed = True
+                        if "ON_FALSE" in custom_functions:
+                            custom_functions["ON_FALSE"](0) 
+
 
             elif properties_group_key == 'selection_expression':
                 
-
-
+                print('selection_expression', property_path, input_data)
                 if str(layer_props[property_path[0]][property_path[1]]) != input_data:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
@@ -1622,8 +1669,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
 
-                if layer_props["exploring"]["is_saving"] is True:
-                    self.setLayerVariableEvent(self.current_layer.id(), tuple(property_path))
+                if property_path[1] == "change_all_layer_properties":
+                    if self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] is True:
+                        self.setLayerVariableEvent(self.current_layer, [])
+                    else:
+                        self.resetLayerVariableEvent(self.current_layer, [])
+                else:
+                    self.setLayerVariableEvent(self.current_layer, [property_path])
 
 
     def set_exporting_properties(self):
@@ -1972,16 +2024,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
 
                 if self.has_loaded_layers is False:
                     self.has_loaded_layers = True
-                    self.connect_widgets_signals()
-                    self.set_widgets_enabled_state(self.has_loaded_layers)
+                    
+                    
         
             else:
                 self.has_loaded_layers = False
                 self.disconnect_widgets_signals()
-                self.set_widgets_enabled_state(self.has_loaded_layers)
+                self.set_widgets_enabled_state(False)
+                return
 
+            self.set_widgets_enabled_state(True)
+            self.connect_widgets_signals()
             self.exploring_groupbox_init()
-
             if layer != None and isinstance(layer, QgsVectorLayer):
                 self.exporting_populate_combobox()
                 self.set_exporting_properties()
@@ -1990,22 +2044,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_filterMateDockWidgetBase):
                 self.exploring_source_params_changed()
 
 
-    def setLayerVariableEvent(self, layer_id=None, path=()):
+    def setLayerVariableEvent(self, layer=None, properties=[]):
 
         if self.widgets_initialized is True:
-            if layer_id == None:
-                layer_id = self.current_layer.id()
+            if layer == None:
+                layer = self.current_layer
 
-            self.settingLayerVariable.emit(layer_id, path)
+            self.settingLayerVariable.emit(layer, properties)
 
-    def resetLayerVariableOnErrorEvent(self, layer_id=None, path=()):
+    def resetLayerVariableOnErrorEvent(self, layer, properties=[]):
+
 
         if self.widgets_initialized is True:
-            if layer_id == None:
-                layer_id = self.current_layer.id()
+            if layer == None:
+                layer = self.current_layer
+           
+            self.resettingLayerVariableOnError.emit(layer, properties)
 
-            self.resettingLayerVariableOnError.emit(layer_id, path)
 
+    def resetLayerVariableEvent(self, layer=None, properties=[]):
+
+        if self.widgets_initialized is True:
+            if layer == None:
+                layer = self.current_layer
+           
+            self.resettingLayerVariable.emit(layer, properties)
 
     def getProjectLayersEvent(self, event):
 

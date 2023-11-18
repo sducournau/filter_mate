@@ -799,13 +799,13 @@ class LayersManagementEngineTask(QgsTask):
 
         self.layers = None
         self.project_layers = None
-        self.layer_property = None
-
+        self.layer_properties = None
+        self.layer_all_properties_flag = False
         self.outputs = {}
         self.message = None
 
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
-        self.json_template_layer_exploring = '{"is_saving":false,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
+        self.json_template_layer_exploring = '{"change_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
 
     def run(self):
@@ -832,9 +832,12 @@ class LayersManagementEngineTask(QgsTask):
                 
             elif self.task_action == 'save_layer_variable':
 
+                print(self.task_parameters["task"])
                 self.layer_id = self.task_parameters["task"]["layer_id"]
                 self.project_layers = self.task_parameters["task"]["project_layers"]
-                self.layer_property = self.task_parameters["task"]["layer_property"]
+                self.layer_properties = self.task_parameters["task"]["layer_properties"]
+                if isinstance(self.layer_properties, list) and len(self.layer_properties) > 0:
+                    self.layer_all_properties_flag = True
                 result = self.save_variables_from_layer_id()
                 if self.isCanceled() or result is False:
                     return False
@@ -843,7 +846,9 @@ class LayersManagementEngineTask(QgsTask):
 
                 self.layer_id = self.task_parameters["task"]["layer_id"]
                 self.project_layers = self.task_parameters["task"]["project_layers"]
-                self.layer_property = self.task_parameters["task"]["layer_property"]
+                self.layer_properties = self.task_parameters["task"]["layer_properties"]
+                if isinstance(self.layer_properties, list) and len(self.layer_properties) > 0:
+                    self.layer_all_properties_flag = True
                 result = self.remove_variables_from_layer_id()
                 if self.isCanceled() or result is False:
                     return False
@@ -1078,13 +1083,13 @@ class LayersManagementEngineTask(QgsTask):
         return True
 
 
-    def save_variables_from_layer_id(self, layer_id=None, layer_property=None):
+    def save_variables_from_layer_id(self, layer_id=None, layer_properties=None):
 
         if self.layer_id != None:
             layer_id = self.layer_id
 
-        if self.layer_property != None:
-            layer_property = self.layer_property
+        if self.layer_properties != None:
+            layer_properties = self.layer_properties
 
         if layer_id in self.project_layers.keys():
             layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
@@ -1094,7 +1099,7 @@ class LayersManagementEngineTask(QgsTask):
                 
                 #layer_scope = QgsExpressionContextUtils.layerScope(layer)  
 
-                if layer_property == None or (isinstance(layer_property, tuple) and len(layer_property) == 0):
+                if self.layer_all_properties_flag is True:
                     for key_group in ("infos", "exploring", "filtering"):
                         for key, value in self.project_layers[layer_id][key_group].items():
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
@@ -1103,13 +1108,14 @@ class LayersManagementEngineTask(QgsTask):
                             if self.isCanceled():
                                 return False
                 
-                elif isinstance(layer_property, tuple) and len(layer_property) == 2:
-                    if layer_property[0] in ("infos", "exploring", "filtering"):
-                        if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
-                            value_typped, type_returned = self.return_typped_value(value, 'save')
-                            self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                else:
+                    for layer_property in layer_properties:
+                        if layer_property[0] in ("infos", "exploring", "filtering"):
+                            if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
+                                variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                                value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
+                                value_typped, type_returned = self.return_typped_value(value, 'save')
+                                self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
 
         return True
     
@@ -1119,8 +1125,8 @@ class LayersManagementEngineTask(QgsTask):
         if self.layer_id != None:
             layer_id = self.layer_id
 
-        if self.layer_property != None:
-            layer_property = self.layer_property
+        if self.layer_properties != None:
+            layer_properties = self.layer_properties
 
         if layer_id in self.project_layers.keys():
             layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
@@ -1128,14 +1134,15 @@ class LayersManagementEngineTask(QgsTask):
             if len(layers) > 0:
                 layer = layers[0]  
 
-                if layer_property == None or (isinstance(layer_property, tuple) and len(layer_property) == 0):
+                if self.layer_all_properties_flag is True:
                    self.removingLayerVariable.emit(layer, '')
 
-                elif isinstance(layer_property, tuple) and len(layer_property) == 2:
-                    if layer_property[0] in ("infos", "exploring", "filtering"):
-                        if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            self.removingLayerVariable.emit(layer, variable_key)
+                else:
+                    for layer_property in layer_properties:
+                        if layer_property[0] in ("infos", "exploring", "filtering"):
+                            if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
+                                variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                                self.removingLayerVariable.emit(layer, variable_key)
                 
                 self.project_layers[layer_id] = self.add_project_layer(layer)
 
@@ -1146,19 +1153,19 @@ class LayersManagementEngineTask(QgsTask):
 
 
         if layer_id in self.project_layers.keys():
-            if self.project_layers[layer_id]["exploring"]["is_saving"] is True:
-                layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
-                print("save_projectCustomProperties_from_layer_id", layers)
-                if len(layers) > 0:
-                    layer = layers[0]
 
-                    try:
-                        layer.deleteStyleFromDatabase(name="FilterMate_style_{}".format(layer.name()))
-                        result = layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
-                        print("save_projectCustomProperties_from_layer_id", result)
-                    except:
-                        layer_path = layer.source().split('|')[0]
-                        layer.saveNamedStyle(os.path.normcase(os.path.join(os.path.split(layer_path)[0], 'FilterMate_style_{}.qml'.format(layer.name()))))
+            layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
+            print("save_projectCustomProperties_from_layer_id", layers)
+            if len(layers) > 0:
+                layer = layers[0]
+
+                try:
+                    layer.deleteStyleFromDatabase(name="FilterMate_style_{}".format(layer.name()))
+                    result = layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
+                    print("save_projectCustomProperties_from_layer_id", result)
+                except:
+                    layer_path = layer.source().split('|')[0]
+                    layer.saveNamedStyle(os.path.normcase(os.path.join(os.path.split(layer_path)[0], 'FilterMate_style_{}.qml'.format(layer.name()))))
 
         return True
 
@@ -1277,16 +1284,16 @@ class LayersManagementEngineTask(QgsTask):
 
                 elif message_category == 'ManageLayersProperties':
 
-                    if self.layer_property == None:
+                    if self.layer_all_properties_flag is True:    
 
                         if self.task_action == 'save_layer_variable':
-                            result_action = 'Properties saved for {} layer'.format(self.layer_id)
+                            result_action = 'All properties saved for {} layer'.format(self.layer_id)
                         elif self.task_action == 'remove_layer_variable':
-                            result_action = 'Properties removed for {} layer'.format(self.layer_id)
+                            result_action = 'All properties removed for {} layer'.format(self.layer_id)
 
-                    iface.messageBar().pushMessage(
-                        'Layers list has been updated : {}'.format(result_action),
-                        MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success)
+                        iface.messageBar().pushMessage(
+                            'Layers list has been updated : {}'.format(result_action),
+                            MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success)
                     
                 self.resultingLayers.emit(self.project_layers)
         else:

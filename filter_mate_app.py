@@ -85,8 +85,10 @@ class FilterMateApp:
         # self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
-        self.dockwidget.resettingLayerVariableOnError.connect(lambda layer_id, path, x='remove_layer_variable': self.manage_task(x, (layer_id, path)))
-        self.dockwidget.settingLayerVariable.connect(lambda layer_id, path, x='save_layer_variable': self.manage_task(x, (layer_id, path)))
+        
+        self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+        self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
+        self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
 
 
@@ -95,23 +97,6 @@ class FilterMateApp:
         # 
         # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
-
-    def saving_layer_variable(self, layer, variable_key, value_typped, type_returned):
-
-        if type_returned in (list, dict):
-            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
-        else:
-            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-
-
-    def removing_layer_variable(self, layer, variable_key):
-
-        layer_scope = QgsExpressionContextUtils.layerScope(layer)
-
-        if variable_key == '':
-            QgsExpressionContextUtils.setLayersVariable(layer, {})
-        else:
-            layer_scope.removeVariable(variable_key)
 
 
     def dockwidget_change_widgets_signal(self, state):
@@ -276,22 +261,22 @@ class FilterMateApp:
 
                     if isinstance(data, tuple) and len(list(data)) > 0:
                         layer_id = data[0]
-                        layer_property = None
-                        if len(list(data)) == 2:
-                            layer_property = data[1]
+                        layer_properties = None
+                        if len(data) == 2:
+                            layer_properties = data[1]
 
-                    task_parameters["task"] = {"layer_id": layer_id, "project_layers": self.PROJECT_LAYERS, "layer_property": layer_property}
+                    task_parameters["task"] = {"layer_id": layer_id, "project_layers": self.PROJECT_LAYERS, "layer_properties": layer_properties}
                     return task_parameters
 
                 elif task_name == 'remove_layer_variable':
 
                     if isinstance(data, tuple) and len(list(data)) > 0:
                         layer_id = data[0]
-                        layer_property = None
-                        if len(list(data)) == 2:
-                            layer_property = data[1]
+                        layer_properties = None
+                        if len(data) == 2:
+                            layer_properties = data[1]
 
-                    task_parameters["task"] = {"layer_id": layer_id, "project_layers": self.PROJECT_LAYERS, "layer_property": layer_property}
+                    task_parameters["task"] = {"layer_id": layer_id, "project_layers": self.PROJECT_LAYERS, "layer_properties": layer_properties}
                     return task_parameters
 
 
@@ -327,6 +312,8 @@ class FilterMateApp:
         if self.PROJECT_LAYERS[current_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
             self.create_spatial_index_for_layer(current_layer)
 
+        self.save_variables_from_layer(current_layer,[("infos","is_already_subset"),("infos","subset_history")])
+
         if task_parameters["filtering"]["has_layers_to_filter"] == True:
             for layer_props in task_parameters["filtering"]["layers_to_filter"]:
                 if layer_props["layer_id"] in self.PROJECT_LAYERS:
@@ -334,6 +321,7 @@ class FilterMateApp:
                     if len(layers) == 1:
 
                         layer = layers[0]
+
                         if layer.subsetString() != '':
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
                             if task_name == 'filter':
@@ -352,14 +340,19 @@ class FilterMateApp:
                                     self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].pop()
                                 else:
                                     self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
+
                         else:
                             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
                             self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
 
+                        
+
                         if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                             self.create_spatial_index_for_layer(layer)
 
-           
+
+                        self.save_variables_from_layer(layer,[("infos","is_already_subset"),("infos","subset_history")])
+
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
          
@@ -379,7 +372,68 @@ class FilterMateApp:
                     done_looping = True
             self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
         
+
+
+    def save_variables_from_layer(self, layer, layer_properties=[]):
+
+        layer_all_properties_flag = False
+
+        assert isinstance(layer, QgsVectorLayer)
+
+        if len(layer_properties) == 0:
+            layer_all_properties_flag = True
+
+        if layer.id() in self.PROJECT_LAYERS.keys():
+
+            if layer_all_properties_flag is True:
+                for key_group in ("infos", "exploring", "filtering"):
+                    for key, value in self.project_layers[layer_id][key_group].items():
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                        value_typped, type_returned = self.return_typped_value(value, 'save')
+                        if type_returned in (list, dict):
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
+                        else:
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+            
+            else:
+                for layer_property in layer_properties:
+                    if layer_property[0] in ("infos", "exploring", "filtering"):
+                        if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                            value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
+                            value_typped, type_returned = self.return_typped_value(value, 'save')
+                            if type_returned in (list, dict):
+                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
+                            else:
+                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+
+    
+
+    def remove_variables_from_layer(self, layer, layer_properties=[]):
         
+        layer_all_properties_flag = False
+
+        assert isinstance(layer, QgsVectorLayer)
+
+        if len(layer_properties) == 0:
+            layer_all_properties_flag = True
+
+        if layer.id() in self.PROJECT_LAYERS.keys():
+
+            layer_scope = QgsExpressionContextUtils.layerScope(layer)
+
+            if layer_all_properties_flag is True:
+                QgsExpressionContextUtils.setLayerVariables(layer, {})
+
+            else:
+                for layer_property in layer_properties:
+                    if layer_property[0] in ("infos", "exploring", "filtering"):
+                        if layer_property[0] in self.PROJECT_LAYERS[layer_id] and layer_property[1] in self.PROJECT_LAYERS[layer_id][layer_property[0]]:
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                            layer_scope.removeVariable(variable_key)
+            
+
+      
 
     def create_spatial_index_for_layer(self, layer):    
 

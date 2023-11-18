@@ -11,7 +11,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 
-class Ui_filterMateDockWidgetBase(object):
+class Ui_FilterMateDockWidgetBase(object):
     def setupUi(self, FilterMateDockWidgetBase):
         FilterMateDockWidgetBase.setObjectName("FilterMateDockWidgetBase")
         FilterMateDockWidgetBase.setWindowModality(QtCore.Qt.NonModal)
@@ -454,28 +454,28 @@ class Ui_filterMateDockWidgetBase(object):
         self.verticalLayout_7.addWidget(self.pushButton_checkable_exploring_linking_widgets)
         spacerItem6 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.MinimumExpanding)
         self.verticalLayout_7.addItem(spacerItem6)
-        self.pushButton_checkable_exploring_saving_parameters = QtWidgets.QPushButton(self.widget_exploring_keys)
+        self.pushButton_exploring_change_all_layer_properties = QtWidgets.QPushButton(self.widget_exploring_keys)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.pushButton_checkable_exploring_saving_parameters.sizePolicy().hasHeightForWidth())
-        self.pushButton_checkable_exploring_saving_parameters.setSizePolicy(sizePolicy)
-        self.pushButton_checkable_exploring_saving_parameters.setMinimumSize(QtCore.QSize(25, 25))
-        self.pushButton_checkable_exploring_saving_parameters.setMaximumSize(QtCore.QSize(16777215, 50))
-        self.pushButton_checkable_exploring_saving_parameters.setBaseSize(QtCore.QSize(0, 50))
+        sizePolicy.setHeightForWidth(self.pushButton_exploring_change_all_layer_properties.sizePolicy().hasHeightForWidth())
+        self.pushButton_exploring_change_all_layer_properties.setSizePolicy(sizePolicy)
+        self.pushButton_exploring_change_all_layer_properties.setMinimumSize(QtCore.QSize(25, 25))
+        self.pushButton_exploring_change_all_layer_properties.setMaximumSize(QtCore.QSize(16777215, 50))
+        self.pushButton_exploring_change_all_layer_properties.setBaseSize(QtCore.QSize(0, 50))
         font = QtGui.QFont()
         font.setFamily("Segoe UI")
         font.setBold(True)
         font.setWeight(75)
-        self.pushButton_checkable_exploring_saving_parameters.setFont(font)
-        self.pushButton_checkable_exploring_saving_parameters.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.pushButton_checkable_exploring_saving_parameters.setMouseTracking(True)
-        self.pushButton_checkable_exploring_saving_parameters.setText("")
-        self.pushButton_checkable_exploring_saving_parameters.setIconSize(QtCore.QSize(20, 20))
-        self.pushButton_checkable_exploring_saving_parameters.setCheckable(True)
-        self.pushButton_checkable_exploring_saving_parameters.setFlat(True)
-        self.pushButton_checkable_exploring_saving_parameters.setObjectName("pushButton_checkable_exploring_saving_parameters")
-        self.verticalLayout_7.addWidget(self.pushButton_checkable_exploring_saving_parameters)
+        self.pushButton_exploring_change_all_layer_properties.setFont(font)
+        self.pushButton_exploring_change_all_layer_properties.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.pushButton_exploring_change_all_layer_properties.setMouseTracking(True)
+        self.pushButton_exploring_change_all_layer_properties.setText("")
+        self.pushButton_exploring_change_all_layer_properties.setIconSize(QtCore.QSize(20, 20))
+        self.pushButton_exploring_change_all_layer_properties.setCheckable(False)
+        self.pushButton_exploring_change_all_layer_properties.setFlat(True)
+        self.pushButton_exploring_change_all_layer_properties.setObjectName("pushButton_exploring_change_all_layer_properties")
+        self.verticalLayout_7.addWidget(self.pushButton_exploring_change_all_layer_properties)
         self.verticalLayout_9.addLayout(self.verticalLayout_7)
         self.horizontalLayout.addWidget(self.widget_exploring_keys)
         spacerItem7 = QtWidgets.QSpacerItem(20, 20, QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Minimum)
@@ -694,7 +694,7 @@ class Ui_filterMateDockWidgetBase(object):
         font.setWeight(75)
         self.mGroupBox_exploring_custom_selection.setFont(font)
         self.mGroupBox_exploring_custom_selection.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.mGroupBox_exploring_custom_selection.setStyleSheet("QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}")
+        self.mGroupBox_exploring_custom_selection.setStyleSheet("QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}")
         self.mGroupBox_exploring_custom_selection.setCheckable(True)
         self.mGroupBox_exploring_custom_selection.setChecked(False)
         self.mGroupBox_exploring_custom_selection.setCollapsed(True)
@@ -1342,7 +1342,7 @@ class Ui_filterMateDockWidgetBase(object):
         icon1.addPixmap(QtGui.QPixmap("icons/filter_multi.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.toolBox_tabTools.addItem(self.FILTERING, icon1, "")
         self.EXPORTING = QtWidgets.QWidget()
-        self.EXPORTING.setGeometry(QtCore.QRect(0, 0, 381, 300))
+        self.EXPORTING.setGeometry(QtCore.QRect(0, 0, 381, 278))
         self.EXPORTING.setObjectName("EXPORTING")
         self.verticalLayout_16 = QtWidgets.QVBoxLayout(self.EXPORTING)
         self.verticalLayout_16.setObjectName("verticalLayout_16")
@@ -1737,7 +1737,7 @@ class Ui_filterMateDockWidgetBase(object):
         icon2.addPixmap(QtGui.QPixmap("icons/save.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.toolBox_tabTools.addItem(self.EXPORTING, icon2, "")
         self.CONFIGURATION = QtWidgets.QWidget()
-        self.CONFIGURATION.setGeometry(QtCore.QRect(0, 0, 381, 300))
+        self.CONFIGURATION.setGeometry(QtCore.QRect(0, 0, 381, 278))
         self.CONFIGURATION.setObjectName("CONFIGURATION")
         self.verticalLayout_8 = QtWidgets.QVBoxLayout(self.CONFIGURATION)
         self.verticalLayout_8.setObjectName("verticalLayout_8")
@@ -1918,7 +1918,6 @@ from qgsmaplayercombobox import QgsMapLayerComboBox
 from qgsprojectionselectionwidget import QgsProjectionSelectionWidget
 from qgspropertyoverridebutton import QgsPropertyOverrideButton
 from .resources import *
-
 
 if __name__ == "__main__":
     import sys
