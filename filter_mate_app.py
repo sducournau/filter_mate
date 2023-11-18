@@ -143,10 +143,6 @@ class FilterMateApp:
                 current_layer = self.dockwidget.current_layer 
 
 
-
-            if task_name == 'filter':
-                if len(task_parameters["task"]['features']) == 0 or task_parameters["task"]['expression'] == None:
-                    return
                 
             layers = []
             self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
@@ -456,7 +452,7 @@ class FilterMateApp:
 
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
         
-        
+
     def can_cast(self, dest_type, source_value):
         try:
             dest_type(source_value)

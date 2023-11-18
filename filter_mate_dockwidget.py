@@ -222,7 +222,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def dockwidget_widgets_configuration(self):
 
         self.layer_properties_tuples_dict =   {
-                                                "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","change_all_layer_properties")),
+                                                "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_changing_all_layer_properties")),
                                                 "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
                                                 "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
                                                 "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
@@ -264,7 +264,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "CHANGE_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_change_all_layer_properties, "SIGNALS":[("clicked", lambda state, x='change_all_layer_properties', custom_functions={"ON_TRUE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON_ON_TRUE":None, "ICON_ON_FALSE":None},
+                                    "IS_CHANGING_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_change_all_layer_properties, "SIGNALS":[("clicked", lambda state, x='is_changing_all_layer_properties': self.layer_property_changed(x, state))], "ICON_ON_TRUE":None, "ICON_ON_FALSE":None},
                                     
                                     "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed),("filterExpressionChanged", self.exploring_source_params_changed)]},
                                     "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", lambda state, x='single_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]},
@@ -1595,7 +1595,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             if properties_group_key == 'is':
 
-                if property_path[1] == "change_all_layer_properties":
+                if property_path[1] == "is_changing_all_layer_properties":
 
                     if layer_props[property_path[0]][property_path[1]] is True:
                         self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = False
@@ -1669,8 +1669,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
 
-                if property_path[1] == "change_all_layer_properties":
-                    if self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] is True:
+                if property_path[1] == "is_changing_all_layer_properties":
+                    if self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] is False:
                         self.setLayerVariableEvent(self.current_layer, [])
                     else:
                         self.resetLayerVariableEvent(self.current_layer, [])

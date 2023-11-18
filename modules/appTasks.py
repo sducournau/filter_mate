@@ -297,15 +297,26 @@ class FilterEngineTask(QgsTask):
             else:
                 param_postgis_sub_expression = postgis_sub_expression_array[0]
 
-            param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
+            if QgsExpression(self.expression).isField() is False:
+
+                param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
                                                                                                                                                                                                                                                                             distant_schema=param_distant_schema,    
                                                                                                                                                                                                                                                                             distant_table=param_distant_table,
                                                                                                                                                                                                                                                                             source_schema=self.param_source_schema,    
                                                                                                                                                                                                                                                                             source_table=self.param_source_table,
                                                                                                                                                                                                                                                                             postgis_sub_expression=param_postgis_sub_expression,
-                                                                                                                                                                                                                                                                            source_subset=self.expression)
+                                                                                                                                                                                                                                                                            source_subset=self.expression
+                                                                                                                                                                                                                                                                            )
+            elif QgsExpression(self.expression).isField() is True:
 
-            
+                param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
+                                                                                                                                                                                                                                                            distant_table=param_distant_table,
+                                                                                                                                                                                                                                                            source_schema=self.param_source_schema,    
+                                                                                                                                                                                                                                                            source_table=self.param_source_table,
+                                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression
+                                                                                                                                                                                                                                                            )
+
             result = layer.setSubsetString(param_expression)
 
             if result is False:
@@ -453,7 +464,9 @@ class FilterEngineTask(QgsTask):
                 if self.task_parameters["infos"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
 
+        print(self.task_parameters["task"]["expression"])
         if self.task_parameters["task"]["expression"] != None:
+            
             self.expression = self.task_parameters["task"]["expression"]
             if QgsExpression(self.expression).isField() is False:
 
@@ -805,7 +818,7 @@ class LayersManagementEngineTask(QgsTask):
         self.message = None
 
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
-        self.json_template_layer_exploring = '{"change_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
+        self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
 
     def run(self):
