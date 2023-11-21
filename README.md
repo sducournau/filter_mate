@@ -10,10 +10,11 @@
 - *it allows you to configure the different widgets and save them independently for each layer.*
 - *export your layers more intuitively.*
 <br>
-*It adapts to your data, takes advantage of PostGIS when possible, manages different CRS by reprojecting on the fly.*
+It adapts to your data, takes advantage of PostGIS when possible, manages different CRS by reprojecting on the fly.
 <br>
-*The layers keep a history of each subset, making it easy to return to the previous state.*
-
+The layers keep a history of each subset, making it easy to return to the previous state.
+<br>
+<br>
 Github page : [https://sducournau.github.io/filter_mate](https://sducournau.github.io/filter_mate)
 <br>
 Qgis plugin repository : [https://plugins.qgis.org/plugins/filter_mate](https://plugins.qgis.org/plugins/filter_mate)
