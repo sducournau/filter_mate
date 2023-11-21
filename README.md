@@ -22,4 +22,4 @@ Qgis plugin repository : https://plugins.qgis.org/plugins/filter_mate
 
 # 1. Preview
 <br>
-[![alt thumbnail video](https://github.com/sducournau/filter_mate/blob/main/thumbnail_yt.png?raw=true)](https://youtu.be/2gOEPrdl2Bo?si=ruN9zDqTu5_BSNbW "FilterMate intro")
+[![thumbnail](https://github.com/sducournau/filter_mate/blob/main/thumbnail_yt.png?raw=true)](https://www.youtube.com/watch?v=2gOEPrdl2Bo "FilterMate intro")
