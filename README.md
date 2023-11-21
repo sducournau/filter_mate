@@ -1,4 +1,4 @@
-# ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) Filter Mate
+# ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
 **FilterMate is a Qgis plugin, a daily companion that allows you to easily explore, filter and export vector data**
 
