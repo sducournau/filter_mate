@@ -22,5 +22,5 @@ Qgis plugin repository : [https://plugins.qgis.org/plugins/filter_mate](https://
 
 # 1. Preview
 <br>
-[ ![alt thumbnail](https://github.com/sducournau/filter_mate/blob/main/thumbnail_yt.png?raw=true)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+![alt thumbnail](https://github.com/sducournau/filter_mate/blob/main/thumbnail_yt.png?raw=true) (https://www.youtube.com/watch?v=2gOEPrdl2Bo)
 
