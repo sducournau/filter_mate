@@ -12,9 +12,9 @@
 *It adapts to your data, takes advantage of PostGIS when possible, manages different CRS by reprojecting on the fly.*
 *The layers keep a history of each subset, making it easy to return to the previous state.*
 
-Github repository : https://github.com/sducournau/filter_mate
+Github repository : (https://github.com/sducournau/filter_mate)
 <br>
-Qgis plugin repository : https://plugins.qgis.org/plugins/filter_mate
+Qgis plugin repository : (https://plugins.qgis.org/plugins/filter_mate)
 
 ******
 
