@@ -9,6 +9,7 @@
 - *filter your vector layers by expression and by geometric predicate, using a buffer if necessary.*
 - *it allows you to configure the different widgets and save them independently for each layer.*
 - *export your layers more intuitively.*
+
 <br>
 <br>
 It adapts to your data, takes advantage of PostGIS when possible, manages different CRS by reprojecting on the fly.
