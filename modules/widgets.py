@@ -346,35 +346,46 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
     def setLayer(self, layer, layer_props=None):
 
-        if layer != None:
-            if self.layer != None:
-                self.list_widgets[self.layer.id()].setFilterText(self.filter_le.text())
+        try:
+
+            if layer != None:
+                if self.layer != None:
+                    
+                        self.list_widgets[self.layer.id()].setFilterText(self.filter_le.text())
+                        self.filter_le.clear()
+                        self.items_le.clear()
+                    
+
+                self.layer = layer
+
+                self.manage_list_widgets()
+                
+
+                self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
+
+                if self.list_widgets[self.layer.id()].getIdentifierFieldName() == '':
+                    self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
+
+                if self.list_widgets[self.layer.id()].getExpression() != layer_props["exploring"]["multiple_selection_expression"]:
+                    self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+                elif layer_props["infos"]["is_already_subset"] != self.list_widgets[self.layer.id()].getSubsetState():
+                    if self.layer.featureCount() != self.list_widgets[self.layer.id()].getListCount():
+                        self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+                else:
+                    description = 'Selecting feature'
+                    action = 'updateFeatures'
+                    self.build_task(description, action, True)
+                    self.launch_task(action)
+                
+                self.list_widgets[self.layer.id()].setSubsetState(layer_props["infos"]["is_already_subset"])
+
+        except:
+            try:
                 self.filter_le.clear()
                 self.items_le.clear()
-
-            self.layer = layer
-
-            self.manage_list_widgets()
-            
-
-            self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
-
-            if self.list_widgets[self.layer.id()].getIdentifierFieldName() == '':
-                self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
-
-            if self.list_widgets[self.layer.id()].getExpression() != layer_props["exploring"]["multiple_selection_expression"]:
-                self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
-            elif layer_props["infos"]["is_already_subset"] != self.list_widgets[self.layer.id()].getSubsetState():
-                if self.layer.featureCount() != self.list_widgets[self.layer.id()].getListCount():
-                    self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
-            else:
-                description = 'Selecting feature'
-                action = 'updateFeatures'
-                self.build_task(description, action, True)
-                self.launch_task(action)
-            
-            self.list_widgets[self.layer.id()].setSubsetState(layer_props["infos"]["is_already_subset"])
-
+            except:
+                pass
+    
 
     def setFilterExpression(self, filter_expression):
         if self.layer != None:

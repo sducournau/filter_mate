@@ -82,7 +82,7 @@ class FilterMateApp:
 
         self.MapLayerStore.layersAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
         self.MapLayerStore.layersWillBeRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
-        # self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
+        self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_all_layers': self.manage_task(x, layers))
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
 
@@ -99,32 +99,6 @@ class FilterMateApp:
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
 
 
-    def dockwidget_change_widgets_signal(self, state):
-        
-        if self.dockwidget != None:
-
-            widgets_to_stop =   [
-                                    ["QGIS","LAYER_TREE_VIEW"],
-                                    ["EXPLORING","SINGLE_SELECTION_FEATURES"],
-                                    ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
-                                    ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
-                                    ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
-                                    ["EXPLORING","CUSTOM_SELECTION_EXPRESSION"],
-                                    ["FILTERING","CURRENT_LAYER"],
-                                    ["FILTERING","LAYERS_TO_FILTER"],
-                                    ["FILTERING","COMBINE_OPERATOR"],
-                                    ["FILTERING","GEOMETRIC_PREDICATES"],
-                                    ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
-                                    ["FILTERING","BUFFER"],
-                                    ["FILTERING","BUFFER_PROPERTY"],
-                                    ["FILTERING","BUFFER_EXPRESSION"]
-                                ]
-        
-            for widget_path in widgets_to_stop:
-                self.dockwidget.manageSignal(widget_path, state)
-
-
-
     def manage_task(self, task_name, data=None):
         """Manage the different tasks"""
 
@@ -132,6 +106,11 @@ class FilterMateApp:
 
         if self.dockwidget != None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
+
+        if task_name == 'remove_all_layers':
+           self.dockwidget.disconnect_widgets_signals()
+           self.layer_management_engine_task_completed(task_name, {})
+           return
 
         task_parameters = self.get_task_parameters(task_name, data)
 
@@ -168,9 +147,9 @@ class FilterMateApp:
                     if len(layers) > 0:
                         layer = layers[0]
                 self.appTasks[task_name].setDependentLayers([layer])
-            else:
-                self.appTasks[task_name].begun.connect(lambda state='disconnect': self.dockwidget_change_widgets_signal(state))
-                self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
+            
+            self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
+            # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
             self.appTasks[task_name].resultingLayers.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
             self.appTasks[task_name].savingLayerVariable.connect(lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned))
@@ -445,10 +424,15 @@ class FilterMateApp:
 
         if self.dockwidget != None:
 
-            if task_name in ("add_layers","remove_layers","save_layer_variable","remove_layer_variable"):
-                if task_name == 'remove_layers':
-                    for layer_key in self.PROJECT_LAYERS.keys():
-                        self.dockwidget.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+            if task_name in ("add_layers","remove_layers","save_layer_variable","remove_layer_variable","remove_all_layers"):
+                if task_name in ('remove_layers', 'remove_all_layers'):
+                    for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
+                        try:
+                            self.dockwidget.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+                        except:
+                            pass
+
+
 
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
         
