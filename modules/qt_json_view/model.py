@@ -35,14 +35,16 @@ class JsonModel(QtGui.QStandardItemModel):
     """Represent JSON-serializable data."""
 
     def __init__(
-            self, parent=None,
+            self,
             data=None,
             editable_keys=False,
             editable_values=False,
-            plugin_dir=None):
+            plugin_dir=None,
+            parent=None):
         super(JsonModel, self).__init__(parent=parent)
         self.plugin_dir = plugin_dir
         set_plugin_dir(self.plugin_dir)
+        print(data)
         if data is not None:
             self.init(data, editable_keys, editable_values)
 

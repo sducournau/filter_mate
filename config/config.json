@@ -28,7 +28,8 @@
                     "FILTER": "filter.png",
                     "UNFILTER": "unfilter.png",
                     "RESET": "reset.png",
-                    "EXPORT": "export.png"
+                    "EXPORT": "export.png",
+                    "ABOUT": "icon.png"
                 },
                 "EXPLORING": {
                     "IDENTIFY": "identify_alt.png",
@@ -125,9 +126,9 @@
         "has_datatype_to_export": true,
         "datatype_to_export": "GPX",
         "has_output_folder_to_export": true,
-        "output_folder_to_export": "e:\\users\\simon\\onedrive\\bureau\\dev\\ign",
+        "output_folder_to_export": "",
         "has_zip_to_export": true,
-        "zip_to_export": "e:\\users\\simon\\onedrive\\bureau\\dev\\ign\\ign_31_v2.zip"
+        "zip_to_export": ""
     },
     "FILTER": {
         "feature_count_limit": 10000
@@ -137,7 +138,6 @@
         "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
         "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
         "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
-        "POSTGRESQL_CONNECTION_NAME": "LOCAL",
         "FRESH_RELOAD_FLAG": true,
         "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true
     }

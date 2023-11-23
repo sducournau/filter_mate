@@ -4,7 +4,6 @@ from qgis.PyQt.QtWidgets import *
 from qgis.core import *
 from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
 from qgis.utils import *
-from qgis.utils import iface
 from qgis import processing
 
 from collections import OrderedDict
@@ -32,9 +31,7 @@ MESSAGE_TASKS_CATEGORIES = {
                             'remove_layers':'ManageLayers',
                             'remove_all_layers':'ManageLayers',
                             'new_project':'ManageLayers',
-                            'project_read':'ManageLayers',
-                            'save_layer_variable':'ManageLayersProperties',
-                            'remove_layer_variable':'ManageLayersProperties'
+                            'project_read':'ManageLayers'
                             }
 
 class FilterMateApp:
@@ -50,7 +47,7 @@ class FilterMateApp:
         self.CONFIG_DATA = CONFIG_DATA
 
         self.plugin_dir = plugin_dir
-        self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None,"save_layer_variable":None,"remove_layer_variable":None}
+        self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None}
         self.tasks_descriptions = {
                                     'filter':'Filtering data',
                                     'unfilter':'Unfiltering data',
@@ -60,9 +57,7 @@ class FilterMateApp:
                                     'remove_layers':'Removing layers',
                                     'remove_all_layers':'Removing all layers',
                                     'new_project':'New project',
-                                    'project_read':'Existing project loaded',
-                                    'save_layer_variable':'Saving layers\' properties',
-                                    'remove_layer_variable':'Removing layers\' properties'
+                                    'project_read':'Existing project loaded'
                                     }
         
         self.PROJECT = QgsProject.instance()
@@ -120,6 +115,7 @@ class FilterMateApp:
         if task_name == 'remove_all_layers':
            QgsApplication.taskManager().cancelAll()
            self.dockwidget.disconnect_widgets_signals()
+           self.dockwidget.reset_multiple_checkable_combobox()
            self.layer_management_engine_task_completed({}, task_name)
            return
         
@@ -131,6 +127,7 @@ class FilterMateApp:
                 self.manage_task('add_layers', init_layers)
             else:
                 self.dockwidget.disconnect_widgets_signals()
+                self.dockwidget.reset_multiple_checkable_combobox()
                 self.layer_management_engine_task_completed({}, 'remove_all_layers')
             return
 
@@ -163,14 +160,10 @@ class FilterMateApp:
 
             if task_name == "add_layers":
                 self.appTasks[task_name].setDependentLayers(task_parameters["task"]["layers"])
-            elif task_name in ("save_layer_variable","remove_layer_variable"):
-                if task_parameters["task"]["layer_id"] in self.PROJECT_LAYERS.keys():
-                    layers = [layer for layer in self.PROJECT.mapLayersByName(self.PROJECT_LAYERS[task_parameters["task"]["layer_id"]]["infos"]["layer_name"]) if layer.id() == task_parameters["task"]["layer_id"]]
-                    if len(layers) > 0:
-                        layer = layers[0]
-                self.appTasks[task_name].setDependentLayers([layer])
+                self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
+            elif task_name == "remove_layers":
+                self.appTasks[task_name].begun.connect(self.dockwidget.on_remove_layer_task_begun)
             
-            self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
             self.appTasks[task_name].resultingLayers.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
@@ -181,7 +174,9 @@ class FilterMateApp:
     
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
-
+    def on_remove_layer_task_begun(self):
+        self.dockwidget.disconnect_widgets_signals()
+        self.dockwidget.reset_multiple_checkable_combobox()
     
 
     def get_task_parameters(self, task_name, data=None):
@@ -252,28 +247,6 @@ class FilterMateApp:
                         reset_all_layers_variables_flag = True
 
                     task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag": reset_all_layers_variables_flag }
-                    return task_parameters
-                
-                elif task_name == 'save_layer_variable':
-
-                    if isinstance(data, tuple) and len(list(data)) > 0:
-                        layer_id = data[0]
-                        layer_properties = None
-                        if len(data) == 2:
-                            layer_properties = data[1]
-
-                    task_parameters["task"] = {"layer_id": layer_id, "project_layers": self.PROJECT_LAYERS, "layer_properties": layer_properties}
-                    return task_parameters
-
-                elif task_name == 'remove_layer_variable':
-
-                    if isinstance(data, tuple) and len(list(data)) > 0:
-                        layer_id = data[0]
-                        layer_properties = None
-                        if len(data) == 2:
-                            layer_properties = data[1]
-
-                    task_parameters["task"] = {"layer_id": layer_id, "project_layers": self.PROJECT_LAYERS, "layer_properties": layer_properties}
                     return task_parameters
 
 
@@ -447,7 +420,7 @@ class FilterMateApp:
 
         if self.dockwidget != None:
 
-            if task_name in ("add_layers","remove_layers","save_layer_variable","remove_layer_variable","remove_all_layers"):
+            if task_name in ("add_layers","remove_layers","remove_all_layers"):
                 if task_name == 'remove_layers':
                     for layer_key in self.PROJECT_LAYERS.keys():
                         if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
@@ -455,12 +428,6 @@ class FilterMateApp:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
                             except:
                                 pass
-                        
-                elif task_name == 'remove_all_layers':
-                    self.dockwidget.reset_multiple_checkable_combobox()
-
-
-
 
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
         

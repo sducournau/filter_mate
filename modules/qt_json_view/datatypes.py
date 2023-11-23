@@ -114,7 +114,7 @@ class StrType(DataType):
     """Strings and unicodes"""
 
     def matches(self, data):
-        return isinstance(data, str) or isinstance(data, unicode)
+        return isinstance(data, str)
 
 
 class IntType(DataType):

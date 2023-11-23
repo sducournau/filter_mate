@@ -1422,7 +1422,7 @@ QComboBox QAbstractItemView {
                <cursorShape>PointingHandCursor</cursorShape>
               </property>
               <property name="styleSheet">
-               <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+               <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
               </property>
               <property name="title">
                <string>CUSTOM SELECTION</string>
@@ -1644,7 +1644,7 @@ QComboBox QAbstractItemView {
              <enum>QFrame::Panel</enum>
             </property>
             <property name="currentIndex">
-             <number>0</number>
+             <number>2</number>
             </property>
             <property name="tabSpacing">
              <number>0</number>
@@ -2942,7 +2942,7 @@ border: 2px solid black;
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>381</width>
+               <width>371</width>
                <height>278</height>
               </rect>
              </property>
@@ -3875,12 +3875,12 @@ border: 2px solid black;
                <x>0</x>
                <y>0</y>
                <width>381</width>
-               <height>278</height>
+               <height>181</height>
               </rect>
              </property>
              <attribute name="icon">
               <iconset>
-               <normaloff>icons/icon.png</normaloff>icons/icon.png</iconset>
+               <normaloff>icons/parameters.png</normaloff>icons/parameters.png</iconset>
              </attribute>
              <attribute name="label">
               <string>CONFIGURATION</string>
@@ -3888,41 +3888,6 @@ border: 2px solid black;
              <layout class="QVBoxLayout" name="verticalLayout_8">
               <item>
                <layout class="QVBoxLayout" name="verticalLayout_11">
-                <item>
-                 <widget class="QgsAuthConfigSelect" name="mAuthConfigSelect">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="minimumSize">
-                   <size>
-                    <width>30</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="maximumSize">
-                   <size>
-                    <width>16777215</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="baseSize">
-                   <size>
-                    <width>0</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="font">
-                   <font>
-                    <family>Segoe UI Semibold</family>
-                    <weight>75</weight>
-                    <bold>true</bold>
-                   </font>
-                  </property>
-                 </widget>
-                </item>
                 <item>
                  <spacer name="verticalSpacer_34">
                   <property name="orientation">
@@ -3938,6 +3903,16 @@ border: 2px solid black;
                    </size>
                   </property>
                  </spacer>
+                </item>
+                <item>
+                 <widget class="QDialogButtonBox" name="buttonBox">
+                  <property name="standardButtons">
+                   <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+                  </property>
+                  <property name="centerButtons">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
                 </item>
                </layout>
               </item>
@@ -4212,7 +4187,7 @@ border: 2px solid black;
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="pushButton_action_help">
+        <widget class="QPushButton" name="pushButton_action_about">
          <property name="minimumSize">
           <size>
            <width>35</width>
@@ -4260,11 +4235,6 @@ border: 2px solid black;
  </widget>
  <customwidgets>
   <customwidget>
-   <class>QgsAuthConfigSelect</class>
-   <extends>QWidget</extends>
-   <header>qgsauthconfigselect.h</header>
-  </customwidget>
-  <customwidget>
    <class>QgsCheckableComboBox</class>
    <extends>QComboBox</extends>
    <header>qgscheckablecombobox.h</header>
@@ -4306,8 +4276,6 @@ border: 2px solid black;
    <header>qgspropertyoverridebutton.h</header>
   </customwidget>
  </customwidgets>
- <resources>
-  <include location="resources.qrc"/>
- </resources>
+ <resources/>
  <connections/>
 </ui>

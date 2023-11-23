@@ -6,6 +6,7 @@ from qgis.utils import *
 from qgis.utils import iface
 from qgis import processing
 
+import psycopg2
 from collections import OrderedDict
 from operator import getitem
 import zipfile
@@ -842,29 +843,6 @@ class LayersManagementEngineTask(QgsTask):
                 result = self.manage_project_layers()
                 if self.isCanceled() or result is False:
                     return False
-                
-            elif self.task_action == 'save_layer_variable':
-
-                print(self.task_parameters["task"])
-                self.layer_id = self.task_parameters["task"]["layer_id"]
-                self.project_layers = self.task_parameters["task"]["project_layers"]
-                self.layer_properties = self.task_parameters["task"]["layer_properties"]
-                if isinstance(self.layer_properties, list) and len(self.layer_properties) > 0:
-                    self.layer_all_properties_flag = True
-                result = self.save_variables_from_layer_id()
-                if self.isCanceled() or result is False:
-                    return False
-                
-            elif self.task_action == 'remove_layer_variable':
-
-                self.layer_id = self.task_parameters["task"]["layer_id"]
-                self.project_layers = self.task_parameters["task"]["project_layers"]
-                self.layer_properties = self.task_parameters["task"]["layer_properties"]
-                if isinstance(self.layer_properties, list) and len(self.layer_properties) > 0:
-                    self.layer_all_properties_flag = True
-                result = self.remove_variables_from_layer_id()
-                if self.isCanceled() or result is False:
-                    return False
 
 
             return True
@@ -990,7 +968,7 @@ class LayersManagementEngineTask(QgsTask):
             layer_props["infos"]["layer_id"] = layer.id()
 
             if layer_provider_type == 'postgresql':
-                result = self.create_spatial_index_for_postgresql_layer(layer_props)
+                result = self.create_spatial_index_for_postgresql_layer(layer, layer_props)
                 if self.isCanceled() or result is False:
                     return False
                 
@@ -1049,9 +1027,9 @@ class LayersManagementEngineTask(QgsTask):
         return ('ID', layer.fields().indexFromName('ID'), new_field.typeName(), True)
 
 
-    def create_spatial_index_for_postgresql_layer(self, layer_props):       
+    def create_spatial_index_for_postgresql_layer(self, layer, layer_props):       
 
-        if layer_props != None:
+        if layer != None or layer_props != None:
 
             schema = layer_props["infos"]["layer_schema"]
             table = layer_props["infos"]["layer_name"]
@@ -1059,22 +1037,32 @@ class LayersManagementEngineTask(QgsTask):
             primary_key_name = layer_props["infos"]["primary_key_name"]
 
 
-            md = QgsProviderRegistry.instance().providerMetadata('postgres')
-            database = md.createConnection('LOCAL')
-            postgresql_named_connection = CONFIG_DATA["APP"]["POSTGRESQL_CONNECTION_NAME"]
+            source_uri = QgsDataSourceUri(layer.source())
+            authcfg_id = source_uri.param('authcfg')
+            host = source_uri.host()
+            port = source_uri.port()
+            dbname = source_uri.database()
+            username = source_uri.username()
 
-            sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});\r\n'.format(schema=schema,
+            if authcfg_id != "":
+                authConfig = QgsAuthMethodConfig()
+                if authcfg_id in QgsApplication.authManager().configIds():
+                    QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
+                    username = authConfig.config("username")
+                    password = authConfig.config("password")
+
+            connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+
+            sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});'.format(schema=schema,
                                                                                                                                                             table=table,
                                                                                                                                                             geometry_field=geometry_field)
             sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
                                                                                                                                                                                 table=table,
                                                                                                                                                                                 primary_key_name=primary_key_name)
 
-            alg_params_postgisexecutesql = {
-                "DATABASE": postgresql_named_connection,
-                "SQL": sql_statement
-            }
-            processing.run('qgis:postgisexecutesql', alg_params_postgisexecutesql)
+            with connection.cursor() as cursor:
+                cursor.execute(sql_statement)
+
             if self.isCanceled():
                 return False
             

@@ -21,7 +21,7 @@
  ***************************************************************************/
 """
 
-from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
+
 from .config.config import *
 import os
 import json
@@ -37,14 +37,16 @@ from qgis.gui import *
 from qgis.utils import iface
 from qgis.PyQt.QtWidgets import QApplication, QVBoxLayout
 
-
+import webbrowser
 from .modules.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 from .modules.qt_json_view.model import JsonModel, JsonSortFilterProxyModel
 from .modules.qt_json_view.view import JsonView
 from .modules.customExceptions import *
 
+FORM_CLASS, _ = uic.loadUiType(os.path.join(
+    os.path.dirname(__file__), 'filter_mate_dockwidget_base.ui'))
 
-class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
+class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
@@ -96,7 +98,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.json_template_layer_filtering = '{"feature_limit": 10000}'
 
         self.setupUi(self)
-        self.manage_configuration_model()
         self.setupUiCustom()
         self.manage_ui_style()
         self.manage_interactions()
@@ -208,6 +209,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         #self.checkableComboBoxLayer_exporting_layers.contextMenuEvent()
 
+
+        self.manage_configuration_model()
         self.dockwidget_widgets_configuration()
 
 
@@ -272,7 +275,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 "MULTIPLE_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_multiple_selection, "SIGNALS":[("stateChanged", lambda state, x='multiple_selection': self.exploring_groupbox_changed(x))]},
                                 "CUSTOM_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("stateChanged", lambda state, x='custom_selection': self.exploring_groupbox_changed(x))]},
                                 "CONFIGURATION_TREE_VIEW":{"TYPE":"JsonTreeView","WIDGET":self.config_view, "SIGNALS":[("collapsed", None),("expanded", None)]},
-                                "CONFIGURATION_MODEL":{"TYPE":"JsonModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", self.data_changed_configuration_model)]},
+                                "CONFIGURATION_MODEL":{"TYPE":"JsonModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", None)]},
                                 "TOOLS":{"TYPE":"ToolBox","WIDGET":self.toolBox_tabTools, "SIGNALS":[("currentChanged", self.select_tabTools_index)]}
                                 }   
 
@@ -280,7 +283,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(state, x))], "ICON":None},
                                 "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
                                 "RESET":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_reset, "SIGNALS":[("clicked", lambda state, x='reset': self.launchTaskEvent(state, x))], "ICON":None},
-                                "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None}
+                                "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None},
+                                "ABOUT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_about, "SIGNALS":[("clicked", self.open_project_page)], "ICON":None}
                                 }        
 
 
@@ -398,7 +402,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
         self.config_view = JsonView(self.config_model, self.plugin_dir)
-        self.CONFIGURATION.layout().addWidget(self.config_view)
+        self.CONFIGURATION.layout().insertWidget(0, self.config_view)
 
         self.config_view.setModel(self.config_model)
 
@@ -409,6 +413,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.config_view.viewport().setAcceptDrops(True)
         self.config_view.setDragDropMode(QAbstractItemView.DropOnly)
         self.config_view.setDropIndicatorShown(True)
+        self.config_view.setEnabled(True)
         self.config_view.show()
 
 
@@ -847,11 +852,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.mGroupBox_exploring_custom_selection.setStyleSheet(collapsibleGroupBox_style)
 
 
-        self.CONFIGURATION.setStyleSheet("""background-color: {};
-                                            border-color: rgb(0, 0, 0);
-                                            border-radius:6px;
-                                            marging: 25px 10px 10px 10px;
-                                            color:{};""".format(self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0],self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][0]))
+        # self.CONFIGURATION.setStyleSheet("""background-color: {};
+        #                                     border-color: rgb(0, 0, 0);
+        #                                     border-radius:6px;
+        #                                     marging: 25px 10px 10px 10px;
+        #                                     color:{};""".format(self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0],self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][0]))
         
         
 
@@ -983,9 +988,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].clicked.connect(lambda state, x='custom_selection': self.exploring_groupbox_changed(x))
         self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentChanged.connect(self.select_tabTools_index)
         self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].itemChanged.connect(self.data_changed_configuration_model)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].dataChanged.connect(self.save_configuration_model)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsInserted.connect(self.save_configuration_model)
-        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsRemoved.connect(self.save_configuration_model)
+        # self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].dataChanged.connect(self.save_configuration_model)
+        # self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsInserted.connect(self.save_configuration_model)
+        # self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsRemoved.connect(self.save_configuration_model)
         # self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].filterExpressionChanged()
         
         # self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].contextMenuEvent
@@ -1592,7 +1597,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
                 self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
-                self.reload_configuration_model()
+                # self.reload_configuration_model()
 
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
@@ -1776,7 +1781,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.manageSignal(widget_path, 'connect')
 
             self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
-            self.reload_configuration_model()
+            # self.reload_configuration_model()
 
 
 
@@ -2071,7 +2076,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.PROJECT = project
             self.PROJECT_LAYERS = project_layers
 
-            print(self.PROJECT,self.PROJECT_LAYERS)
 
             if self.PROJECT != None and len(list(self.PROJECT_LAYERS)) > 0:
 
@@ -2114,6 +2118,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return
 
 
+    def open_project_page(self):
+        if "APP" in self.CONFIG_DATA:
+            if "GITHUB_PAGE" in self.CONFIG_DATA["APP"] and self.CONFIG_DATA["APP"]["GITHUB_PAGE"].find("http") >= 0:
+                webbrowser.open(self.CONFIG_DATA["APP"]["GITHUB_PAGE"])
 
 
     def setLayerVariableEvent(self, layer=None, properties=[]):
