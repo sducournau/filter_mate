@@ -118,11 +118,13 @@ class FilterMateApp:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
 
         if task_name == 'remove_all_layers':
+           QgsApplication.taskManager().cancelAll()
            self.dockwidget.disconnect_widgets_signals()
            self.layer_management_engine_task_completed({}, task_name)
            return
         
         if task_name in ('project_read', 'new_project'):
+            QgsApplication.taskManager().cancelAll()
             self.PROJECT = QgsProject.instance()
             init_layers = list(self.PROJECT.mapLayers().values())
             if len(init_layers) > 0:
@@ -455,7 +457,7 @@ class FilterMateApp:
                                 pass
                         
                 elif task_name == 'remove_all_layers':
-                    self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_all_lists_widget()
+                    self.dockwidget.reset_multiple_checkable_combobox()
 
 
 

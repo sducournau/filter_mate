@@ -171,16 +171,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if state == None:
             raise SignalStateChangeError(state, widget_path)
 
+    def reset_multiple_checkable_combobox(self):
+       
 
+
+        layout = self.verticalLayout_exploring_multiple_selection
+        item = layout.itemAt(0)
+        layout.removeItem(item)
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset()
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close()
+        
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = None
+
+        self.set_multiple_checkable_combobox()
+
+        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
+        layout.update()
+
+        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]}
+        #self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+
+    def set_multiple_checkable_combobox(self):
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self)
 
 
     def setupUiCustom(self):
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self)
-        self.layout = self.verticalLayout_exploring_multiple_selection
-        self.layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
+        self.set_multiple_checkable_combobox()
+
+        layout = self.verticalLayout_exploring_multiple_selection
+        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
 
         self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self)
-
         #self.checkableComboBoxLayer_filtering_layers_to_filter.contextMenuEvent()
 
         self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self)
@@ -212,11 +233,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.link_legend_layers_and_current_layer_flag = self.CONFIG_DATA["APP"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
 
 
-        self.layout = self.verticalLayout_filtering_values
-        self.layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
+        layout = self.verticalLayout_filtering_values
+        layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
 
-        self.layout = self.verticalLayout_exporting_values
-        self.layout.insertWidget(1, self.checkableComboBoxLayer_exporting_layers)
+        layout = self.verticalLayout_exporting_values
+        layout.insertWidget(1, self.checkableComboBoxLayer_exporting_layers)
 
         #self.custom_identify_tool = CustomIdentifyTool(self.iface)
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))

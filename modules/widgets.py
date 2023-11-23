@@ -494,8 +494,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             except:
                 pass
 
-    def remove_all_lists_widget(self):
-        self.list_widgets = {}
+    def reset(self):
+        self.layer = None
         self.tasks = {}
         self.tasks['buildFeaturesList'] = {}
         self.tasks['updateFeaturesList'] = {}
@@ -504,6 +504,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.tasks['deselectAllFeatures'] = {}
         self.tasks['filterFeatures'] = {}
         self.tasks['updateFeatures'] = {}
+        for i in range(self.layout.count()):
+            item = self.layout.itemAt(i)
+            widget = item.widget()       
+            if widget:
+                try:
+                    widget.close()
+                except:
+                    pass
+
+        self.list_widgets = {}
+
 
     def add_list_widget(self):
         self.list_widgets[self.layer.id()] = ListWidgetWrapper(self)
@@ -536,11 +547,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.launch_task(action)
     
     def build_task(self, description, action, silent_flag=False):
-        self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
-        self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
+        try:
+            self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
+            self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
 
-        if silent_flag is False:
-            self.tasks[action][self.layer.id()].begun.connect(lambda:  iface.messageBar().pushMessage(self.layer.name() + " : " + description))
+            if silent_flag is False:
+                try:
+                    self.tasks[action][self.layer.id()].begun.connect(lambda:  iface.messageBar().pushMessage(self.layer.name() + " : " + description))
+                except:
+                    pass    
+        except:
+            pass
 
     def launch_task(self, action):
         try:
