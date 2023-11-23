@@ -30,6 +30,9 @@ MESSAGE_TASKS_CATEGORIES = {
                             'export':'ExportLayers',
                             'add_layers':'ManageLayers',
                             'remove_layers':'ManageLayers',
+                            'remove_all_layers':'ManageLayers',
+                            'new_project':'ManageLayers',
+                            'project_read':'ManageLayers',
                             'save_layer_variable':'ManageLayersProperties',
                             'remove_layer_variable':'ManageLayersProperties'
                             }
@@ -45,8 +48,9 @@ class FilterMateApp:
         self.dockwidget = None
         self.flags = {}
         self.CONFIG_DATA = CONFIG_DATA
+
         self.plugin_dir = plugin_dir
-        self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"save_layer_variable":None,"remove_layer_variable":None}
+        self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None,"save_layer_variable":None,"remove_layer_variable":None}
         self.tasks_descriptions = {
                                     'filter':'Filtering data',
                                     'unfilter':'Unfiltering data',
@@ -54,20 +58,25 @@ class FilterMateApp:
                                     'export':'Exporting data',
                                     'add_layers':'Adding layers',
                                     'remove_layers':'Removing layers',
+                                    'remove_all_layers':'Removing all layers',
+                                    'new_project':'New project',
+                                    'project_read':'Existing project loaded',
                                     'save_layer_variable':'Saving layers\' properties',
                                     'remove_layer_variable':'Removing layers\' properties'
                                     }
+        
+        self.PROJECT = QgsProject.instance()
         self.run()
 
 
     def run(self):
         if self.dockwidget == None:
             
-            
 
-            init_layers = list(PROJECT.mapLayers().values())
 
-            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA)
+            init_layers = list(self.PROJECT.mapLayers().values())
+
+            self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
 
             if init_layers != None and len(init_layers) > 0:
                 self.manage_task('add_layers', init_layers)
@@ -79,10 +88,11 @@ class FilterMateApp:
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
-
+        self.iface.projectRead.connect(lambda x='project_read': self.manage_task(x))
+        self.iface.newProjectCreated.connect(lambda x='new_project': self.manage_task(x))
         self.MapLayerStore.layersAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
         self.MapLayerStore.layersWillBeRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
-        self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_all_layers': self.manage_task(x, layers))
+        self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_all_layers': self.manage_task(x))
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
 
@@ -109,8 +119,18 @@ class FilterMateApp:
 
         if task_name == 'remove_all_layers':
            self.dockwidget.disconnect_widgets_signals()
-           self.layer_management_engine_task_completed(task_name, {})
+           self.layer_management_engine_task_completed({}, task_name)
            return
+        
+        if task_name in ('project_read', 'new_project'):
+            self.PROJECT = QgsProject.instance()
+            init_layers = list(self.PROJECT.mapLayers().values())
+            if len(init_layers) > 0:
+                self.manage_task('add_layers', init_layers)
+            else:
+                self.dockwidget.disconnect_widgets_signals()
+                self.layer_management_engine_task_completed({}, 'remove_all_layers')
+            return
 
         task_parameters = self.get_task_parameters(task_name, data)
 
@@ -128,7 +148,7 @@ class FilterMateApp:
             layers_props = [layer_infos for layer_infos in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]]
             layers_ids = [layer_props["layer_id"] for layer_props in layers_props]
             for layer_props in layers_props:
-                temp_layers = PROJECT.mapLayersByName(layer_props["layer_name"])
+                temp_layers = self.PROJECT.mapLayersByName(layer_props["layer_name"])
                 for temp_layer in temp_layers:
                     if temp_layer.id() in layers_ids: 
                         layers.append(temp_layer)
@@ -143,7 +163,7 @@ class FilterMateApp:
                 self.appTasks[task_name].setDependentLayers(task_parameters["task"]["layers"])
             elif task_name in ("save_layer_variable","remove_layer_variable"):
                 if task_parameters["task"]["layer_id"] in self.PROJECT_LAYERS.keys():
-                    layers = [layer for layer in PROJECT.mapLayersByName(self.PROJECT_LAYERS[task_parameters["task"]["layer_id"]]["infos"]["layer_name"]) if layer.id() == task_parameters["task"]["layer_id"]]
+                    layers = [layer for layer in self.PROJECT.mapLayersByName(self.PROJECT_LAYERS[task_parameters["task"]["layer_id"]]["infos"]["layer_name"]) if layer.id() == task_parameters["task"]["layer_id"]]
                     if len(layers) > 0:
                         layer = layers[0]
                 self.appTasks[task_name].setDependentLayers([layer])
@@ -292,7 +312,7 @@ class FilterMateApp:
         if task_parameters["filtering"]["has_layers_to_filter"] == True:
             for layer_props in task_parameters["filtering"]["layers_to_filter"]:
                 if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                    layers = [layer for layer in PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
+                    layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
                     if len(layers) == 1:
 
                         layer = layers[0]
@@ -421,20 +441,26 @@ class FilterMateApp:
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
 
         self.PROJECT_LAYERS = result_project_layers
+        self.PROJECT = QgsProject.instance()
 
         if self.dockwidget != None:
 
             if task_name in ("add_layers","remove_layers","save_layer_variable","remove_layer_variable","remove_all_layers"):
-                if task_name in ('remove_layers', 'remove_all_layers'):
-                    for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
-                        try:
-                            self.dockwidget.widgets["MULTIPLE_SELECTION"]["FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                        except:
-                            pass
+                if task_name == 'remove_layers':
+                    for layer_key in self.PROJECT_LAYERS.keys():
+                        if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
+                            try:
+                                self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+                            except:
+                                pass
+                        
+                elif task_name == 'remove_all_layers':
+                    self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_all_lists_widget()
 
 
 
-                self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
+
+                self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
         
 
     def can_cast(self, dest_type, source_value):

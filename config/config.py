@@ -1,4 +1,4 @@
-from qgis.core import *
+from qgis.core import QgsProject
 from pathlib import Path
 import os.path
 import json
@@ -21,7 +21,6 @@ def merge(a, b, path=None):
 
 PROJECT = QgsProject.instance()
 
-ROOT = PROJECT.layerTreeRoot()
 DIR_CONFIG = os.path.normpath(os.path.dirname(__file__))
 PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
 if PATH_ABSOLUTE_PROJECT =='./':

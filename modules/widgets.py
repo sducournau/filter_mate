@@ -478,7 +478,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def remove_list_widget(self, layer_id):
         if layer_id in self.list_widgets:
-            del self.list_widgets[layer_id]
+            try:
+                del self.list_widgets[layer_id]
+            except:
+                pass
+
+    def remove_all_lists_widget(self):
+        self.list_widgets = {}
 
 
     def add_list_widget(self):
@@ -532,6 +538,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     def filteredCheckedItemListEvent(self, data, flag):
         self.list_widgets[self.layer.id()].setVisibleFeaturesList(data)
         self.filteringCheckedItemList.emit()
+
+
 
 class ListWidgetWrapper(QListWidget):
   
