@@ -350,10 +350,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
             if layer != None:
                 if self.layer != None:
-                    
+                    if self.layer.id() not in self.list_widgets:
+                        self.manage_list_widgets()
+                    if self.layer.id() in self.list_widgets:
                         self.list_widgets[self.layer.id()].setFilterText(self.filter_le.text())
-                        self.filter_le.clear()
-                        self.items_le.clear()
+
+                    self.filter_le.clear()
+                    self.items_le.clear()
                     
 
                 self.layer = layer
@@ -389,11 +392,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def setFilterExpression(self, filter_expression):
         if self.layer != None:
-            if filter_expression != self.list_widgets[self.layer.id()].getFilterExpression():
-                if QgsExpression(filter_expression).isField() is False:
-                    self.list_widgets[self.layer.id()].setFilterExpression(filter_expression)
-                    expression = self.list_widgets[self.layer.id()].getExpression()
-                    self.setDisplayExpression(expression)
+            if self.layer.id() not in self.list_widgets:
+                self.manage_list_widgets()
+            if self.layer.id() in self.list_widgets:  
+                if filter_expression != self.list_widgets[self.layer.id()].getFilterExpression():
+                    if QgsExpression(filter_expression).isField() is False:
+                        self.list_widgets[self.layer.id()].setFilterExpression(filter_expression)
+                        expression = self.list_widgets[self.layer.id()].getExpression()
+                        self.setDisplayExpression(expression)
 
 
     def setDisplayExpression(self, expression):
@@ -478,6 +484,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def remove_list_widget(self, layer_id):
         if layer_id in self.list_widgets:
+            for task in self.tasks:
+                try:
+                    del self.tasks[task][layer_id]
+                except:
+                    pass
             try:
                 del self.list_widgets[layer_id]
             except:
@@ -485,7 +496,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def remove_all_lists_widget(self):
         self.list_widgets = {}
-
+        self.tasks = {}
+        self.tasks['buildFeaturesList'] = {}
+        self.tasks['updateFeaturesList'] = {}
+        self.tasks['loadFeaturesList'] = {}
+        self.tasks['selectAllFeatures'] = {}
+        self.tasks['deselectAllFeatures'] = {}
+        self.tasks['filterFeatures'] = {}
+        self.tasks['updateFeatures'] = {}
 
     def add_list_widget(self):
         self.list_widgets[self.layer.id()] = ListWidgetWrapper(self)

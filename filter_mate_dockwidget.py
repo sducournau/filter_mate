@@ -2075,14 +2075,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                 self.set_widgets_enabled_state(True)
                 self.connect_widgets_signals()
-                self.exploring_groupbox_init()
+                
                 if layer != None and isinstance(layer, QgsVectorLayer):
                     self.manage_output_name()
                     self.exporting_populate_combobox()
                     self.set_exporting_properties()
                     self.current_layer_changed(layer)
+                    self.exploring_groupbox_init()
                     self.filtering_auto_current_layer_changed()
-                    self.exploring_source_params_changed()
                     return
 
                     
