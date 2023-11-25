@@ -16,7 +16,7 @@
   <property name="minimumSize">
    <size>
     <width>421</width>
-    <height>622</height>
+    <height>807</height>
    </size>
   </property>
   <property name="baseSize">
@@ -477,19 +477,19 @@ background: #bdc3c7;
        <property name="minimumSize">
         <size>
          <width>0</width>
-         <height>200</height>
+         <height>250</height>
         </size>
        </property>
        <property name="maximumSize">
         <size>
          <width>16777215</width>
-         <height>500</height>
+         <height>400</height>
         </size>
        </property>
        <property name="baseSize">
         <size>
          <width>0</width>
-         <height>200</height>
+         <height>300</height>
         </size>
        </property>
        <property name="font">
@@ -536,8 +536,8 @@ background: #bdc3c7;
          </spacer>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="horizontalLayout">
-          <item>
+         <layout class="QGridLayout" name="gridLayout">
+          <item row="1" column="0">
            <spacer name="horizontalSpacer_3">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
@@ -553,7 +553,39 @@ background: #bdc3c7;
             </property>
            </spacer>
           </item>
-          <item>
+          <item row="2" column="1">
+           <spacer name="verticalSpacer_9">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Preferred</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item row="1" column="2">
+           <spacer name="horizontalSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Preferred</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item row="1" column="1">
            <widget class="QWidget" name="widget_exploring_keys" native="true">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
@@ -590,6 +622,22 @@ color:black;
             <layout class="QVBoxLayout" name="verticalLayout_9">
              <item>
               <layout class="QVBoxLayout" name="verticalLayout_7">
+               <item>
+                <spacer name="verticalSpacer_38">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Preferred</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
                <item>
                 <widget class="QPushButton" name="pushButton_exploring_identify">
                  <property name="sizePolicy">
@@ -646,7 +694,7 @@ color:black;
                   <enum>Qt::Vertical</enum>
                  </property>
                  <property name="sizeType">
-                  <enum>QSizePolicy::MinimumExpanding</enum>
+                  <enum>QSizePolicy::Preferred</enum>
                  </property>
                  <property name="sizeHint" stdset="0">
                   <size>
@@ -712,7 +760,7 @@ color:black;
                   <enum>Qt::Vertical</enum>
                  </property>
                  <property name="sizeType">
-                  <enum>QSizePolicy::MinimumExpanding</enum>
+                  <enum>QSizePolicy::Preferred</enum>
                  </property>
                  <property name="sizeHint" stdset="0">
                   <size>
@@ -788,7 +836,7 @@ color:black;
                   <enum>Qt::Vertical</enum>
                  </property>
                  <property name="sizeType">
-                  <enum>QSizePolicy::MinimumExpanding</enum>
+                  <enum>QSizePolicy::Preferred</enum>
                  </property>
                  <property name="sizeHint" stdset="0">
                   <size>
@@ -864,7 +912,7 @@ color:black;
                   <enum>Qt::Vertical</enum>
                  </property>
                  <property name="sizeType">
-                  <enum>QSizePolicy::MinimumExpanding</enum>
+                  <enum>QSizePolicy::Preferred</enum>
                  </property>
                  <property name="sizeHint" stdset="0">
                   <size>
@@ -940,7 +988,7 @@ color:black;
                   <enum>Qt::Vertical</enum>
                  </property>
                  <property name="sizeType">
-                  <enum>QSizePolicy::MinimumExpanding</enum>
+                  <enum>QSizePolicy::Preferred</enum>
                  </property>
                  <property name="sizeHint" stdset="0">
                   <size>
@@ -1006,28 +1054,28 @@ color:black;
                  </property>
                 </widget>
                </item>
+               <item>
+                <spacer name="verticalSpacer_37">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Preferred</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>40</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
               </layout>
              </item>
             </layout>
            </widget>
           </item>
-          <item>
-           <spacer name="horizontalSpacer">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeType">
-             <enum>QSizePolicy::Preferred</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-          <item>
+          <item row="1" column="3">
            <layout class="QVBoxLayout" name="verticalLayout_6">
             <item>
              <widget class="QgsCollapsibleGroupBox" name="mGroupBox_exploring_single_selection">
@@ -1422,7 +1470,7 @@ QComboBox QAbstractItemView {
                <cursorShape>PointingHandCursor</cursorShape>
               </property>
               <property name="styleSheet">
-               <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+               <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
               </property>
               <property name="title">
                <string>CUSTOM SELECTION</string>
@@ -1549,6 +1597,22 @@ QComboBox QAbstractItemView {
             </item>
            </layout>
           </item>
+          <item row="0" column="1">
+           <spacer name="verticalSpacer_12">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Preferred</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
          </layout>
         </item>
         <item>
@@ -1573,7 +1637,13 @@ QComboBox QAbstractItemView {
        <property name="minimumSize">
         <size>
          <width>0</width>
-         <height>300</height>
+         <height>250</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>600</height>
         </size>
        </property>
        <property name="font">
@@ -1644,7 +1714,7 @@ QComboBox QAbstractItemView {
              <enum>QFrame::Panel</enum>
             </property>
             <property name="currentIndex">
-             <number>2</number>
+             <number>0</number>
             </property>
             <property name="tabSpacing">
              <number>0</number>
@@ -1654,8 +1724,8 @@ QComboBox QAbstractItemView {
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>371</width>
-               <height>371</height>
+               <width>381</width>
+               <height>313</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -1669,7 +1739,7 @@ QComboBox QAbstractItemView {
               <item>
                <widget class="QWidget" name="widget_filtering_keys" native="true">
                 <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                   <horstretch>0</horstretch>
                   <verstretch>0</verstretch>
                  </sizepolicy>
@@ -1769,12 +1839,12 @@ color:black;
                       <enum>Qt::Vertical</enum>
                      </property>
                      <property name="sizeType">
-                      <enum>QSizePolicy::MinimumExpanding</enum>
+                      <enum>QSizePolicy::Preferred</enum>
                      </property>
                      <property name="sizeHint" stdset="0">
                       <size>
                        <width>20</width>
-                       <height>40</height>
+                       <height>20</height>
                       </size>
                      </property>
                     </spacer>
@@ -1848,12 +1918,12 @@ color:black;
                       <enum>Qt::Vertical</enum>
                      </property>
                      <property name="sizeType">
-                      <enum>QSizePolicy::MinimumExpanding</enum>
+                      <enum>QSizePolicy::Preferred</enum>
                      </property>
                      <property name="sizeHint" stdset="0">
                       <size>
                        <width>20</width>
-                       <height>40</height>
+                       <height>20</height>
                       </size>
                      </property>
                     </spacer>
@@ -1927,12 +1997,12 @@ color:black;
                       <enum>Qt::Vertical</enum>
                      </property>
                      <property name="sizeType">
-                      <enum>QSizePolicy::MinimumExpanding</enum>
+                      <enum>QSizePolicy::Preferred</enum>
                      </property>
                      <property name="sizeHint" stdset="0">
                       <size>
                        <width>20</width>
-                       <height>40</height>
+                       <height>20</height>
                       </size>
                      </property>
                     </spacer>
@@ -2208,12 +2278,12 @@ color:black;
                       <enum>Qt::Vertical</enum>
                      </property>
                      <property name="sizeType">
-                      <enum>QSizePolicy::MinimumExpanding</enum>
+                      <enum>QSizePolicy::Preferred</enum>
                      </property>
                      <property name="sizeHint" stdset="0">
                       <size>
                        <width>20</width>
-                       <height>40</height>
+                       <height>20</height>
                       </size>
                      </property>
                     </spacer>
@@ -2311,12 +2381,12 @@ color:black;
               <item>
                <layout class="QVBoxLayout" name="verticalLayout_filtering_values">
                 <item>
-                 <spacer name="verticalSpacer_12">
+                 <spacer name="verticalSpacer_13">
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
                   </property>
                   <property name="sizeType">
-                   <enum>QSizePolicy::Fixed</enum>
+                   <enum>QSizePolicy::Preferred</enum>
                   </property>
                   <property name="sizeHint" stdset="0">
                    <size>
@@ -2414,10 +2484,13 @@ QComboBox QAbstractItemView {
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
                   </property>
+                  <property name="sizeType">
+                   <enum>QSizePolicy::Preferred</enum>
+                  </property>
                   <property name="sizeHint" stdset="0">
                    <size>
                     <width>20</width>
-                    <height>40</height>
+                    <height>20</height>
                    </size>
                   </property>
                  </spacer>
@@ -2427,10 +2500,13 @@ QComboBox QAbstractItemView {
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
                   </property>
+                  <property name="sizeType">
+                   <enum>QSizePolicy::Preferred</enum>
+                  </property>
                   <property name="sizeHint" stdset="0">
                    <size>
                     <width>20</width>
-                    <height>40</height>
+                    <height>20</height>
                    </size>
                   </property>
                  </spacer>
@@ -2539,140 +2615,67 @@ QComboBox QAbstractItemView {
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
                   </property>
+                  <property name="sizeType">
+                   <enum>QSizePolicy::Preferred</enum>
+                  </property>
                   <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>20</width>
-                    <height>40</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="minimumSize">
-                   <size>
-                    <width>30</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="maximumSize">
-                   <size>
-                    <width>16777215</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="baseSize">
-                   <size>
-                    <width>0</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="font">
-                   <font>
-                    <family>Segoe UI Semibold</family>
-                    <pointsize>8</pointsize>
-                    <weight>75</weight>
-                    <bold>true</bold>
-                   </font>
-                  </property>
-                  <property name="cursor">
-                   <cursorShape>PointingHandCursor</cursorShape>
-                  </property>
-                  <property name="mouseTracking">
-                   <bool>true</bool>
-                  </property>
-                  <property name="toolTip">
-                   <string>Prédicat géométrique</string>
-                  </property>
-                  <property name="layoutDirection">
-                   <enum>Qt::LeftToRight</enum>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">QComboBox
-{
- background-color:#bdc3c7;
-border: 1px solid black;
-border-radius: 3px;
-padding: 3px 3px 3px 3px;
-color:black;
-
-}
-
-QComboBox:hover
-{
-
-border: 2px solid black;
-
-}
-
-QComboBox QAbstractItemView {
-
-  background: #bdc3c7;
-  selection-background-color: #34495e;
-	color:black;
-}
-
-
-
-
-</string>
-                  </property>
-                  <property name="maxVisibleItems">
-                   <number>20</number>
-                  </property>
-                  <property name="iconSize">
                    <size>
                     <width>20</width>
                     <height>20</height>
                    </size>
                   </property>
-                  <property name="separator">
-                   <string>, </string>
-                  </property>
-                 </widget>
+                 </spacer>
                 </item>
                 <item>
-                 <widget class="QComboBox" name="comboBox_filtering_geometric_predicates_operator">
-                  <property name="minimumSize">
-                   <size>
-                    <width>30</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="maximumSize">
-                   <size>
-                    <width>16777215</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="baseSize">
-                   <size>
-                    <width>0</width>
-                    <height>30</height>
-                   </size>
-                  </property>
-                  <property name="font">
-                   <font>
-                    <family>Segoe UI Semibold</family>
-                    <pointsize>8</pointsize>
-                    <weight>75</weight>
-                    <bold>true</bold>
-                   </font>
-                  </property>
-                  <property name="cursor">
-                   <cursorShape>PointingHandCursor</cursorShape>
-                  </property>
-                  <property name="tabletTracking">
-                   <bool>true</bool>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">QComboBox
+                 <layout class="QHBoxLayout" name="horizontalLayout">
+                  <item>
+                   <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>30</width>
+                      <height>30</height>
+                     </size>
+                    </property>
+                    <property name="maximumSize">
+                     <size>
+                      <width>16777215</width>
+                      <height>30</height>
+                     </size>
+                    </property>
+                    <property name="baseSize">
+                     <size>
+                      <width>0</width>
+                      <height>30</height>
+                     </size>
+                    </property>
+                    <property name="font">
+                     <font>
+                      <family>Segoe UI Semibold</family>
+                      <pointsize>8</pointsize>
+                      <weight>75</weight>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="cursor">
+                     <cursorShape>PointingHandCursor</cursorShape>
+                    </property>
+                    <property name="mouseTracking">
+                     <bool>true</bool>
+                    </property>
+                    <property name="toolTip">
+                     <string>Prédicat géométrique</string>
+                    </property>
+                    <property name="layoutDirection">
+                     <enum>Qt::LeftToRight</enum>
+                    </property>
+                    <property name="styleSheet">
+                     <string notr="true">QComboBox
 {
  background-color:#bdc3c7;
 border: 1px solid black;
@@ -2700,37 +2703,120 @@ QComboBox QAbstractItemView {
 
 
 </string>
-                  </property>
-                  <property name="editable">
-                   <bool>false</bool>
-                  </property>
-                  <property name="iconSize">
-                   <size>
-                    <width>16</width>
-                    <height>16</height>
-                   </size>
-                  </property>
-                  <item>
-                   <property name="text">
-                    <string>AND</string>
-                   </property>
+                    </property>
+                    <property name="maxVisibleItems">
+                     <number>20</number>
+                    </property>
+                    <property name="iconSize">
+                     <size>
+                      <width>20</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                    <property name="separator">
+                     <string>, </string>
+                    </property>
+                   </widget>
                   </item>
                   <item>
-                   <property name="text">
-                    <string>OR</string>
-                   </property>
+                   <widget class="QComboBox" name="comboBox_filtering_geometric_predicates_operator">
+                    <property name="minimumSize">
+                     <size>
+                      <width>30</width>
+                      <height>30</height>
+                     </size>
+                    </property>
+                    <property name="maximumSize">
+                     <size>
+                      <width>16777215</width>
+                      <height>30</height>
+                     </size>
+                    </property>
+                    <property name="baseSize">
+                     <size>
+                      <width>0</width>
+                      <height>30</height>
+                     </size>
+                    </property>
+                    <property name="font">
+                     <font>
+                      <family>Segoe UI Semibold</family>
+                      <pointsize>8</pointsize>
+                      <weight>75</weight>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="cursor">
+                     <cursorShape>PointingHandCursor</cursorShape>
+                    </property>
+                    <property name="tabletTracking">
+                     <bool>true</bool>
+                    </property>
+                    <property name="styleSheet">
+                     <string notr="true">QComboBox
+{
+ background-color:#bdc3c7;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QComboBox:hover
+{
+
+border: 2px solid black;
+
+}
+
+QComboBox QAbstractItemView {
+
+  background: #bdc3c7;
+  selection-background-color: #34495e;
+	color:black;
+}
+
+
+
+
+</string>
+                    </property>
+                    <property name="editable">
+                     <bool>false</bool>
+                    </property>
+                    <property name="iconSize">
+                     <size>
+                      <width>16</width>
+                      <height>16</height>
+                     </size>
+                    </property>
+                    <item>
+                     <property name="text">
+                      <string>AND</string>
+                     </property>
+                    </item>
+                    <item>
+                     <property name="text">
+                      <string>OR</string>
+                     </property>
+                    </item>
+                   </widget>
                   </item>
-                 </widget>
+                 </layout>
                 </item>
                 <item>
                  <spacer name="verticalSpacer">
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
                   </property>
+                  <property name="sizeType">
+                   <enum>QSizePolicy::Preferred</enum>
+                  </property>
                   <property name="sizeHint" stdset="0">
                    <size>
                     <width>20</width>
-                    <height>40</height>
+                    <height>20</height>
                    </size>
                   </property>
                  </spacer>
@@ -2918,12 +3004,12 @@ border: 2px solid black;
                  </layout>
                 </item>
                 <item>
-                 <spacer name="verticalSpacer_9">
+                 <spacer name="verticalSpacer_31">
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
                   </property>
                   <property name="sizeType">
-                   <enum>QSizePolicy::Fixed</enum>
+                   <enum>QSizePolicy::Preferred</enum>
                   </property>
                   <property name="sizeHint" stdset="0">
                    <size>
@@ -2942,8 +3028,8 @@ border: 2px solid black;
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>371</width>
-               <height>278</height>
+               <width>381</width>
+               <height>310</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -3052,10 +3138,13 @@ color:black;
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Preferred</enum>
+                       </property>
                        <property name="sizeHint" stdset="0">
                         <size>
                          <width>20</width>
-                         <height>40</height>
+                         <height>20</height>
                         </size>
                        </property>
                       </spacer>
@@ -3122,10 +3211,13 @@ color:black;
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Preferred</enum>
+                       </property>
                        <property name="sizeHint" stdset="0">
                         <size>
                          <width>20</width>
-                         <height>40</height>
+                         <height>20</height>
                         </size>
                        </property>
                       </spacer>
@@ -3189,10 +3281,13 @@ color:black;
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Preferred</enum>
+                       </property>
                        <property name="sizeHint" stdset="0">
                         <size>
                          <width>20</width>
-                         <height>40</height>
+                         <height>20</height>
                         </size>
                        </property>
                       </spacer>
@@ -3256,10 +3351,13 @@ color:black;
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Preferred</enum>
+                       </property>
                        <property name="sizeHint" stdset="0">
                         <size>
                          <width>20</width>
-                         <height>40</height>
+                         <height>20</height>
                         </size>
                        </property>
                       </spacer>
@@ -3323,10 +3421,13 @@ color:black;
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
+                       <property name="sizeType">
+                        <enum>QSizePolicy::Preferred</enum>
+                       </property>
                        <property name="sizeHint" stdset="0">
                         <size>
                          <width>20</width>
-                         <height>40</height>
+                         <height>20</height>
                         </size>
                        </property>
                       </spacer>
@@ -3406,17 +3507,17 @@ color:black;
                 <item>
                  <layout class="QVBoxLayout" name="verticalLayout_exporting_values">
                   <item>
-                   <spacer name="verticalSpacer_31">
+                   <spacer name="verticalSpacer_35">
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
                     <property name="sizeType">
-                     <enum>QSizePolicy::Fixed</enum>
+                     <enum>QSizePolicy::Preferred</enum>
                     </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>20</height>
+                      <height>10</height>
                      </size>
                     </property>
                    </spacer>
@@ -3426,10 +3527,13 @@ color:black;
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Preferred</enum>
+                    </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>40</height>
+                      <height>20</height>
                      </size>
                     </property>
                    </spacer>
@@ -3513,10 +3617,13 @@ QComboBox QAbstractItemView {
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Preferred</enum>
+                    </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>40</height>
+                      <height>20</height>
                      </size>
                     </property>
                    </spacer>
@@ -3611,10 +3718,13 @@ QComboBox QAbstractItemView {
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Preferred</enum>
+                    </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>40</height>
+                      <height>20</height>
                      </size>
                     </property>
                    </spacer>
@@ -3699,10 +3809,13 @@ QComboBox QAbstractItemView {
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Preferred</enum>
+                    </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>40</height>
+                      <height>20</height>
                      </size>
                     </property>
                    </spacer>
@@ -3774,10 +3887,13 @@ border: 2px solid black;
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
+                    <property name="sizeType">
+                     <enum>QSizePolicy::Preferred</enum>
+                    </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>40</height>
+                      <height>20</height>
                      </size>
                     </property>
                    </spacer>
@@ -3848,17 +3964,17 @@ border: 2px solid black;
                    </widget>
                   </item>
                   <item>
-                   <spacer name="verticalSpacer_13">
+                   <spacer name="verticalSpacer_36">
                     <property name="orientation">
                      <enum>Qt::Vertical</enum>
                     </property>
                     <property name="sizeType">
-                     <enum>QSizePolicy::Fixed</enum>
+                     <enum>QSizePolicy::Preferred</enum>
                     </property>
                     <property name="sizeHint" stdset="0">
                      <size>
                       <width>20</width>
-                      <height>20</height>
+                      <height>10</height>
                      </size>
                     </property>
                    </spacer>
@@ -3875,7 +3991,7 @@ border: 2px solid black;
                <x>0</x>
                <y>0</y>
                <width>381</width>
-               <height>181</height>
+               <height>310</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -3944,6 +4060,18 @@ border: 2px solid black;
     </item>
     <item>
      <widget class="QFrame" name="frame_actions">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>50</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>50</height>
+       </size>
+      </property>
       <property name="frameShape">
        <enum>QFrame::NoFrame</enum>
       </property>

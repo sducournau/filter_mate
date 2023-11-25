@@ -291,9 +291,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets["EXPLORING"] = {
                                     "IDENTIFY":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_identify, "SIGNALS":[("clicked", self.exploring_identify_clicked)], "ICON":None},
                                     "ZOOM":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_zoom, "SIGNALS":[("clicked", lambda state: self.exploring_zoom_clicked())], "ICON":None},
-                                    "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_features_changed(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_features_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.get_current_features(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.get_current_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_link_widgets()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "IS_CHANGING_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_change_all_layer_properties, "SIGNALS":[("clicked", lambda state, x='is_changing_all_layer_properties': self.layer_property_changed(x, state))], "ICON_ON_TRUE":None, "ICON_ON_FALSE":None},
                                     
                                     "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed)]},
@@ -1057,7 +1057,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if self.current_layer != None:
                     self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
                     self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect', 'updatingCheckedItemList')
+                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
 
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
@@ -1123,7 +1123,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if self.current_layer != None:
                     self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect', 'featureChanged')
                     self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect', 'updatingCheckedItemList')
+                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
 
                     self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
                     self.exploring_custom_selection()
@@ -1281,15 +1281,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
     
-    def exploring_features_changed(self, input, identify_by_primary_key_name=False, custom_expression=None):
+    def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None):
 
         if self.widgets_initialized is True and self.current_layer != None and isinstance(self.current_layer, QgsVectorLayer):
             
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
 
-            if self.current_exploring_groupbox == 'multiple_selection':
-                self.exploring_link_widgets()
+
+            self.exploring_link_widgets()
 
             self.current_layer.removeSelection()
 
