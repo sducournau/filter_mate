@@ -968,14 +968,10 @@ class LayersManagementEngineTask(QgsTask):
             layer_props["infos"]["layer_id"] = layer.id()
 
             if layer_provider_type == 'postgresql':
-                result = self.create_spatial_index_for_postgresql_layer(layer, layer_props)
-                if self.isCanceled() or result is False:
-                    return False
+                self.create_spatial_index_for_postgresql_layer(layer, layer_props)
                 
             else:
-                result = self.create_spatial_index_for_layer(layer)
-                if self.isCanceled() or result is False:
-                    return False
+                self.create_spatial_index_for_layer(layer)
                 
             if layer.id() not in self.project_layers.keys():
                 self.project_layers[layer.id()] = layer_props
@@ -1029,47 +1025,59 @@ class LayersManagementEngineTask(QgsTask):
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):       
 
-        if layer != None or layer_props != None:
+        try:
+            if layer != None or layer_props != None:
 
-            schema = layer_props["infos"]["layer_schema"]
-            table = layer_props["infos"]["layer_name"]
-            geometry_field = layer_props["infos"]["geometry_field"]
-            primary_key_name = layer_props["infos"]["primary_key_name"]
+                schema = layer_props["infos"]["layer_schema"]
+                table = layer_props["infos"]["layer_name"]
+                geometry_field = layer_props["infos"]["geometry_field"]
+                primary_key_name = layer_props["infos"]["primary_key_name"]
 
 
-            source_uri = QgsDataSourceUri(layer.source())
-            authcfg_id = source_uri.param('authcfg')
-            host = source_uri.host()
-            port = source_uri.port()
-            dbname = source_uri.database()
-            username = source_uri.username()
+                source_uri = QgsDataSourceUri(layer.source())
+                authcfg_id = source_uri.param('authcfg')
+                host = source_uri.host()
+                port = source_uri.port()
+                dbname = source_uri.database()
+                username = source_uri.username()
+                password = source_uri.password()
+                ssl_mode = source_uri.sslMode()
 
-            if authcfg_id != "":
-                authConfig = QgsAuthMethodConfig()
-                if authcfg_id in QgsApplication.authManager().configIds():
-                    QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
-                    username = authConfig.config("username")
-                    password = authConfig.config("password")
+                if authcfg_id != "":
+                    authConfig = QgsAuthMethodConfig()
+                    if authcfg_id in QgsApplication.authManager().configIds():
+                        QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
+                        username = authConfig.config("username")
+                        password = authConfig.config("password")
 
-            connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+                if password != None and len(password) > 0:
+                    if ssl_mode != None and len(ssl_mode) > 0:
+                        connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=ssl_mode)
+                    else:
+                        connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+                else:
+                    return False
 
-            sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});'.format(schema=schema,
-                                                                                                                                                            table=table,
-                                                                                                                                                            geometry_field=geometry_field)
-            sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
-                                                                                                                                                                                table=table,
-                                                                                                                                                                                primary_key_name=primary_key_name)
+                sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});'.format(schema=schema,
+                                                                                                                                                                table=table,
+                                                                                                                                                                geometry_field=geometry_field)
+                sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
+                                                                                                                                                                                    table=table,
+                                                                                                                                                                                    primary_key_name=primary_key_name)
 
-            with connection.cursor() as cursor:
-                cursor.execute(sql_statement)
+                with connection.cursor() as cursor:
+                    cursor.execute(sql_statement)
 
-            if self.isCanceled():
+                if self.isCanceled():
+                    return False
+                
+                return True
+
+            else:
                 return False
-            
-            return True
-
-        else:
-            return False
+        
+        except:
+            pass
 
 
     def create_spatial_index_for_layer(self, layer):    
