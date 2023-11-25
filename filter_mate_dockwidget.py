@@ -727,12 +727,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         border: 2px solid {color_3};
                         }
                         """
+        
+        toolBox_tabTools =  """QWidget
+                                {
+                                background: {color_1};
+                                }
+                                QScrollBar:vertical 
+                                {
+                                border: none;
+                                background: transparent;
+                                width:5px;
+                                }
+                                QScrollBar::handle:vertical {
+                                border: none;
+                                background: {color_2};
+                                width:3px;
+                                }
+                                QScrollBar::add-line:vertical {
+                                background: transparent;
+                                height: 3px;
+                                subcontrol-position: bottom;
+                                subcontrol-origin: margin;
+                                }
+                                QScrollBar::sub-line:vertical {
+                                background: transparent;
+                                height: 3px;
+                                subcontrol-position: top;
+                                subcontrol-origin: margin;
+                                }
+                                QScrollBar:horizontal {
+                                border: none;
+                                background: transparent;
+                                height:5px;
+                                }
+                                QScrollBar::handle:horizontal {
+                                border: none;
+                                background: {color_2};
+                                height:3px;
+                                }
+                                QScrollBar::add-line:horizontal {
+                                background: transparent;
+                                width: 3px;
+                                subcontrol-position: right;
+                                subcontrol-origin: margin;
+                                }
+                                QScrollBar::sub-line:horizontal {
+                                background: transparent;
+                                width: 3px;
+                                subcontrol-position: left;
+                                subcontrol-origin: margin;
+                                }"""
 
-
-        dock_style = ("""QWidget
+        dock_style = """QWidget
                         {
-                        background: {color};
-                        }""")
+                        background: {color_1};
+                        }"""
         
         expressionBuilder_style = """QgsExpressionBuilderWidget
                             {
@@ -742,7 +791,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             padding: 10px 10px 10px 10px;
                             color:{color_3}
                             }"""
-
+        
+        scroll_area_style =  """QScrollArea
+                            {
+                            background-color: {color_1};
+                            color:{color_3}
+                            }
+                            QWidget
+                            {
+                            background: {color_1};
+                            }
+                            QScrollBar:vertical 
+                            {
+                            border: none;
+                            background: transparent;
+                            width:5px;
+                            }
+                            QScrollBar::handle:vertical {
+                            border: none;
+                            background: {color_2};
+                            width:3px;
+                            }
+                            QScrollBar::add-line:vertical {
+                            background: transparent;
+                            height: 3px;
+                            subcontrol-position: bottom;
+                            subcontrol-origin: margin;
+                            }
+                            QScrollBar::sub-line:vertical {
+                            background: transparent;
+                            height: 3px;
+                            subcontrol-position: top;
+                            subcontrol-origin: margin;
+                            }
+                            QScrollBar:horizontal {
+                            border: none;
+                            background: transparent;
+                            height:5px;
+                            }
+                            QScrollBar::handle:horizontal {
+                            border: none;
+                            background: {color_2};
+                            height:3px;
+                            }
+                            QScrollBar::add-line:horizontal {
+                            background: transparent;
+                            width: 3px;
+                            subcontrol-position: right;
+                            subcontrol-origin: margin;
+                            }
+                            QScrollBar::sub-line:horizontal {
+                            background: transparent;
+                            width: 3px;
+                            subcontrol-position: left;
+                            subcontrol-origin: margin;
+                            }"""
         
         frame_style =    """QFrame
                             {
@@ -809,6 +912,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         frame_style = frame_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
         
+        toolBox_tabTools = toolBox_tabTools.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
+
+        scroll_area_style = scroll_area_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
+
         collapsibleGroupBox_style = collapsibleGroupBox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
 
         lineEdit_style = lineEdit_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
@@ -847,10 +954,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.frame_exploring.setStyleSheet(frame_style)
         self.frame_toolset.setStyleSheet(frame_style)
 
+        self.toolBox_tabTools.setStyleSheet(toolBox_tabTools)
+        self.scrollArea_frame_exploring.setStyleSheet(scroll_area_style)
+
         self.mGroupBox_exploring_single_selection.setStyleSheet(collapsibleGroupBox_style)
         self.mGroupBox_exploring_multiple_selection.setStyleSheet(collapsibleGroupBox_style)
         self.mGroupBox_exploring_custom_selection.setStyleSheet(collapsibleGroupBox_style)
-
+        
 
         # self.CONFIGURATION.setStyleSheet("""background-color: {};
         #                                     border-color: rgb(0, 0, 0);
@@ -2067,13 +2177,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'disconnect')
 
 
-    def get_project_layers_from_app(self, project_layers, project):
+    def get_project_layers_from_app(self, project_layers, project=None):
 
         layer = None
 
         if self.widgets_initialized is True:
 
-            self.PROJECT = project
+            if project != None:    
+                self.PROJECT = project
+
             self.PROJECT_LAYERS = project_layers
 
 

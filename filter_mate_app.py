@@ -326,7 +326,7 @@ class FilterMateApp:
         self.iface.mapCanvas().refreshAllLayers()
         self.iface.mapCanvas().refresh()
          
-        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS)
+        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
 
         if task_name == 'filter' or task_name == 'unfilter':
