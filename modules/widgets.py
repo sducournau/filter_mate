@@ -222,14 +222,18 @@ class PopulateListEngineTask(QgsTask):
     def updateFeatures(self):
         self.parent.items_le.clear()
         selection_data = []
+        visible_data = []
         total_count = self.parent.list_widgets[self.layer.id()].count()
         for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
             item = self.parent.list_widgets[self.layer.id()].item(it)
             if item.checkState() == Qt.Checked:
                 selection_data.append([item.data(0), item.data(3)])
+            visible_data.append([item.data(0), item.data(3)])
             self.setProgress((index/total_count)*100)
         selection_data.sort(key=lambda k: k[0])
         self.parent.items_le.setText(', '.join([data[0] for data in selection_data]))
+        self.parent.list_widgets[self.layer.id()].setSelectedFeaturesList(selection_data)
+        self.parent.list_widgets[self.layer.id()].setVisibleFeaturesList(visible_data)
         self.parent.updatedCheckedItemListEvent(selection_data, True)
         
     

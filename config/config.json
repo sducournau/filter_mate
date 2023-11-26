@@ -73,18 +73,18 @@
         }
     },
     "EXPORT": {
-        "has_layers_to_export": true,
+        "has_layers_to_export": false,
         "layers_to_export": [
         ],
-        "has_projection_to_export": true,
+        "has_projection_to_export": false,
         "projection_to_export": "EPSG:2154",
-        "has_styles_to_export": true,
+        "has_styles_to_export": false,
         "styles_to_export": "QML",
-        "has_datatype_to_export": true,
-        "datatype_to_export": "GPX",
-        "has_output_folder_to_export": true,
+        "has_datatype_to_export": false,
+        "datatype_to_export": "",
+        "has_output_folder_to_export": false,
         "output_folder_to_export": "",
-        "has_zip_to_export": true,
+        "has_zip_to_export": false,
         "zip_to_export": ""
     },
     "FILTER": {

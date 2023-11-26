@@ -254,7 +254,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                                 "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking"),("exploring","is_changing_all_layer_properties")),
                                                 "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
                                                 "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
-                                                "combine_operator":(("filtering","has_combine_operator"),("filtering","combine_operator")),
+                                                "combine_operator":(("filtering","has_combine_operator"),("filtering","source_layer_combine_operator"),("filtering","other_layers_combine_operator")),
                                                 "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
                                                 "buffer":(("filtering","has_buffer"),("filtering","buffer"),("filtering","buffer_property"),("filtering","buffer_expression"))
                                                 }
@@ -314,7 +314,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "HAS_BUFFER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer, "SIGNALS":[("clicked", lambda state, x='has_buffer': self.layer_property_changed(x, state))], "ICON":None},
                                     "CURRENT_LAYER":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
                                     "LAYERS_TO_FILTER":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_filtering_layers_to_filter, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_filter(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_filter()}, x='layers_to_filter': self.layer_property_changed(x, state, custom_functions))]},
-                                    "COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='combine_operator': self.layer_property_changed(x, state))]},
+                                    "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='source_layer_combine_operator': self.layer_property_changed(x, state))]},
+                                    "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='other_layers_combine_operator': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates_operator, "SIGNALS":[("currentTextChanged", lambda state, x='geometric_predicates_operator': self.layer_property_changed(x, state))]},
                                     "BUFFER":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("valueChanged", lambda state, x='buffer': self.layer_property_changed(x, state))]},
@@ -874,11 +875,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                         color:{color_3}
                                         }""" 
         
-        lineEdit_style = """
-                                background-color: {color_2};
-                                color:{color_1};
-                                border-radius: 3px;
-                                padding: 3px 3px 3px 3px;"""
+        lineEdit_style = """QLineEdit 
+                            {
+                            background-color: {color_2};
+                            color:{color_1};
+                            border-radius: 3px;
+                            padding: 3px 3px 3px 3px;
+                            }
+                            QLineEdit:hover
+                            {
+                            border: 2px solid black;
+                            }
+                            """
+        
+        qgsDoubleSpinBox_style = """QgsDoubleSpinBox {
+                                    background-color: {color_2};
+                                    color:{color_1};
+                                    border-radius: 3px;
+                                    padding: 3px 3px 3px 3px;
+                                    }
+                                    QgsDoubleSpinBox:hover
+                                    {
+                                    border: 2px solid black;
+                                    }
+                                    """
         
         pushBarMessage_style =  """QFrame QFrame {
                                     min-height: 70px;
@@ -897,6 +917,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                         height:40px;
                                     }"""
 
+        propertyOverrideButton_style =  """QgsPropertyOverrideButton 
+                                        {
+                                        background-color: {color_1};
+                                        color:{color_3};
+                                        border-radius: 3px;
+                                        padding: 3px 3px 3px 3px;
+                                        }
+                                        QgsPropertyOverrideButton:hover
+                                        {
+                                        border: 2px solid black;
+                                        }
+                                        QgsFieldExpressionWidget
+                                        {
+                                        background-color:{color_1};
+                                        border: 1px solid {color_1};
+                                        border-radius: 3px;
+                                        padding: 3px 3px 3px 3px;
+                                        color:{color_3};
+                                        }
+                                        QgsFieldExpressionWidget:hover
+                                        {
+                                        border: 2px solid {color_3};
+                                        }
+                                        QgsFieldExpressionWidget QAbstractItemView {
+                                        background: {color_1};
+                                        selection-background-color:{color_3};
+                                        color:{color_3};
+                                        border: 2px solid {color_3};
+                                        }"""
+
+
         splitter_style = """QSplitter::handle {
                             background: {color_1};
                             }
@@ -905,6 +956,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             }"""
 
         comboBox_style = comboBox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][2]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
+
+        propertyOverrideButton_style = propertyOverrideButton_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][2]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
 
         dock_style = dock_style.replace("{color}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
 
@@ -919,6 +972,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         collapsibleGroupBox_style = collapsibleGroupBox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1])
 
         lineEdit_style = lineEdit_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
+
+        qgsDoubleSpinBox_style = qgsDoubleSpinBox_style.replace("{color_1}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1])
 
         splitter_style = splitter_style.replace("{color_1}", self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][1]).replace("{color_2}", self.CONFIG_DATA['DOCKWIDGET']['COLORS']["BACKGROUND"][3])
 
@@ -1015,15 +1070,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
                     self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.IBeamCursor)
                     self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
+                elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsDoubleSpinBox") >= 0:
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(qgsDoubleSpinBox_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.IBeamCursor)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("PropertyOverrideButton") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
+                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(propertyOverrideButton_style)
                     self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
                     self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
                 elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsProjectionSelectionWidget") >= 0:
                     self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
                     self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
                     self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                
+                _
         icon_size = icons_sizes["OTHERS"]
         for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
             # widget.setMinimumHeight(icon_size*2)
@@ -1398,7 +1457,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
 
-
+     
             self.exploring_link_widgets()
 
             self.current_layer.removeSelection()
@@ -1475,6 +1534,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
 
+            
             if layer_props["exploring"]["is_linking"] == True:
                 if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
                     if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
@@ -1492,6 +1552,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
                 elif custom_filter != None:
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
+                
+                multiple_display_expression = layer_props["exploring"]["multiple_selection_expression"]
+                if QgsExpression(multiple_display_expression).isField():
+                    multiple_display_expression = multiple_display_expression.replace('"','')
+
+                single_display_expression = layer_props["exploring"]["single_selection_expression"]
+                if QgsExpression(single_display_expression).isField():
+                    single_display_expression = single_display_expression.replace('"','')
+
+                if QgsExpression(single_display_expression).isValid() and single_display_expression == layer_props["infos"]["primary_key_name"]:
+                    if QgsExpression(multiple_display_expression).isValid() and multiple_display_expression != layer_props["infos"]["primary_key_name"]:
+                        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_display_expression)
+
+                if QgsExpression(multiple_display_expression).isValid() and multiple_display_expression == layer_props["infos"]["primary_key_name"]:
+                    if QgsExpression(single_display_expression).isValid() and single_display_expression != layer_props["infos"]["primary_key_name"]:
+                        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression)
+
             
             else:
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('')
@@ -1545,7 +1626,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                         ["FILTERING","BUFFER_EXPRESSION"],
                                         ["FILTERING","GEOMETRIC_PREDICATES"],
                                         ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
-                                        ["FILTERING","COMBINE_OPERATOR"],
+                                        ["FILTERING","SOURCE_LAYER_COMBINE_OPERATOR"],
+                                        ["FILTERING","OTHER_LAYERS_COMBINE_OPERATOR"],
                                         ["FILTERING","LAYERS_TO_FILTER"],
                                         ["FILTERING","CURRENT_LAYER"]
                                     ]
@@ -1600,12 +1682,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             self.filtering_init_buffer_property()
                             if layer_props[property_tuple[0]][property_tuple[1]] is False:
                                 self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].setActive(False)
-                                if self.widgets["FILTERING"]["BUFFER_EXPRESSION"]["WIDGET"].isVisible() is True:
-                                    self.widgets["FILTERING"]["BUFFER_EXPRESSION"]["WIDGET"].hide()
                             elif layer_props[property_tuple[0]][property_tuple[1]] is True:
                                 self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].setActive(True)
-                                if self.widgets["FILTERING"]["BUFFER_EXPRESSION"]["WIDGET"].isHidden() is True:
-                                    self.widgets["FILTERING"]["BUFFER_EXPRESSION"]["WIDGET"].show()
                             
                             
                                 
@@ -1866,8 +1944,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'disconnect')
 
+
+
             for properties_tuples_key in self.export_properties_tuples_dict:
-                properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]    
+                properties_tuples = self.export_properties_tuples_dict[properties_tuples_key]
+                self.properties_group_state_changed(properties_tuples, properties_tuples_key)
                 for i, property_tuple in enumerate(properties_tuples):
                     widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
                     if widget_type == 'PushButton':
@@ -1881,7 +1962,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     elif widget_type == 'QgsDoubleSpinBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(self.project_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'LineEdit':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(self.project_props[property_tuple[0]][property_tuple[1]])
+                        if self.project_props[property_tuple[0]][property_tuple[1]] == '':
+                            if property_tuple[1] == 'output_folder_to_export':
+                                self.reset_export_output_path()
+                            if property_tuple[1] == 'zip_to_export':
+                                self.reset_export_output_pathzip()
+                        else:
+                            self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(self.project_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'QgsProjectionSelectionWidget':
                         crs = QgsCoordinateReferenceSystem(self.project_props[property_tuple[0]][property_tuple[1]])
                         if crs.isValid():
@@ -2026,7 +2113,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
-            if layer_props["filtering"]["buffer_expression"] in ('','NULL'):
+            if layer_props["filtering"]["buffer_expression"] in ('','NULL') or self.widgets["FILTERING"]["BUFFER_EXPRESSION"]["WIDGET"].text() in ('','NULL'):
                 if layer_props["filtering"]["buffer_property"] is True:
                     self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_expression"] = ''
                     self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_property"] = False
@@ -2053,6 +2140,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if self.current_buffer_property_has_been_init is False:
                     self.filtering_init_buffer_property()
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_expression"] = self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].toProperty().asExpression()
+                self.widgets["FILTERING"]["BUFFER_EXPRESSION"]["WIDGET"].setClearButtonEnabled(True)
 
             if layer_props["filtering"]["buffer_property"] is False:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_expression"] = ''
