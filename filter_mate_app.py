@@ -61,6 +61,7 @@ class FilterMateApp:
                                     }
         
         self.PROJECT = QgsProject.instance()
+        self.history_table_exists = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists'))
         self.run()
 
 
@@ -95,7 +96,8 @@ class FilterMateApp:
         self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
         self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
-
+        # if self.history_table_exists is False:
+        #     self.create_project_history_table()
 
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
@@ -122,6 +124,9 @@ class FilterMateApp:
         if task_name in ('project_read', 'new_project'):
             QgsApplication.taskManager().cancelAll()
             self.PROJECT = QgsProject.instance()
+            # self.history_table_exists = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists'))
+            # if self.history_table_exists is False:
+            #     self.create_project_history_table()
             init_layers = list(self.PROJECT.mapLayers().values())
             if len(init_layers) > 0:
                 self.manage_task('add_layers', init_layers)
@@ -421,6 +426,18 @@ class FilterMateApp:
         }
         processing.run('qgis:createspatialindex', alg_params_createspatialindex)
     
+
+    def create_project_history_table(self):
+
+        
+        vl = QgsVectorLayer("NoGeometry", "temp", "memory")
+    
+        first_launch = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('first_launch'))
+
+               
+        result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export) 
+
+
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
 

@@ -158,10 +158,30 @@ class FilterEngineTask(QgsTask):
             self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
                                                                                                                 source_layer_srid=self.source_layer_crs_authid.split(':')[1])
             
+        self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=self.param_source_table), self.param_buffer_expression)
+        if self.param_buffer_expression.find('"') == 0:
+            self.param_buffer_expression = '"{source_table}"."'.format(source_table=self.param_source_table) + self.param_buffer_expression
+
+
         if self.param_buffer_expression != None:
             if self.param_buffer_expression.find('if') >= 0:
                 self.param_buffer_expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', self.param_buffer_expression)
                 print(self.param_buffer_expression)
+
+
+            self.param_buffer_expression = self.param_buffer_expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
+            self.param_buffer_expression = self.param_buffer_expression.replace('" <', '"::numeric >').replace('"<', '"::numeric <')
+            self.param_buffer_expression = self.param_buffer_expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
+            self.param_buffer_expression = self.param_buffer_expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
+
+            
+            self.param_buffer_expression = re.sub('ilike', 'ILIKE', self.param_buffer_expression)
+            self.param_buffer_expression = re.sub('like', 'LIKE', self.param_buffer_expression)
+            self.param_buffer_expression = re.sub('not', 'NOT', self.param_buffer_expression)
+
+            self.param_buffer_expression = self.param_buffer_expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
+            self.param_buffer_expression = self.param_buffer_expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
+
 
 
             self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
