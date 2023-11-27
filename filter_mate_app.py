@@ -11,6 +11,7 @@ from operator import getitem
 import zipfile
 import os.path
 from pathlib import Path
+from shutil import copyfile
 import re
 from .config.config import *
 from functools import partial
@@ -258,15 +259,7 @@ class FilterMateApp:
 
 
     def filter_engine_task_completed(self, task_name, current_layer, task_parameters):
-        
-        # if self.PROJECT_LAYERS.
-        #     first_launch = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('first_launch'))
-        #     history_table_exists = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists'))
 
-        # if history_table_exists is False:
-        #     vl = QgsVectorLayer("Point", "temp", "memory")
-        
-        #     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'history_table_exists','True')
 
         if current_layer.subsetString() != '':
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
@@ -429,8 +422,22 @@ class FilterMateApp:
 
     def create_project_history_table(self):
 
-        
-        vl = QgsVectorLayer("NoGeometry", "temp", "memory")
+        current_profile = QgsUserProfileManager().userProfile()
+        current_profile_folder = os.path.normpath(QgsUserProfile(current_profile).folder())
+        plugin_config_directory = os.path.normpath(current_profile_folder +  os.sep + 'FilterMate')
+        if not os.path.isdir(plugin_config_directory):
+            try:
+                os.makedirs(plugin_config_directory, exist_ok = True)
+            except OSError as error:
+                pass
+
+        layer_name = 'filterMate_subset_history'
+        if os.path.isfile(plugin_config_directory + os.sep + layer_name):
+            layer = QgsVectorLayer(pathLayer, layer_name, 'ogr')            
+            QgsVectorFileWriter.writeAsVectorFormat(layer, plugin_config_directory  +  os.sep + layer.name() + ".sqlite", "utf-8", None, "SQLite", False, None ,["SPATIALITE=YES",])
+       
+        QgsMapLayerRegistry.instance().addMapLayer(vlayer)
+
     
         first_launch = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('first_launch'))
 
