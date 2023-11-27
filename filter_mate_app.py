@@ -253,7 +253,16 @@ class FilterMateApp:
 
 
     def filter_engine_task_completed(self, task_name, current_layer, task_parameters):
-         
+        
+        # if self.PROJECT_LAYERS.
+        #     first_launch = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('first_launch'))
+        #     history_table_exists = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists'))
+
+        # if history_table_exists is False:
+        #     vl = QgsVectorLayer("Point", "temp", "memory")
+        
+        #     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'history_table_exists','True')
+
         if current_layer.subsetString() != '':
             self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
             if task_name == 'filter':

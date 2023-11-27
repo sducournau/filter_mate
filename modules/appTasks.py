@@ -158,8 +158,16 @@ class FilterEngineTask(QgsTask):
             self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
                                                                                                                 source_layer_srid=self.source_layer_crs_authid.split(':')[1])
             
+        if self.param_buffer_expression != None:
+            if self.param_buffer_expression.find('if') >= 0:
+                self.param_buffer_expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', self.param_buffer_expression)
+                print(self.param_buffer_expression)
 
-        if self.param_buffer_value != None:
+
+            self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                        buffer_value=self.param_buffer_expression)
+
+        elif self.param_buffer_value != None:
             self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
                                                                                                         buffer_value=self.param_buffer_value)
 
@@ -248,7 +256,7 @@ class FilterEngineTask(QgsTask):
         postgis_predicates = list(self.current_predicates.values())
 
         param_old_subset = ''
-        if self.param_source_layer_combine_operator != '':
+        if self.param_other_layers_combine_operator != '':
             if layer_props["is_already_subset"] == True:
                 param_old_subset = layer.subsetString()
 
@@ -276,7 +284,7 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql' and self.param_buffer_expression == None:
+        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
 
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
@@ -321,9 +329,9 @@ class FilterEngineTask(QgsTask):
 
             if param_old_subset != '' and self.param_other_layers_combine_operator != '':
 
-                result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                    combine_operator=self.param_other_layers_combine_operator,
-                                                                                                                    expression=param_expression))
+                result = layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                            combine_operator=self.param_other_layers_combine_operator,
+                                                                                                            expression=param_expression))
             else:
                 result = layer.setSubsetString(param_expression)
 
@@ -440,13 +448,13 @@ class FilterEngineTask(QgsTask):
         provider_list = self.provider_list + [self.param_source_provider_type]
         provider_list = list(dict.fromkeys(provider_list))
 
-        if 'postgresql' in provider_list and self.param_buffer_expression == None:
+        if 'postgresql' in provider_list:
             self.prepare_postgresql_source_geom()
 
         if 'spatialite' in provider_list:
             self.prepare_ogr_source_geom()
 
-        if 'ogr' in provider_list or self.param_buffer_expression != None:
+        if 'ogr' in provider_list or self.param_buffer_expression != '':
             self.prepare_ogr_source_geom()
 
         i = 1
