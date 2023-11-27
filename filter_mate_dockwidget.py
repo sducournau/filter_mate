@@ -255,7 +255,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                                 "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
                                                 "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
                                                 "combine_operator":(("filtering","has_combine_operator"),("filtering","source_layer_combine_operator"),("filtering","other_layers_combine_operator")),
-                                                "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates"),("filtering","geometric_predicates_operator")),
+                                                "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer"),("filtering","geometric_predicates")),
                                                 "buffer":(("filtering","has_buffer"),("filtering","buffer"),("filtering","buffer_property"),("filtering","buffer_expression"))
                                                 }
         
@@ -317,7 +317,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='source_layer_combine_operator': self.layer_property_changed(x, state))]},
                                     "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='other_layers_combine_operator': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
-                                    "GEOMETRIC_PREDICATES_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates_operator, "SIGNALS":[("currentTextChanged", lambda state, x='geometric_predicates_operator': self.layer_property_changed(x, state))]},
                                     "BUFFER":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer, "SIGNALS":[("valueChanged", lambda state, x='buffer': self.layer_property_changed(x, state))]},
                                     "BUFFER_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_property, "SIGNALS":[("activated", lambda state, x='buffer_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))]},
                                     "BUFFER_EXPRESSION":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_filtering_buffer_expression, "SIGNALS":[("textEdited", lambda state, x='buffer_expression', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_expression_edited()}: self.layer_property_changed(x, state, custom_functions)),("textChanged", lambda state, x='buffer_expression': self.layer_property_changed(x, state))]}
@@ -1174,11 +1173,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.filtering_auto_current_layer_changed()
 
             
-    def select_tabTools_index(self, i):
+    def select_tabTools_index(self):
         
         if self.widgets_initialized is True:
 
-            self.tabTools_current_index = i
+            self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
             if self.tabTools_current_index == 1:
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
             else:
@@ -1625,7 +1624,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                         ["FILTERING","BUFFER_PROPERTY"],
                                         ["FILTERING","BUFFER_EXPRESSION"],
                                         ["FILTERING","GEOMETRIC_PREDICATES"],
-                                        ["FILTERING","GEOMETRIC_PREDICATES_OPERATOR"],
                                         ["FILTERING","SOURCE_LAYER_COMBINE_OPERATOR"],
                                         ["FILTERING","OTHER_LAYERS_COMBINE_OPERATOR"],
                                         ["FILTERING","LAYERS_TO_FILTER"],
@@ -2305,6 +2303,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.manage_output_name()
                     self.exporting_populate_combobox()
                     self.set_exporting_properties()
+                    self.select_tabTools_index()
                     self.current_layer_changed(layer)
                     self.exploring_groupbox_init()
                     self.filtering_auto_current_layer_changed()

@@ -440,15 +440,16 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         if event.type() == QEvent.MouseButtonPress and obj == self.list_widgets[self.layer.id()].viewport():
             if event.button() == Qt.LeftButton:
                 clicked_item = self.list_widgets[self.layer.id()].itemAt(event.pos())
-                if clicked_item.checkState() == Qt.Checked:
-                    clicked_item.setCheckState(Qt.Unchecked)
-                else:
-                    clicked_item.setCheckState(Qt.Checked)
+                if clicked_item != None:
+                    if clicked_item.checkState() == Qt.Checked:
+                        clicked_item.setCheckState(Qt.Unchecked)
+                    else:
+                        clicked_item.setCheckState(Qt.Checked)
 
-                description = 'Selecting feature'
-                action = 'updateFeatures'
-                self.build_task(description, action, True)
-                self.launch_task(action)
+                    description = 'Selecting feature'
+                    action = 'updateFeatures'
+                    self.build_task(description, action, True)
+                    self.launch_task(action)
 
             elif event.button() == Qt.RightButton:
                 self.context_menu.exec(QCursor.pos())
@@ -552,6 +553,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
     def build_task(self, description, action, silent_flag=False):
         try:
+            self.tasks[action][self.layer.id()].cancel()
+        except:
+            pass
+        
+        try:
             self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
             self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
 
@@ -564,12 +570,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             pass
 
     def launch_task(self, action):
+
         try:
             self.tasks[action][self.layer.id()].taskCompleted.connect(self.connect_filter_lineEdit)
             QgsApplication.taskManager().addTask(self.tasks[action][self.layer.id()])
         except:
             pass
-    
+
     def updatedCheckedItemListEvent(self, data, flag):
         self.list_widgets[self.layer.id()].setSelectedFeaturesList(data)
         self.updatingCheckedItemList.emit(data, flag)

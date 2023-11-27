@@ -15,9 +15,9 @@ It adapts to your data, takes advantage of PostGIS when possible, manages differ
 The layers keep a history of each subset, making it easy to return to the previous state.
 <br>
 <br>
-Github page : https://sducournau.github.io/filter_mate
+Github page : [https://sducournau.github.io/filter_mate](https://sducournau.github.io/filter_mate)
 <br>
-Qgis plugin repository : https://plugins.qgis.org/plugins/filter_mate
+Qgis plugin repository : [https://plugins.qgis.org/plugins/filter_mate](https://plugins.qgis.org/plugins/filter_mate)
 
 ******
 

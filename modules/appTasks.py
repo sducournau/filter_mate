@@ -50,13 +50,13 @@ class FilterEngineTask(QgsTask):
         self.feature_count_limit = None
         self.param_source_provider_type = None
         self.has_combine_operator = None
-        self.param_combine_operator = None
+        self.param_source_layer_combine_operator = None
+        self.param_other_layers_combine_operator = None
         self.param_buffer_expression = None
         self.param_buffer_value = None
         self.param_source_schema = None
         self.param_source_table = None
         self.param_source_geom = None
-        self.param_source_geom_operator = None
         self.param_source_subset = None
 
         self.has_to_reproject_source_layer = False
@@ -248,7 +248,7 @@ class FilterEngineTask(QgsTask):
         postgis_predicates = list(self.current_predicates.values())
 
         param_old_subset = ''
-        if self.param_combine_operator != '':
+        if self.param_source_layer_combine_operator != '':
             if layer_props["is_already_subset"] == True:
                 param_old_subset = layer.subsetString()
 
@@ -258,6 +258,7 @@ class FilterEngineTask(QgsTask):
         param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
         param_distant_geometry_field = layer_props["geometry_field"]
         param_layer_crs_authid = layer_props["layer_crs_authid"]
+        
         
         param_layer_feature_count = 0
         param_has_to_reproject_layer = False
@@ -275,7 +276,7 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql' and self.has_combine_operator is False and self.param_buffer_expression == None:
+        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql' and self.param_buffer_expression == None:
 
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
@@ -294,7 +295,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                     )
             
             if len(postgis_sub_expression_array) > 1:
-                param_postgis_sub_expression = self.param_source_geom_operator.join(postgis_sub_expression_array)
+                param_postgis_sub_expression = ' OR '.join(postgis_sub_expression_array)
             else:
                 param_postgis_sub_expression = postgis_sub_expression_array[0]
 
@@ -318,7 +319,13 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                             postgis_sub_expression=param_postgis_sub_expression
                                                                                                                                                                                                                                                             )
 
-            result = layer.setSubsetString(param_expression)
+            if param_old_subset != '' and self.param_other_layers_combine_operator != '':
+
+                result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
+                                                                                                                    combine_operator=self.param_other_layers_combine_operator,
+                                                                                                                    expression=param_expression))
+            else:
+                result = layer.setSubsetString(param_expression)
 
             if result is False:
                 print(param_expression)
@@ -328,7 +335,7 @@ class FilterEngineTask(QgsTask):
                 if param_has_to_reproject_layer or (self.has_feature_count_limit is True and param_layer_feature_count > self.feature_count_limit):
 
                     features_ids = []
-                    for feature in layer.getFeatures():
+                    for feature in layer.getFeatures(QgsFeatureRequest(QgsExpression(param_expression))):
                         features_ids.append(str(feature[param_distant_primary_key_name]))
 
                     if len(features_ids) > 0:
@@ -363,21 +370,32 @@ class FilterEngineTask(QgsTask):
                 }
                 processing.run('qgis:createspatialindex', alg_params_createspatialindex)
 
-
             features_list = []
-            alg_params_select = {
-                'INPUT': current_layer,
-                'INTERSECT': self.ogr_source_geom,
-                'METHOD': 0,
-                'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-            }
-            processing.run("qgis:selectbylocation", alg_params_select)
+
+            if param_old_subset != '' and self.param_other_layers_combine_operator != '':
+
+                alg_params_select = {
+                    'INPUT': current_layer,
+                    'INTERSECT': self.ogr_source_geom,
+                    'METHOD': 0,
+                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                }
+                processing.run("qgis:selectbylocation", alg_params_select)
+            else:
+                current_layer.setSubsetString('')
+                layer.setSubsetString('')
+                alg_params_select = {
+                    'INPUT': current_layer,
+                    'INTERSECT': self.ogr_source_geom,
+                    'METHOD': 0,
+                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                }
+                processing.run("qgis:selectbylocation", alg_params_select)
+
 
             features_ids = []
             for feature in current_layer.selectedFeatures():
                 features_ids.append(str(feature[param_distant_primary_key_name]))
-
-
 
             current_layer.removeSelection()
             layer.removeSelection()
@@ -405,7 +423,6 @@ class FilterEngineTask(QgsTask):
 
         result = False
         self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
-        self.param_source_geom_operator = ' ' + self.task_parameters["filtering"]["geometric_predicates_operator"] + ' '
         self.param_source_subset = self.expression
 
 
@@ -460,10 +477,12 @@ class FilterEngineTask(QgsTask):
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
         if self.has_combine_operator == True:
-            if self.task_parameters["filtering"]["combine_operator"] != '':
-                self.param_combine_operator = self.task_parameters["filtering"]["combine_operator"]
+            if self.task_parameters["filtering"]["source_layer_combine_operator"] != '':
+                self.param_source_layer_combine_operator = self.task_parameters["filtering"]["source_layer_combine_operator"]
                 if self.task_parameters["infos"]["is_already_subset"] == True:
                     param_old_subset = self.source_layer.subsetString()
+            if self.task_parameters["filtering"]["other_layers_combine_operator"] != '':
+                self.param_other_layers_combine_operator = self.task_parameters["filtering"]["other_layers_combine_operator"]
 
         print(self.task_parameters["task"]["expression"])
         if self.task_parameters["task"]["expression"] != None:
@@ -506,7 +525,7 @@ class FilterEngineTask(QgsTask):
 
 
                     if param_old_subset != '':
-                        result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=param_old_subset, param_combine_operator=self.param_combine_operator, expression=self.expression))
+                        result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=param_old_subset, param_combine_operator=self.param_source_layer_combine_operator, expression=self.expression))
                     else:
                         result = self.source_layer.setSubsetString(self.expression)
 
@@ -526,7 +545,7 @@ class FilterEngineTask(QgsTask):
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
                 
                 if param_old_subset != '':
-                    result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=param_old_subset, param_combine_operator=self.param_combine_operator, expression=self.expression))
+                    result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=param_old_subset, param_combine_operator=self.param_source_layer_combine_operator, expression=self.expression))
                 else:
                     result = self.source_layer.setSubsetString(self.expression)
  
@@ -558,7 +577,7 @@ class FilterEngineTask(QgsTask):
                         if index >= 0:
                             self.current_predicates[str(index)] = self.predicates[key]
 
-                self.geometric_predicates_operator = self.task_parameters["filtering"]["geometric_predicates_operator"]
+                
                 result = self.manage_distant_layers_geometric_filtering()
 
                 if self.isCanceled() or result is False:
@@ -566,19 +585,21 @@ class FilterEngineTask(QgsTask):
 
         elif self.is_field_expression != None:
             field_idx = -1
+
             for layer_provider_type in self.layers:
                 for layer, layer_prop in self.layers[layer_provider_type]:
                     field_idx = layer.fields().indexOf(self.is_field_expression[1])
                     if field_idx >= 0:
                         param_old_subset = ''
-                        if self.param_combine_operator != '':
-                            if layer_prop["is_already_subset"] == True:
-                                param_old_subset = layer.subsetString()
+                        if self.task_parameters["infos"]["is_already_subset"] == True:
+                            if self.param_other_layers_combine_operator != '':
+                                if layer_prop["is_already_subset"] == True:
+                                    param_old_subset = layer.subsetString()
 
-                        if param_old_subset != '' and self.param_combine_operator != '':
+                        if param_old_subset != '' and self.param_other_layers_combine_operator != '':
 
                             result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                                                combine_operator=self.param_combine_operator,
+                                                                                                                                combine_operator=self.param_other_layers_combine_operator,
                                                                                                                                 expression=self.expression))
                         else:
                             result = self.source_layer.setSubsetString(self.expression)
@@ -820,7 +841,7 @@ class LayersManagementEngineTask(QgsTask):
 
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"geometric_predicates_operator":"AND","has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
 
     def run(self):
         try:    
