@@ -1,4 +1,4 @@
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsUserProfileManager, QgsUserProfile
 from pathlib import Path
 import os.path
 import json
@@ -25,6 +25,16 @@ DIR_CONFIG = os.path.normpath(os.path.dirname(__file__))
 PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
 if PATH_ABSOLUTE_PROJECT =='./':
     PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+
+
+default_profile_folder = os.environ['APPDATA'] + '\QGIS\QGIS3\profiles\default'
+
+PLUGIN_CONFIG_DIRECTORY = default_profile_folder +  os.sep + 'FilterMate'
+if not os.path.isdir(PLUGIN_CONFIG_DIRECTORY):
+    try:
+        os.makedirs(PLUGIN_CONFIG_DIRECTORY, exist_ok = True)
+    except OSError as error:
+        pass
 
 
 CONFIG_DATA = None

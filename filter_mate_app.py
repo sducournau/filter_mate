@@ -62,7 +62,9 @@ class FilterMateApp:
                                     }
         
         self.PROJECT = QgsProject.instance()
-        self.history_table_exists = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists'))
+        self.PLUGIN_CONFIG_DIRECTORY = PLUGIN_CONFIG_DIRECTORY
+        self.history_table_exists = None
+        self.subset_layers_history_table = None
         self.run()
 
 
@@ -97,8 +99,8 @@ class FilterMateApp:
         self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
         self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
-        # if self.history_table_exists is False:
-        #     self.create_project_history_table()
+        self.history_table_exists = QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists')
+        #self.load_project_history_table()
 
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
@@ -125,9 +127,8 @@ class FilterMateApp:
         if task_name in ('project_read', 'new_project'):
             QgsApplication.taskManager().cancelAll()
             self.PROJECT = QgsProject.instance()
-            # self.history_table_exists = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists'))
-            # if self.history_table_exists is False:
-            #     self.create_project_history_table()
+            self.history_table_exists = QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists')
+            #self.load_project_history_table()
             init_layers = list(self.PROJECT.mapLayers().values())
             if len(init_layers) > 0:
                 self.manage_task('add_layers', init_layers)
@@ -420,29 +421,49 @@ class FilterMateApp:
         processing.run('qgis:createspatialindex', alg_params_createspatialindex)
     
 
-    def create_project_history_table(self):
+    def load_project_history_table(self):
 
-        current_profile = QgsUserProfileManager().userProfile()
-        current_profile_folder = os.path.normpath(QgsUserProfile(current_profile).folder())
-        plugin_config_directory = os.path.normpath(current_profile_folder +  os.sep + 'FilterMate')
-        if not os.path.isdir(plugin_config_directory):
-            try:
-                os.makedirs(plugin_config_directory, exist_ok = True)
-            except OSError as error:
-                pass
+        if self.PROJECT != None and len(list(self.PROJECT.mapLayers().values())) > 0:
 
-        layer_name = 'filterMate_subset_history'
-        if os.path.isfile(plugin_config_directory + os.sep + layer_name):
-            layer = QgsVectorLayer(pathLayer, layer_name, 'ogr')            
-            QgsVectorFileWriter.writeAsVectorFormat(layer, plugin_config_directory  +  os.sep + layer.name() + ".sqlite", "utf-8", None, "SQLite", False, None ,["SPATIALITE=YES",])
-       
-        QgsMapLayerRegistry.instance().addMapLayer(vlayer)
+            db_name = 'filterMate_subset_history'
+            file_path = os.path.normpath(self.PLUGIN_CONFIG_DIRECTORY + os.sep + db_name + ".sqlite")
+            project_name = self.PROJECT.baseName().lower()
+            print(self.history_table_exists)
 
-    
-        first_launch = bool(QgsExpressionContextUtils.projectScope(self.PROJECT).variable('first_launch'))
+            if self.history_table_exists is None or self.history_table_exists is False:
+                memory_uri = 'NoGeometry?field=id:integer(20,0)&field=layer_id:string(255,0)&field=source_layer_id:string(255,0)&field=subset:string(999,0)&field=last_update:date(0,0)&uid={d702fa94-a355-414c-bda0-6fbf9d5c103e}'
+                layer = QgsVectorLayer(memory_uri, '_'.join([db_name, project_name]), "memory")
+                                       
+                if os.path.isfile(file_path):
+                    ctc = self.PROJECT.transformContext()
+                    o_save_options = QgsVectorFileWriter.SaveVectorOptions()
+                    o_save_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteLayer
+                    o_save_options.EditionCapability = QgsVectorFileWriter.CanAddNewLayer
+                    o_save_options.layerName = layer.name()
+                    o_save_options.driverName = 'SQLite'
+                    o_save_options.fileEncoding = 'utf-8'
+                    o_save_options.onlySelectedFeatures = False
+                    o_save_options.layerOptions = ['SPATIALITE=YES']
+                    o_save_options.ct = QgsCoordinateTransform(QgsCoordinateReferenceSystem("EPSG:2154"), QgsCoordinateReferenceSystem("EPSG:4326"), self.PROJECT)
+                    err = QgsVectorFileWriter.writeAsVectorFormatV2(layer, file_path, ctc, o_save_options)
+                else:
+                    crs = QgsCoordinateReferenceSystem("epsg:4326")
+                    err = QgsVectorFileWriter.writeAsVectorFormat(layer, file_path, "utf-8", crs, driverName='SQLite', onlySelected=False, datasourceOptions=['SPATIALITE=YES'])
+                
+                print(err)
 
-               
-        result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export) 
+
+            uri = QgsDataSourceUri()
+            uri.setDatabase(file_path)
+            uri.setSchema = ''
+            uri.setDriver("SQLite")
+            uri.setTable(project_name)
+            uri.setWkbType(QgsWkbTypes.NoGeometry)
+            self.subset_layers_history_table = QgsVectorLayer(uri.uri(), '_'.join([db_name, project_name]), 'spatialite')
+            self.PROJECT.addMapLayer(self.subset_layers_history_table)
+
+            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'history_table_exists','True')
+
 
 
 

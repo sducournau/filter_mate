@@ -242,14 +242,9 @@ class FilterEngineTask(QgsTask):
         result = False
         self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
         self.param_source_new_subset = self.source_layer.subsetString()
-        index = self.param_source_new_subset.find('LEFT JOIN')
-        if index >= 0:
-            self.param_source_new_subset = self.param_source_new_subset[index:-1]
-        else:
-            if self.source_layer.subsetString().find('"{source_table}"'.format(source_table=self.param_source_table)) != 0:
-                if self.source_layer.subsetString().find('"{primary_key_name}"'.format(primary_key_name=self.primary_key_name)) == 0:
-                    self.param_source_new_subset = '"{source_table}".'.format(source_table=self.param_source_table) + self.source_layer.subsetString()
-
+        if self.param_source_new_subset.find('"{source_table}"'.format(source_table=self.param_source_table)) != 0:
+            if self.param_source_new_subset.find('"{primary_key_name}"'.format(primary_key_name=self.primary_key_name)) == 0:
+                self.param_source_new_subset = '"{source_table}".'.format(source_table=self.param_source_table) + self.source_layer.subsetString()
 
 
         if self.task_parameters["filtering"]["has_buffer"] is True:
@@ -296,12 +291,11 @@ class FilterEngineTask(QgsTask):
             self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
                                                                                                                 source_layer_srid=self.source_layer_crs_authid.split(':')[1])
             
-        self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=self.param_source_table), self.param_buffer_expression)
-        if self.param_buffer_expression.find('"') == 0:
-            self.param_buffer_expression = '"{source_table}"."'.format(source_table=self.param_source_table) + self.param_buffer_expression
+        if self.param_buffer_expression != None and self.param_buffer_expression != '':
+            self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=self.param_source_table), self.param_buffer_expression)
+            if self.param_buffer_expression.find('"') == 0:
+                self.param_buffer_expression = '"{source_table}"."'.format(source_table=self.param_source_table) + self.param_buffer_expression
 
-
-        if self.param_buffer_expression != None:
             if self.param_buffer_expression.find('if') >= 0:
                 self.param_buffer_expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', self.param_buffer_expression)
                 print(self.param_buffer_expression)
@@ -442,7 +436,7 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
+        if (self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql') and param_old_subset != '':
 
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
@@ -464,21 +458,11 @@ class FilterEngineTask(QgsTask):
                 param_postgis_sub_expression = ' OR '.join(postgis_sub_expression_array)
             else:
                 param_postgis_sub_expression = postgis_sub_expression_array[0]
+            
 
-            if self.has_combine_operator == True and self.param_source_layer_combine_operator != '' and self.param_source_new_subset != '':
+            if QgsExpression(self.expression).isField() is False:
                 
-               
-                if self.param_source_new_subset.find('LEFT JOIN') == 0: 
-                    param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                                            distant_table=param_distant_table,
-                                                                                                                                                                                                                                                                            source_schema=self.param_source_schema,    
-                                                                                                                                                                                                                                                                            source_table=self.param_source_table,
-                                                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression,
-                                                                                                                                                                                                                                                                            source_subset=self.param_source_new_subset
-                                                                                                                                                                                                                                                                            )
-                else:    
-                    param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
                                                                                                                                                                                                                                                         distant_schema=param_distant_schema,    
                                                                                                                                                                                                                                                         distant_table=param_distant_table,
                                                                                                                                                                                                                                                         source_schema=self.param_source_schema,    
@@ -486,7 +470,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                         postgis_sub_expression=param_postgis_sub_expression,
                                                                                                                                                                                                                                                         source_subset=self.param_source_new_subset
                                                                                                                                                                                                                                                         )
-            elif self.has_combine_operator == False or self.param_source_layer_combine_operator == '' or self.param_source_new_subset == '':
+            elif QgsExpression(self.expression).isField() is True:
 
                 param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression})'.format(distant_primary_key_name=param_distant_primary_key_name,
                                                                                                                                                                                                                                                             distant_schema=param_distant_schema,    
@@ -496,31 +480,18 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                                                             postgis_sub_expression=param_postgis_sub_expression
                                                                                                                                                                                                                                                             )
 
-            if param_old_subset != '' and self.param_other_layers_combine_operator in ('OR', 'AND NOT'):
-
-                param_expression = '( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                combine_operator=self.param_other_layers_combine_operator,
-                                                                                                expression=param_expression)
-            
-            
-            print(param_expression)
-
             if QgsExpression(param_expression).isValid():
                 
-                print(param_expression)
                 result = layer.setSubsetString(param_expression)
-                print(result)
 
-
-        if result is False:
-
-            layer.setSubsetString('')    
-            current_layer = layer
+        if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql') or (param_old_subset != '' and self.param_other_layers_combine_operator != ''):
+            
+            layer.setSubsetString('')
 
             if param_has_to_reproject_layer:
 
                 alg_layer_params_reprojectlayer = {
-                    'INPUT': current_layer,
+                    'INPUT': layer,
                     'TARGET_CRS': param_layer_crs_authid,
                     'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
                 }
@@ -531,23 +502,59 @@ class FilterEngineTask(QgsTask):
                     "INPUT": current_layer
                 }
                 processing.run('qgis:createspatialindex', alg_params_createspatialindex)
-            
-            alg_params_select = {
-                'INPUT': current_layer,
-                'INTERSECT': self.ogr_source_geom,
-                'METHOD': 0,
-                'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-            }
-            processing.run("qgis:selectbylocation", alg_params_select)
+                current_layer.setSubsetString(param_old_subset)
+            else:
+                current_layer = layer
 
+            if param_old_subset != '':
+                current_layer.setSubsetString(param_old_subset)
+                current_layer.selectAll()
+                current_layer.setSubsetString('')
 
+                if self.param_other_layers_combine_operator == 'OR':
+
+                    alg_params_select = {
+                        'INPUT': current_layer,
+                        'INTERSECT': self.ogr_source_geom,
+                        'METHOD': 1,
+                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    }
+                    processing.run("qgis:selectbylocation", alg_params_select)
+
+                elif self.param_other_layers_combine_operator == 'AND':
+
+                    alg_params_select = {
+                        'INPUT': current_layer,
+                        'INTERSECT': self.ogr_source_geom,
+                        'METHOD': 2,
+                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    }
+                    processing.run("qgis:selectbylocation", alg_params_select)
+                
+                elif self.param_other_layers_combine_operator == 'NOT AND':
+
+                    alg_params_select = {
+                        'INPUT': current_layer,
+                        'INTERSECT': self.ogr_source_geom,
+                        'METHOD': 3,
+                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    }
+                    processing.run("qgis:selectbylocation", alg_params_select)
+
+            else:
+                alg_params_select = {
+                        'INPUT': current_layer,
+                        'INTERSECT': self.ogr_source_geom,
+                        'METHOD': 0,
+                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    }
+                processing.run("qgis:selectbylocation", alg_params_select)
+                
             features_ids = []
             for feature in current_layer.selectedFeatures():
                 features_ids.append(str(feature[param_distant_primary_key_name]))
 
             current_layer.removeSelection()
-            layer.removeSelection()
-
 
             if len(features_ids) > 0:
                 if param_distant_primary_key_is_numeric == True:
@@ -555,11 +562,6 @@ class FilterEngineTask(QgsTask):
                 else:
                     param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
             
-                if param_old_subset != '' and self.param_other_layers_combine_operator != '':
-                    
-                    param_expression = '( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-                                                                                                        combine_operator=self.param_other_layers_combine_operator,
-                                                                                                        expression=param_expression)
                 if QgsExpression(param_expression).isValid():
                         
                     result = layer.setSubsetString(param_expression)
