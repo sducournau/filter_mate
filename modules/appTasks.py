@@ -10,6 +10,7 @@ import psycopg2
 from collections import OrderedDict
 from operator import getitem
 import zipfile
+import os
 import os.path
 from pathlib import Path
 import re
@@ -242,9 +243,6 @@ class FilterEngineTask(QgsTask):
         result = False
         self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
         self.param_source_new_subset = self.source_layer.subsetString()
-        if self.param_source_new_subset.find('"{source_table}"'.format(source_table=self.param_source_table)) != 0:
-            if self.param_source_new_subset.find('"{primary_key_name}"'.format(primary_key_name=self.primary_key_name)) == 0:
-                self.param_source_new_subset = '"{source_table}".'.format(source_table=self.param_source_table) + self.source_layer.subsetString()
 
 
         if self.task_parameters["filtering"]["has_buffer"] is True:
@@ -283,8 +281,13 @@ class FilterEngineTask(QgsTask):
         return True
     
     def prepare_postgresql_source_geom(self):
+        
+        if self.has_combine_operator is True:
+            source_table = 'sub'
+        else:
+            source_table = self.param_source_table
 
-        self.postgresql_source_geom = '"{source_table}"."{source_geom}"'.format(source_table=self.param_source_table,
+        self.postgresql_source_geom = '"{source_table}"."{source_geom}"'.format(source_table=source_table,
                                                                                 source_geom=self.param_source_geom)
 
         if self.has_to_reproject_source_layer is True:
@@ -292,9 +295,10 @@ class FilterEngineTask(QgsTask):
                                                                                                                 source_layer_srid=self.source_layer_crs_authid.split(':')[1])
             
         if self.param_buffer_expression != None and self.param_buffer_expression != '':
-            self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=self.param_source_table), self.param_buffer_expression)
+
+            self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=source_table), self.param_buffer_expression)
             if self.param_buffer_expression.find('"') == 0:
-                self.param_buffer_expression = '"{source_table}"."'.format(source_table=self.param_source_table) + self.param_buffer_expression
+                self.param_buffer_expression = '"{source_table}"."'.format(source_table=source_table) + self.param_buffer_expression
 
             if self.param_buffer_expression.find('if') >= 0:
                 self.param_buffer_expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', self.param_buffer_expression)
@@ -378,7 +382,7 @@ class FilterEngineTask(QgsTask):
                 param_buffer_distance = float(self.param_buffer_value)   
 
             alg_source_layer_params_buffer = {
-                'DISSOLVE': True,
+                'DISSOLVE': False,
                 'DISTANCE': param_buffer_distance,
                 'END_CAP_STYLE': 0,
                 'INPUT': layer,
@@ -436,8 +440,8 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if (self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql') and param_old_subset != '':
-
+        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
+            # and (self.param_buffer_expression == None or self.param_buffer_expression == '')    
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
                 
@@ -458,31 +462,95 @@ class FilterEngineTask(QgsTask):
                 param_postgis_sub_expression = ' OR '.join(postgis_sub_expression_array)
             else:
                 param_postgis_sub_expression = postgis_sub_expression_array[0]
-            
+
+            sub_expression = self.param_source_new_subset
+
+            if self.has_combine_operator is True:
+
+                index = sub_expression.find('FROM "{source_schema}"."{source_table}"'.format(source_schema=self.param_source_schema,
+                                                                                            source_table=self.param_source_table
+                                                                                            ))
+                
+                print(self.expression)
+                print(index, sub_expression[index:])
+                
+                results_fields = []
+                sub_expression_results_fields = []
+                buffer_expression_results_fields = []
+
+                sub_expression_results_fields = re.findall(r'\"{source_table}\"\.[\"a-zA-Z_0_9-]*'.format(source_table=self.param_source_table), sub_expression[index:])
+
+                if self.param_buffer_expression != None and self.param_buffer_expression != '':
+                    buffer_expression_results_fields = re.findall(r'\"{source_table}\"\.[\"a-zA-Z_0_9-]*'.format(source_table='sub'), self.postgresql_source_geom)
+                    buffer_expression_results_fields = [item.replace('sub',self.param_source_table) for item in buffer_expression_results_fields]
+
+                results_fields = list(set(sub_expression_results_fields + buffer_expression_results_fields))
+
+                geom_column = '"{source_table}"."{source_geom}"'.format(source_table=self.param_source_table,source_geom=self.param_source_geom)
+                
+                if geom_column not in results_fields:
+                    results_fields.append(geom_column)
+
+                if len(results_fields) > 1:
+                    sub_expression = '(SELECT ' + ' , '.join(results_fields) + ' ' + sub_expression[index:]
+                else:
+                    sub_expression = '(SELECT {geom_column} '.format(geom_column=geom_column) + ' ' + sub_expression[index:]
 
             if QgsExpression(self.expression).isField() is False:
                 
-                param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                        distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                        distant_table=param_distant_table,
-                                                                                                                                                                                                                                                        source_schema=self.param_source_schema,    
-                                                                                                                                                                                                                                                        source_table=self.param_source_table,
-                                                                                                                                                                                                                                                        postgis_sub_expression=param_postgis_sub_expression,
-                                                                                                                                                                                                                                                        source_subset=self.param_source_new_subset
-                                                                                                                                                                                                                                                        )
+                if self.has_combine_operator is True:
+                    # if self.param_other_layers_combine_operator == 'AND':
+                    #     combine_operator = ''
+                    # elif self.param_other_layers_combine_operator == 'AND NOT': 
+                    #     combine_operator = 'NOT'
+                    # elif self.param_other_layers_combine_operator == 'OR':
+                    #     combine_operator = 'NOT'
+
+                    param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} as "sub" ON {postgis_sub_expression})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
+                                                                                                                                                                                                                                            distant_table=param_distant_table,
+                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression,
+                                                                                                                                                                                                                                            source_subset=sub_expression
+                                                                                                                                                                                                                                            )
+                else:
+                    param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                                                                                                                                                                                                                                                                                distant_schema=param_distant_schema,    
+                                                                                                                                                                                                                                                                                distant_table=param_distant_table,
+                                                                                                                                                                                                                                                                                source_schema=self.param_source_schema,    
+                                                                                                                                                                                                                                                                                source_table=self.param_source_table,
+                                                                                                                                                                                                                                                                                postgis_sub_expression=param_postgis_sub_expression,
+                                                                                                                                                                                                                                                                                source_subset=sub_expression
+                                                                                                                                                                                                                                                                                )
             elif QgsExpression(self.expression).isField() is True:
 
-                param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" LEFT JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression})'.format(distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                            distant_table=param_distant_table,
-                                                                                                                                                                                                                                                            source_schema=self.param_source_schema,    
-                                                                                                                                                                                                                                                            source_table=self.param_source_table,
-                                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                                                                            )
+                if self.has_combine_operator is True:    
+                    param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} as "sub" ON {postgis_sub_expression})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
+                                                                                                                                                                                                                                            distant_table=param_distant_table,  
+                                                                                                                                                                                                                                            source_subset=sub_expression,
+                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression
+                                                                                                                                                                                                                                            )
+                           
+                    with open(PATH_ABSOLUTE_PROJECT + os.sep + 'logs.txt', 'a') as f:
+                        f.write(param_expression)
 
-            if QgsExpression(param_expression).isValid():
-                
-                result = layer.setSubsetString(param_expression)
+                else:
+                    param_expression = '"{distant_primary_key_name}" IN (SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression})'.format(distant_primary_key_name=param_distant_primary_key_name,
+                                                                                                                                                                                                                                                    distant_schema=param_distant_schema,    
+                                                                                                                                                                                                                                                    distant_table=param_distant_table,
+                                                                                                                                                                                                                                                    source_schema=self.param_source_schema,    
+                                                                                                                                                                                                                                                    source_table=self.param_source_table,
+                                                                                                                                                                                                                                                    postgis_sub_expression=param_postgis_sub_expression
+                                                                                                                                                                                                                                                    )
+
+
+            print(param_expression)
+    
+            result = layer.setSubsetString(param_expression)
+
+            print(result)
+            if result is True:
+                return result
 
         if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql') or (param_old_subset != '' and self.param_other_layers_combine_operator != ''):
             
@@ -502,7 +570,6 @@ class FilterEngineTask(QgsTask):
                     "INPUT": current_layer
                 }
                 processing.run('qgis:createspatialindex', alg_params_createspatialindex)
-                current_layer.setSubsetString(param_old_subset)
             else:
                 current_layer = layer
 
