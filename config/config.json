@@ -68,7 +68,8 @@
             ],
             "FONT": [
                 "black",
-                "black"
+                "black",
+                "#a3a3a3"
             ]
         }
     },

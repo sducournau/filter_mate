@@ -166,7 +166,7 @@ class FilterMateApp:
             self.appTasks[task_name] = LayersManagementEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
 
             if task_name == "add_layers":
-                self.appTasks[task_name].setDependentLayers(task_parameters["task"]["layers"])
+                self.appTasks[task_name].setDependentLayers([layer_tuple[0] for layer_tuple in task_parameters["task"]["layers"]])
                 self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
                 self.appTasks[task_name].begun.connect(self.dockwidget.on_remove_layer_task_begun)
@@ -237,6 +237,9 @@ class FilterMateApp:
                 task_parameters = {}
 
                 if task_name == 'add_layers':
+
+                    new_layers = []
+
                     if isinstance(data, list):
                         layers = data
                     else:
@@ -245,7 +248,25 @@ class FilterMateApp:
                     if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
                         reset_all_layers_variables_flag = True
 
-                    task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag }
+                    for layer in layers:
+                        layer_total_features_count = None
+                        layer_features_source = 0
+
+                        subset_string_init = layer.subsetString()
+                        if subset_string_init != '':
+                            layer.setSubsetString('')
+
+                        data_provider_layer = layer.dataProvider()
+                        if data_provider_layer:
+                            layer_total_features_count = data_provider_layer.featureCount()
+                            layer_features_source = data_provider_layer.featureSource()
+
+                        if subset_string_init != '':
+                            layer.setSubsetString(subset_string_init)
+                        
+                        new_layers.append((layer, layer_features_source, layer_total_features_count))
+
+                    task_parameters["task"] = {"layers": new_layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag }
                     return task_parameters
 
                 elif task_name == 'remove_layers':

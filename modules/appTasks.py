@@ -926,7 +926,7 @@ class LayersManagementEngineTask(QgsTask):
         self.outputs = {}
         self.message = None
 
-        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":[],"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false, "total_features_count":%s }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
 
@@ -972,13 +972,17 @@ class LayersManagementEngineTask(QgsTask):
             if self.isCanceled() or result is False:
                 return False
             
-        for layer in self.layers:
+        for layer_obj in self.layers:
             if self.task_action == 'add_layers':
-                if layer.id() not in self.project_layers.keys():
-                    result = self.add_project_layer(layer)
+                if isinstance(layer_obj, tuple) and len(list(layer_obj)) == 3 and isinstance(layer_obj[0], QgsVectorLayer):
+                    layer = layer_obj[0]
+                    if layer.id() not in self.project_layers.keys():
+                        result = self.add_project_layer(layer_obj)
             elif self.task_action == 'remove_layers':
-                if layer.id() in self.project_layers.keys():
-                    result = self.remove_project_layer(layer)
+                if isinstance(layer_obj, QgsVectorLayer):
+                    layer = layer_obj
+                    if layer.id() in self.project_layers.keys():
+                        result = self.remove_project_layer(layer)
 
             if self.isCanceled() or result is False:
                 return False
@@ -988,9 +992,13 @@ class LayersManagementEngineTask(QgsTask):
         return True
     
 
-    def add_project_layer(self, layer):
+    def add_project_layer(self, layer_tuple):
 
         result = False
+
+        layer = layer_tuple[0]
+        layer_features_source = layer_tuple[1]
+        layer_total_features_count = layer_tuple[2]
 
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
@@ -1045,7 +1053,7 @@ class LayersManagementEngineTask(QgsTask):
             elif layer_provider_type == 'ogr':
                 geometry_field = '_ogr_geometry_'
 
-            new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
+            new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower(), layer_total_features_count))
             new_layer_variables["exploring"] = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
             new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
     
@@ -1072,7 +1080,7 @@ class LayersManagementEngineTask(QgsTask):
             if (layer_provider_type != layer_variables["infos"]["layer_provider_type"]) or (layer.name() != layer_variables["infos"]["layer_name"]) or (source_schema != layer_variables["infos"]["layer_schema"]) or (primary_key_name != layer_variables["infos"]["primary_key_name"]):
                 layer_variables["infos"] = new_layer_variables["infos"]
 
-            layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}
+            layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"], "featureIterator": layer_features_source}
             layer_props["infos"]["layer_id"] = layer.id()
 
             if layer_provider_type == 'postgresql':
@@ -1292,7 +1300,12 @@ class LayersManagementEngineTask(QgsTask):
         if len(self.project_layers) == 0:
             if len(self.layers) > 0:
 
-                for layer in self.layers:
+                for layer_obj in self.layers:
+
+                    if isinstance(layer_obj, tuple) and len(list(layer_obj)) == 3:
+                        layer = layer_obj[0]
+                    elif isinstance(layer_obj, QgsVectorLayer):
+                        layer = layer_obj
 
                     result_layers = [result_layer for result_layer in PROJECT.mapLayersByName(layer.name())]
                     if len(result_layers) > 0:

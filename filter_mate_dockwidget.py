@@ -193,7 +193,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         #self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
 
     def set_multiple_checkable_combobox(self):
-        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self)
+        self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
 
 
     def setupUiCustom(self):
@@ -1395,7 +1395,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if expression != None and layer_props["exploring"]["multiple_selection_expression"] != expression:
                     self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
 
-                layer_props = self.PROJECT_LAYERS[self.current_layer.id()] 
+                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
                 self.exploring_link_widgets()
 
@@ -1532,13 +1532,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
-
+            layer_features_source = self.current_layer.dataProvider().featureSource() 
             
             if layer_props["exploring"]["is_linking"] == True:
+                   
+
                 if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
                     if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
                         custom_filter = layer_props["exploring"]["custom_selection_expression"]
-                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter)
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter, layer_props)
                 if expression != None:
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
                 elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures() != False:
@@ -1575,7 +1577,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             
             else:
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('')
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('')
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('', layer_props)
 
 
     def get_layers_to_filter(self):
@@ -1646,6 +1648,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if lastLayer != None and lastLayer.id() != self.current_layer.id():
                     self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
 
+                """SINGLE SELECTION"""
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
+
+
+                """MULTIPLE SELECTION"""
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
 
 
                 for properties_tuples_key in self.layer_properties_tuples_dict:
@@ -1683,19 +1694,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             elif layer_props[property_tuple[0]][property_tuple[1]] is True:
                                 self.widgets["FILTERING"]["BUFFER_PROPERTY"]["WIDGET"].setActive(True)
                             
-                            
-                                
-                """SINGLE SELECTION"""
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
-
-
-                """MULTIPLE SELECTION"""
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                                    
-
 
                 for properties_group in self.layer_properties_tuples_dict:
                     if properties_group != 'is':
