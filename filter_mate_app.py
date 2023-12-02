@@ -21,6 +21,7 @@ from .modules.appTasks import *
 from .resources import *
 import uuid
 
+
 # Import the code for the DockWidget
 from .filter_mate_dockwidget import FilterMateDockWidget
 
@@ -66,8 +67,8 @@ class FilterMateApp:
         self.PLUGIN_CONFIG_DIRECTORY = PLUGIN_CONFIG_DIRECTORY
         self.db_name = 'filterMate_db.sqlite'
         self.db_file_path = os.path.normpath(self.PLUGIN_CONFIG_DIRECTORY + os.sep + self.db_name)
-        self.project_name = self.PROJECT.baseName()
-        self.project_path = self.PROJECT.absolutePath()
+        self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
+        self.project_file_path = self.PROJECT.absolutePath()
         self.project_uuid = ''
         self.run()
 
@@ -477,8 +478,8 @@ class FilterMateApp:
 
         if self.PROJECT != None and len(list(self.PROJECT.mapLayers().values())) > 0:
 
-            self.project_name = self.PROJECT.baseName()
-            self.project_path = self.PROJECT.absolutePath()
+            self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
+            self.project_file_path = self.PROJECT.absolutePath()
             project_settings = json.dumps(self.CONFIG_DATA["CURRENT_PROJECT"])
  
             if not os.path.isfile(self.db_file_path):
@@ -505,7 +506,7 @@ class FilterMateApp:
                                 _updated_at DATETIME NOT NULL,
                                 project_name VARYING CHARACTER(255) NOT NULL,
                                 project_path VARYING CHARACTER(255) NOT NULL,
-                                projects_settings VARYING CHARACTER(1000) NOT NULL);
+                                projects_settings TEXT NOT NULL);
                                 """)
 
                 cur.execute("""CREATE TABLE fm_subset_history (
