@@ -364,7 +364,7 @@ class FilterMateApp:
 
         if task_name == 'filter':
             current_seq_order = last_seq_order + 1
-            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, CAST('{subset_string}' AS TEXT));""".format(
                                                                                                                                                                                 id=uuid.uuid4(),
                                                                                                                                                                                 fk_project=self.project_uuid,
                                                                                                                                                                                 layer_id=layer.id(),
@@ -396,7 +396,7 @@ class FilterMateApp:
 
         elif task_name == 'reset':
             cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND layer_source_id = '{layer_source_id}'""".format(
-                                                                                                                                                                        fk_project=self.project_name,
+                                                                                                                                                                        fk_project=self.project_file_name,
                                                                                                                                                                         layer_id=layer.id(),
                                                                                                                                                                         layer_source_id=source_layer.id()
                                                                                                                                                                         )
@@ -538,10 +538,10 @@ class FilterMateApp:
                 
                 self.project_uuid = uuid.uuid4()
             
-                cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+                cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', CAST('{project_settings}' AS TEXT));""".format(
                                                                                                                                                                             project_id=self.project_uuid,
-                                                                                                                                                                            project_name=self.project_name,
-                                                                                                                                                                            project_path=self.project_path,
+                                                                                                                                                                            project_name=self.project_file_name,
+                                                                                                                                                                            project_path=self.project_file_path,
                                                                                                                                                                             project_settings=project_settings
                                                                                                                                                                             )
                 )
@@ -554,8 +554,8 @@ class FilterMateApp:
                 conn = spatialite_connect(self.db_file_path)
                 cur = conn.cursor()
                 cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}';""".format(
-                                                                                                                                            project_name=self.project_name,
-                                                                                                                                            project_path=self.project_path
+                                                                                                                                            project_name=self.project_file_name,
+                                                                                                                                            project_path=self.project_file_path
                                                                                                                                             )
                 )
 
@@ -578,10 +578,10 @@ class FilterMateApp:
 
                 else:
                     self.project_uuid = uuid.uuid4()
-                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{projects_settings}');""".format(
+                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', CAST('{projects_settings}' AS TEXT));""".format(
                                                                                                                                                                                 project_id=self.project_uuid,
-                                                                                                                                                                                project_name=self.project_name,
-                                                                                                                                                                                project_path=self.project_path,
+                                                                                                                                                                                project_name=self.project_file_name,
+                                                                                                                                                                                project_path=self.project_file_path,
                                                                                                                                                                                 projects_settings=project_settings
                                                                                                                                                                                 )
                     )
