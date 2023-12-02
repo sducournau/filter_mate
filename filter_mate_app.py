@@ -293,6 +293,7 @@ class FilterMateApp:
             cur = conn.cursor()
 
             self.manage_layer_subset_strings_history(task_name, source_layer, source_layer, cur)
+            conn.commit()
 
             if self.PROJECT_LAYERS[source_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                 self.create_spatial_index_for_layer(source_layer)
@@ -307,7 +308,8 @@ class FilterMateApp:
                         if len(layers) == 1:
                             layer = layers[0]
                             self.manage_layer_subset_strings_history(task_name, source_layer, layer, cur)
-            
+                            conn.commit()    
+
                             if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                                 self.create_spatial_index_for_layer(layer)
 
@@ -542,7 +544,9 @@ class FilterMateApp:
                                                                                                                                                                             project_settings=project_settings
                                                                                                                                                                             )
                 )
-                
+
+                conn.commit()
+
                 QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
             
             else:
@@ -581,6 +585,8 @@ class FilterMateApp:
                                                                                                                                                                                 )
                     )
                     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+
+                conn.commit()
 
             cur.close()
             conn.close()
