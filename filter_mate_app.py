@@ -480,7 +480,7 @@ class FilterMateApp:
             project_settings = json.dumps(self.CONFIG_DATA["CURRENT_PROJECT"])
  
             if not os.path.isfile(self.db_file_path):
-                memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
+                memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
                 layer_name = 'filterMate_db'
                 layer = QgsVectorLayer(memory_uri, layer_name, "memory")
 
@@ -490,7 +490,7 @@ class FilterMateApp:
                 conn = spatialite_connect(self.db_file_path)
                 cur = conn.cursor()
 
-                cur.execute("""INSERT INTO filterMate_db VALUES('{plugin_name}', datetime(), datetime(), '{_version}');""".format(
+                cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
                                                                                                                                 plugin_name='FilterMate',
                                                                                                                                 _version='1.4'
                                                                                                                                 )
@@ -548,7 +548,7 @@ class FilterMateApp:
             else:
                 conn = spatialite_connect(self.db_file_path)
                 cur = conn.cursor()
-                cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}'""".format(
+                cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}';""".format(
                                                                                                                                             project_name=self.project_name,
                                                                                                                                             project_path=self.project_path
                                                                                                                                             )
