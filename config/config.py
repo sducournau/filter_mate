@@ -1,9 +1,6 @@
 from qgis.core import QgsProject, QgsUserProfileManager, QgsUserProfile
-from pathlib import Path
-import os.path
+import os
 import json
-from shutil import copyfile
-
 
 def merge(a, b, path=None):
     "merges b into a"
@@ -26,10 +23,19 @@ PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
 if PATH_ABSOLUTE_PROJECT =='./':
     PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
 
+CONFIG_DATA = None
 
-default_profile_folder = os.environ['APPDATA'] + '\QGIS\QGIS3\profiles\default'
+with open(DIR_CONFIG +  os.sep + 'config.json') as f:
+  CONFIG_DATA = json.load(f)
 
-PLUGIN_CONFIG_DIRECTORY = default_profile_folder +  os.sep + 'FilterMate'
+if CONFIG_DATA["APP"]["SQLITE_PATH"] != '':
+    PLUGIN_CONFIG_DIRECTORY = os.path.normpath(CONFIG_DATA["APP"]["SQLITE_PATH"])
+else:
+    PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.environ['APPDATA'] + '\QGIS\QGIS3\profiles\default\FilterMate')
+    CONFIG_DATA["APP"]["SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
+    with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+        outfile.write(json.dumps(CONFIG_DATA, indent=4))
+
 if not os.path.isdir(PLUGIN_CONFIG_DIRECTORY):
     try:
         os.makedirs(PLUGIN_CONFIG_DIRECTORY, exist_ok = True)
@@ -37,18 +43,3 @@ if not os.path.isdir(PLUGIN_CONFIG_DIRECTORY):
         pass
 
 
-CONFIG_DATA = None
-# DIR_CONFIG =  os.getenv('APPDATA') + os.sep + 'QGIS' + os.sep +  'FilterMate'
-
-# if not os.path.isdir(DIR_CONFIG):
-#     try:
-#         os.makedirs(DIR_CONFIG +  os.sep + 'config', exist_ok = True)
-#     except OSError as error:
-#         pass
-#     if not os.path.isfile(DIR_CONFIG + '/config/config.json'):
-#         copyfile(DIR_PLUGIN + '/config/config.json', DIR_CONFIG + '/config/config.json')
-
-with open(DIR_CONFIG +  os.sep + 'config.json') as f:
-  CONFIG_DATA = json.load(f)
-
-RESULT_PROJECT_LAYERS = {}

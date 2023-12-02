@@ -19,6 +19,7 @@ import json
 from .modules.customExceptions import *
 from .modules.appTasks import *
 from .resources import *
+import uuid
 
 # Import the code for the DockWidget
 from .filter_mate_dockwidget import FilterMateDockWidget
@@ -63,18 +64,21 @@ class FilterMateApp:
         
         self.PROJECT = QgsProject.instance()
         self.PLUGIN_CONFIG_DIRECTORY = PLUGIN_CONFIG_DIRECTORY
-        self.history_table_exists = None
-        self.subset_layers_history_table = None
+        self.db_name = 'filterMate_db.sqlite'
+        self.db_file_path = os.path.normpath(self.PLUGIN_CONFIG_DIRECTORY + os.sep + self.db_name)
+        self.project_name = self.PROJECT.baseName()
+        self.project_path = self.PROJECT.absolutePath()
+        self.project_uuid = ''
         self.run()
 
 
     def run(self):
         if self.dockwidget == None:
             
-
+            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')    
+            self.init_filterMate_db()
 
             init_layers = list(self.PROJECT.mapLayers().values())
-
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
 
             if init_layers != None and len(init_layers) > 0:
@@ -99,8 +103,8 @@ class FilterMateApp:
         self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
         self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
-        self.history_table_exists = QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists')
-        #self.load_project_history_table()
+        
+        
 
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
@@ -116,6 +120,7 @@ class FilterMateApp:
 
         if self.dockwidget != None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
+            self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
 
         if task_name == 'remove_all_layers':
            QgsApplication.taskManager().cancelAll()
@@ -127,8 +132,7 @@ class FilterMateApp:
         if task_name in ('project_read', 'new_project'):
             QgsApplication.taskManager().cancelAll()
             self.PROJECT = QgsProject.instance()
-            self.history_table_exists = QgsExpressionContextUtils.projectScope(self.PROJECT).variable('history_table_exists')
-            #self.load_project_history_table()
+            self.init_filterMate_db()
             init_layers = list(self.PROJECT.mapLayers().values())
             if len(init_layers) > 0:
                 self.manage_task('add_layers', init_layers)
@@ -282,88 +286,44 @@ class FilterMateApp:
                     return task_parameters
 
 
+    def filter_engine_task_completed(self, task_name, source_layer, task_parameters):
 
+        if task_name in ('filter','unfilter','reset'):
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
 
-    def filter_engine_task_completed(self, task_name, current_layer, task_parameters):
+            self.manage_layer_subset_strings_history(task_name, source_layer, source_layer, cur)
 
+            if self.PROJECT_LAYERS[source_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
+                self.create_spatial_index_for_layer(source_layer)
 
-        if current_layer.subsetString() != '':
-            self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
-            if task_name == 'filter':
+            self.save_variables_from_layer(source_layer,[("infos","is_already_subset"),("infos","subset_history")])
+            
+            
+            if task_parameters["filtering"]["has_layers_to_filter"] == True:
+                for layer_props in task_parameters["filtering"]["layers_to_filter"]:
+                    if layer_props["layer_id"] in self.PROJECT_LAYERS:
+                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
+                        if len(layers) == 1:
+                            layer = layers[0]
+                            self.manage_layer_subset_strings_history(task_name, source_layer, layer, cur)
+            
+                            if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
+                                self.create_spatial_index_for_layer(layer)
 
-                if isinstance(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"], list):
-                    pass
-                else:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
+                            self.save_variables_from_layer(layer,[("infos","is_already_subset"),("infos","subset_history")])
 
-                self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":current_layer.subsetString()})
+            cur.close()
+            conn.close()
 
-            elif task_name == 'unfilter':
-
-                if isinstance(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"], list) is False:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = list(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"])
-
-                if len(self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"]) > 0:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"].pop()
-                else:
-                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
-                    
-        else:
-            self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
-            self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
-
-        if self.PROJECT_LAYERS[current_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
-            self.create_spatial_index_for_layer(current_layer)
-
-        self.save_variables_from_layer(current_layer,[("infos","is_already_subset"),("infos","subset_history")])
-
-        if task_parameters["filtering"]["has_layers_to_filter"] == True:
-            for layer_props in task_parameters["filtering"]["layers_to_filter"]:
-                if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                    layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
-                    if len(layers) == 1:
-
-                        layer = layers[0]
-
-                        if layer.subsetString() != '':
-                            self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
-                            if task_name == 'filter':
-
-                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list) is False:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = list(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
-
-                                self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].append({"source_layer":current_layer.id(), "subset_string":layer.subsetString()})
-
-                            elif task_name == 'unfilter':
-
-                                if isinstance(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"], list) is False:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = list(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"])
-
-                                if len(self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"]) > 0:
-                                    self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"].pop()
-                                else:
-                                    self.PROJECT_LAYERS[current_layer.id()]["infos"]["subset_history"] = []
-
-                        else:
-                            self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-                            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = []
-
-                        
-
-                        if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
-                            self.create_spatial_index_for_layer(layer)
-
-
-                        self.save_variables_from_layer(layer,[("infos","is_already_subset"),("infos","subset_history")])
-
-        self.iface.mapCanvas().refreshAllLayers()
-        self.iface.mapCanvas().refresh()
+            self.iface.mapCanvas().refreshAllLayers()
+            self.iface.mapCanvas().refresh()
          
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
 
         if task_name == 'filter' or task_name == 'unfilter':
-            features_iterator = current_layer.getFeatures()
+            features_iterator = source_layer.getFeatures()
             done_looping = False
             features = []
 
@@ -375,6 +335,71 @@ class FilterMateApp:
                     done_looping = True
             self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
         
+
+    def manage_layer_subset_strings_history(self, task_name, source_layer, layer, cur):
+
+        current_seq_order = 0
+        last_seq_order = 0
+
+        cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND layer_source_id = '{layer_source_id}' ORDER BY seq_order DESC""".format(
+                                                                                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                                                                                layer_id=layer.id(),
+                                                                                                                                                                                                layer_source_id=source_layer.id()
+                                                                                                                                                                                                )
+        )
+
+        results = cur.fetchall()
+
+        if len(results) > 0:
+            last_subset_id = result[0][0]
+            last_subset_string = result[0][-1]
+            last_seq_order = result[0][-2]
+            last_layer_source_id = result[0][-3]
+            last_layer_id = result[0][-4]
+
+
+
+        if task_name == 'filter':
+            current_seq_order = last_seq_order + 1
+            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+                                                                                                                                                                                id=uuid.uuid4(),
+                                                                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                                                                layer_id=layer.id(),
+                                                                                                                                                                                layer_source_id=source_layer.id(),
+                                                                                                                                                                                seq_order=current_seq_order,
+                                                                                                                                                                                subset_string=layer.subsetString()
+                                                                                                                                                                                )
+            )
+            if layer.subsetString() != '':
+                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+            else:
+                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = {"seq_order": current_seq_order, "source_layer": source_layer.id(), "subset_string": layer.subsetString()}   
+
+        elif task_name == 'unfilter':
+            current_seq_order = last_seq_order - 1
+            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND layer_source_id = '{layer_source_id}' AND id = '{last_subset_id}'""".format(
+                                                                                                                                                                                                    fk_project=self.project_uuid,
+                                                                                                                                                                                                    layer_id=layer.id(),
+                                                                                                                                                                                                    layer_source_id=source_layer.id(),
+                                                                                                                                                                                                    last_subset_id=last_subset_id
+                                                                                                                                                                                                    )
+            )
+            if layer.subsetString() != '':
+                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+            else:
+                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = {"seq_order": current_seq_order, "source_layer": source_layer.id(), "subset_string": layer.subsetString()}      
+
+        elif task_name == 'reset':
+            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND layer_source_id = '{layer_source_id}'""".format(
+                                                                                                                                                                        fk_project=self.project_name,
+                                                                                                                                                                        layer_id=layer.id(),
+                                                                                                                                                                        layer_source_id=source_layer.id()
+                                                                                                                                                                        )
+            )
+            self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = {}
 
 
     def save_variables_from_layer(self, layer, layer_properties=[]):
@@ -446,48 +471,121 @@ class FilterMateApp:
         processing.run('qgis:createspatialindex', alg_params_createspatialindex)
     
 
-    def load_project_history_table(self):
+    def init_filterMate_db(self):
 
         if self.PROJECT != None and len(list(self.PROJECT.mapLayers().values())) > 0:
 
-            db_name = 'filterMate_subset_history'
-            file_path = os.path.normpath(self.PLUGIN_CONFIG_DIRECTORY + os.sep + db_name + ".sqlite")
-            project_name = self.PROJECT.baseName().lower()
-            print(self.history_table_exists)
+            self.project_name = self.PROJECT.baseName()
+            self.project_path = self.PROJECT.absolutePath()
+            project_settings = json.dumps(self.CONFIG_DATA["CURRENT_PROJECT"])
+ 
+            if not os.path.isfile(self.db_file_path):
+                memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
+                layer_name = 'filterMate_db'
+                layer = QgsVectorLayer(memory_uri, layer_name, "memory")
 
-            if self.history_table_exists is None or self.history_table_exists is False:
-                memory_uri = 'NoGeometry?field=id:integer(20,0)&field=layer_id:string(255,0)&field=source_layer_id:string(255,0)&field=subset:string(999,0)&field=last_update:date(0,0)&uid={d702fa94-a355-414c-bda0-6fbf9d5c103e}'
-                layer = QgsVectorLayer(memory_uri, '_'.join([db_name, project_name]), "memory")
-                                       
-                if os.path.isfile(file_path):
-                    ctc = self.PROJECT.transformContext()
-                    o_save_options = QgsVectorFileWriter.SaveVectorOptions()
-                    o_save_options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteLayer
-                    o_save_options.EditionCapability = QgsVectorFileWriter.CanAddNewLayer
-                    o_save_options.layerName = layer.name()
-                    o_save_options.driverName = 'SQLite'
-                    o_save_options.fileEncoding = 'utf-8'
-                    o_save_options.onlySelectedFeatures = False
-                    o_save_options.layerOptions = ['SPATIALITE=YES']
-                    o_save_options.ct = QgsCoordinateTransform(QgsCoordinateReferenceSystem("EPSG:2154"), QgsCoordinateReferenceSystem("EPSG:4326"), self.PROJECT)
-                    err = QgsVectorFileWriter.writeAsVectorFormatV2(layer, file_path, ctc, o_save_options)
-                else:
-                    crs = QgsCoordinateReferenceSystem("epsg:4326")
-                    err = QgsVectorFileWriter.writeAsVectorFormat(layer, file_path, "utf-8", crs, driverName='SQLite', onlySelected=False, datasourceOptions=['SPATIALITE=YES'])
+                crs = QgsCoordinateReferenceSystem("epsg:4326")
+                QgsVectorFileWriter.writeAsVectorFormat(layer, self.db_file_path, "utf-8", crs, driverName="SQLite", datasourceOptions=["SPATIALITE=YES",])
+            
+                conn = spatialite_connect(self.db_file_path)
+                cur = conn.cursor()
+
+                cur.execute("""INSERT INTO filterMate_db VALUES('{plugin_name}', datetime(), datetime(), '{_version}');""".format(
+                                                                                                                                plugin_name='FilterMate',
+                                                                                                                                _version='1.4'
+                                                                                                                                )
+                )
+
+                cur.execute("""CREATE TABLE fm_projects (
+                                project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                _created_at DATETIME NOT NULL,
+                                _updated_at DATETIME NOT NULL,
+                                project_name VARYING CHARACTER(255) NOT NULL,
+                                project_path VARYING CHARACTER(255) NOT NULL,
+                                projects_settings VARYING CHARACTER(1000) NOT NULL);
+                                """)
+
+                cur.execute("""CREATE TABLE fm_subset_history (
+                                id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                _created_at DATETIME NOT NULL,
+                                fk_project VARYING CHARACTER(255) NOT NULL,
+                                layer_id VARYING CHARACTER(255) NOT NULL,
+                                layer_source_id VARYING CHARACTER(255) NOT NULL,
+                                seq_order INTEGER NOT NULL,
+                                subset_string TEXT NOT NULL,
+                                CONSTRAINT fk_project  
+                                FOREIGN KEY (project_id)  
+                                REFERENCES fm_projects(project_id));
+                                """)
                 
-                print(err)
+                # cur.execute("""CREATE TABLE fm_project_layers_properties (
+                #                 id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                #                 _created_at DATETIME NOT NULL,
+                #                 fk_project VARYING CHARACTER(255) NOT NULL,
+                #                 meta_type VARYING CHARACTER(255) NOT NULL,
+                #                 layer_id VARYING CHARACTER(255) NOT NULL,
+                #                 layer_geometry_type
+                #                 layer_name
+                #                 seq_order INTEGER NOT NULL,
+                #                 subset_string TEXT NOT NULL,
+                #                 CONSTRAINT fk_project  
+                #                 FOREIGN KEY (project_id)  
+                #                 REFERENCES fm_projects(project_id));
+                #                 """)
+                
+                self.project_uuid = uuid.uuid4()
+            
+                cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+                                                                                                                                                                            project_id=self.project_uuid,
+                                                                                                                                                                            project_name=self.project_name,
+                                                                                                                                                                            project_path=self.project_path,
+                                                                                                                                                                            project_settings=project_settings
+                                                                                                                                                                            )
+                )
+                
+                QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+            
+            else:
+                conn = spatialite_connect(self.db_file_path)
+                cur = conn.cursor()
+                cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}'""".format(
+                                                                                                                                            project_name=self.project_name,
+                                                                                                                                            project_path=self.project_path
+                                                                                                                                            )
+                )
 
+                result = cur.fetchall()
 
-            uri = QgsDataSourceUri()
-            uri.setDatabase(file_path)
-            uri.setSchema = ''
-            uri.setDriver("SQLite")
-            uri.setTable(project_name)
-            uri.setWkbType(QgsWkbTypes.NoGeometry)
-            self.subset_layers_history_table = QgsVectorLayer(uri.uri(), '_'.join([db_name, project_name]), 'spatialite')
-            self.PROJECT.addMapLayer(self.subset_layers_history_table)
+                if len(result) > 0:
+                    project_settings = result[0][-1]
+                    self.project_uuid = result[0][1]
+                    self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
+                    QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
 
-            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'history_table_exists','True')
+                    # cur.execute("""UPDATE fm_projects 
+                    #                 SET _updated_at = datetime(),
+                    #                     project_settings = '{project_settings}' 
+                    #                 WHERE project_id = '{project_id}'""".format(
+                    #                                                             project_settings=project_settings,
+                    #                                                             project_id=project_id
+                    #                                                             )
+                    # )
+
+                else:
+                    self.project_uuid = uuid.uuid4()
+                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{projects_settings}');""".format(
+                                                                                                                                                                                project_id=self.project_uuid,
+                                                                                                                                                                                project_name=self.project_name,
+                                                                                                                                                                                project_path=self.project_path,
+                                                                                                                                                                                projects_settings=project_settings
+                                                                                                                                                                                )
+                    )
+                    QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+
+            cur.close()
+            conn.close()
+
+            
 
 
 

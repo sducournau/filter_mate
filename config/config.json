@@ -73,29 +73,30 @@
             ]
         }
     },
-    "EXPORT": {
-        "has_layers_to_export": false,
-        "layers_to_export": [
-        ],
-        "has_projection_to_export": false,
-        "projection_to_export": "EPSG:2154",
-        "has_styles_to_export": false,
-        "styles_to_export": "QML",
-        "has_datatype_to_export": false,
-        "datatype_to_export": "",
-        "has_output_folder_to_export": false,
-        "output_folder_to_export": "",
-        "has_zip_to_export": false,
-        "zip_to_export": ""
+    "CURRENT_PROJECT": {
+        "EXPORT": {
+            "has_layers_to_export": false,
+            "layers_to_export": [],
+            "has_projection_to_export": false,
+            "projection_to_export": "EPSG:2154",
+            "has_styles_to_export": false,
+            "styles_to_export": "QML",
+            "has_datatype_to_export": false,
+            "datatype_to_export": "",
+            "has_output_folder_to_export": false,
+            "output_folder_to_export": "",
+            "has_zip_to_export": false,
+            "zip_to_export": ""
+        },
+        "FILTER": {
+            "feature_count_limit": 10000
+        }
     },
-    "FILTER": {
-        "feature_count_limit": 10000
-    },
-    "LAYERS": [],
     "APP": {
         "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
         "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
         "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
+        "SQLITE_PATH": "",
         "FRESH_RELOAD_FLAG": true,
         "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true
     }
