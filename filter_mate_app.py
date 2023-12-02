@@ -490,9 +490,10 @@ class FilterMateApp:
                 conn = spatialite_connect(self.db_file_path)
                 cur = conn.cursor()
 
+                cur.execute("""PRAGMA foreign_keys = ON;""")
                 cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
                                                                                                                                 plugin_name='FilterMate',
-                                                                                                                                _version='1.4'
+                                                                                                                                version='1.4'
                                                                                                                                 )
                 )
 
@@ -513,8 +514,7 @@ class FilterMateApp:
                                 layer_source_id VARYING CHARACTER(255) NOT NULL,
                                 seq_order INTEGER NOT NULL,
                                 subset_string TEXT NOT NULL,
-                                CONSTRAINT fk_project  
-                                FOREIGN KEY (project_id)  
+                                FOREIGN KEY (fk_project)  
                                 REFERENCES fm_projects(project_id));
                                 """)
                 
