@@ -2,22 +2,22 @@
 
 **FilterMate is a Qgis plugin, a daily companion that allows you to easily explore, filter and export vector data**
 
-*FilterMate will change your relationship to QGIS, it allows you to:*
+*FilterMate will change your daily life with QGIS, it allows you to:*
 - *a more intuitive search for entities in a layer.*
-- *make selections more simply.*
+- *make selections simplier.*
 - *be able to review each entity.*
-- *filter your vector layers by expression and by geometric predicate, using a buffer if necessary.*
-- *it allows you to configure the different widgets and save them independently for each layer.*
+- *filter your vector layers by expressions and by geometric predicates, using a buffer if necessary.*
+- *it allows you to configure the differents widgets and save them independently for each layer.*
 - *export your layers more intuitively.*
 <br>
-It adapts to your data, takes advantage of PostGIS when possible, manages different CRS by reprojecting on the fly.
+It adapts to your data, takes advantage of PostGIS when possible, manages differents CRS by reprojecting on the fly.
 <br>
-The layers keep a history of each subset, making it easy to return to the previous state.
+The layers keep an history of each subset, making it easy to return to the previous state.
 <br>
 <br>
-Github page : [https://sducournau.github.io/filter_mate](https://sducournau.github.io/filter_mate)
+Github page : https://sducournau.github.io/filter_mate
 <br>
-Qgis plugin repository : [https://plugins.qgis.org/plugins/filter_mate](https://plugins.qgis.org/plugins/filter_mate)
+Qgis plugin repository : https://plugins.qgis.org/plugins/filter_mate
 
 ******
 
