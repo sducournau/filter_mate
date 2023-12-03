@@ -209,9 +209,14 @@ class FilterEngineTask(QgsTask):
                                     else:
                                         self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
 
+                    self.expression = self.qgis_expression_to_postgis(self.expression)
 
                     if self.param_source_old_subset != '' and self.param_source_layer_combine_operator != '':
-                        result = self.source_layer.setSubsetString('({param_old_subset}) {param_combine_operator} {expression}'.format(param_old_subset=self.param_source_old_subset, param_combine_operator=self.param_source_layer_combine_operator, expression=self.expression))
+                        result = self.source_layer.setSubsetString('( {param_old_subset} ) {param_combine_operator} {expression}'.format(param_old_subset=self.param_source_old_subset,
+                                                                                                                                         param_combine_operator=self.param_source_layer_combine_operator, 
+                                                                                                                                         expression=self.expression)
+                        )
+                        
                     else:
                         result = self.source_layer.setSubsetString(self.expression)
 
@@ -280,6 +285,29 @@ class FilterEngineTask(QgsTask):
                 
         return True
     
+    def qgis_expression_to_postgis(self, expression):
+
+        if expression.find('if') >= 0:
+            expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', expression)
+            print(expression)
+
+
+        expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
+        expression = expression.replace('" <', '"::numeric >').replace('"<', '"::numeric <')
+        expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
+        expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
+
+        
+        expression = re.sub('ilike', 'ILIKE', expression)
+        expression = re.sub('like', 'LIKE', expression)
+        expression = re.sub('not', 'NOT', expression)
+
+        expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
+        expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
+
+        return expression
+
+
     def prepare_postgresql_source_geom(self):
         
         if self.has_combine_operator is True:
@@ -300,25 +328,7 @@ class FilterEngineTask(QgsTask):
             if self.param_buffer_expression.find('"') == 0:
                 self.param_buffer_expression = '"{source_table}"."'.format(source_table=source_table) + self.param_buffer_expression
 
-            if self.param_buffer_expression.find('if') >= 0:
-                self.param_buffer_expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', self.param_buffer_expression)
-                print(self.param_buffer_expression)
-
-
-            self.param_buffer_expression = self.param_buffer_expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
-            self.param_buffer_expression = self.param_buffer_expression.replace('" <', '"::numeric >').replace('"<', '"::numeric <')
-            self.param_buffer_expression = self.param_buffer_expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
-            self.param_buffer_expression = self.param_buffer_expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
-
-            
-            self.param_buffer_expression = re.sub('ilike', 'ILIKE', self.param_buffer_expression)
-            self.param_buffer_expression = re.sub('like', 'LIKE', self.param_buffer_expression)
-            self.param_buffer_expression = re.sub('not', 'NOT', self.param_buffer_expression)
-
-            self.param_buffer_expression = self.param_buffer_expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
-            self.param_buffer_expression = self.param_buffer_expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
-
-
+            self.param_buffer_expression = self.qgis_expression_to_postgis(self.param_buffer_expression)    
 
             self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
                                                                                                         buffer_value=self.param_buffer_expression)
