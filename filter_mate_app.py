@@ -292,7 +292,11 @@ class FilterMateApp:
 
         if task_name in ('filter','unfilter','reset'):
 
-            self.manage_layer_subset_strings_history(task_name, source_layer, source_layer)
+            try:    
+                self.manage_layer_subset_strings_history(task_name, source_layer, source_layer)
+            except:
+                print(task_name, source_layer, 'Update SQLite did not work properly')
+
             source_layer.reload()
             source_layer.updateExtents()
             source_layer.triggerRepaint()
@@ -309,7 +313,10 @@ class FilterMateApp:
                         layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
                         if len(layers) == 1:
                             layer = layers[0]
-                            self.manage_layer_subset_strings_history(task_name, source_layer, layer)
+                            try:
+                                self.manage_layer_subset_strings_history(task_name, source_layer, layer)
+                            except:
+                                print(task_name, layer, 'Update SQLite did not work properly')
                             
 
                             layer.reload()
