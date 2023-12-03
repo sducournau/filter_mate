@@ -18,7 +18,7 @@ class PopulateListEngineTask(QgsTask):
         QgsTask.__init__(self, description, QgsTask.CanCancel)
 
         self.exception = None
-        
+        self.sub_action = self.description()
         self.action = action
 
         self.parent = parent
@@ -230,42 +230,106 @@ class PopulateListEngineTask(QgsTask):
 
 
     def selectAllFeatures(self):
-        total_count = self.parent.list_widgets[self.layer.id()].count()
-        nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
 
-        for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-            item = self.parent.list_widgets[self.layer.id()].item(it)
-            if not item.isHidden():
-                item.setCheckState(Qt.Checked)
-                if it[1] in nonSubset_features_list:
+
+        if self.sub_action == 'Select All':
+
+            total_count = self.parent.list_widgets[self.layer.id()].count()
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+
+            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
+                item = self.parent.list_widgets[self.layer.id()].item(it)
+                if not item.isHidden():
+                    item.setCheckState(Qt.Checked)
                     item.setData(6,self.parent.font_by_state['checked'][0])
                     item.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
                     item.setData(4,"True")
-                else:
-                    item.setData(6,self.parent.font_by_state['checkedFiltered'][0])
-                    item.setData(9,QBrush(self.parent.font_by_state['checkedFiltered'][1]))
-                    item.setData(4,"False")
-            self.setProgress((index/total_count)*100)
+                self.setProgress((index/total_count)*100)
+
+        
+        elif self.sub_action == 'Select All (non subset)':
+
+            total_count = self.parent.list_widgets[self.layer.id()].count()
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            total_count = total_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+
+            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
+                item = self.parent.list_widgets[self.layer.id()].item(it)
+                if not item.isHidden():
+                    if item.data(3) not in nonSubset_features_list:
+                        item.setCheckState(Qt.Checked)
+                        item.setData(6,self.parent.font_by_state['checkedFiltered'][0])
+                        item.setData(9,QBrush(self.parent.font_by_state['checkedFiltered'][1]))
+                        item.setData(4,"False")
+                self.setProgress((index/total_count)*100)
+        
+
+        elif self.sub_action == 'Select All (subset)':
+
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            total_count = len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+
+            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
+                item = self.parent.list_widgets[self.layer.id()].item(it)
+                if not item.isHidden():
+                    if item.data(3) in nonSubset_features_list:
+                        item.setCheckState(Qt.Checked)
+                        item.setData(6,self.parent.font_by_state['checked'][0])
+                        item.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
+                        item.setData(4,"True")
+                self.setProgress((index/total_count)*100)
+
         self.updateFeatures()
 
 
     def deselectAllFeatures(self):
-        total_count = self.parent.list_widgets[self.layer.id()].count()
-        nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
 
-        for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-            item = self.parent.list_widgets[self.layer.id()].item(it)
-            if not item.isHidden():
-                item.setCheckState(Qt.Unchecked)
-                if it[1] in nonSubset_features_list:
+        if self.sub_action == 'De-select All':
+
+            total_count = self.parent.list_widgets[self.layer.id()].count()
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+
+            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
+                item = self.parent.list_widgets[self.layer.id()].item(it)
+                if not item.isHidden():
+                    item.setCheckState(Qt.Unchecked)
                     item.setData(6,self.parent.font_by_state['unChecked'][0])
                     item.setData(9,QBrush(self.parent.font_by_state['unChecked'][1]))
                     item.setData(4,"True")
-                else:
-                    item.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
-                    item.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
-                    item.setData(4,"False")
-            self.setProgress((index/total_count)*100)
+                self.setProgress((index/total_count)*100)
+
+        elif self.sub_action == 'De-select All (non subset)':
+
+            total_count = self.parent.list_widgets[self.layer.id()].count()
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            total_count = total_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+
+            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
+                item = self.parent.list_widgets[self.layer.id()].item(it)
+                if not item.isHidden():
+                    if item.data(3) not in nonSubset_features_list:
+                        item.setCheckState(Qt.Unchecked)
+                        item.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
+                        item.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
+                        item.setData(4,"False")
+                self.setProgress((index/total_count)*100)
+
+
+        elif self.sub_action == 'De-select All (subset)':
+
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            total_count = len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+
+            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
+                item = self.parent.list_widgets[self.layer.id()].item(it)
+                if not item.isHidden():
+                    if item.data(3) in nonSubset_features_list:
+                        item.setCheckState(Qt.Unchecked)
+                        item.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
+                        item.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
+                        item.setData(4,"False")
+                self.setProgress((index/total_count)*100)
+
         self.updateFeatures()
 
     
@@ -340,11 +404,25 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         self.context_menu = QMenu(self)
         self.action_check_all = QAction('Select All', self)
-        self.action_check_all.triggered.connect(self.select_all)
+        self.action_check_all.triggered.connect(lambda state, x='Select All': self.select_all(x))
+        self.action_check_all_non_subset = QAction('Select All (non subset)', self)
+        self.action_check_all_non_subset.triggered.connect(lambda state, x='Select All (non subset)': self.select_all(x))
+        self.action_check_all_subset = QAction('Select All (subset)', self)
+        self.action_check_all_subset.triggered.connect(lambda state, x='Select All (subset)': self.select_all(x))
         self.action_uncheck_all = QAction('De-select All', self)
-        self.action_uncheck_all.triggered.connect(self.deselect_all)
+        self.action_uncheck_all.triggered.connect(lambda state, x='De-select All': self.deselect_all(x))
+        self.action_uncheck_all_non_subset = QAction('De-select All (non subset)', self)
+        self.action_uncheck_all_non_subset.triggered.connect(lambda state, x='De-select All (non subset)': self.deselect_all(x))
+        self.action_uncheck_all_subset = QAction('De-select All (subset)', self)
+        self.action_uncheck_all_subset.triggered.connect(lambda state, x='De-select All (subset)': self.deselect_all(x))
+
         self.context_menu.addAction(self.action_check_all)
+        self.context_menu.addAction(self.action_check_all_non_subset)
+        self.context_menu.addAction(self.action_check_all_subset)
+        self.context_menu.addSeparator()
         self.context_menu.addAction(self.action_uncheck_all)
+        self.context_menu.addAction(self.action_uncheck_all_non_subset)
+        self.context_menu.addAction(self.action_uncheck_all_subset)
 
         self.font_by_state = {'unChecked':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
                               'checked':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
@@ -418,6 +496,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     self.items_le.clear()
                     
                 self.layer = layer
+
+                if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
+                    self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
+
                 self.manage_list_widgets(layer_props)
 
                 self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
@@ -481,12 +563,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
 
     def eventFilter(self, obj, event):
-        identifier_field_name = self.list_widgets[self.layer.id()].getIdentifierFieldName()
-        nonSubset_features_list = [feature[identifier_field_name] for feature in self.layer.getFeatures()]
-
-
 
         if event.type() == QEvent.MouseButtonPress and obj == self.list_widgets[self.layer.id()].viewport():
+            identifier_field_name = self.list_widgets[self.layer.id()].getIdentifierFieldName()
+            nonSubset_features_list = [feature[identifier_field_name] for feature in self.layer.getFeatures()]
             if event.button() == Qt.LeftButton:
                 clicked_item = self.list_widgets[self.layer.id()].itemAt(event.pos())
                 if clicked_item != None:
@@ -597,16 +677,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
 
-    def select_all(self):
-        description = 'Selecting all features'
+    def select_all(self, x):
         action = 'selectAllFeatures'
-        self.build_task(description, action)
+        self.build_task(x, action)
         self.launch_task(action)
 
-    def deselect_all(self):
-        description = 'Deselecting all features'
+    def deselect_all(self, x):
         action = 'deselectAllFeatures'
-        self.build_task(description, action)
+        self.build_task(x, action)
         self.launch_task(action)
         
     def filter_items(self, filter_txt=None):
@@ -622,17 +700,16 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.launch_task(action)
     
     def build_task(self, description, action, silent_flag=False):
-        
-        try:
-            self.tasks[action][self.layer.id()].cancel()
-        except:
-            pass
 
-        try:        
-            self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
-            self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
-        except:
-            pass
+        all_active_tasks = QgsApplication.taskManager().activeTasks()
+        if len(all_active_tasks) > 0:
+            filtered_active_tasks = [k for k, v in self.tasks.items() if k == action and v == self.layer.id()]
+            for filtered_active_task in filtered_active_tasks:
+                filtered_active_task.cancel()
+       
+        self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
+        self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
+
 
         if silent_flag is False:
             try:
