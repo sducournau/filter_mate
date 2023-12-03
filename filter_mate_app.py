@@ -293,7 +293,9 @@ class FilterMateApp:
         if task_name in ('filter','unfilter','reset'):
 
             self.manage_layer_subset_strings_history(task_name, source_layer, source_layer)
-            
+            source_layer.reload()
+            source_layer.updateExtents()
+            source_layer.triggerRepaint()
 
             if self.PROJECT_LAYERS[source_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                 self.create_spatial_index_for_layer(source_layer)
@@ -308,11 +310,17 @@ class FilterMateApp:
                         if len(layers) == 1:
                             layer = layers[0]
                             self.manage_layer_subset_strings_history(task_name, source_layer, layer)
+                            
+
+                            layer.reload()
+                            layer.updateExtents()
+                            layer.triggerRepaint()
 
                             if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                                 self.create_spatial_index_for_layer(layer)
 
                             self.save_variables_from_layer(layer,[("infos","is_already_subset"),("infos","subset_history")])
+
 
 
             self.iface.mapCanvas().refreshAllLayers()
