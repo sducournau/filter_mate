@@ -216,7 +216,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                          param_combine_operator=self.param_source_layer_combine_operator, 
                                                                                                                                          expression=self.expression)
                         )
-                        
+
                     else:
                         result = self.source_layer.setSubsetString(self.expression)
 
@@ -324,9 +324,11 @@ class FilterEngineTask(QgsTask):
             
         if self.param_buffer_expression != None and self.param_buffer_expression != '':
 
+
+            if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
+                self.param_buffer_expression = '"{source_table}".'.format(source_table=source_table) + self.param_buffer_expression
+
             self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=source_table), self.param_buffer_expression)
-            if self.param_buffer_expression.find('"') == 0:
-                self.param_buffer_expression = '"{source_table}"."'.format(source_table=source_table) + self.param_buffer_expression
 
             self.param_buffer_expression = self.qgis_expression_to_postgis(self.param_buffer_expression)    
 
