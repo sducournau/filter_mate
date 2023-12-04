@@ -182,13 +182,15 @@ class FilterMateApp:
             self.appTasks[task_name].savingLayerVariable.connect(lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned))
             self.appTasks[task_name].removingLayerVariable.connect(lambda layer, variable_key: self.removing_layer_variable(layer, variable_key))
 
-        
-        active_tasks = QgsApplication.taskManager().activeTasks()
-        if len(active_tasks) > 0:
-            for active_task in active_tasks:
-                key_active_task = [k for k, v in self.tasks_descriptions.items() if v == active_task.description()][0]
-                if key_active_task in ('filter','reset','unfilter'):
-                    active_task.cancel()
+        try:
+            active_tasks = QgsApplication.taskManager().activeTasks()
+            if len(active_tasks) > 0:
+                for active_task in active_tasks:
+                    key_active_task = [k for k, v in self.tasks_descriptions.items() if v == active_task.description()][0]
+                    if key_active_task in ('filter','reset','unfilter'):
+                        active_task.cancel()
+        except:
+            pass
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
     def on_remove_layer_task_begun(self):
