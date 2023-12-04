@@ -210,12 +210,25 @@ class FilterEngineTask(QgsTask):
                                         self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
 
                     self.expression = self.qgis_expression_to_postgis(self.expression)
+                    self.expression = self.expression.strip()
+                    if self.expression.find("CASE") == 0:
+                        self.expression = 'SELECT ' + self.expression
 
+                    param_old_subset_where_clause = ''
+                    param_source_old_subset = ''
                     if self.param_source_old_subset != '' and self.param_source_layer_combine_operator != '':
-                        result = self.source_layer.setSubsetString('( {param_old_subset} ) {param_combine_operator} {expression}'.format(param_old_subset=self.param_source_old_subset,
-                                                                                                                                         param_combine_operator=self.param_source_layer_combine_operator, 
-                                                                                                                                         expression=self.expression)
-                        )
+                        index_where_clause = self.param_source_old_subset.find('WHERE')
+                        if index_where_clause > -1:
+                            param_old_subset_where_clause = self.param_source_old_subset[index_where_clause:]
+                            if param_old_subset_where_clause[-2:] == '))':
+                                param_old_subset_where_clause = param_old_subset_where_clause[:-1]
+                                param_source_old_subset = self.param_source_old_subset[:index_where_clause]
+
+                        result = self.source_layer.setSubsetString('{source_old_subset} {old_subset_where_clause} {param_combine_operator} {expression} )'.format(source_old_subset=param_source_old_subset,
+                                                                                                                                                                old_subset_where_clause=param_old_subset_where_clause,   
+                                                                                                                                                                param_combine_operator=self.param_source_layer_combine_operator, 
+                                                                                                                                                                expression=self.expression)
+                            )
 
                     else:
                         result = self.source_layer.setSubsetString(self.expression)
@@ -297,7 +310,9 @@ class FilterEngineTask(QgsTask):
         expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
         expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
 
-        
+        expression = re.sub('case', 'CASE', expression)
+        expression = re.sub('then', 'THEN', expression)
+        expression = re.sub('else', 'ELSE', expression)
         expression = re.sub('ilike', 'ILIKE', expression)
         expression = re.sub('like', 'LIKE', expression)
         expression = re.sub('not', 'NOT', expression)
