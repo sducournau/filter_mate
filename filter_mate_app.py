@@ -221,17 +221,20 @@ class FilterMateApp:
 
             if task_name == 'filter':
 
-                task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"]}
+                task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"], 
+                                           "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                 return task_parameters
 
             elif task_name == 'unfilter':
 
-                task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"]}
+                task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"], 
+                                           "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                 return task_parameters
             
             elif task_name == 'reset':
 
-                task_parameters["task"] = {"features": features, "expression": expression}
+                task_parameters["task"] = {"features": features, "expression": expression, 
+                                           "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                 return task_parameters
 
             elif task_name == 'export':
@@ -294,10 +297,9 @@ class FilterMateApp:
 
         if task_name in ('filter','unfilter','reset'):
 
-            try:    
-                self.manage_layer_subset_strings_history(task_name, source_layer, source_layer)
-            except:
-                print(task_name, source_layer, 'Update SQLite did not work properly')
+
+            self.apply_subset_filter(task_name, source_layer)
+
 
             source_layer.reload()
             source_layer.updateExtents()
@@ -306,7 +308,7 @@ class FilterMateApp:
             if self.PROJECT_LAYERS[source_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                 self.create_spatial_index_for_layer(source_layer)
 
-            self.save_variables_from_layer(source_layer,[("infos","is_already_subset"),("infos","subset_history")])
+            # self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
             
             
             if task_parameters["filtering"]["has_layers_to_filter"] == True:
@@ -315,22 +317,19 @@ class FilterMateApp:
                         layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
                         if len(layers) == 1:
                             layer = layers[0]
-                            try:
-                                self.manage_layer_subset_strings_history(task_name, source_layer, layer)
-                            except:
-                                print(task_name, layer, 'Update SQLite did not work properly')
-                            
+
+                            self.apply_subset_filter(task_name, layer)
 
                             layer.reload()
                             layer.updateExtents()
                             layer.triggerRepaint()
 
+                            
+
                             if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
                                 self.create_spatial_index_for_layer(layer)
 
-                            self.save_variables_from_layer(layer,[("infos","is_already_subset"),("infos","subset_history")])
-
-
+                            # self.save_variables_from_layer(layer,[("infos","is_already_subset")])
 
             self.iface.mapCanvas().refreshAllLayers()
             self.iface.mapCanvas().refresh()
@@ -352,19 +351,14 @@ class FilterMateApp:
             self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
         
 
-    def manage_layer_subset_strings_history(self, task_name, source_layer, layer):
+    def apply_subset_filter(self, task_name, layer):
 
         conn = spatialite_connect(self.db_file_path)
         cur = conn.cursor()
 
-        current_seq_order = 0
-        last_seq_order = 0
-        last_subset_id = None
-        last_layer_id = None
-        last_layer_source_id = None
         last_subset_string = ''
 
-        cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC""".format(
+        cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
                                                                                                                                                         fk_project=self.project_uuid,
                                                                                                                                                         layer_id=layer.id()
                                                                                                                                                         )
@@ -372,58 +366,23 @@ class FilterMateApp:
 
         results = cur.fetchall()
 
-        if len(results) > 0:
-            last_subset_id = results[0][0]
-            #last_layer_id = results[0][3]
-            #last_layer_source_id = results[0][4]
-            last_seq_order = results[0][5]
-            last_subset_string = results[0][6]
+        if len(results) == 1:
+            result = results[0]
+            last_subset_string = result[6].replace("\'\'", "\'")
 
-        if task_name == 'filter':
-            current_seq_order = last_seq_order + 1
-            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, CAST('{subset_string}' AS TEXT));""".format(
-                                                                                                                                                                                            id=uuid.uuid4(),
-                                                                                                                                                                                            fk_project=self.project_uuid,
-                                                                                                                                                                                            layer_id=layer.id(),
-                                                                                                                                                                                            layer_source_id=source_layer.id(),
-                                                                                                                                                                                            seq_order=current_seq_order,
-                                                                                                                                                                                            subset_string=layer.subsetString()
-                                                                                                                                                                                            )
-            )
+        if task_name in ('filter', 'unfilter'):
+
+            layer.setSubsetString(last_subset_string)
+
             if layer.subsetString() != '':
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
             else:
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = {"seq_order": current_seq_order, "source_layer": source_layer.id(), "subset_string": last_subset_string}   
-
-        elif task_name == 'unfilter':
-            if len(results) > 1:
-                current_seq_order = results[1][5]
-                last_subset_string = results[1][6]
-
-
-            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND id = '{last_subset_id}'""".format(
-                                                                                                                                                            fk_project=self.project_uuid,
-                                                                                                                                                            layer_id=layer.id(),
-                                                                                                                                                            last_subset_id=last_subset_id
-                                                                                                                                                            )
-            )
-            if layer.subsetString() != '':
-                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
-            else:
-                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = {"seq_order": current_seq_order, "source_layer": source_layer.id(), "subset_string": last_subset_string}      
 
         elif task_name == 'reset':
-            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}'""".format(
-                                                                                                                                fk_project=self.project_uuid,
-                                                                                                                                layer_id=layer.id()
-                                                                                                                                )
-            )
+            layer.setSubsetString('')
             self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-            self.PROJECT_LAYERS[layer.id()]["infos"]["subset_history"] = {}
 
-        conn.commit()
         cur.close()
         conn.close()
 

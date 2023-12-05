@@ -7,6 +7,7 @@ from qgis.utils import iface
 from qgis import processing
 
 import psycopg2
+import uuid
 from collections import OrderedDict
 from operator import getitem
 import zipfile
@@ -42,6 +43,10 @@ class FilterEngineTask(QgsTask):
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
+
+        self.db_file_path = None
+        self.project_uuid = None
+
         self.layers_count = None
         self.layers = {}
         self.expression = None
@@ -109,7 +114,13 @@ class FilterEngineTask(QgsTask):
                         self.layers_count += 1
     
                 self.provider_list = list(self.layers)
+
+            if 'db_file_path' in self.task_parameters["task"] and self.task_parameters["task"]['db_file_path'] not in (None, ''):
+                self.db_file_path = self.task_parameters["task"]['db_file_path']
         
+            if 'project_uuid' in self.task_parameters["task"] and self.task_parameters["task"]['project_uuid'] not in (None, ''):
+                self.project_uuid = self.task_parameters["task"]['project_uuid']
+
 
             if self.task_action == 'filter':
                 """We will filter layers"""
@@ -224,14 +235,24 @@ class FilterEngineTask(QgsTask):
                                 param_old_subset_where_clause = param_old_subset_where_clause[:-1]
                                 param_source_old_subset = self.param_source_old_subset[:index_where_clause]
 
-                        result = self.source_layer.setSubsetString('{source_old_subset} {old_subset_where_clause} {param_combine_operator} {expression} )'.format(source_old_subset=param_source_old_subset,
-                                                                                                                                                                old_subset_where_clause=param_old_subset_where_clause,   
-                                                                                                                                                                param_combine_operator=self.param_source_layer_combine_operator, 
-                                                                                                                                                                expression=self.expression)
-                            )
+                        self.expression = '{source_old_subset} {old_subset_where_clause} {param_combine_operator} {expression} )'.format(source_old_subset=param_source_old_subset,
+                                                                                                                                            old_subset_where_clause=param_old_subset_where_clause,   
+                                                                                                                                            param_combine_operator=self.param_source_layer_combine_operator, 
+                                                                                                                                            expression=self.expression)
 
-                    else:
-                        result = self.source_layer.setSubsetString(self.expression)
+                    # sql_expression = QgsSQLStatement('SELECT * FROM  "{source_schema}"."{source_table}" WHERE {expression}'.format(source_schema=self.param_source_schema,
+                    #                                                                                                                 source_table=self.param_source_table,
+                    #                                                                                                                 expression=self.expression),
+                    #                                                                                                                 True)
+                    # validation_check = sql_expression.doBasicValidationChecks()
+                    # print(sql_expression)
+                    # print(sql_expression.dump())
+                    # print(validation_check)
+                    
+                    # if validation_check[0] is True:
+
+                    result = True
+                    self.manage_layer_subset_strings(self.source_layer, self.expression)
 
             else:
                 result = True
@@ -249,10 +270,19 @@ class FilterEngineTask(QgsTask):
                     self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
                 
                 if self.param_source_old_subset != '' and self.param_source_layer_combine_operator != '':
-                    result = self.source_layer.setSubsetString('( {param_old_subset} ) {param_combine_operator} {expression}'.format(param_old_subset=self.param_source_old_subset, param_combine_operator=self.param_source_layer_combine_operator, expression=self.expression))
-                else:
-                    result = self.source_layer.setSubsetString(self.expression)
- 
+                    self.expression = '( {param_old_subset} ) {param_combine_operator} {expression}'.format(param_old_subset=self.param_source_old_subset, param_combine_operator=self.param_source_layer_combine_operator, expression=self.expression)
+
+                # sql_expression = QgsSQLStatement('SELECT * FROM  "{source_schema}"."{source_table}" WHERE {expression}'.format(source_schema=self.param_source_schema,
+                #                                                                                                                 source_table=self.param_source_table,
+                #                                                                                                                 expression=self.expression),
+                #                                                                                                                 True)
+                # validation_check = sql_expression.doBasicValidationChecks()
+                # print(validation_check)
+                # if validation_check[0] is True:
+
+                result = True
+                self.manage_layer_subset_strings(self.source_layer, self.expression)
+
         return result
     
     def manage_distant_layers_geometric_filtering(self):
@@ -260,7 +290,7 @@ class FilterEngineTask(QgsTask):
 
         result = False
         self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
-        self.param_source_new_subset = self.source_layer.subsetString()
+        self.param_source_new_subset = self.expression
 
 
         if self.task_parameters["filtering"]["has_buffer"] is True:
@@ -593,14 +623,18 @@ class FilterEngineTask(QgsTask):
                                                                                         expression=param_expression
                                                                                         )
 
+            # sql_expression = QgsSQLStatement('SELECT * FROM  "{distant_schema}"."{distant_table}" WHERE {expression}'.format(distant_schema=param_distant_schema,
+            #                                                                                                                 distant_table=param_distant_table,
+            #                                                                                                                 expression=param_expression),
+            #                                                                                                                 True)
+            # validation_check = sql_expression.doBasicValidationChecks()
+            # print(validation_check)
+            # if validation_check[0] is True:
 
-            print(param_expression)
-    
-            result = layer.setSubsetString(param_expression)
+            result = True
+            self.manage_layer_subset_strings(layer, param_expression)
 
-            print(result)
-            if result is True:
-                return result
+
 
         if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql') or (param_old_subset != '' and self.param_other_layers_combine_operator != ''):
             
@@ -678,13 +712,17 @@ class FilterEngineTask(QgsTask):
                     param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
                 else:
                     param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
-            
-                if QgsExpression(param_expression).isValid():
-                        
-                    result = layer.setSubsetString(param_expression)
 
-                if result is False:
-                    print(param_expression)
+                # sql_expression = QgsSQLStatement('SELECT * FROM  "{distant_schema}"."{distant_table}" WHERE {expression}'.format(distant_schema=param_distant_schema,
+                #                                                                                                                 distant_table=param_distant_table,
+                #                                                                                                                 expression=param_expression),
+                #                                                                                                                 True)
+                # validation_check = sql_expression.doBasicValidationChecks()
+                # print(validation_check)
+                # if validation_check[0] is True:
+
+                result = True
+                self.manage_layer_subset_strings(layer, param_expression)
                         
         return result
     
@@ -747,25 +785,14 @@ class FilterEngineTask(QgsTask):
     def execute_unfiltering(self):
 
         i = 1
-        if "subset_history" in self.task_parameters["infos"]:
-            if "subset_string" in self.task_parameters["infos"]["subset_history"] and self.task_parameters["infos"]["subset_history"]["subset_string"] != '':
-                self.source_layer.setSubsetString(self.task_parameters["infos"]["subset_history"]["subset_string"])
-            else:
-                self.source_layer.setSubsetString('')
-        else:
-            self.source_layer.setSubsetString('')
+
+        self.manage_layer_subset_strings(self.source_layer)
         self.setProgress((i/self.layers_count)*100)
 
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                if "subset_history" in layer_props:
-                    if "subset_string" in layer_props["subset_history"] and layer_props["subset_history"]["subset_string"] != '':
-                        layer.setSubsetString(layer_props["subset_history"]["subset_string"])
-                    else:
-                        layer.setSubsetString('')
-                else:
-                    layer.setSubsetString('')
+                self.manage_layer_subset_strings(layer)
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
@@ -777,11 +804,11 @@ class FilterEngineTask(QgsTask):
 
     def execute_reseting(self):
 
-        self.source_layer.setSubsetString('')
+        self.manage_layer_subset_strings(self.source_layer)
 
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                layer.setSubsetString('')
+                self.manage_layer_subset_strings(layer)
                 if self.isCanceled():
                     return False
 
@@ -912,6 +939,66 @@ class FilterEngineTask(QgsTask):
         return True
 
 
+    def manage_layer_subset_strings(self, layer, sql_subset_string=None):
+
+        conn = spatialite_connect(self.db_file_path)
+        cur = conn.cursor()
+
+        current_seq_order = 0
+        last_seq_order = 0
+        last_subset_id = None
+
+        cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
+                                                                                                                                                        fk_project=self.project_uuid,
+                                                                                                                                                        layer_id=layer.id()
+                                                                                                                                                        )
+        )
+
+        results = cur.fetchall()
+
+        if len(results) == 1:
+            result = results[0]
+            last_subset_id = result[0]
+            last_seq_order = result[5]
+
+        if self.task_action == 'filter':
+            current_seq_order = last_seq_order + 1
+            if sql_subset_string != None:
+                cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+                                                                                                                                                                                        id=uuid.uuid4(),
+                                                                                                                                                                                        fk_project=self.project_uuid,
+                                                                                                                                                                                        layer_id=layer.id(),
+                                                                                                                                                                                        layer_source_id=self.source_layer.id(),
+                                                                                                                                                                                        seq_order=current_seq_order,
+                                                                                                                                                                                        subset_string=sql_subset_string.replace("\'","\'\'")
+                                                                                                                                                                                        )
+                )
+                conn.commit()
+
+        elif self.task_action == 'unfilter':
+            if last_subset_id != None:
+
+                cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND id = '{last_subset_id}';""".format(
+                                                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                                                layer_id=layer.id(),
+                                                                                                                                                                last_subset_id=last_subset_id
+                                                                                                                                                                )
+                )
+                conn.commit()
+
+        elif self.task_action == 'reset':
+            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}';""".format(
+                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                layer_id=layer.id()
+                                                                                                                                )
+            )
+            conn.commit()
+
+        cur.close()
+        conn.close()
+
+
+
     def cancel(self):
         QgsMessageLog.logMessage(
             '"{name}" task was canceled'.format(name=self.description()),
@@ -982,7 +1069,7 @@ class LayersManagementEngineTask(QgsTask):
         self.outputs = {}
         self.message = None
 
-        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","subset_history":{ },"is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false, "total_features_count":%s }'
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false, "total_features_count":%s }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
 
