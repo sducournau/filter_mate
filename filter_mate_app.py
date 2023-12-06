@@ -410,7 +410,7 @@ class FilterMateApp:
                             value_typped = json.dumps(value_typped)
                         QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
                         cur.execute("""INSERT INTO fm_project_layers_properties 
-                                        VALUES('{id}', datetime(), datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                        VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
                                                                             id=uuid.uuid4(),
                                                                             project_id=self.project_uuid,
                                                                             layer_id=layer.id(),
@@ -433,7 +433,7 @@ class FilterMateApp:
                                 value_typped = json.dumps(value_typped)
                             QgsExpressionContextUtils.setLayerVariable(layer, layer_property[0] + '_' +  layer_property[1], value_typped)
                             cur.execute("""INSERT INTO fm_project_layers_properties 
-                                            VALUES('{id}', datetime(), datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                            VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
                                                                                 id=uuid.uuid4(),
                                                                                 project_id=self.project_uuid,
                                                                                 layer_id=layer.id(),
