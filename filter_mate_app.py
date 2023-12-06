@@ -77,9 +77,10 @@ class FilterMateApp:
         if self.dockwidget == None:
             
             QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')    
-            self.init_filterMate_db()
 
             init_layers = list(self.PROJECT.mapLayers().values())
+
+            self.init_filterMate_db()
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
 
             if init_layers != None and len(init_layers) > 0:
@@ -133,8 +134,8 @@ class FilterMateApp:
         if task_name in ('project_read', 'new_project'):
             QgsApplication.taskManager().cancelAll()
             self.PROJECT = QgsProject.instance()
-            self.init_filterMate_db()
             init_layers = list(self.PROJECT.mapLayers().values())
+            self.init_filterMate_db()
             if len(init_layers) > 0:
                 self.manage_task('add_layers', init_layers)
             else:
@@ -398,29 +399,53 @@ class FilterMateApp:
 
         if layer.id() in self.PROJECT_LAYERS.keys():
 
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
+
             if layer_all_properties_flag is True:
                 for key_group in ("infos", "exploring", "filtering"):
                     for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
-                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
                         value_typped, type_returned = self.return_typped_value(value, 'save')
                         if type_returned in (list, dict):
-                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
-                        else:
-                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-            
+                            value_typped = json.dumps(value_typped)
+                        QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
+                        cur.execute("""INSERT INTO fm_project_layers_properties 
+                                        VALUES('{id}', datetime(), datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                                                            id=uuid.uuid4(),
+                                                                            project_id=self.project_uuid,
+                                                                            layer_id=layer.id(),
+                                                                            meta_type=key_group,
+                                                                            meta_key=key,
+                                                                            meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                                                            )
+                        )
+                        conn.commit()
+
+
+
             else:
                 for layer_property in layer_properties:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
                         if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
                             value_typped, type_returned = self.return_typped_value(value, 'save')
                             if type_returned in (list, dict):
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, json.dumps(value_typped))
-                            else:
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                                value_typped = json.dumps(value_typped)
+                            QgsExpressionContextUtils.setLayerVariable(layer, layer_property[0] + '_' +  layer_property[1], value_typped)
+                            cur.execute("""INSERT INTO fm_project_layers_properties 
+                                            VALUES('{id}', datetime(), datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                                                                id=uuid.uuid4(),
+                                                                                project_id=self.project_uuid,
+                                                                                layer_id=layer.id(),
+                                                                                meta_type=layer_property[0],
+                                                                                meta_key=layer_property[1],
+                                                                                meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                                                                )
+                            )
+                            conn.commit()
 
-    
+            cur.close()
+            conn.close()
 
     def remove_variables_from_layer(self, layer, layer_properties=[]):
         
@@ -433,18 +458,33 @@ class FilterMateApp:
 
         if layer.id() in self.PROJECT_LAYERS.keys():
 
-            layer_scope = QgsExpressionContextUtils.layerScope(layer)
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
 
             if layer_all_properties_flag is True:
+                cur.execute("""DELETE FROM fm_project_layers_properties 
+                                WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
+                                                                                                    project_id=self.project_uuid,
+                                                                                                    layer_id=layer.id()
+                                                                                                    )
+                )
+                conn.commit()
                 QgsExpressionContextUtils.setLayerVariables(layer, {})
 
             else:
                 for layer_property in layer_properties:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
                         if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            layer_scope.removeVariable(variable_key)
-            
+                            cur.execute("""DELETE FROM fm_project_layers_properties  
+                                            WHERE fk_project = '{project_id}' and layer_id = '{layer_id}' and meta_type = '{meta_type}' and meta_key = '{meta_key}');""".format(
+                                                                                                                                                                            project_id=self.project_uuid,
+                                                                                                                                                                            layer_id=layer.id(),
+                                                                                                                                                                            meta_type=layer_property[0],
+                                                                                                                                                                            meta_key=layer_property[1]                           
+                                                                                                                                                                            )
+                            )
+                            conn.commit()
+                            QgsExpressionContextUtils.setLayerVariable(layer, layer_property[0] + '_' + layer_property[1], '')
 
       
 
@@ -463,8 +503,16 @@ class FilterMateApp:
             self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
             self.project_file_path = self.PROJECT.absolutePath()
             project_settings = json.dumps(self.CONFIG_DATA["CURRENT_PROJECT"])
- 
-            if not os.path.isfile(self.db_file_path):
+
+            print(self.db_file_path)
+
+            if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True:
+                os.remove(self.db_file_path)
+                self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
+                with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+                    outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+                    
+            if not os.path.exists(self.db_file_path):
                 memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
                 layer_name = 'filterMate_db'
                 layer = QgsVectorLayer(memory_uri, layer_name, "memory")
@@ -493,7 +541,7 @@ class FilterMateApp:
 
                 cur.execute("""CREATE TABLE fm_subset_history (
                                 id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                _created_at DATETIME NOT NULL,
+                                _updated_at DATETIME NOT NULL,
                                 fk_project VARYING CHARACTER(255) NOT NULL,
                                 layer_id VARYING CHARACTER(255) NOT NULL,
                                 layer_source_id VARYING CHARACTER(255) NOT NULL,
@@ -505,7 +553,6 @@ class FilterMateApp:
                 
                 cur.execute("""CREATE TABLE fm_project_layers_properties (
                                 id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                _created_at DATETIME NOT NULL,
                                 _updated_at DATETIME NOT NULL,
                                 fk_project VARYING CHARACTER(255) NOT NULL,
                                 layer_id VARYING CHARACTER(255) NOT NULL,
@@ -513,37 +560,42 @@ class FilterMateApp:
                                 meta_key VARYING CHARACTER(255) NOT NULL,
                                 meta_value TEXT NOT NULL,
                                 FOREIGN KEY (fk_project)  
-                                REFERENCES fm_projects(project_id));
+                                REFERENCES fm_projects(project_id),
+                                CONSTRAINT property_unicity
+                                UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
                                 """)
                 
                 self.project_uuid = uuid.uuid4()
             
-                cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', CAST('{project_settings}' AS TEXT));""".format(
-                                                                                                                                                                            project_id=self.project_uuid,
-                                                                                                                                                                            project_name=self.project_file_name,
-                                                                                                                                                                            project_path=self.project_file_path,
-                                                                                                                                                                            project_settings=project_settings
-                                                                                                                                                                            )
+                cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+                                                                                                                                                                    project_id=self.project_uuid,
+                                                                                                                                                                    project_name=self.project_file_name,
+                                                                                                                                                                    project_path=self.project_file_path,
+                                                                                                                                                                    project_settings=project_settings.replace("\'","\'\'")
+                                                                                                                                                                    )
                 )
 
                 conn.commit()
 
                 QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-            
+
+
+
             else:
                 conn = spatialite_connect(self.db_file_path)
                 cur = conn.cursor()
-                cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}';""".format(
-                                                                                                                                            project_name=self.project_file_name,
-                                                                                                                                            project_path=self.project_file_path
-                                                                                                                                            )
+                cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
+                                                                                                                                                project_name=self.project_file_name,
+                                                                                                                                                project_path=self.project_file_path
+                                                                                                                                                )
                 )
 
-                result = cur.fetchall()
+                results = cur.fetchall()
 
-                if len(result) == 1:
-                    project_settings = result[0][-1]
-                    self.project_uuid = result[0][0]
+                if len(results) == 1:
+                    result = results[0]
+                    project_settings = result[-1]
+                    self.project_uuid = result[0].replace("\'\'", "\'")
                     self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
                     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
 
@@ -558,12 +610,12 @@ class FilterMateApp:
 
                 else:
                     self.project_uuid = uuid.uuid4()
-                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', CAST('{projects_settings}' AS TEXT));""".format(
-                                                                                                                                                                                project_id=self.project_uuid,
-                                                                                                                                                                                project_name=self.project_file_name,
-                                                                                                                                                                                project_path=self.project_file_path,
-                                                                                                                                                                                projects_settings=project_settings
-                                                                                                                                                                                )
+                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{projects_settings}');""".format(
+                                                                                                                                                                        project_id=self.project_uuid,
+                                                                                                                                                                        project_name=self.project_file_name,
+                                                                                                                                                                        project_path=self.project_file_path,
+                                                                                                                                                                        projects_settings=project_settings.replace("\'","\'\'")
+                                                                                                                                                                        )
                     )
                     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
 

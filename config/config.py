@@ -35,7 +35,7 @@ if QGIS_SETTINGS_PATH[-1] in ('\,/'):
 if CONFIG_DATA["APP"]["SQLITE_PATH"] != '':
     PLUGIN_CONFIG_DIRECTORY = os.path.normpath(CONFIG_DATA["APP"]["SQLITE_PATH"])
 else:
-    PLUGIN_CONFIG_DIRECTORY = os.path.normpath(QGIS_SETTINGS_PATH + '\QGIS\QGIS3\profiles\default\FilterMate')
+    PLUGIN_CONFIG_DIRECTORY = os.path.normpath(QGIS_SETTINGS_PATH + '\FilterMate')
     CONFIG_DATA["APP"]["SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
     with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
         outfile.write(json.dumps(CONFIG_DATA, indent=4))
