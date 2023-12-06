@@ -507,11 +507,14 @@ class FilterMateApp:
             print(self.db_file_path)
 
             if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True:
-                os.remove(self.db_file_path)
-                self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
-                with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
-                    outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
-                    
+                try: 
+                    os.remove(self.db_file_path)
+                    self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
+                    with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+                        outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+                except OSError as error: 
+                    print(error)
+            
             if not os.path.exists(self.db_file_path):
                 memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
                 layer_name = 'filterMate_db'
