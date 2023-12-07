@@ -278,7 +278,8 @@ class FilterMateApp:
                         
                         new_layers.append((layer, layer_features_source, layer_total_features_count))
 
-                    task_parameters["task"] = {"layers": new_layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag }
+                    task_parameters["task"] = {"layers": new_layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag,
+                                               "config_data": self.CONFIG_DATA, "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                     return task_parameters
 
                 elif task_name == 'remove_layers':
@@ -290,7 +291,8 @@ class FilterMateApp:
                     if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
                         reset_all_layers_variables_flag = True
 
-                    task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag": reset_all_layers_variables_flag }
+                    task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag": reset_all_layers_variables_flag,
+                                               "config_data": self.CONFIG_DATA, "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                     return task_parameters
 
 
@@ -408,6 +410,7 @@ class FilterMateApp:
                         value_typped, type_returned = self.return_typped_value(value, 'save')
                         if type_returned in (list, dict):
                             value_typped = json.dumps(value_typped)
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
                         QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
                         cur.execute("""INSERT INTO fm_project_layers_properties 
                                         VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
@@ -431,7 +434,8 @@ class FilterMateApp:
                             value_typped, type_returned = self.return_typped_value(value, 'save')
                             if type_returned in (list, dict):
                                 value_typped = json.dumps(value_typped)
-                            QgsExpressionContextUtils.setLayerVariable(layer, layer_property[0] + '_' +  layer_property[1], value_typped)
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
                             cur.execute("""INSERT INTO fm_project_layers_properties 
                                             VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
                                                                                 id=uuid.uuid4(),
@@ -484,7 +488,8 @@ class FilterMateApp:
                                                                                                                                                                             )
                             )
                             conn.commit()
-                            QgsExpressionContextUtils.setLayerVariable(layer, layer_property[0] + '_' + layer_property[1], '')
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
 
       
 

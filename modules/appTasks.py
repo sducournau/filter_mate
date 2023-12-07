@@ -1061,6 +1061,9 @@ class LayersManagementEngineTask(QgsTask):
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
+        self.CONFIG_DATA = None
+        self.db_file_path = None
+        self.project_uuid = None
 
         self.layers = None
         self.project_layers = None
@@ -1076,6 +1079,10 @@ class LayersManagementEngineTask(QgsTask):
     def run(self):
         try:    
             result = False
+
+            self.CONFIG_DATA = self.task_parameters["task"]["config_data"]
+            self.db_file_path = self.task_parameters["task"]["db_file_path"]
+            self.project_uuid = self.task_parameters["task"]["project_uuid"]
 
             if self.task_action == 'add_layers':
 
@@ -1138,6 +1145,7 @@ class LayersManagementEngineTask(QgsTask):
     def add_project_layer(self, layer_tuple):
 
         result = False
+        layer_variables = {}
 
         layer = layer_tuple[0]
         layer_features_source = layer_tuple[1]
@@ -1145,94 +1153,112 @@ class LayersManagementEngineTask(QgsTask):
 
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
-            result = self.search_primary_key_from_layer(layer)
-            if self.isCanceled() or result is False:
-                return False
-            
-            if isinstance(result, tuple) and len(list(result)) == 4:
-                primary_key_name = result[0]
-                primary_key_idx = result[1]
-                primary_key_type = result[2]
-                primary_key_is_numeric = result[3]
+            spatialite_results = self.select_properties_from_spatialite(layer.id())
+            if len(spatialite_results) == self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"]:
+                existing_layer_variables = {}
+                for key in ("infos", "exploring", "filtering"):
+                    existing_layer_variables[key] = {}
+                for property in spatialite_results:
+
+                    if property[0] in existing_layer_variables:
+                        value_typped, type_returned = self.return_typped_value(property[2], 'load')
+                        existing_layer_variables[property[0]][property[1]] = value_typped.replace("\'\'", "\'") if type_returned in (str, dict, list) else value_typped
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                        QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+
+                layer_variables["infos"] = existing_layer_variables["infos"]
+                layer_variables["exploring"] = existing_layer_variables["exploring"]
+                layer_variables["filtering"] = existing_layer_variables["filtering"]
+
             else:
-                return False
-
-            source_schema = 'NULL'
-            geometry_field = 'NULL'
-            new_layer_variables = {}
-            existing_layer_variables = {}
-            layer_variables = {}
-            layer_props = {}
-
-            if layer.providerType() == 'ogr':
-
-                capabilities = layer.capabilitiesString().split(', ')
-                if 'Transactions' in capabilities:
-                    layer_provider_type = 'spatialite'
-                else:
-                    layer_provider_type = 'ogr'
-
-            elif layer.providerType() == 'postgres':
-                layer_provider_type = 'postgresql'
+                new_layer_variables = {}
+                result = self.search_primary_key_from_layer(layer)
+                if self.isCanceled() or result is False:
+                    return False
                 
-                layer_source = layer.source()
-                regexp_match_source_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)',layer_source)
-                if regexp_match_source_schema != None:
-                    source_schema = regexp_match_source_schema.group()
-
-                regexp_match_geometry_field = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))',layer_source)
-                if regexp_match_geometry_field != None:
-                    geometry_field = regexp_match_geometry_field.group()
-            else:
-                capabilities = layer.capabilitiesString().split(', ')
-                if 'Transactions' in capabilities:
-                    layer_provider_type = 'spatialite'
+                if isinstance(result, tuple) and len(list(result)) == 4:
+                    primary_key_name = result[0]
+                    primary_key_idx = result[1]
+                    primary_key_type = result[2]
+                    primary_key_is_numeric = result[3]
                 else:
-                    layer_provider_type = 'ogr'
+                    return False
 
-            layer_geometry_type = layer.geometryType()
-            if layer_provider_type == 'spatialite':
-                geometry_field = 'GEOMETRY'
-            elif layer_provider_type == 'ogr':
-                geometry_field = '_ogr_geometry_'
+                source_schema = 'NULL'
+                geometry_field = 'NULL'
 
-            new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower(), layer_total_features_count))
-            new_layer_variables["exploring"] = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
-            new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
-    
-            layer_scope = QgsExpressionContextUtils.layerScope(layer)
+                layer_variables = {}
+                layer_props = {}
 
-            for key_group in ("infos", "exploring", "filtering"):
-                existing_layer_variables[key_group] = {}
-                for key in new_layer_variables[key_group]:
-                    variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                if layer.providerType() == 'ogr':
 
-                    if layer_scope.hasVariable(variable_key) is True:
-                        value = layer_scope.variable(variable_key)
-                        typped_value, type_returned = self.return_typped_value(value, 'load')
-                        existing_layer_variables[key_group][key] = typped_value
+                    capabilities = layer.capabilitiesString().split(', ')
+                    if 'Transactions' in capabilities:
+                        layer_provider_type = 'spatialite'
                     else:
-                        if key in new_layer_variables[key_group]:
-                            value = new_layer_variables[key_group][key]
-                            existing_layer_variables[key_group][key] = value
-            
-            layer_variables["infos"] = existing_layer_variables["infos"]
-            layer_variables["exploring"] = existing_layer_variables["exploring"]
-            layer_variables["filtering"] = existing_layer_variables["filtering"]    
+                        layer_provider_type = 'ogr'
 
-            if (layer_provider_type != layer_variables["infos"]["layer_provider_type"]) or (layer.name() != layer_variables["infos"]["layer_name"]) or (source_schema != layer_variables["infos"]["layer_schema"]) or (primary_key_name != layer_variables["infos"]["primary_key_name"]):
+                elif layer.providerType() == 'postgres':
+                    layer_provider_type = 'postgresql'
+                    
+                    layer_source = layer.source()
+                    regexp_match_source_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)',layer_source)
+                    if regexp_match_source_schema != None:
+                        source_schema = regexp_match_source_schema.group()
+
+                    regexp_match_geometry_field = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))',layer_source)
+                    if regexp_match_geometry_field != None:
+                        geometry_field = regexp_match_geometry_field.group()
+                else:
+                    capabilities = layer.capabilitiesString().split(', ')
+                    if 'Transactions' in capabilities:
+                        layer_provider_type = 'spatialite'
+                    else:
+                        layer_provider_type = 'ogr'
+
+                layer_geometry_type = layer.geometryType()
+                if layer_provider_type == 'spatialite':
+                    geometry_field = 'GEOMETRY'
+                elif layer_provider_type == 'ogr':
+                    geometry_field = '_ogr_geometry_'
+
+                new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower(), layer_total_features_count))
+                new_layer_variables["exploring"] = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
+                new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
+    
+                
+                for key_group in ("infos", "exploring", "filtering"):
+                    for key in new_layer_variables[key_group]:
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                        value_typped, type_returned = self.return_typped_value(new_layer_variables[key_group][key], 'save')
+                        if type_returned in (list, dict):
+                            value_typped = json.dumps(value_typped)
+                        QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+
                 layer_variables["infos"] = new_layer_variables["infos"]
+                layer_variables["exploring"] = new_layer_variables["exploring"]
+                layer_variables["filtering"] = new_layer_variables["filtering"]  
 
-            layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"], "featureIterator": layer_features_source}
+            
+            if self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"] == 0:
+                properties_count = len(layer_variables["infos"]) + len(layer_variables["exploring"]) + len(layer_variables["filtering"])
+                self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"] = properties_count
+                with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+                    outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+
+            layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}
             layer_props["infos"]["layer_id"] = layer.id()
 
-            if layer_provider_type == 'postgresql':
+            self.insert_properties_to_spatialite(layer.id(), layer_props)
+
+            if layer_props["infos"]["layer_provider_type"] == 'postgresql':
                 self.create_spatial_index_for_postgresql_layer(layer, layer_props)
                 
             else:
                 self.create_spatial_index_for_layer(layer)
                 
             if layer.id() not in self.project_layers.keys():
+                layer_props["featureIterator"] = layer_features_source
                 self.project_layers[layer.id()] = layer_props
 
             return True
@@ -1476,6 +1502,56 @@ class LayersManagementEngineTask(QgsTask):
                     return False
 
         return True
+
+    def select_properties_from_spatialite(self, layer_id):
+
+        results = []
+        
+        conn = spatialite_connect(self.db_file_path)
+        cur = conn.cursor()
+
+        cur.execute("""SELECT meta_type, meta_key, meta_value FROM fm_project_layers_properties  
+                        WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
+                                                                                            project_id=self.project_uuid,
+                                                                                            layer_id=layer_id                    
+                                                                                            )
+        )
+        results = cur.fetchall()   
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return results
+    
+
+    def insert_properties_to_spatialite(self, layer_id, layer_props):
+
+        conn = spatialite_connect(self.db_file_path)
+        cur = conn.cursor()
+
+        for key_group in layer_props:
+            for key in layer_props[key_group]:
+
+                value_typped, type_returned = self.return_typped_value(layer_props[key_group][key], 'save')
+                if type_returned in (list, dict):
+                    value_typped = json.dumps(value_typped)
+        
+                cur.execute("""INSERT INTO fm_project_layers_properties 
+                                VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                                                                                                                        id=uuid.uuid4(),
+                                                                                                                                        project_id=self.project_uuid,
+                                                                                                                                        layer_id=layer_id,
+                                                                                                                                        meta_type=key_group,
+                                                                                                                                        meta_key=key,
+                                                                                                                                        meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                                                                                                                        )
+                )
+                conn.commit()
+  
+        cur.close()
+        conn.close()
+
 
 
     def can_cast(self, dest_type, source_value):
