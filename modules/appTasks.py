@@ -1154,16 +1154,16 @@ class LayersManagementEngineTask(QgsTask):
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
             spatialite_results = self.select_properties_from_spatialite(layer.id())
-            if len(spatialite_results) == self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"]:
+            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"]:
                 existing_layer_variables = {}
                 for key in ("infos", "exploring", "filtering"):
                     existing_layer_variables[key] = {}
                 for property in spatialite_results:
 
                     if property[0] in existing_layer_variables:
-                        value_typped, type_returned = self.return_typped_value(property[2], 'load')
-                        existing_layer_variables[property[0]][property[1]] = value_typped.replace("\'\'", "\'") if type_returned in (str, dict, list) else value_typped
-                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                        value_typped, type_returned = self.return_typped_value(property[2].replace("\'\'", "\'"), 'load')
+                        existing_layer_variables[property[0]][property[1]] = value_typped
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=property[0], key=property[1])
                         QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
 
                 layer_variables["infos"] = existing_layer_variables["infos"]
@@ -1582,7 +1582,10 @@ class LayersManagementEngineTask(QgsTask):
                 value_typped = list(json.loads(value_as_string))
             type_returned = list
         elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
-            value_typped = bool(value_as_string)
+            if str(value_as_string).upper() == 'FALSE':
+                value_typped = False
+            elif str(value_as_string).upper() == 'TRUE':
+                value_typped = True
             type_returned = bool
         elif self.can_cast(float, value_as_string) is True and len(str(value_as_string).split('.')) > 1:
             value_typped = float(value_as_string)
