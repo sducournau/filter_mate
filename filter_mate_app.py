@@ -644,8 +644,11 @@ class FilterMateApp:
 
         if self.dockwidget != None:
 
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
+
             if task_name in ("add_layers","remove_layers","remove_all_layers"):
-                if task_name == 'remove_layers':
+                if task_name == 'add_layers':
                     for layer_key in self.PROJECT_LAYERS.keys():
                         if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
                             try:
@@ -653,8 +656,26 @@ class FilterMateApp:
                             except:
                                 pass
 
+                else:                    
+                    for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
+                        if layer_key not in self.PROJECT_LAYERS.keys():
+                            cur.execute("""DELETE FROM fm_project_layers_properties 
+                                            WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
+                                                                                                                project_id=self.project_uuid,
+                                                                                                                layer_id=layer_key
+                                                                                                                )
+                            )
+                            conn.commit()
+                            try:
+                                self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+                            except:
+                                pass          
+                
+
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
-        
+
+            cur.close()
+            conn.close()
 
     def can_cast(self, dest_type, source_value):
         try:

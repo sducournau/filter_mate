@@ -1154,7 +1154,7 @@ class LayersManagementEngineTask(QgsTask):
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
             spatialite_results = self.select_properties_from_spatialite(layer.id())
-            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"]:
+            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"]:
                 existing_layer_variables = {}
                 for key in ("infos", "exploring", "filtering"):
                     existing_layer_variables[key] = {}
@@ -1240,9 +1240,9 @@ class LayersManagementEngineTask(QgsTask):
                 layer_variables["filtering"] = new_layer_variables["filtering"]  
 
             
-            if self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"] == 0:
+            if self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"] == 0:
                 properties_count = len(layer_variables["infos"]) + len(layer_variables["exploring"]) + len(layer_variables["filtering"])
-                self.CONFIG_DATA["APP"]["LAYER_PROPERTIES_COUNT"] = properties_count
+                self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"] = properties_count
                 with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
                     outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
 
