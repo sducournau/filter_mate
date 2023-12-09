@@ -88,7 +88,7 @@
             "has_zip_to_export": false,
             "zip_to_export": ""
         },
-        "LAYER_PROPERTIES_COUNT": 0,
+        "LAYER_PROPERTIES_COUNT": 32,
         "FILTER": {
             "feature_count_limit": 10000
         }

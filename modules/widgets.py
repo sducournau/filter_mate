@@ -54,7 +54,8 @@ class PopulateListEngineTask(QgsTask):
             print(self.exception)
             return False
 
-        
+    def get_task_action_and_layer(self):
+        return self.action, self.layer
     
     def buildFeaturesList(self):
 
@@ -118,8 +119,9 @@ class PopulateListEngineTask(QgsTask):
                             features_list.append(arr)
                             self.setProgress((index/total_count)*100)
 
+        nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
         self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
-        self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression()
+        self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
 
 
     def loadFeaturesList(self, custom_list=None, new_list=True, has_limit=True):
@@ -701,12 +703,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
     def build_task(self, description, action, silent_flag=False):
 
-        all_active_tasks = QgsApplication.taskManager().activeTasks()
-        if len(all_active_tasks) > 0:
-            filtered_active_tasks = [k for k, v in self.tasks.items() if k == action and v == self.layer.id()]
-            for filtered_active_task in filtered_active_tasks:
-                filtered_active_task.cancel()
-       
+        # for key in self.tasks[action].keys():
+        #     if key == self.layer.id():
+        #         if isinstance(self.tasks[action][key], QgsTask):
+        #             self.tasks[action][key].cancel()
+  
         self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
         self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
 
@@ -719,7 +720,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def launch_task(self, action):
-        
+
         self.tasks[action][self.layer.id()].taskCompleted.connect(self.connect_filter_lineEdit)
         QgsApplication.taskManager().addTask(self.tasks[action][self.layer.id()])
 
@@ -831,8 +832,8 @@ class ListWidgetWrapper(QListWidget):
     def getFeaturesListCount(self):
         return self.features_list_count
     
-    def sortFeaturesListByDisplayExpression(self):
-        self.features_list.sort(key=lambda k: k[0])
+    def sortFeaturesListByDisplayExpression(self, nonSubset_features_list=[]):
+        self.features_list.sort(key=lambda k: (k[1] not in nonSubset_features_list, k[0]))
 
 
 class QgsCheckableComboBoxLayer(QComboBox):

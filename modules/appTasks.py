@@ -636,7 +636,7 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql') or (param_old_subset != '' and self.param_other_layers_combine_operator != ''):
+        if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql'):
             
             layer.setSubsetString('')
 
@@ -1243,8 +1243,7 @@ class LayersManagementEngineTask(QgsTask):
             if self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"] == 0:
                 properties_count = len(layer_variables["infos"]) + len(layer_variables["exploring"]) + len(layer_variables["filtering"])
                 self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"] = properties_count
-                with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
-                    outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+
 
             layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}
             layer_props["infos"]["layer_id"] = layer.id()
@@ -1349,6 +1348,14 @@ class LayersManagementEngineTask(QgsTask):
                 sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
                                                                                                                                                                                     table=table,
                                                                                                                                                                                     primary_key_name=primary_key_name)
+                sql_statement = sql_statement + 'CLUSTER "{schema}"."{table}" USING {schema}_{table}_{geometry_field}_idx;'.format(schema=schema,
+                                                                                                                                    table=table,
+                                                                                                                                    geometry_field=geometry_field)
+                
+                sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
+                                                                                        table=table)
+
+
 
                 with connection.cursor() as cursor:
                     cursor.execute(sql_statement)

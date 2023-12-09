@@ -57,6 +57,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     resettingLayerVariable = pyqtSignal(QgsVectorLayer, list)
     resettingLayerVariableOnError = pyqtSignal(QgsVectorLayer, list)
 
+    settingProjectVariables = pyqtSignal()
+
     def __init__(self, project_layers, plugin_dir, config_data, project, parent=None):
         """Constructor."""
         super(FilterMateDockWidget, self).__init__(parent)
@@ -1639,8 +1641,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     widget_path = ["QGIS","LAYER_TREE_VIEW"]
                     self.manageSignal(widget_path, 'disconnect')
 
-
-
+                
+                self.exploring_groupbox_changed("custom_selection")
                 self.current_buffer_property_has_been_init = False
                 self.current_layer_all_features = None
 
@@ -1712,6 +1714,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     self.manageSignal(widget_path, 'connect')
                     
                 self.exploring_link_widgets()
+                
         except:
             pass
 
@@ -1780,8 +1783,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if flag_value_changed is True:
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
-                self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
-                # self.reload_configuration_model()
+                self.CONFIG_DATA['CURRENT_PROJECT']['EXPORT'] = self.project_props['exporting']
+                self.setProjectVariablesEvent()
 
 
     def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
@@ -2329,6 +2332,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             self.settingLayerVariable.emit(layer, properties)
 
+
     def resetLayerVariableOnErrorEvent(self, layer, properties=[]):
 
 
@@ -2346,6 +2350,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 layer = self.current_layer
            
             self.resettingLayerVariable.emit(layer, properties)
+
+    def setProjectVariablesEvent(self):
+        if self.widgets_initialized is True:
+
+            self.settingProjectVariables.emit()
 
     def getProjectLayersEvent(self, event):
 

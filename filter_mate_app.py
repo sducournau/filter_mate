@@ -105,7 +105,8 @@ class FilterMateApp:
         self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
         self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
-        
+        self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
+        self.PROJECT.fileNameChanged.connect(lambda name: self.save_project_variables(name))
         
 
         
@@ -304,12 +305,9 @@ class FilterMateApp:
             self.apply_subset_filter(task_name, source_layer)
 
 
-            source_layer.reload()
+            #source_layer.reload()
             source_layer.updateExtents()
             source_layer.triggerRepaint()
-
-            if self.PROJECT_LAYERS[source_layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
-                self.create_spatial_index_for_layer(source_layer)
 
             # self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
             
@@ -323,14 +321,9 @@ class FilterMateApp:
 
                             self.apply_subset_filter(task_name, layer)
 
-                            layer.reload()
+                            #layer.reload()
                             layer.updateExtents()
                             layer.triggerRepaint()
-
-                            
-
-                            if self.PROJECT_LAYERS[layer.id()]["infos"]["layer_provider_type"] != 'postgresql':
-                                self.create_spatial_index_for_layer(layer)
 
                             # self.save_variables_from_layer(layer,[("infos","is_already_subset")])
 
@@ -338,7 +331,7 @@ class FilterMateApp:
             self.iface.mapCanvas().refresh()
          
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
-
+        print('all layers reshreshed')
 
         if task_name == 'filter' or task_name == 'unfilter':
             features_iterator = source_layer.getFeatures()
@@ -351,6 +344,7 @@ class FilterMateApp:
                     features.append(feature)
                 except StopIteration:
                     done_looping = True
+            print('zooming')
             self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
         
 
@@ -388,6 +382,47 @@ class FilterMateApp:
 
         cur.close()
         conn.close()
+
+
+        layer_props = self.PROJECT_LAYERS[layer.id()]
+        schema = layer_props["infos"]["layer_schema"]
+        table = layer_props["infos"]["layer_name"]
+        geometry_field = layer_props["infos"]["geometry_field"]
+        primary_key_name = layer_props["infos"]["primary_key_name"]
+
+
+        source_uri = QgsDataSourceUri(layer.source())
+        authcfg_id = source_uri.param('authcfg')
+        host = source_uri.host()
+        port = source_uri.port()
+        dbname = source_uri.database()
+        username = source_uri.username()
+        password = source_uri.password()
+        ssl_mode = source_uri.sslMode()
+
+        if authcfg_id != "":
+            authConfig = QgsAuthMethodConfig()
+            if authcfg_id in QgsApplication.authManager().configIds():
+                QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
+                username = authConfig.config("username")
+                password = authConfig.config("password")
+
+        if password != None and len(password) > 0:
+            if ssl_mode != None and len(ssl_mode) > 0:
+                connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=ssl_mode)
+            else:
+                connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+        else:
+            return False
+        
+        sql_statement =  'CLUSTER "{schema}"."{table}";'.format(schema=schema,
+                                                                table=table)
+
+        sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
+                                                                                table=table)
+        
+        with connection.cursor() as cursor:
+            cursor.execute(sql_statement)
 
 
     def save_variables_from_layer(self, layer, layer_properties=[]):
@@ -491,6 +526,9 @@ class FilterMateApp:
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
 
+            cur.close()
+            conn.close()
+
       
 
     def create_spatial_index_for_layer(self, layer):    
@@ -579,7 +617,7 @@ class FilterMateApp:
                                                                                                                                                                     project_id=self.project_uuid,
                                                                                                                                                                     project_name=self.project_file_name,
                                                                                                                                                                     project_path=self.project_file_path,
-                                                                                                                                                                    project_settings=project_settings.replace("\'","\'\'")
+                                                                                                                                                                    project_settings=json.dumps(project_settings).replace("\'","\'\'")
                                                                                                                                                                     )
                 )
 
@@ -602,8 +640,8 @@ class FilterMateApp:
 
                 if len(results) == 1:
                     result = results[0]
-                    project_settings = result[-1]
-                    self.project_uuid = result[0].replace("\'\'", "\'")
+                    project_settings = result[-1].replace("\'\'", "\'")
+                    self.project_uuid = result[0]
                     self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
                     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
 
@@ -618,11 +656,11 @@ class FilterMateApp:
 
                 else:
                     self.project_uuid = uuid.uuid4()
-                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{projects_settings}');""".format(
+                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
                                                                                                                                                                         project_id=self.project_uuid,
                                                                                                                                                                         project_name=self.project_file_name,
                                                                                                                                                                         project_path=self.project_file_path,
-                                                                                                                                                                        projects_settings=project_settings.replace("\'","\'\'")
+                                                                                                                                                                        project_settings=json.dumps(project_settings).replace("\'","\'\'")
                                                                                                                                                                         )
                     )
                     QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
@@ -633,8 +671,38 @@ class FilterMateApp:
             conn.close()
 
             
+    def save_project_variables(self, name=None):
 
+        if self.dockwidget != None:
 
+            self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
+
+            if name != None:
+                self.project_file_name = name
+                self.project_file_path = self.PROJECT.absolutePath()    
+
+            project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]    
+
+            cur.execute("""UPDATE fm_projects SET 
+                        _updated_at = datetime(),
+                        project_name = '{project_name}',
+                        project_path = '{project_path}',
+                        project_settings = '{project_settings}'
+                        WHERE project_id = '{project_id}';""".format(
+                                                                    project_name=self.project_file_name,
+                                                                    project_path=self.project_file_path,
+                                                                    project_settings=json.dumps(project_settings).replace("\'","\'\'"),
+                                                                    project_id=self.project_uuid
+                                                                    )
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+                outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
 
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
@@ -671,7 +739,7 @@ class FilterMateApp:
                             except:
                                 pass          
                 
-
+                self.save_project_variables()                    
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
             cur.close()
