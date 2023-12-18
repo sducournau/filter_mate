@@ -1,6 +1,7 @@
 from qgis.core import QgsApplication, QgsProject, QgsUserProfileManager, QgsUserProfile
-import os
+import os, sys
 import json
+
 
 def merge(a, b, path=None):
     "merges b into a"
@@ -18,10 +19,16 @@ def merge(a, b, path=None):
 
 PROJECT = QgsProject.instance()
 
+PLATFORM = sys.platform
+
+
 DIR_CONFIG = os.path.normpath(os.path.dirname(__file__))
 PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
 if PATH_ABSOLUTE_PROJECT =='./':
-    PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+    if PLATFORM.startswith('win'):
+        PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+    else:
+        PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.environ['HOME'])
 
 CONFIG_DATA = None
 

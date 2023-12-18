@@ -173,7 +173,7 @@ class FilterMateApp:
             self.appTasks[task_name] = LayersManagementEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
 
             if task_name == "add_layers":
-                self.appTasks[task_name].setDependentLayers([layer_tuple[0] for layer_tuple in task_parameters["task"]["layers"]])
+                self.appTasks[task_name].setDependentLayers([layer for layer in task_parameters["task"]["layers"]])
                 self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
                 self.appTasks[task_name].begun.connect(self.dockwidget.on_remove_layer_task_begun)
@@ -261,25 +261,25 @@ class FilterMateApp:
                     if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
                         reset_all_layers_variables_flag = True
 
-                    for layer in layers:
-                        layer_total_features_count = None
-                        layer_features_source = 0
+                    # for layer in layers:
+                    #     layer_total_features_count = None
+                    #     layer_features_source = 0
 
-                        subset_string_init = layer.subsetString()
-                        if subset_string_init != '':
-                            layer.setSubsetString('')
+                    #     subset_string_init = layer.subsetString()
+                    #     if subset_string_init != '':
+                    #         layer.setSubsetString('')
 
-                        data_provider_layer = layer.dataProvider()
-                        if data_provider_layer:
-                            layer_total_features_count = data_provider_layer.featureCount()
-                            layer_features_source = data_provider_layer.featureSource()
+                    #     data_provider_layer = layer.dataProvider()
+                    #     if data_provider_layer:
+                    #         layer_total_features_count = data_provider_layer.featureCount()
+                    #         layer_features_source = data_provider_layer.featureSource()
 
-                        if subset_string_init != '':
-                            layer.setSubsetString(subset_string_init)
+                    #     if subset_string_init != '':
+                    #         layer.setSubsetString(subset_string_init)
                         
-                        new_layers.append((layer, layer_features_source, layer_total_features_count))
+                    #     new_layers.append((layer, layer_features_source, layer_total_features_count))
 
-                    task_parameters["task"] = {"layers": new_layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag,
+                    task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag,
                                                "config_data": self.CONFIG_DATA, "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                     return task_parameters
 
@@ -302,14 +302,18 @@ class FilterMateApp:
         if task_name in ('filter','unfilter','reset'):
 
 
-            self.apply_subset_filter(task_name, source_layer)
+
+            if source_layer.subsetString() != '':
+                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = True
+            else:
+                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = False
 
 
-            #source_layer.reload()
-            source_layer.updateExtents()
-            source_layer.triggerRepaint()
+            # source_layer.reload()
+            # source_layer.updateExtents()
+            # source_layer.triggerRepaint()
 
-            # self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
+            self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
             
             
             if task_parameters["filtering"]["has_layers_to_filter"] == True:
@@ -319,13 +323,16 @@ class FilterMateApp:
                         if len(layers) == 1:
                             layer = layers[0]
 
-                            self.apply_subset_filter(task_name, layer)
+                            if layer.subsetString() != '':
+                                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+                            else:
+                                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
 
-                            #layer.reload()
-                            layer.updateExtents()
-                            layer.triggerRepaint()
+                            # layer.reload()
+                            # layer.updateExtents()
+                            # layer.triggerRepaint()
 
-                            # self.save_variables_from_layer(layer,[("infos","is_already_subset")])
+                            self.save_variables_from_layer(layer,[("infos","is_already_subset")])
 
             self.iface.mapCanvas().refreshAllLayers()
             self.iface.mapCanvas().refresh()
@@ -333,19 +340,9 @@ class FilterMateApp:
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
         print('all layers reshreshed')
 
-        if task_name == 'filter' or task_name == 'unfilter':
-            features_iterator = source_layer.getFeatures()
-            done_looping = False
-            features = []
 
-            while not done_looping:
-                try:
-                    feature = next(features_iterator)
-                    features.append(feature)
-                except StopIteration:
-                    done_looping = True
-            print('zooming')
-            self.dockwidget.exploring_zoom_clicked(features if len(features) > 0 else None)
+        self.iface.mapCanvas().zoomToFullExtent()
+
         
 
     def apply_subset_filter(self, task_name, layer):
@@ -384,45 +381,46 @@ class FilterMateApp:
         conn.close()
 
 
-        layer_props = self.PROJECT_LAYERS[layer.id()]
-        schema = layer_props["infos"]["layer_schema"]
-        table = layer_props["infos"]["layer_name"]
-        geometry_field = layer_props["infos"]["geometry_field"]
-        primary_key_name = layer_props["infos"]["primary_key_name"]
+        # layer_props = self.PROJECT_LAYERS[layer.id()]
+        # schema = layer_props["infos"]["layer_schema"]
+        # table = layer_props["infos"]["layer_name"]
+        # geometry_field = layer_props["infos"]["geometry_field"]
+        # primary_key_name = layer_props["infos"]["primary_key_name"]
 
 
-        source_uri = QgsDataSourceUri(layer.source())
-        authcfg_id = source_uri.param('authcfg')
-        host = source_uri.host()
-        port = source_uri.port()
-        dbname = source_uri.database()
-        username = source_uri.username()
-        password = source_uri.password()
-        ssl_mode = source_uri.sslMode()
+        # source_uri = QgsDataSourceUri(layer.source())
+        # authcfg_id = source_uri.param('authcfg')
+        # host = source_uri.host()
+        # port = source_uri.port()
+        # dbname = source_uri.database()
+        # username = source_uri.username()
+        # password = source_uri.password()
+        # ssl_mode = source_uri.sslMode()
 
-        if authcfg_id != "":
-            authConfig = QgsAuthMethodConfig()
-            if authcfg_id in QgsApplication.authManager().configIds():
-                QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
-                username = authConfig.config("username")
-                password = authConfig.config("password")
+        # if authcfg_id != "":
+        #     authConfig = QgsAuthMethodConfig()
+        #     if authcfg_id in QgsApplication.authManager().configIds():
+        #         QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
+        #         username = authConfig.config("username")
+        #         password = authConfig.config("password")
 
-        if password != None and len(password) > 0:
-            if ssl_mode != None and len(ssl_mode) > 0:
-                connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=ssl_mode)
-            else:
-                connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
-        else:
-            return False
+        # if password != None and len(password) > 0:
+        #     if ssl_mode != None:
+        #         connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
+        #     else:
+        #         connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+        # else:
+        #     return False
         
-        sql_statement =  'CLUSTER "{schema}"."{table}";'.format(schema=schema,
-                                                                table=table)
+        # sql_statement =  'CLUSTER "{schema}"."{table}" USING {schema}_{table}_{geometry_field}_idx;'.format(schema=schema,
+        #                                                                                                     table=table,
+        #                                                                                                     geometry_field=geometry_field)
 
-        sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
-                                                                                table=table)
+        # sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
+        #                                                                         table=table)
         
-        with connection.cursor() as cursor:
-            cursor.execute(sql_statement)
+        # with connection.cursor() as cursor:
+        #     cursor.execute(sql_statement)
 
 
     def save_variables_from_layer(self, layer, layer_properties=[]):
@@ -545,7 +543,7 @@ class FilterMateApp:
 
             self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
             self.project_file_path = self.PROJECT.absolutePath()
-            project_settings = json.dumps(self.CONFIG_DATA["CURRENT_PROJECT"])
+            
 
             print(self.db_file_path)
 
@@ -558,6 +556,8 @@ class FilterMateApp:
                 except OSError as error: 
                     print(error)
             
+            project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]
+
             if not os.path.exists(self.db_file_path):
                 memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
                 layer_name = 'filterMate_db'
@@ -572,7 +572,7 @@ class FilterMateApp:
                 cur.execute("""PRAGMA foreign_keys = ON;""")
                 cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
                                                                                                                                 plugin_name='FilterMate',
-                                                                                                                                version='1.4'
+                                                                                                                                version='1.6'
                                                                                                                                 )
                 )
 
