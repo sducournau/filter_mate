@@ -25,7 +25,6 @@ class PopulateListEngineTask(QgsTask):
 
         self.silent_flag = silent_flag
         self.layer = self.parent.layer
-        self.layer_features_source = self.parent.list_widgets[self.layer.id()].getLayerFeaturesSoure()
         self.identifier_field_name = self.parent.list_widgets[self.layer.id()].getIdentifierFieldName()
         self.display_expression = self.parent.list_widgets[self.layer.id()].getDisplayExpression()
         self.is_field_flag = self.parent.list_widgets[self.layer.id()].getExpressionFieldFlag()
@@ -57,19 +56,100 @@ class PopulateListEngineTask(QgsTask):
     def get_task_action_and_layer(self):
         return self.action, self.layer
     
-    def buildFeaturesList(self):
+    def buildFeaturesList(self, has_limit=True, filter_txt_splitted=None):
 
         features_list = []
-        
-        
-        if self.parent.list_widgets[self.layer.id()].getFilterExpression() != '':
-            filter_expression = self.parent.list_widgets[self.layer.id()].getFilterExpression()
-            if QgsExpression(filter_expression).isValid():
 
-                total_count = sum(1 for _ in self.parent.list_widgets[self.layer.id()].getFeatures(QgsFeatureRequest(QgsExpression(filter_expression))))
+        limit = 0
+        layer_features_source = None
+        total_features_list_count = 0
+        filter_expression_request = QgsFeatureRequest()
+
+        subset_string_init = self.layer.subsetString()
+        if subset_string_init != '':
+            self.layer.setSubsetString('')
+
+        data_provider_layer = self.layer.dataProvider()
+        if data_provider_layer:
+            total_features_list_count = data_provider_layer.featureCount()
+            layer_features_source = data_provider_layer.featureSource()
+
+        if subset_string_init != '':
+            self.layer.setSubsetString(subset_string_init)
+
+        if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
+            self.parent.list_widgets[self.layer.id()].setTotalFeaturesListCount(total_features_list_count)
+
+        if layer_features_source != None and has_limit is True:
+            limit = self.parent.list_widgets[self.layer.id()].getLimit()
+            
+        
+        if layer_features_source != None:
+            if self.parent.list_widgets[self.layer.id()].getFilterExpression() != '':
+                filter_expression = self.parent.list_widgets[self.layer.id()].getFilterExpression()
+                if QgsExpression(filter_expression).isValid():
+
+                    if filter_txt_splitted != None:
+                        filter_txt_splitted_final = []
+                        for filter_txt in filter_txt_splitted:
+                            filter_txt_splitted_final.append("""{display_expression} *~ '{filter_txt}'""".format(display_expression=self.display_expression,
+                                                                                                                filter_txt=filter_txt.replace('é','?').replace('è','?').replace('â','?').replace('ô','?')))
+                                              
+                        filter_txt_string_final = ' OR '.join(filter_txt_splitted_final)
+                        filter_expression = filter_expression + ' AND ( {filter_txt_string_final} )'.format(filter_txt_string_final=filter_txt_string_final)
+                        filter_expression_request = QgsFeatureRequest(QgsExpression(filter_expression))
+                    else: 
+                        filter_expression_request = QgsFeatureRequest(QgsExpression(filter_expression))
+
+                    if limit > 0:
+                        filter_expression_request.setLimit(limit)
+
+                    total_count = sum(1 for _ in layer_features_source.getFeatures(filter_expression_request))
+
+                    if self.is_field_flag is True:
+                        for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                            arr = [feature[self.display_expression], feature[self.identifier_field_name]]
+                            features_list.append(arr)
+                            self.setProgress((index/total_count)*100)
+                    else:
+                        display_expression = QgsExpression(self.display_expression)
+
+                        if display_expression.isValid():
+                            
+                            context = QgsExpressionContext()
+                            scope = QgsExpressionContextScope()
+                            context.appendScope(scope)
+
+
+                            for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                                scope.setFeature(feature)
+                                result = display_expression.evaluate(context)
+                                if result:
+                                    arr = [result, feature[self.identifier_field_name]]
+                                    features_list.append(arr)
+                                    self.setProgress((index/total_count)*100)
+
+
+            
+            else:
+
+                if filter_txt_splitted != None:
+                    filter_txt_splitted_final = []
+                    for filter_txt in filter_txt_splitted:
+                        filter_txt_splitted_final.append("""{display_expression} *~ '{filter_txt}'""".format(display_expression=self.display_expression,
+                                                                                                            filter_txt=filter_txt.replace('é','?').replace('è','?').replace('â','?').replace('ô','?')))
+                                            
+                    filter_txt_string_final = ' OR '.join(filter_txt_splitted_final)
+                    filter_expression_request = QgsFeatureRequest(QgsExpression(filter_txt_string_final))
+
+                if limit > 0:
+                    filter_expression_request.setLimit(limit)
+
+                    
+                total_count = sum(1 for _ in layer_features_source.getFeatures(filter_expression_request))
 
                 if self.is_field_flag is True:
-                    for index, feature in enumerate(self.layer_features_source.getFeatures(QgsFeatureRequest(QgsExpression(filter_expression)))):
+                    for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                         arr = [feature[self.display_expression], feature[self.identifier_field_name]]
                         features_list.append(arr)
                         self.setProgress((index/total_count)*100)
@@ -83,7 +163,7 @@ class PopulateListEngineTask(QgsTask):
                         context.appendScope(scope)
 
 
-                        for index, feature in enumerate(self.layer_features_source.getFeatures(QgsFeatureRequest(QgsExpression(filter_expression)))):
+                        for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                             scope.setFeature(feature)
                             result = display_expression.evaluate(context)
                             if result:
@@ -91,130 +171,64 @@ class PopulateListEngineTask(QgsTask):
                                 features_list.append(arr)
                                 self.setProgress((index/total_count)*100)
 
-
-        
-        else:
-            total_count = self.parent.list_widgets[self.layer.id()].getFeaturesListCount()
-
-            if self.is_field_flag is True:
-                for index, feature in enumerate(self.layer_features_source.getFeatures()):
-                    arr = [feature[self.display_expression], feature[self.identifier_field_name]]
-                    features_list.append(arr)
-                    self.setProgress((index/total_count)*100)
-            else:
-                display_expression = QgsExpression(self.display_expression)
-
-                if display_expression.isValid():
-                    
-                    context = QgsExpressionContext()
-                    scope = QgsExpressionContextScope()
-                    context.appendScope(scope)
+            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+            self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
 
 
-                    for index, feature in enumerate(self.layer_features_source.getFeatures()):
-                        scope.setFeature(feature)
-                        result = display_expression.evaluate(context)
-                        if result:
-                            arr = [result, feature[self.identifier_field_name]]
-                            features_list.append(arr)
-                            self.setProgress((index/total_count)*100)
-
-        nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-        self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
-        self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
-
-
-    def loadFeaturesList(self, custom_list=None, new_list=True, has_limit=True):
+    def loadFeaturesList(self, new_list=True):
         current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[self.layer.id()].getSelectedFeaturesList()]
         nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
         
         if new_list is True:
             self.parent.list_widgets[self.layer.id()].clear()
 
-        if custom_list == None:
-            list_to_load = self.parent.list_widgets[self.layer.id()].getFeaturesList()
-        else:
-            list_to_load = custom_list
 
-        if has_limit is True:
-            limit = self.parent.list_widgets[self.layer.id()].getLimit()
-            list_to_load = list_to_load[:limit]
-            total_count = len(list_to_load)
-            for index, it in enumerate(list_to_load):
-                lwi = QListWidgetItem(str(it[0]))
-                lwi.setData(0,str(it[0]))
-                lwi.setData(3,it[1])
-                lwi.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-                if it[1] in current_selected_features_list:
-                    lwi.setCheckState(Qt.Checked)
-                    if it[1] in nonSubset_features_list:
-                        lwi.setData(6,self.parent.font_by_state['checked'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
-                        lwi.setData(4,"True")
-                    else:
-                        lwi.setData(6,self.parent.font_by_state['checkedFiltered'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['checkedFiltered'][1]))
-                        lwi.setData(4,"False")
+        list_to_load = self.parent.list_widgets[self.layer.id()].getFeaturesList()
+
+        total_count = len(list_to_load)
+        for index, it in enumerate(list_to_load):
+            lwi = QListWidgetItem(str(it[0]))
+            lwi.setData(0,str(it[0]))
+            lwi.setData(3,it[1])
+            lwi.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            if it[1] in current_selected_features_list:
+                lwi.setCheckState(Qt.Checked)
+                if it[1] in nonSubset_features_list:
+                    lwi.setData(6,self.parent.font_by_state['checked'][0])
+                    lwi.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
+                    lwi.setData(4,"True")
                 else:
-                    lwi.setCheckState(Qt.Unchecked)
-                    if it[1] in nonSubset_features_list:
-                        lwi.setData(6,self.parent.font_by_state['unChecked'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['unChecked'][1]))
-                        lwi.setData(4,"True")
-                    else:
-                        lwi.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
-                        lwi.setData(4,"False")
-                self.parent.list_widgets[self.layer.id()].addItem(lwi)
-                self.setProgress((index/total_count)*100)
-        
-        else:
-            total_count = len(list_to_load)
-            for index, it in enumerate(list_to_load):
-                lwi = QListWidgetItem(str(it[0]))
-                lwi.setData(0,str(it[0]))
-                lwi.setData(3,it[1])
-                lwi.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-                if it[1] in current_selected_features_list:
-                    lwi.setCheckState(Qt.Checked)
-                    if it[1] in nonSubset_features_list:
-                        lwi.setData(6,self.parent.font_by_state['checked'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
-                        lwi.setData(4,"True")
-                    else:
-                        lwi.setData(6,self.parent.font_by_state['checkedFiltered'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['checkedFiltered'][1]))
-                        lwi.setData(4,"False")
+                    lwi.setData(6,self.parent.font_by_state['checkedFiltered'][0])
+                    lwi.setData(9,QBrush(self.parent.font_by_state['checkedFiltered'][1]))
+                    lwi.setData(4,"False")
+            else:
+                lwi.setCheckState(Qt.Unchecked)
+                if it[1] in nonSubset_features_list:
+                    lwi.setData(6,self.parent.font_by_state['unChecked'][0])
+                    lwi.setData(9,QBrush(self.parent.font_by_state['unChecked'][1]))
+                    lwi.setData(4,"True")
                 else:
-                    lwi.setCheckState(Qt.Unchecked)
-                    if it[1] in nonSubset_features_list:
-                        lwi.setData(6,self.parent.font_by_state['unChecked'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['unChecked'][1]))
-                        lwi.setData(4,"True")
-                    else:
-                        lwi.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
-                        lwi.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
-                        lwi.setData(4,"False")
-                self.parent.list_widgets[self.layer.id()].addItem(lwi)
-                self.setProgress((index/total_count)*100)
+                    lwi.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
+                    lwi.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
+                    lwi.setData(4,"False")
+            self.parent.list_widgets[self.layer.id()].addItem(lwi)
+            self.setProgress((index/total_count)*100)
+
 
         self.updateFeatures()
 
             
     def filterFeatures(self):
         total_count = self.parent.list_widgets[self.layer.id()].count()
-        filter_txt_splitted = self.parent.filter_txt.lower().strip().replace('é','e').replace('è','e').replace('â','a').replace('ô','o').split(" ")
+        filter_txt_splitted = self.parent.filter_txt.lower().strip().split(" ")
 
-        if self.parent.list_widgets[self.layer.id()].getFeaturesListCount() != total_count:
-            features_to_load = []
-            for index, feature in enumerate(self.parent.list_widgets[self.layer.id()].getList()):
-                string_value = str(feature[0]).strip().lower().replace('é','e').replace('è','e').replace('â','a').replace('ô','o')
-                if all(x in string_value for x in filter_txt_splitted):
-                    features_to_load.append(feature)
-                self.setProgress((index/total_count)*100)
-            self.loadFeaturesList(features_to_load, True, False)
+        if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() > total_count:
+            self.buildFeaturesList(False, filter_txt_splitted)
+            self.loadFeaturesList(True)
 
         else:
+            filter_txt_splitted = [item.replace('é','e').replace('è','e').replace('â','a').replace('ô','o') for item in filter_txt_splitted]
             for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
                 item = self.parent.list_widgets[self.layer.id()].item(it)
                 string_value = item.text().lower().replace('é','e').replace('è','e').replace('â','a').replace('ô','o')
@@ -610,7 +624,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         try:
             if self.layer != None:
                 if self.layer.id() in self.list_widgets:
-                    if self.list_widgets[self.layer.id()].getFeaturesListCount() == self.list_widgets[self.layer.id()].count():
+                    if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                         try:
                             self.filter_le.editingFinished.disconnect()
                         except:
@@ -671,8 +685,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def add_list_widget(self, layer_props):
-        layer_features_source = layer_props["featureIterator"]
-        self.list_widgets[self.layer.id()] = ListWidgetWrapper(layer_props["infos"]["primary_key_name"], layer_props["infos"]["primary_key_is_numeric"], layer_features_source, self)
+        self.list_widgets[self.layer.id()] = ListWidgetWrapper(layer_props["infos"]["primary_key_name"], layer_props["infos"]["primary_key_is_numeric"], self)
         self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
         self.layout.addWidget(self.list_widgets[self.layer.id()])
 
@@ -737,14 +750,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 class ListWidgetWrapper(QListWidget):
   
-    def __init__(self, identifier_field_name, primary_key_is_numeric, layer_features_source, parent=None):
+    def __init__(self, identifier_field_name, primary_key_is_numeric, parent=None):
 
         super(ListWidgetWrapper, self).__init__(parent)
 
         self.setMinimumHeight(100)
         self.identifier_field_name = identifier_field_name
         self.identifier_field_type_numeric = primary_key_is_numeric
-        self.layer_features_source = layer_features_source
         self.filter_expression = ''
         self.filter_text = ''
         self.display_expression = ''
@@ -755,7 +767,7 @@ class ListWidgetWrapper(QListWidget):
         self.visible_features_list = []
         self.selected_features_list = []
         self.limit = 1000
-        self.features_list_count = sum(1 for _ in self.layer_features_source.getFeatures())
+        self.total_features_list_count = 0
 
     def setFilterExpression(self, filter_expression):
         self.filter_expression = filter_expression
@@ -775,8 +787,8 @@ class ListWidgetWrapper(QListWidget):
     def setSubsetString(self, subset_string):
         self.subset_string = subset_string
 
-    def setLayerFeaturesSoure(self, layer_features_source):
-        self.layer_features_source = layer_features_source
+    def setTotalFeaturesListCount(self, total_features_list_count):
+        self.total_features_list_count = total_features_list_count
 
     def setFeaturesList(self, features_list):
         self.features_list = features_list
@@ -811,8 +823,8 @@ class ListWidgetWrapper(QListWidget):
     def getSubsetString(self):
         return self.subset_string
     
-    def getLayerFeaturesSoure(self):
-        return self.layer_features_source
+    def getTotalFeaturesListCount(self):
+        return self.total_features_list_count
       
     def getFilterExpressionFeaturesIdList(self):
         return self.filter_expression_features_id_list
@@ -828,9 +840,6 @@ class ListWidgetWrapper(QListWidget):
 
     def getLimit(self):
         return self.limit
-
-    def getFeaturesListCount(self):
-        return self.features_list_count
     
     def sortFeaturesListByDisplayExpression(self, nonSubset_features_list=[]):
         self.features_list.sort(key=lambda k: (k[1] not in nonSubset_features_list, k[0]))

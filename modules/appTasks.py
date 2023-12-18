@@ -251,8 +251,9 @@ class FilterEngineTask(QgsTask):
                     
                     # if validation_check[0] is True:
 
-                    result = True
-                    self.manage_layer_subset_strings(self.source_layer, self.expression)
+                    result = self.source_layer.setSubsetString(self.expression)
+                    if result is True:
+                        self.manage_layer_subset_strings(self.source_layer, self.expression)
 
             else:
                 result = True
@@ -280,8 +281,9 @@ class FilterEngineTask(QgsTask):
                 # print(validation_check)
                 # if validation_check[0] is True:
 
-                result = True
-                self.manage_layer_subset_strings(self.source_layer, self.expression)
+                result = self.source_layer.setSubsetString(self.expression)
+                if result is True:
+                    self.manage_layer_subset_strings(self.source_layer, self.expression)
 
         return result
     
@@ -529,16 +531,18 @@ class FilterEngineTask(QgsTask):
             else:
                 param_postgis_sub_expression = postgis_sub_expression_array[0]
 
-            sub_expression = self.param_source_new_subset
+            if QgsExpression(self.expression).isField() is True and self.param_source_old_subset != '':
+                sub_expression = self.param_source_old_subset
+            else:
+                sub_expression = self.expression
 
             if self.has_combine_operator is True:
-
+                
+                
                 index = sub_expression.find('FROM "{source_schema}"."{source_table}"'.format(source_schema=self.param_source_schema,
                                                                                             source_table=self.param_source_table
                                                                                             ))
                 
-                print(self.expression)
-                print(index, sub_expression[index:])
                 
                 results_fields = []
                 sub_expression_results_fields = []
@@ -557,13 +561,23 @@ class FilterEngineTask(QgsTask):
                 if geom_column not in results_fields:
                     results_fields.append(geom_column)
 
-                if len(results_fields) > 1:
-                    sub_expression = '(SELECT ' + ' , '.join(results_fields) + ' ' + sub_expression[index:]
-                else:
-                    sub_expression = '(SELECT {geom_column} '.format(geom_column=geom_column) + ' ' + sub_expression[index:]
+                if len(results_fields) >= 1:
+                    if index > -1:
+                        sub_expression = '(SELECT ' + ' , '.join(results_fields) + ' {sub_expression}'.format(sub_expression=sub_expression[index:])
+                    else:
+                        sub_expression = '(SELECT ' + ' , '.join(results_fields) + ' FROM "{source_schema}"."{source_table}")'.format(source_schema=self.param_source_schema,
+                                                                                                                                        source_table=self.param_source_table
+                                                                                                                                        )
 
                 index = param_old_subset.find('(SELECT')
-                param_old_subset = param_old_subset[index:]
+                if index > -1:
+                    param_old_subset = param_old_subset[index:]
+                else:
+                    index = param_old_subset.find('(')
+                    if index > -1:
+                        param_old_subset[index:]
+
+
 
             if QgsExpression(self.expression).isField() is False:
                 
@@ -597,8 +611,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                 postgis_sub_expression=param_postgis_sub_expression
                                                                                                                                                                                                                 )
                            
-                    with open(PATH_ABSOLUTE_PROJECT + os.sep + 'logs.txt', 'a') as f:
-                        f.write(param_expression)
+
 
                 else:
                     param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression})'.format(
@@ -611,7 +624,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                             )
             if param_old_subset != '' and param_combine_operator != '':
                 
-                param_expression = '"{distant_primary_key_name}" IN (( {param_old_subset} ) {param_combine_operator} {expression})'.format(
+                param_expression = '"{distant_primary_key_name}" IN ( {param_old_subset} {param_combine_operator} {expression} )'.format(
                                                                                                                                         distant_primary_key_name=param_distant_primary_key_name,    
                                                                                                                                         param_old_subset=param_old_subset, 
                                                                                                                                         param_combine_operator=param_combine_operator, 
@@ -623,6 +636,11 @@ class FilterEngineTask(QgsTask):
                                                                                         expression=param_expression
                                                                                         )
 
+            param_expression = param_expression.replace(' " ', ' ')
+            print(param_expression)
+            with open(PATH_ABSOLUTE_PROJECT + os.sep + 'logs.txt', 'a') as f:
+                f.write(param_expression)
+
             # sql_expression = QgsSQLStatement('SELECT * FROM  "{distant_schema}"."{distant_table}" WHERE {expression}'.format(distant_schema=param_distant_schema,
             #                                                                                                                 distant_table=param_distant_table,
             #                                                                                                                 expression=param_expression),
@@ -631,14 +649,16 @@ class FilterEngineTask(QgsTask):
             # print(validation_check)
             # if validation_check[0] is True:
 
-            result = True
-            self.manage_layer_subset_strings(layer, param_expression)
-
+            result = layer.setSubsetString(param_expression)
+            if result is True:
+                self.manage_layer_subset_strings(layer, param_expression)
 
 
         if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql'):
             
-            layer.setSubsetString('')
+
+            if self.has_combine_operator is False or (self.has_combine_operator is True and self.param_other_layers_combine_operator == 'OR'):
+                layer.setSubsetString('')
 
             if param_has_to_reproject_layer:
 
@@ -657,12 +677,14 @@ class FilterEngineTask(QgsTask):
             else:
                 current_layer = layer
 
-            if param_old_subset != '':
-                current_layer.setSubsetString(param_old_subset)
-                current_layer.selectAll()
-                current_layer.setSubsetString('')
+            if self.has_combine_operator is True:
+                if param_old_subset != '':
+                    current_layer.setSubsetString(param_old_subset)
+                    current_layer.selectAll()
+                
 
                 if self.param_other_layers_combine_operator == 'OR':
+                    current_layer.setSubsetString('')
 
                     alg_params_select = {
                         'INPUT': current_layer,
@@ -692,7 +714,18 @@ class FilterEngineTask(QgsTask):
                     }
                     processing.run("qgis:selectbylocation", alg_params_select)
 
+                else:
+
+                    alg_params_select = {
+                        'INPUT': current_layer,
+                        'INTERSECT': self.ogr_source_geom,
+                        'METHOD': 0,
+                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    }
+                    processing.run("qgis:selectbylocation", alg_params_select)
+
             else:
+
                 alg_params_select = {
                         'INPUT': current_layer,
                         'INTERSECT': self.ogr_source_geom,
@@ -721,8 +754,9 @@ class FilterEngineTask(QgsTask):
                 # print(validation_check)
                 # if validation_check[0] is True:
 
-                result = True
-                self.manage_layer_subset_strings(layer, param_expression)
+                result = layer.setSubsetString(param_expression)
+                if result is True:
+                    self.manage_layer_subset_strings(layer, param_expression)
                         
         return result
     
@@ -779,7 +813,8 @@ class FilterEngineTask(QgsTask):
         #                 else:
         #                     result = self.source_layer.setSubsetString(self.expression)
 
-        return result  
+        return result 
+     
 
 
     def execute_unfiltering(self):
@@ -787,12 +822,14 @@ class FilterEngineTask(QgsTask):
         i = 1
 
         self.manage_layer_subset_strings(self.source_layer)
+        self.source_layer.setSubsetString('')
         self.setProgress((i/self.layers_count)*100)
 
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
                 self.manage_layer_subset_strings(layer)
+                layer.setSubsetString('')
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
@@ -804,11 +841,18 @@ class FilterEngineTask(QgsTask):
 
     def execute_reseting(self):
 
-        self.manage_layer_subset_strings(self.source_layer)
+        i = 1
+
+        sql_subset_string = self.manage_layer_subset_strings(self.source_layer)
+        self.source_layer.setSubsetString(sql_subset_string)
+        self.setProgress((i/self.layers_count)*100)
 
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                self.manage_layer_subset_strings(layer)
+                sql_subset_string = self.manage_layer_subset_strings(layer)
+                layer.setSubsetString(sql_subset_string)
+                i += 1
+                self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
                     return False
 
@@ -994,8 +1038,21 @@ class FilterEngineTask(QgsTask):
             )
             conn.commit()
 
+            cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
+                                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                                layer_id=layer.id()
+                                                                                                                                                )
+            )
+
+            results = cur.fetchall()
+            if len(results) == 1:
+                result = results[0]
+                sql_subset_string = result[-1]
+
         cur.close()
         conn.close()
+
+        return sql_subset_string
 
 
 
@@ -1072,7 +1129,7 @@ class LayersManagementEngineTask(QgsTask):
         self.outputs = {}
         self.message = None
 
-        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false, "total_features_count":%s }'
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
 
@@ -1122,15 +1179,13 @@ class LayersManagementEngineTask(QgsTask):
             if self.isCanceled() or result is False:
                 return False
             
-        for layer_obj in self.layers:
+        for layer in self.layers:
             if self.task_action == 'add_layers':
-                if isinstance(layer_obj, tuple) and len(list(layer_obj)) == 3 and isinstance(layer_obj[0], QgsVectorLayer):
-                    layer = layer_obj[0]
+                if isinstance(layer, QgsVectorLayer):
                     if layer.id() not in self.project_layers.keys():
-                        result = self.add_project_layer(layer_obj)
+                        result = self.add_project_layer(layer)
             elif self.task_action == 'remove_layers':
-                if isinstance(layer_obj, QgsVectorLayer):
-                    layer = layer_obj
+                if isinstance(layer, QgsVectorLayer):
                     if layer.id() in self.project_layers.keys():
                         result = self.remove_project_layer(layer)
 
@@ -1142,14 +1197,10 @@ class LayersManagementEngineTask(QgsTask):
         return True
     
 
-    def add_project_layer(self, layer_tuple):
+    def add_project_layer(self, layer):
 
         result = False
         layer_variables = {}
-
-        layer = layer_tuple[0]
-        layer_features_source = layer_tuple[1]
-        layer_total_features_count = layer_tuple[2]
 
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
@@ -1222,7 +1273,7 @@ class LayersManagementEngineTask(QgsTask):
                 elif layer_provider_type == 'ogr':
                     geometry_field = '_ogr_geometry_'
 
-                new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower(), layer_total_features_count))
+                new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
                 new_layer_variables["exploring"] = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
                 new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
     
@@ -1256,10 +1307,7 @@ class LayersManagementEngineTask(QgsTask):
             else:
                 self.create_spatial_index_for_layer(layer)
                 
-            if layer.id() not in self.project_layers.keys():
-                layer_props["featureIterator"] = layer_features_source
-                self.project_layers[layer.id()] = layer_props
-
+            self.project_layers[layer.id()] = layer_props
             return True
 
 
@@ -1267,7 +1315,7 @@ class LayersManagementEngineTask(QgsTask):
 
         if isinstance(layer_id, str):
 
-            self.save_variables_from_layer_id(layer_id)    
+            self.save_variables_from_layer(layer_id)    
             self.save_style_from_layer_id(layer_id)
 
             del self.project_layers[layer_id]
@@ -1309,67 +1357,66 @@ class LayersManagementEngineTask(QgsTask):
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):       
 
-        try:
-            if layer != None or layer_props != None:
 
-                schema = layer_props["infos"]["layer_schema"]
-                table = layer_props["infos"]["layer_name"]
-                geometry_field = layer_props["infos"]["geometry_field"]
-                primary_key_name = layer_props["infos"]["primary_key_name"]
+        if layer != None or layer_props != None:
+
+            schema = layer_props["infos"]["layer_schema"]
+            table = layer_props["infos"]["layer_name"]
+            geometry_field = layer_props["infos"]["geometry_field"]
+            primary_key_name = layer_props["infos"]["primary_key_name"]
 
 
-                source_uri = QgsDataSourceUri(layer.source())
-                authcfg_id = source_uri.param('authcfg')
-                host = source_uri.host()
-                port = source_uri.port()
-                dbname = source_uri.database()
-                username = source_uri.username()
-                password = source_uri.password()
-                ssl_mode = source_uri.sslMode()
+            source_uri = QgsDataSourceUri(layer.source())
+            authcfg_id = source_uri.param('authcfg')
+            host = source_uri.host()
+            port = source_uri.port()
+            dbname = source_uri.database()
+            username = source_uri.username()
+            password = source_uri.password()
+            ssl_mode = source_uri.sslMode()
 
-                if authcfg_id != "":
-                    authConfig = QgsAuthMethodConfig()
-                    if authcfg_id in QgsApplication.authManager().configIds():
-                        QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
-                        username = authConfig.config("username")
-                        password = authConfig.config("password")
+            if authcfg_id != "":
+                authConfig = QgsAuthMethodConfig()
+                if authcfg_id in QgsApplication.authManager().configIds():
+                    QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
+                    username = authConfig.config("username")
+                    password = authConfig.config("password")
 
-                if password != None and len(password) > 0:
-                    if ssl_mode != None and len(ssl_mode) > 0:
-                        connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=ssl_mode)
-                    else:
-                        connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+            if password != None and len(password) > 0:
+                if ssl_mode != None:
+                    connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
                 else:
-                    return False
-
-                sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});'.format(schema=schema,
-                                                                                                                                                                table=table,
-                                                                                                                                                                geometry_field=geometry_field)
-                sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
-                                                                                                                                                                                    table=table,
-                                                                                                                                                                                    primary_key_name=primary_key_name)
-                sql_statement = sql_statement + 'CLUSTER "{schema}"."{table}" USING {schema}_{table}_{geometry_field}_idx;'.format(schema=schema,
-                                                                                                                                    table=table,
-                                                                                                                                    geometry_field=geometry_field)
-                
-                sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
-                                                                                        table=table)
-
-
-
-                with connection.cursor() as cursor:
-                    cursor.execute(sql_statement)
-
-                if self.isCanceled():
-                    return False
-                
-                return True
-
+                    connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
             else:
                 return False
-        
-        except:
-            pass
+
+            sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});'.format(schema=schema,
+                                                                                                                                                            table=table,
+                                                                                                                                                            geometry_field=geometry_field)
+            sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
+                                                                                                                                                                                table=table,
+                                                                                                                                                                                primary_key_name=primary_key_name)
+            sql_statement = sql_statement + 'ALTER TABLE "{schema}"."{table}" CLUSTER ON {schema}_{table}_{geometry_field}_idx;'.format(schema=schema,
+                                                                                                                                table=table,
+                                                                                                                                geometry_field=geometry_field)
+            
+            sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
+                                                                                    table=table)
+
+            print(sql_statement)
+
+
+            with connection.cursor() as cursor:
+                cursor.execute(sql_statement)
+
+            if self.isCanceled():
+                return False
+            
+            return True
+
+        else:
+            return False
+
 
 
     def create_spatial_index_for_layer(self, layer):    
@@ -1384,70 +1431,110 @@ class LayersManagementEngineTask(QgsTask):
         return True
 
 
-    def save_variables_from_layer_id(self, layer_id=None, layer_properties=None):
+    def save_variables_from_layer(self, layer, layer_properties=[]):
 
-        if self.layer_id != None:
-            layer_id = self.layer_id
+        layer_all_properties_flag = False
 
-        if self.layer_properties != None:
-            layer_properties = self.layer_properties
+        assert isinstance(layer, QgsVectorLayer)
 
-        if layer_id in self.project_layers.keys():
-            layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
-            
-            if len(layers) > 0:
-                layer = layers[0]
-                
-                #layer_scope = QgsExpressionContextUtils.layerScope(layer)  
+        if len(layer_properties) == 0:
+            layer_all_properties_flag = True
 
-                if self.layer_all_properties_flag is True:
-                    for key_group in ("infos", "exploring", "filtering"):
-                        for key, value in self.project_layers[layer_id][key_group].items():
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+        if layer.id() in self.PROJECT_LAYERS.keys():
+
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
+
+            if layer_all_properties_flag is True:
+                for key_group in ("infos", "exploring", "filtering"):
+                    for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
+                        value_typped, type_returned = self.return_typped_value(value, 'save')
+                        if type_returned in (list, dict):
+                            value_typped = json.dumps(value_typped)
+                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                        QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
+                        cur.execute("""INSERT INTO fm_project_layers_properties 
+                                        VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                                                            id=uuid.uuid4(),
+                                                                            project_id=self.project_uuid,
+                                                                            layer_id=layer.id(),
+                                                                            meta_type=key_group,
+                                                                            meta_key=key,
+                                                                            meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                                                            )
+                        )
+                        conn.commit()
+
+
+
+            else:
+                for layer_property in layer_properties:
+                    if layer_property[0] in ("infos", "exploring", "filtering"):
+                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                            value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
                             value_typped, type_returned = self.return_typped_value(value, 'save')
-                            self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
-                            if self.isCanceled():
-                                return False
-                
-                else:
-                    for layer_property in layer_properties:
-                        if layer_property[0] in ("infos", "exploring", "filtering"):
-                            if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
-                                variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                                value = self.project_layers[layer_id][layer_property[0]][layer_property[1]]
-                                value_typped, type_returned = self.return_typped_value(value, 'save')
-                                self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                            if type_returned in (list, dict):
+                                value_typped = json.dumps(value_typped)
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                            cur.execute("""INSERT INTO fm_project_layers_properties 
+                                            VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                                                                id=uuid.uuid4(),
+                                                                                project_id=self.project_uuid,
+                                                                                layer_id=layer.id(),
+                                                                                meta_type=layer_property[0],
+                                                                                meta_key=layer_property[1],
+                                                                                meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                                                                )
+                            )
+                            conn.commit()
 
-        return True
-    
+            cur.close()
+            conn.close()
 
-    def remove_variables_from_layer_id(self, layer_id=None, layer_property=None):
+    def remove_variables_from_layer(self, layer, layer_properties=[]):
         
-        if self.layer_id != None:
-            layer_id = self.layer_id
+        layer_all_properties_flag = False
 
-        if self.layer_properties != None:
-            layer_properties = self.layer_properties
+        assert isinstance(layer, QgsVectorLayer)
 
-        if layer_id in self.project_layers.keys():
-            layers = [layer for layer in PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
+        if len(layer_properties) == 0:
+            layer_all_properties_flag = True
 
-            if len(layers) > 0:
-                layer = layers[0]  
+        if layer.id() in self.PROJECT_LAYERS.keys():
 
-                if self.layer_all_properties_flag is True:
-                   self.removingLayerVariable.emit(layer, '')
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
 
-                else:
-                    for layer_property in layer_properties:
-                        if layer_property[0] in ("infos", "exploring", "filtering"):
-                            if layer_property[0] in self.project_layers[layer_id] and layer_property[1] in self.project_layers[layer_id][layer_property[0]]:
-                                variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                                self.removingLayerVariable.emit(layer, variable_key)
-                
-                self.project_layers[layer_id] = self.add_project_layer(layer)
+            if layer_all_properties_flag is True:
+                cur.execute("""DELETE FROM fm_project_layers_properties 
+                                WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
+                                                                                                    project_id=self.project_uuid,
+                                                                                                    layer_id=layer.id()
+                                                                                                    )
+                )
+                conn.commit()
+                QgsExpressionContextUtils.setLayerVariables(layer, {})
 
-        return True
+            else:
+                for layer_property in layer_properties:
+                    if layer_property[0] in ("infos", "exploring", "filtering"):
+                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                            cur.execute("""DELETE FROM fm_project_layers_properties  
+                                            WHERE fk_project = '{project_id}' and layer_id = '{layer_id}' and meta_type = '{meta_type}' and meta_key = '{meta_key}');""".format(
+                                                                                                                                                                            project_id=self.project_uuid,
+                                                                                                                                                                            layer_id=layer.id(),
+                                                                                                                                                                            meta_type=layer_property[0],
+                                                                                                                                                                            meta_key=layer_property[1]                           
+                                                                                                                                                                            )
+                            )
+                            conn.commit()
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
+
+            cur.close()
+            conn.close()
+
 
 
     def save_style_from_layer_id(self, layer_id):
