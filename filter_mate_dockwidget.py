@@ -82,7 +82,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.init_layer = None
             self.has_loaded_layers = False
 
-        self.current_layer_all_features = None
 
         self.widgets = None
         self.widgets_initialized = False
@@ -1342,6 +1341,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if QgsExpression(expression).isField() is False:
                     features, expression = self.exploring_custom_selection()
 
+
                 
             return features, expression
         
@@ -1350,33 +1350,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         if self.widgets_initialized is True and self.current_layer != None:
 
-
             if len(features) == 0:   
                 features, expression = self.get_current_features()
             
-            if len(features) == 0:
-                return
-            else:
-                self.zooming_to_features(features)
+
+            self.zooming_to_features(features)
 
 
     def zooming_to_features(self, features):
         
         if self.widgets_initialized is True and self.current_layer != None:
 
-            features_with_geometry = [feature for feature in features if feature.hasGeometry()]
+            if len(features) == 0:        
+                extent = self.current_layer.extent()
+                self.iface.mapCanvas().zoomToFeatureExtent(extent) 
 
-            if len(features_with_geometry) == 1:
-                feature = features_with_geometry[0]
+            else: 
+                features_with_geometry = [feature for feature in features if feature.hasGeometry()]
 
-                if str(feature.geometry().type()) == 'GeometryType.Point':
-                    box = feature.geometry().buffer(50,5).boundingBox()
+                if len(features_with_geometry) == 1:
+                    feature = features_with_geometry[0]
+
+                    if str(feature.geometry().type()) == 'GeometryType.Point':
+                        box = feature.geometry().buffer(50,5).boundingBox()
+                    else:
+                        box = feature.geometry().boundingBox()
+
+                    self.iface.mapCanvas().zoomToFeatureExtent(box)
                 else:
-                    box = feature.geometry().boundingBox()
-
-                self.iface.mapCanvas().zoomToFeatureExtent(box)
-            else:
-                self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [feature.id() for feature in features_with_geometry])
+                    self.iface.mapCanvas().zoomToFeatureIds(self.current_layer, [feature.id() for feature in features_with_geometry])
 
             self.iface.mapCanvas().refresh()
 
@@ -1427,19 +1429,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             features = []
             if QgsExpression(expression).isField() is False:
                 features = self.exploring_features_changed([], False, expression)
-            elif self.current_layer_all_features == None:
-                features_iterator = self.current_layer.getFeatures()
-                done_looping = False
-                
-                while not done_looping:
-                    try:
-                        feature = next(features_iterator)
-                        features.append(feature)
-                    except StopIteration:
-                        done_looping = True
-                self.current_layer_all_features = features
-            else:
-                features = self.current_layer_all_features
 
             return features, expression
     
@@ -1660,7 +1649,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 
                 self.exploring_groupbox_changed("custom_selection")
                 self.current_buffer_property_has_been_init = False
-                self.current_layer_all_features = None
+
 
                 lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
                 if lastLayer != None and lastLayer.id() != self.current_layer.id():
@@ -1992,7 +1981,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'connect')
 
-            self.CONFIG_DATA['EXPORT'] = self.project_props['exporting']
+            self.CONFIG_DATA["CURRENT_PROJECT"]['EXPORT'] = self.project_props['exporting']
             # self.reload_configuration_model()
 
 

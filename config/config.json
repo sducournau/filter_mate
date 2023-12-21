@@ -89,8 +89,8 @@
             "zip_to_export": ""
         },
         "META": {
-            "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
-            "LAYER_PROPERTIES_COUNT": 31
+            "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,
+            "LAYER_PROPERTIES_COUNT": 0
         },
         "FILTER": {
             "feature_count_limit": 10000

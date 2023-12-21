@@ -332,7 +332,7 @@ class FilterMateApp:
             
             
             if task_parameters["filtering"]["has_layers_to_filter"] == True:
-                for layer_props in task_parameters["filtering"]["layers_to_filter"]:
+                for layer_props in task_parameters["task"]["layers"]:
                     if layer_props["layer_id"] in self.PROJECT_LAYERS:
                         layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
                         if len(layers) == 1:
@@ -565,9 +565,9 @@ class FilterMateApp:
             if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True:
                 try: 
                     os.remove(self.db_file_path)
-                    with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
-                        outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
                     self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
+                    with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+                        outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
                     print(error)
             
