@@ -95,8 +95,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.project_props = {"exporting":{}}
         self.layer_properties_tuples_dict = None
         self.export_properties_tuples_dict = None
-        self.json_template_layer_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
-        self.json_template_layer_filtering = '{"feature_limit": 10000}'
+        self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
+        self.json_template_project_filtering = '{"feature_limit": 10000}'
+        self.json_template_project_meta = '{"LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,"LAYER_PROPERTIES_COUNT": 0}'
 
         self.setupUi(self)
         self.setupUiCustom()
@@ -218,20 +219,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if len(list(self.CONFIG_DATA["CURRENT_PROJECT"]["EXPORT"])) > 0 and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["EXPORT"], dict):
                     self.project_props['exporting'] = self.CONFIG_DATA["CURRENT_PROJECT"]["EXPORT"]
                 else:
-                    self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
+                    self.project_props['exporting'] = json.loads(self.json_template_project_exporting)
             else:
-                self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
+                self.project_props['exporting'] = json.loads(self.json_template_project_exporting)
 
             if 'FILTER' in self.CONFIG_DATA["CURRENT_PROJECT"]:
                 if len(list(self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"])) > 0 and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"], dict):
                     self.project_props['filtering'] = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]
                 else:
-                    self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
+                    self.project_props['filtering'] = json.loads(self.json_template_project_filtering)
             else:
-                self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
+                self.project_props['filtering'] = json.loads(self.json_template_project_filtering)
 
             if "META" in self.CONFIG_DATA["CURRENT_PROJECT"]:
-                self.project_props["meta"] = self.CONFIG_DATA["CURRENT_PROJECT"]["META"] and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["META"], dict)
+                if len(list(self.CONFIG_DATA["CURRENT_PROJECT"]["META"])) > 0 and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["META"], dict):
+                    self.project_props["meta"] = self.CONFIG_DATA["CURRENT_PROJECT"]["META"]
+                else:
+                    self.project_props['meta'] = json.loads(self.json_template_project_meta)
+            else:
+                self.project_props['meta'] = json.loads(self.json_template_project_meta)
         
         
         self.manage_configuration_model()

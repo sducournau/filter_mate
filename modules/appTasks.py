@@ -104,7 +104,7 @@ class FilterEngineTask(QgsTask):
             """We split the selected layers to be filtered in two categories sql and others"""
 
             if self.task_parameters["filtering"]["has_layers_to_filter"] == True:
-                for layer_props in self.task_parameters["layers"]:
+                for layer_props in self.task_parameters["task"]["layers"]:
                     if layer_props["layer_provider_type"] not in self.layers:
                         self.layers[layer_props["layer_provider_type"]] = []
 
