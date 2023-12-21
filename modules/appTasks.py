@@ -104,7 +104,7 @@ class FilterEngineTask(QgsTask):
             """We split the selected layers to be filtered in two categories sql and others"""
 
             if self.task_parameters["filtering"]["has_layers_to_filter"] == True:
-                for layer_props in self.task_parameters["filtering"]["layers_to_filter"]:
+                for layer_props in self.task_parameters["layers"]:
                     if layer_props["layer_provider_type"] not in self.layers:
                         self.layers[layer_props["layer_provider_type"]] = []
 
@@ -257,6 +257,7 @@ class FilterEngineTask(QgsTask):
 
             else:
                 result = True
+                self.manage_layer_subset_strings(self.source_layer, self.param_source_old_subset)
 
         if result is False:
             self.is_field_expression = None    
@@ -292,7 +293,10 @@ class FilterEngineTask(QgsTask):
 
         result = False
         self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
-        self.param_source_new_subset = self.expression
+        if QgsExpression(self.expression).isField() is False:
+            self.param_source_new_subset = self.expression
+        else:
+            self.param_source_new_subset = self.param_source_old_subset
 
 
         if self.task_parameters["filtering"]["has_buffer"] is True:
@@ -872,8 +876,8 @@ class FilterEngineTask(QgsTask):
         zip_result = None
 
         if self.task_parameters["task"]["exporting"]["has_layers_to_export"] is True:
-            if self.task_parameters["task"]["exporting"]["layers_to_export"] != None and len(self.task_parameters["task"]["exporting"]["layers_to_export"]) > 0:
-                layers_to_export = [re.search('.* ', layer).group().strip() for layer in self.task_parameters["task"]["exporting"]["layers_to_export"] if re.search('.* ', layer) != None]
+            if self.task_parameters["task"]["layers"] != None and len(self.task_parameters["task"]["layers"]) > 0:
+                layers_to_export = self.task_parameters["task"]["layers"]
             else:
                 return False
         else:
@@ -1205,7 +1209,7 @@ class LayersManagementEngineTask(QgsTask):
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
             spatialite_results = self.select_properties_from_spatialite(layer.id())
-            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"]:
+            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["CURRENT_PROJECT"]["META"]["LAYER_PROPERTIES_COUNT"]:
                 existing_layer_variables = {}
                 for key in ("infos", "exploring", "filtering"):
                     existing_layer_variables[key] = {}
@@ -1291,9 +1295,9 @@ class LayersManagementEngineTask(QgsTask):
                 layer_variables["filtering"] = new_layer_variables["filtering"]  
 
             
-            if self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"] == 0:
+            if self.CONFIG_DATA["CURRENT_PROJECT"]["META"]["LAYER_PROPERTIES_COUNT"] == 0:
                 properties_count = len(layer_variables["infos"]) + len(layer_variables["exploring"]) + len(layer_variables["filtering"])
-                self.CONFIG_DATA["CURRENT_PROJECT"]["LAYER_PROPERTIES_COUNT"] = properties_count
+                self.CONFIG_DATA["CURRENT_PROJECT"]["META"]["LAYER_PROPERTIES_COUNT"] = properties_count
 
 
             layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}

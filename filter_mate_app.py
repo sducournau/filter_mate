@@ -158,12 +158,12 @@ class FilterMateApp:
                 
             layers = []
             self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
-            layers_props = [layer_infos for layer_infos in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]]
+            layers_props = [layer_infos for layer_infos in task_parameters["task"]["layers"]]
             layers_ids = [layer_props["layer_id"] for layer_props in layers_props]
             for layer_props in layers_props:
                 temp_layers = self.PROJECT.mapLayersByName(layer_props["layer_name"])
                 for temp_layer in temp_layers:
-                    if temp_layer.id() in layers_ids: 
+                    if temp_layer.id() in layers_ids:
                         layers.append(temp_layer)
 
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
@@ -221,27 +221,42 @@ class FilterMateApp:
 
             features, expression = self.dockwidget.get_current_features()
 
-            if task_name == 'filter':
+            if task_name in ('filter','unfilter','reset'):
+                layers_to_filter = []
+                for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
+                    if key in self.PROJECT_LAYERS:
+                        layers_to_filter.append(self.PROJECT_LAYERS[key]["infos"])
 
-                task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"], 
-                                           "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
-                return task_parameters
 
-            elif task_name == 'unfilter':
+                if task_name == 'filter':
 
-                task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"], 
-                                           "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
-                return task_parameters
-            
-            elif task_name == 'reset':
+                    task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"],
+                                                "layers": layers_to_filter,
+                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                    return task_parameters
 
-                task_parameters["task"] = {"features": features, "expression": expression, 
-                                           "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
-                return task_parameters
+                elif task_name == 'unfilter':
+
+                    task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"],
+                                                "layers": layers_to_filter,
+                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                    return task_parameters
+                
+                elif task_name == 'reset':
+
+                    task_parameters["task"] = {"features": features, "expression": expression,
+                                                "layers": layers_to_filter,
+                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                    return task_parameters
 
             elif task_name == 'export':
-                
+                layers_to_export = []
+                for key in self.dockwidget.project_props["layers_to_export"]:
+                    if key in self.PROJECT_LAYERS:
+                        layers_to_export.append(self.PROJECT_LAYERS[key]["infos"])
                 task_parameters["task"] = self.dockwidget.project_props
+                task_parameters["task"]["layers"] = layers_to_export
+                                            
                 return task_parameters
             
         else:
@@ -309,9 +324,9 @@ class FilterMateApp:
                 self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = False
 
 
-            # source_layer.reload()
-            # source_layer.updateExtents()
-            # source_layer.triggerRepaint()
+            source_layer.reload()
+            source_layer.updateExtents()
+            source_layer.triggerRepaint()
 
             self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
             
@@ -328,9 +343,9 @@ class FilterMateApp:
                             else:
                                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
 
-                            # layer.reload()
-                            # layer.updateExtents()
-                            # layer.triggerRepaint()
+                            layer.reload()
+                            layer.updateExtents()
+                            layer.triggerRepaint()
 
                             self.save_variables_from_layer(layer,[("infos","is_already_subset")])
 
@@ -340,8 +355,8 @@ class FilterMateApp:
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
         print('all layers reshreshed')
 
-
-        self.iface.mapCanvas().zoomToFullExtent()
+        extent = source_layer.extent()
+        self.iface.mapCanvas().zoomToFeatureExtent(extent)
 
         
 
@@ -550,9 +565,9 @@ class FilterMateApp:
             if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True:
                 try: 
                     os.remove(self.db_file_path)
-                    self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
                     with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+                    self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
                 except OSError as error: 
                     print(error)
             

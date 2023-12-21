@@ -71,7 +71,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.PROJECT_LAYERS = project_layers
         self.PROJECT = project
         self.current_layer = None
-        self.link_legend_layers_and_current_layer_flag = False
         if self.PROJECT:
             if len(list(self.PROJECT_LAYERS)) > 0:
                 self.init_layer = self.iface.activeLayer() if self.iface.activeLayer() != None else list(self.PROJECT.mapLayers().values())[0]
@@ -212,31 +211,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         #self.checkableComboBoxLayer_exporting_layers.contextMenuEvent()
 
 
-        self.manage_configuration_model()
-        self.dockwidget_widgets_configuration()
 
 
-        if 'EXPORT' in self.CONFIG_DATA:
-            if len(list(self.CONFIG_DATA["EXPORT"])) > 0 and isinstance(self.CONFIG_DATA["EXPORT"], dict):
-                self.project_props['exporting'] = self.CONFIG_DATA["EXPORT"]
+        if 'CURRENT_PROJECT' in self.CONFIG_DATA:
+            if 'EXPORT' in self.CONFIG_DATA["CURRENT_PROJECT"]:
+                if len(list(self.CONFIG_DATA["CURRENT_PROJECT"]["EXPORT"])) > 0 and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["EXPORT"], dict):
+                    self.project_props['exporting'] = self.CONFIG_DATA["CURRENT_PROJECT"]["EXPORT"]
+                else:
+                    self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
             else:
                 self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
-        else:
-            self.project_props['exporting'] = json.loads(self.json_template_layer_exporting)
 
-        if 'FILTER' in self.CONFIG_DATA:
-            if len(list(self.CONFIG_DATA["FILTER"])) > 0 and isinstance(self.CONFIG_DATA["FILTER"], dict):
-                self.project_props['filtering'] = self.CONFIG_DATA["FILTER"]
+            if 'FILTER' in self.CONFIG_DATA["CURRENT_PROJECT"]:
+                if len(list(self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"])) > 0 and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"], dict):
+                    self.project_props['filtering'] = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]
+                else:
+                    self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
             else:
                 self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
-        else:
-            self.project_props['filtering'] = json.loads(self.json_template_layer_filtering)
 
-        if 'APP' in self.CONFIG_DATA:
-            if len(list(self.CONFIG_DATA["APP"])) > 0 and isinstance(self.CONFIG_DATA["APP"], dict):
-                if "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG" in self.CONFIG_DATA["APP"] and isinstance(self.CONFIG_DATA["APP"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"], bool):
-                    self.link_legend_layers_and_current_layer_flag = self.CONFIG_DATA["APP"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
-
+            if "META" in self.CONFIG_DATA["CURRENT_PROJECT"]:
+                self.project_props["meta"] = self.CONFIG_DATA["CURRENT_PROJECT"]["META"] and isinstance(self.CONFIG_DATA["CURRENT_PROJECT"]["META"], dict)
+        
+        
+        self.manage_configuration_model()
+        self.dockwidget_widgets_configuration()
 
         layout = self.verticalLayout_filtering_values
         layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
@@ -267,7 +266,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                                 "styles_to_export":(("exporting","has_styles_to_export"),("exporting","styles_to_export")),
                                                 "datatype_to_export":(("exporting","has_datatype_to_export"),("exporting","datatype_to_export")),
                                                 "output_folder_to_export":(("exporting","has_output_folder_to_export"),("exporting","output_folder_to_export")),
-                                                "zip_to_export":(("exporting","has_zip_to_export"),("exporting","zip_to_export"))
+                                                "zip_to_export":(("exporting", "has_zip_to_export"), ("exporting", "zip_to_export"))
                                                 }
 
         self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "SINGLE_SELECTION":{}, "MULTIPLE_SELECTION":{}, "CUSTOM_SELECTION":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
@@ -309,7 +308,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
         self.widgets["FILTERING"] = {
-                                    "AUTO_CURRENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", lambda state: self.filtering_auto_current_layer_changed(state))], "ICON":None},
+                                    "AUTO_CURRENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", lambda state : self.filtering_auto_current_layer_changed(state))], "ICON":None},
                                     "HAS_LAYERS_TO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_layers_to_filter, "SIGNALS":[("clicked", lambda state, x='has_layers_to_filter': self.layer_property_changed(x, state))], "ICON":None},
                                     "HAS_COMBINE_OPERATOR":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", lambda state, x='has_combine_operator': self.layer_property_changed(x, state))], "ICON":None},
                                     "HAS_GEOMETRIC_PREDICATES":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", lambda state, x='has_geometric_predicates': self.layer_property_changed(x, state))], "ICON":None},
@@ -331,7 +330,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     "HAS_DATATYPE_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", lambda state, x='has_datatype_to_export': self.project_property_changed(x, state))], "ICON":None},
                                     "HAS_OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", lambda state, x='has_output_folder_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_path()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_ZIP_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", lambda state, x='has_zip_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_pathzip()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "LAYERS_TO_EXPORT":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_exporting_layers, "SIGNALS":[("checkedItemsChanged", lambda state, x='layers_to_export': self.project_property_changed(x, state))]},
+                                    "LAYERS_TO_EXPORT":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_exporting_layers, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_export(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_export()}, x='layers_to_export': self.project_property_changed(x, state, custom_functions))]},
                                     "PROJECTION_TO_EXPORT":{"TYPE":"QgsProjectionSelectionWidget", "WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", lambda state, x='projection_to_export', custom_functions={"CUSTOM_DATA": lambda x: self.get_current_crs_authid()}: self.project_property_changed(x, state, custom_functions))]},
                                     "STYLES_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", lambda state, x='styles_to_export': self.project_property_changed(x, state))]},
                                     "DATATYPE_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_datatype, "SIGNALS":[("currentTextChanged", lambda state, x='datatype_to_export': self.project_property_changed(x, state))]},
@@ -509,10 +508,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
 
                         if key != layer.id():
-                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), json.dumps(self.PROJECT_LAYERS[key]["infos"]))
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), key)
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             if len(layer_props["filtering"]["layers_to_filter"]) > 0:
-                                if layer_id in list(layer_info["layer_id"] for layer_info in list(layer_props["filtering"]["layers_to_filter"])):
+                                if layer_id in list(layer_id for layer_id in list(layer_props["filtering"]["layers_to_filter"])):
                                     item.setCheckState(Qt.Checked)
                                 else:
                                     item.setCheckState(Qt.Unchecked) 
@@ -528,7 +527,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                         layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
                         
                         if key != layer.id():
-                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), self.PROJECT_LAYERS[key]["infos"])
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), key)
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             item.setCheckState(Qt.Unchecked)
                             i += 1    
@@ -558,9 +557,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 layer_crs_authid = self.PROJECT_LAYERS[key]["infos"]["layer_crs_authid"]
                 layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
                 layer_name = layer_name + ' [%s]' % (layer_crs_authid)
-                self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, json.dumps(self.PROJECT_LAYERS[key]["infos"]))
+                self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, key)
                 item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(i)
-                if layer_name in layers_to_export:
+                if key in layers_to_export:
                     item.setCheckState(Qt.Checked)
                 else:
                     item.setCheckState(Qt.Unchecked)
@@ -1590,10 +1589,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             for i in range(self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].count()):
                 if self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemCheckState(i) == Qt.Checked:
                     data = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemData(i, Qt.UserRole)
-                    if isinstance(data, dict):
+                    if isinstance(data, str):
                         checked_list_data.append(data)
-                    else:
-                        checked_list_data.append(json.loads(data))
+            return checked_list_data
+
+
+    def get_layers_to_export(self):
+
+        if self.widgets_initialized is True and self.current_layer != None:
+
+            checked_list_data = []
+            for i in range(self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].count()):
+                if self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].itemCheckState(i) == Qt.Checked:
+                    data = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].itemData(i, Qt.UserRole)
+                    if isinstance(data, str):
+                        checked_list_data.append(data)
             return checked_list_data
 
 
@@ -1637,7 +1647,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 for widget_path in widgets_to_stop:
                     self.manageSignal(widget_path, 'disconnect')
 
-                if self.link_legend_layers_and_current_layer_flag is True:
+                if self.project_props["meta"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
                     widget_path = ["QGIS","LAYER_TREE_VIEW"]
                     self.manageSignal(widget_path, 'disconnect')
 
@@ -1706,7 +1716,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 for widget_path in widgets_to_stop:
                     self.manageSignal(widget_path, 'connect')
 
-                if self.link_legend_layers_and_current_layer_flag is True:
+                if self.project_props["meta"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
                     if self.iface.activeLayer() != None and self.iface.activeLayer().id() != self.current_layer.id():
                         self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
 
@@ -2249,20 +2259,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if self.widgets_initialized is True and self.has_loaded_layers is True:
 
             if state == None:
-                state = self.link_legend_layers_and_current_layer_flag
-            # else:
-            #     state = self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].isChecked()
+                state = self.project_props["meta"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
+
 
             self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
 
             if state is True:
-                self.link_legend_layers_and_current_layer_flag = state
+                self.project_props["meta"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
                 self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
 
             elif state is False:
-                self.link_legend_layers_and_current_layer_flag = state
-                self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'disconnect')
-
+                self.project_props["meta"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
+                self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
+                
+            self.setProjectVariablesEvent()
 
     def get_project_layers_from_app(self, project_layers, project=None):
 
