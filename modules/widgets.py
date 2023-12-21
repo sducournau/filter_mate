@@ -183,6 +183,9 @@ class PopulateListEngineTask(QgsTask):
         if new_list is True:
             self.parent.list_widgets[self.layer.id()].clear()
 
+        filter_text = self.parent.list_widgets[self.layer.id()].getFilterText()
+        if filter_text != '':
+            self.parent.filter_le.setText(filter_text)
 
         list_to_load = self.parent.list_widgets[self.layer.id()].getFeaturesList()
 
@@ -222,6 +225,8 @@ class PopulateListEngineTask(QgsTask):
     def filterFeatures(self):
         total_count = self.parent.list_widgets[self.layer.id()].count()
         filter_txt_splitted = self.parent.filter_txt.lower().strip().split(" ")
+
+        self.parent.list_widgets[self.layer.id()].setFilterText(self.parent.filter_txt)
 
         if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() > total_count:
             self.buildFeaturesList(False, filter_txt_splitted)
