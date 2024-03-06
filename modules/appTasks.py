@@ -18,6 +18,7 @@ import re
 from functools import partial
 import json
 from ..config.config import *
+from .appUtils import *
 from qgis.utils import iface
 
 MESSAGE_TASKS_CATEGORIES = {
@@ -66,6 +67,8 @@ class FilterEngineTask(QgsTask):
         self.param_source_new_subset = None
         self.param_source_old_subset = None
 
+        self.current_materialized_subset = None
+
         self.has_to_reproject_source_layer = False
         self.source_crs = None
         self.source_layer_crs_authid = None
@@ -97,9 +100,9 @@ class FilterEngineTask(QgsTask):
 
 
 
-                if "filtering" in self.task_parameters["task"] and "feature_count_limit" in self.task_parameters["task"]["filtering"]:
-                    if isinstance(self.task_parameters["task"]["filtering"]["feature_count_limit"], int) and self.task_parameters["task"]["filtering"]["feature_count_limit"] > 0:
-                        self.feature_count_limit = self.task_parameters["task"]["filtering"]["feature_count_limit"]
+                if "options" in self.task_parameters["task"] and "LAYERS" in self.task_parameters["task"]["options"] and "FEATURE_COUNT_LIMIT" in self.task_parameters["task"]["options"]["LAYERS"]:
+                    if isinstance(self.task_parameters["task"]["options"]["LAYERS"]["FEATURE_COUNT_LIMIT"], int) and self.task_parameters["task"]["options"]["LAYERS"]["FEATURE_COUNT_LIMIT"] > 0:
+                        self.feature_count_limit = self.task_parameters["task"]["options"]["LAYERS"]["FEATURE_COUNT_LIMIT"]
 
             """We split the selected layers to be filtered in two categories sql and others"""
 
@@ -146,7 +149,7 @@ class FilterEngineTask(QgsTask):
 
             elif self.task_action == 'export':
                 """We will export layers"""
-                if self.task_parameters["task"]["exporting"]["has_layers_to_export"] == True:
+                if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"] == True:
                     result = self.execute_exporting()
                     if self.isCanceled() or result is False:
                         return False
@@ -169,6 +172,7 @@ class FilterEngineTask(QgsTask):
         self.param_source_provider_type = self.task_parameters["infos"]["layer_provider_type"]
         self.param_source_schema = self.task_parameters["infos"]["layer_schema"]
         self.param_source_table = self.task_parameters["infos"]["layer_name"]
+        self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
         self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
@@ -286,27 +290,29 @@ class FilterEngineTask(QgsTask):
                 if result is True:
                     self.manage_layer_subset_strings(self.source_layer, self.expression)
 
+
+
         return result
     
     def manage_distant_layers_geometric_filtering(self):
         """Filter layers from a prefiltered layer"""
 
         result = False
-        self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
+        
         if QgsExpression(self.expression).isField() is False:
             self.param_source_new_subset = self.expression
         else:
             self.param_source_new_subset = self.param_source_old_subset
 
 
-        if self.task_parameters["filtering"]["has_buffer"] is True:
-            if self.task_parameters["filtering"]["buffer_property"] is True:
-                if self.task_parameters["filtering"]["buffer_expression"] != '':
-                    self.param_buffer_expression = self.task_parameters["filtering"]["buffer_expression"]
+        if self.task_parameters["filtering"]["has_buffer_value"] is True:
+            if self.task_parameters["filtering"]["buffer_value_property"] is True:
+                if self.task_parameters["filtering"]["buffer_value_expression"] != '':
+                    self.param_buffer_expression = self.task_parameters["filtering"]["buffer_value_expression"]
                 else:
-                    self.param_buffer_value = self.task_parameters["filtering"]["buffer"]
+                    self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]
             else:
-                self.param_buffer_value = self.task_parameters["filtering"]["buffer"]  
+                self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]  
 
         
         provider_list = self.provider_list + [self.param_source_provider_type]
@@ -342,16 +348,18 @@ class FilterEngineTask(QgsTask):
 
 
         expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
-        expression = expression.replace('" <', '"::numeric >').replace('"<', '"::numeric <')
+        expression = expression.replace('" <', '"::numeric <').replace('"<', '"::numeric <')
         expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
         expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
 
-        expression = re.sub('case', 'CASE', expression)
-        expression = re.sub('then', 'THEN', expression)
-        expression = re.sub('else', 'ELSE', expression)
-        expression = re.sub('ilike', 'ILIKE', expression)
-        expression = re.sub('like', 'LIKE', expression)
-        expression = re.sub('not', 'NOT', expression)
+        expression = re.sub('case', ' CASE ', expression)
+        expression = re.sub('when', ' WHEN ', expression)
+        expression = re.sub(' is ', ' IS ', expression)
+        expression = re.sub('then', ' THEN ', expression)
+        expression = re.sub('else', ' ELSE ', expression)
+        expression = re.sub('ilike', ' ILIKE ', expression)
+        expression = re.sub('like', ' LIKE ', expression)
+        expression = re.sub('not', ' NOT ', expression)
 
         expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
         expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
@@ -361,10 +369,8 @@ class FilterEngineTask(QgsTask):
 
     def prepare_postgresql_source_geom(self):
         
-        if self.has_combine_operator is True:
-            source_table = 'sub'
-        else:
-            source_table = self.param_source_table
+
+        source_table = self.param_source_table
 
         self.postgresql_source_geom = '"{source_table}"."{source_geom}"'.format(source_table=source_table,
                                                                                 source_geom=self.param_source_geom)
@@ -379,18 +385,76 @@ class FilterEngineTask(QgsTask):
             if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
                 self.param_buffer_expression = '"{source_table}".'.format(source_table=source_table) + self.param_buffer_expression
 
-            self.param_buffer_expression = re.sub(' "', ' "{source_table}"."'.format(source_table=source_table), self.param_buffer_expression)
+            self.param_buffer_expression = re.sub(' "', ' "mv_{source_table}"."'.format(source_table=source_table), self.param_buffer_expression)
 
             self.param_buffer_expression = self.qgis_expression_to_postgis(self.param_buffer_expression)    
 
-            self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                        buffer_value=self.param_buffer_expression)
+            self.current_materialized_subset = self.create_materialized_view()    
+
+            self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, "buffer_value") from {current_materialized_subset}'.format(postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                                                    current_materialized_subset=self.current_materialized_subset)
+            
 
         elif self.param_buffer_value != None:
             self.postgresql_source_geom = 'ST_Buffer({postgresql_source_geom}, {buffer_value})'.format(postgresql_source_geom=self.postgresql_source_geom,
                                                                                                         buffer_value=self.param_buffer_value)
 
+        
+
         print("prepare_postgresql_source_geom", self.postgresql_source_geom)     
+
+    def create_materialized_view(self):
+
+        current_materialized_subset = None
+
+        if self.task_parameters["task"]["options"]["IS_ACTIVE_POSTGRESQL"] is True:
+            
+            self.where_clause = self.param_buffer_expression.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
+            where_clauses_in_arr = self.where_clause.split('WHEN')
+
+            where_clause_out_arr = []
+            where_clause_fields_arr = []
+            
+            for where_then_clause in where_clauses_in_arr:
+                if len(where_then_clause.split('THEN')) >= 1:
+                    where_clause = where_then_clause.split('THEN')[0]
+                    where_clause = where_clause.replace('WHEN', ' ')
+                    if where_clause.strip() != '':
+                        where_clause = where_clause.strip()
+                        where_clause_out_arr.append(where_clause)
+                        where_clause_fields_arr.append(where_clause.split(' ')[0])
+
+            print(where_clause_out_arr)
+            print(where_clause_fields_arr)
+            
+            
+            sql_request = '''DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}";
+                                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}"
+                                TABLESPACE pg_default
+                                AS SELECT "{table_source}".geom, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}"
+                                WHERE {source_new_subset}
+                                AND {where_expression}
+                                WITH DATA;'''.format(schema='filter_mate_temp',
+                                                    name=self.param_source_table,
+                                                    schema_source=self.param_source_schema,
+                                                    primary_key_name=self.primary_key_name,
+                                                    table_source=self.param_source_table,
+                                                    where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
+                                                    param_buffer_expression=self.param_buffer_expression.replace('mv_',''),
+                                                    source_new_subset=self.param_source_new_subset,
+                                                    where_expression=' OR '.join(where_clause_out_arr).replace('mv_',''))
+            
+            
+            print(sql_request)
+            connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+            with connexion.cursor() as cursor:
+                cursor.execute(sql_request)
+
+            current_materialized_subset='''"{schema}"."mv_{name}"'''.format(schema='filter_mate_temp',
+                                                                                name=self.param_source_table)
+        return current_materialized_subset
+
+
 
     def prepare_spatialite_source_geom(self):
 
@@ -445,7 +509,7 @@ class FilterEngineTask(QgsTask):
                 param_buffer_distance = float(self.param_buffer_value)   
 
             alg_source_layer_params_buffer = {
-                'DISSOLVE': False,
+                'DISSOLVE': True,
                 'DISTANCE': param_buffer_distance,
                 'END_CAP_STYLE': 0,
                 'INPUT': layer,
@@ -522,7 +586,7 @@ class FilterEngineTask(QgsTask):
                 if param_has_to_reproject_layer:
 
                     param_distant_geom_expression = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid})'.format(param_distant_geom_expression=param_distant_geom_expression,
-                                                                                                                              param_layer_srid=param_layer_crs_authid.split(':')[1])
+                                                                                                                            param_layer_srid=param_layer_crs_authid.split(':')[1])
                     
                     
 
@@ -587,7 +651,7 @@ class FilterEngineTask(QgsTask):
                 
                 if self.has_combine_operator is True:
 
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} as "sub" ON {postgis_sub_expression})'.format(
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
                                                                                                                                                                                                                 distant_primary_key_name=param_distant_primary_key_name,
                                                                                                                                                                                                                 distant_schema=param_distant_schema,    
                                                                                                                                                                                                                 distant_table=param_distant_table,
@@ -607,14 +671,14 @@ class FilterEngineTask(QgsTask):
             elif QgsExpression(self.expression).isField() is True:
 
                 if self.has_combine_operator is True:    
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} as "sub" ON {postgis_sub_expression})'.format(
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
                                                                                                                                                                                                                 distant_primary_key_name=param_distant_primary_key_name,
                                                                                                                                                                                                                 distant_schema=param_distant_schema,    
                                                                                                                                                                                                                 distant_table=param_distant_table,  
                                                                                                                                                                                                                 source_subset=sub_expression,
                                                                                                                                                                                                                 postgis_sub_expression=param_postgis_sub_expression
                                                                                                                                                                                                                 )
-                           
+                        
 
 
                 else:
@@ -660,7 +724,8 @@ class FilterEngineTask(QgsTask):
 
         if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql'):
             
-
+            layer.removeSelection()
+                
             if self.has_combine_operator is False or (self.has_combine_operator is True and self.param_other_layers_combine_operator == 'OR'):
                 layer.setSubsetString('')
 
@@ -680,14 +745,14 @@ class FilterEngineTask(QgsTask):
                 processing.run('qgis:createspatialindex', alg_params_createspatialindex)
             else:
                 current_layer = layer
-
-            if self.has_combine_operator is True:
-                if param_old_subset != '':
-                    current_layer.setSubsetString(param_old_subset)
-                    current_layer.selectAll()
                 
 
+            if self.has_combine_operator is True:
+                current_layer.selectAll()
+
                 if self.param_other_layers_combine_operator == 'OR':
+                    current_layer.setSubsetString(param_old_subset)
+                    current_layer.selectAll()
                     current_layer.setSubsetString('')
 
                     alg_params_select = {
@@ -743,6 +808,7 @@ class FilterEngineTask(QgsTask):
                 features_ids.append(str(feature[param_distant_primary_key_name]))
 
             current_layer.removeSelection()
+            current_layer = None
 
             if len(features_ids) > 0:
                 if param_distant_primary_key_is_numeric == True:
@@ -763,19 +829,74 @@ class FilterEngineTask(QgsTask):
                     self.manage_layer_subset_strings(layer, param_expression)
                         
         return result
+
     
+    def create_materialized_view_from_source_layer(self):       
+
+        schema = self.param_source_schema
+        table = self.param_source_table
+        geometry_field = self.param_source_geom
+        primary_key_name = self.primary_key_name
+
+        
+
+        connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
+
+        sql_statement = '''CREATE OR REPLACE MATERIALIZED VIEW "temp"."TRONCON_DE_ROUTE_2"
+                            TABLESPACE pg_default
+                            AS SELECT "TRONCON_DE_ROUTE".importance,
+                                "TRONCON_DE_ROUTE".nom_coll_d,
+                                "TRONCON_DE_ROUTE".geom,
+                                "TRONCON_DE_ROUTE".largeur::numeric AS largeur,
+                                "TRONCON_DE_ROUTE".largeur::numeric + 15::numeric AS buffer,
+                                "TRONCON_DE_ROUTE".nom_coll_g
+                            FROM ign_topographie."TRONCON_DE_ROUTE"
+                                LEFT JOIN ign_topographie."EPCI" ON st_intersects("EPCI".geom, "TRONCON_DE_ROUTE".geom)
+                            WHERE "EPCI".id_0 = 35 AND ("TRONCON_DE_ROUTE".importance::numeric <= 4::numeric OR "TRONCON_DE_ROUTE".nom_coll_g::text ~~* 'PL %'::text OR "TRONCON_DE_ROUTE".nom_coll_d::text ~~* 'PL %'::text)
+                            WITH DATA;'''
+
+
+        sql_statement = sql_statement + 'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx ON "{schema}"."{table}" ({primary_key_name});'.format(schema=schema,
+                                                                                                                                                                            table=table,
+                                                                                                                                                                            primary_key_name=primary_key_name)
+        sql_statement = sql_statement + 'ALTER TABLE "{schema}"."{table}" CLUSTER ON {schema}_{table}_{geometry_field}_idx;'.format(schema=schema,
+                                                                                                                            table=table,
+                                                                                                                            geometry_field=geometry_field)
+        
+        sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
+                                                                                table=table)
+
+        print(sql_statement)
+
+
+        with connexion.cursor() as cursor:
+            cursor.execute(sql_statement)
+
+        if self.isCanceled():
+            return False
+        
+        return True
+
+
+
 
 
     def execute_filtering(self):
         """Manage the advanced filtering"""
-
        
         result = self.execute_source_layer_filtering()
 
-        self.setProgress((1/self.layers_count)*100)
+        if self.isCanceled() or result is False:
+            return False
+        
+        # if self.param_source_provider_type == 'postgresql':
+        #     result = self.create_materialized_view_from_source_layer()
+
 
         if self.isCanceled() or result is False:
             return False
+
+        self.setProgress((1 / self.layers_count) * 100)
 
         if self.task_parameters["filtering"]["has_geometric_predicates"] == True:
 
@@ -875,7 +996,7 @@ class FilterEngineTask(QgsTask):
         result = None
         zip_result = None
 
-        if self.task_parameters["task"]["exporting"]["has_layers_to_export"] is True:
+        if self.task_parameters["task"]['EXPORTING']["HAS_LAYERS_TO_EXPORT"] is True:
             if self.task_parameters["task"]["layers"] != None and len(self.task_parameters["task"]["layers"]) > 0:
                 layers_to_export = self.task_parameters["task"]["layers"]
             else:
@@ -883,37 +1004,37 @@ class FilterEngineTask(QgsTask):
         else:
             return False
 
-        if self.task_parameters["task"]["exporting"]["has_projection_to_export"] is True:
-            if self.task_parameters["task"]["exporting"]["projection_to_export"] != None and self.task_parameters["task"]["exporting"]["projection_to_export"] != '':
-                self.coordinateReferenceSystem.createFromWkt(self.task_parameters["task"]["exporting"]["projection_to_export"])
+        if self.task_parameters["task"]['EXPORTING']["HAS_PROJECTION_TO_EXPORT"] is True:
+            if self.task_parameters["task"]['EXPORTING']["PROJECTION_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["PROJECTION_TO_EXPORT"] != '':
+                self.coordinateReferenceSystem.createFromWkt(self.task_parameters["task"]['EXPORTING']["PROJECTION_TO_EXPORT"])
                 projection_to_export = self.coordinateReferenceSystem
      
-        if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
-            if self.task_parameters["task"]["exporting"]["styles_to_export"] != None and self.task_parameters["task"]["exporting"]["styles_to_export"] != '':
-                styles_to_export = self.task_parameters["task"]["exporting"]["styles_to_export"].lower()
+        if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
+            if self.task_parameters["task"]['EXPORTING']["STYLES_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["STYLES_TO_EXPORT"] != '':
+                styles_to_export = self.task_parameters["task"]['EXPORTING']["STYLES_TO_EXPORT"].lower()
 
-        if self.task_parameters["task"]["exporting"]["has_datatype_to_export"] is True:
-            if self.task_parameters["task"]["exporting"]["datatype_to_export"] != None and self.task_parameters["task"]["exporting"]["datatype_to_export"] != '':
-                datatype_to_export = self.task_parameters["task"]["exporting"]["datatype_to_export"]
+        if self.task_parameters["task"]['EXPORTING']["HAS_DATATYPE_TO_EXPORT"] is True:
+            if self.task_parameters["task"]['EXPORTING']["DATATYPE_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["DATATYPE_TO_EXPORT"] != '':
+                datatype_to_export = self.task_parameters["task"]['EXPORTING']["DATATYPE_TO_EXPORT"]
             else:
                 return False
         else:
             return False
 
-        if self.task_parameters["task"]["exporting"]["has_output_folder_to_export"] is True:
-            if self.task_parameters["task"]["exporting"]["output_folder_to_export"] != None and self.task_parameters["task"]["exporting"]["output_folder_to_export"] != '':
-                output_folder_to_export = self.task_parameters["task"]["exporting"]["output_folder_to_export"]
+        if self.task_parameters["task"]['EXPORTING']["HAS_OUTPUT_FOLDER_TO_EXPORT"] is True:
+            if self.task_parameters["task"]['EXPORTING']["OUTPUT_FOLDER_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["OUTPUT_FOLDER_TO_EXPORT"] != '':
+                output_folder_to_export = self.task_parameters["task"]['EXPORTING']["OUTPUT_FOLDER_TO_EXPORT"]
 
-        if self.task_parameters["task"]["exporting"]["has_zip_to_export"] is True:
-            if self.task_parameters["task"]["exporting"]["zip_to_export"] != None and self.task_parameters["task"]["exporting"]["zip_to_export"] != '':
-                zip_to_export = self.task_parameters["task"]["exporting"]["zip_to_export"]
+        if self.task_parameters["task"]['EXPORTING']["HAS_ZIP_TO_EXPORT"] is True:
+            if self.task_parameters["task"]['EXPORTING']["ZIP_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["ZIP_TO_EXPORT"] != '':
+                zip_to_export = self.task_parameters["task"]['EXPORTING']["ZIP_TO_EXPORT"]
 
         if layers_to_export != None:
             if datatype_to_export == 'GPKG':
                 alg_parameters_export = {
                     'LAYERS': [PROJECT.mapLayersByName(layer)[0] for layer in layers_to_export],
                     'OVERWRITE':True,
-                    'SAVE_STYLES':self.task_parameters["task"]["exporting"]["has_styles_to_export"],
+                    'SAVE_STYLES':self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"],
                     'OUTPUT':output_folder_to_export
 
                     }
@@ -931,7 +1052,7 @@ class FilterEngineTask(QgsTask):
                                 current_projection_to_export = projection_to_export
                             result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
                             if datatype_to_export != 'XLSX':
-                                if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
+                                if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
                                     layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name + '.{}'.format(styles_to_export))))
                             if self.isCanceled() or list(result)[0] != 0:
                                 return False
@@ -945,7 +1066,7 @@ class FilterEngineTask(QgsTask):
                         current_projection_to_export = projection_to_export
                     result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
                     if datatype_to_export != 'XLSX':
-                        if self.task_parameters["task"]["exporting"]["has_styles_to_export"] is True:
+                        if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
                             layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export + '.{}'.format(styles_to_export))))
 
             
@@ -1135,7 +1256,7 @@ class LayersManagementEngineTask(QgsTask):
 
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer":false,"buffer":0.0,"buffer_property":false,"buffer_expression":"" }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"" }'
 
     def run(self):
         try:    
@@ -1209,7 +1330,7 @@ class LayersManagementEngineTask(QgsTask):
         if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
 
             spatialite_results = self.select_properties_from_spatialite(layer.id())
-            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["CURRENT_PROJECT"]["META"]["LAYER_PROPERTIES_COUNT"]:
+            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"]:
                 existing_layer_variables = {}
                 for key in ("infos", "exploring", "filtering"):
                     existing_layer_variables[key] = {}
@@ -1295,9 +1416,9 @@ class LayersManagementEngineTask(QgsTask):
                 layer_variables["filtering"] = new_layer_variables["filtering"]  
 
             
-            if self.CONFIG_DATA["CURRENT_PROJECT"]["META"]["LAYER_PROPERTIES_COUNT"] == 0:
+            if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] == 0:
                 properties_count = len(layer_variables["infos"]) + len(layer_variables["exploring"]) + len(layer_variables["filtering"])
-                self.CONFIG_DATA["CURRENT_PROJECT"]["META"]["LAYER_PROPERTIES_COUNT"] = properties_count
+                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] = properties_count
 
 
             layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}
@@ -1306,7 +1427,10 @@ class LayersManagementEngineTask(QgsTask):
             self.insert_properties_to_spatialite(layer.id(), layer_props)
 
             if layer_props["infos"]["layer_provider_type"] == 'postgresql':
-                self.create_spatial_index_for_postgresql_layer(layer, layer_props)
+                try:
+                    self.create_spatial_index_for_postgresql_layer(layer, layer_props)
+                except:
+                    pass
                 
             else:
                 self.create_spatial_index_for_layer(layer)
@@ -1369,30 +1493,7 @@ class LayersManagementEngineTask(QgsTask):
             geometry_field = layer_props["infos"]["geometry_field"]
             primary_key_name = layer_props["infos"]["primary_key_name"]
 
-
-            source_uri = QgsDataSourceUri(layer.source())
-            authcfg_id = source_uri.param('authcfg')
-            host = source_uri.host()
-            port = source_uri.port()
-            dbname = source_uri.database()
-            username = source_uri.username()
-            password = source_uri.password()
-            ssl_mode = source_uri.sslMode()
-
-            if authcfg_id != "":
-                authConfig = QgsAuthMethodConfig()
-                if authcfg_id in QgsApplication.authManager().configIds():
-                    QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
-                    username = authConfig.config("username")
-                    password = authConfig.config("password")
-
-            if password != None and len(password) > 0:
-                if ssl_mode != None:
-                    connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
-                else:
-                    connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
-            else:
-                return False
+            connexion, source_uri = get_datasource_connexion_from_layer(layer)
 
             sql_statement = 'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx ON "{schema}"."{table}" USING GIST ({geometry_field});'.format(schema=schema,
                                                                                                                                                             table=table,
@@ -1407,10 +1508,8 @@ class LayersManagementEngineTask(QgsTask):
             sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
                                                                                     table=table)
 
-            print(sql_statement)
 
-
-            with connection.cursor() as cursor:
+            with connexion.cursor() as cursor:
                 cursor.execute(sql_statement)
 
             if self.isCanceled():

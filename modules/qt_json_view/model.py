@@ -40,11 +40,11 @@ class JsonModel(QtGui.QStandardItemModel):
             editable_keys=False,
             editable_values=False,
             plugin_dir=None,
-            parent=None):
+            parent=None
+            ):
         super(JsonModel, self).__init__(parent=parent)
         self.plugin_dir = plugin_dir
         set_plugin_dir(self.plugin_dir)
-        print(data)
         if data is not None:
             self.init(data, editable_keys, editable_values)
 

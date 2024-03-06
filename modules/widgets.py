@@ -355,7 +355,7 @@ class PopulateListEngineTask(QgsTask):
 
     
     def updateFeatures(self):
-        self.parent.items_le.clear()
+
         selection_data = []
         visible_data = []
         total_count = self.parent.list_widgets[self.layer.id()].count()
@@ -445,10 +445,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.context_menu.addAction(self.action_uncheck_all_non_subset)
         self.context_menu.addAction(self.action_uncheck_all_subset)
 
-        self.font_by_state = {'unChecked':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
-                              'checked':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
-                              'unCheckedFiltered':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["DOCKWIDGET"]["COLORS"]["FONT"][2]))),
-                              'checkedFiltered':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["DOCKWIDGET"]["COLORS"]["FONT"][2])))}
+        self.font_by_state = {'unChecked':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
+                              'checked':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
+                              'unCheckedFiltered':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][2]))),
+                              'checkedFiltered':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][2])))}
 
 
         self.list_widgets = {}
@@ -511,8 +511,6 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 if self.layer != None:
                     if self.layer.id() not in self.list_widgets:
                         self.manage_list_widgets(layer_props)
-                    if self.layer.id() in self.list_widgets:
-                        self.list_widgets[self.layer.id()].setFilterText(self.filter_le.text())
                     self.filter_le.clear()
                     self.items_le.clear()
                     
@@ -626,23 +624,22 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def connect_filter_lineEdit(self):
-        try:
-            if self.layer != None:
-                if self.layer.id() in self.list_widgets:
-                    if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
-                        try:
-                            self.filter_le.editingFinished.disconnect()
-                        except:
-                            pass
-                        self.filter_le.textChanged.connect(self.filter_items)
-                    else:
-                        try:
-                            self.filter_le.textChanged.disconnect()
-                        except:
-                            pass
-                        self.filter_le.editingFinished.connect(self.filter_items)
-        except:
-            pass
+
+        if self.layer != None:
+            if self.layer.id() in self.list_widgets:
+                if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
+                    try:
+                        self.filter_le.editingFinished.disconnect()
+                    except:
+                        pass
+                    self.filter_le.textChanged.connect(self.filter_items)
+                else:
+                    try:
+                        self.filter_le.textChanged.disconnect()
+                    except:
+                        pass
+                    self.filter_le.editingFinished.connect(self.filter_items)
+
 
 
     def manage_list_widgets(self, layer_props):
@@ -714,6 +711,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         else:
             self.filter_txt_limit_changed = False    
             self.filter_txt = filter_txt
+            
         description = 'Filtering features'
         action = 'filterFeatures'
         self.build_task(description, action)

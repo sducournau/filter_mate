@@ -5,6 +5,7 @@ from qgis.core import *
 from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
 from qgis.utils import *
 from qgis import processing
+from osgeo import ogr
 
 from collections import OrderedDict
 from operator import getitem
@@ -44,7 +45,7 @@ class FilterMateApp:
 
     def __init__(self, plugin_dir):
         self.iface = iface
-        self.MapLayerStore = QgsMapLayerStore()
+        
         self.dockwidget = None
         self.flags = {}
         self.CONFIG_DATA = CONFIG_DATA
@@ -64,12 +65,16 @@ class FilterMateApp:
                                     }
         
         self.PROJECT = QgsProject.instance()
+        self.MapLayerStore = self.PROJECT.layerStore()
         self.PLUGIN_CONFIG_DIRECTORY = PLUGIN_CONFIG_DIRECTORY
         self.db_name = 'filterMate_db.sqlite'
         self.db_file_path = os.path.normpath(self.PLUGIN_CONFIG_DIRECTORY + os.sep + self.db_name)
         self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
         self.project_file_path = self.PROJECT.absolutePath()
         self.project_uuid = ''
+
+        self.project_datasources = {}
+        self.app_postgresql_temp_schema_setted = False
         self.run()
 
 
@@ -95,6 +100,7 @@ class FilterMateApp:
         """Keep the advanced filter combobox updated on adding or removing layers"""
         self.iface.projectRead.connect(lambda x='project_read': self.manage_task(x))
         self.iface.newProjectCreated.connect(lambda x='new_project': self.manage_task(x))
+        self.MapLayerStore.layerWasAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
         self.MapLayerStore.layersAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
         self.MapLayerStore.layersWillBeRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
         self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_all_layers': self.manage_task(x))
@@ -121,6 +127,8 @@ class FilterMateApp:
 
         assert task_name in list(self.tasks_descriptions.keys())
 
+        print(task_name)
+
         if self.dockwidget != None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
@@ -133,8 +141,10 @@ class FilterMateApp:
            return
         
         if task_name in ('project_read', 'new_project'):
+            self.app_postgresql_temp_schema_setted = False
             QgsApplication.taskManager().cancelAll()
             self.PROJECT = QgsProject.instance()
+            self.MapLayerStore = self.PROJECT.layerStore()
             init_layers = list(self.PROJECT.mapLayers().values())
             self.init_filterMate_db()
             if len(init_layers) > 0:
@@ -230,14 +240,14 @@ class FilterMateApp:
 
                 if task_name == 'filter':
 
-                    task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"],
+                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
                                                 "layers": layers_to_filter,
                                                 "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                     return task_parameters
 
                 elif task_name == 'unfilter':
 
-                    task_parameters["task"] = {"features": features, "expression": expression, "filtering": self.dockwidget.project_props["filtering"],
+                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
                                                 "layers": layers_to_filter,
                                                 "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                     return task_parameters
@@ -251,7 +261,7 @@ class FilterMateApp:
 
             elif task_name == 'export':
                 layers_to_export = []
-                for key in self.dockwidget.project_props["layers_to_export"]:
+                for key in self.dockwidget.project_props["EXPORTING"]["LAYERS_TO_EXPORT"]:
                     if key in self.PROJECT_LAYERS:
                         layers_to_export.append(self.PROJECT_LAYERS[key]["infos"])
                 task_parameters["task"] = self.dockwidget.project_props
@@ -273,7 +283,7 @@ class FilterMateApp:
                     else:
                         layers = [data]
 
-                    if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
+                    if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
                         reset_all_layers_variables_flag = True
 
                     # for layer in layers:
@@ -304,7 +314,7 @@ class FilterMateApp:
                     else:
                         layers = [data]
 
-                    if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
+                    if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
                         reset_all_layers_variables_flag = True
 
                     task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag": reset_all_layers_variables_flag,
@@ -318,47 +328,43 @@ class FilterMateApp:
 
 
 
-            if source_layer.subsetString() != '':
-                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = True
-            else:
-                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = False
+            # if source_layer.subsetString() != '':
+            #     self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = True
+            # else:
+            #     self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = False
+            # self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
 
-
-            source_layer.reload()
+            
+            # source_layer.reload()
             source_layer.updateExtents()
             source_layer.triggerRepaint()
-
-            self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
             
-            
-            if task_parameters["filtering"]["has_layers_to_filter"] == True:
-                for layer_props in task_parameters["task"]["layers"]:
-                    if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
-                        if len(layers) == 1:
-                            layer = layers[0]
+            # if task_parameters["filtering"]["has_layers_to_filter"] == True:
+            #     for layer_props in task_parameters["task"]["layers"]:
+            #         if layer_props["layer_id"] in self.PROJECT_LAYERS:
+            #             layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
+            #             if len(layers) == 1:
+            #                 layer = layers[0]
 
-                            if layer.subsetString() != '':
-                                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
-                            else:
-                                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+            #                 # if layer.subsetString() != '':
+            #                 #     self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+            #                 # else:
+            #                 #     self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+            #                 # self.save_variables_from_layer(layer,[("infos","is_already_subset")])
 
-                            layer.reload()
-                            layer.updateExtents()
-                            layer.triggerRepaint()
-
-                            self.save_variables_from_layer(layer,[("infos","is_already_subset")])
+            #                 layer.reload()
+            #                 layer.updateExtents()
+            #                 layer.triggerRepaint()
+                        
 
             self.iface.mapCanvas().refreshAllLayers()
             self.iface.mapCanvas().refresh()
-         
-        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
-        print('all layers reshreshed')
 
         extent = source_layer.extent()
-        self.iface.mapCanvas().zoomToFeatureExtent(extent)
+        self.iface.mapCanvas().zoomToFeatureExtent(extent)  
 
-        
+        self.dockwidget.PROJECT_LAYERS = self.PROJECT_LAYERS
+
 
     def apply_subset_filter(self, task_name, layer):
 
@@ -421,9 +427,9 @@ class FilterMateApp:
 
         # if password != None and len(password) > 0:
         #     if ssl_mode != None:
-        #         connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
+        #         connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
         #     else:
-        #         connection = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+        #         connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
         # else:
         #     return False
         
@@ -434,7 +440,7 @@ class FilterMateApp:
         # sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
         #                                                                         table=table)
         
-        # with connection.cursor() as cursor:
+        # with connexion.cursor() as cursor:
         #     cursor.execute(sql_statement)
 
 
@@ -562,16 +568,17 @@ class FilterMateApp:
 
             print(self.db_file_path)
 
-            if self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] is True:
+            if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True:
                 try: 
                     os.remove(self.db_file_path)
-                    self.CONFIG_DATA["APP"]["FRESH_RELOAD_FLAG"] = False
+                    self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] = False
                     with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
                     print(error)
             
             project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]
+            print(project_settings)
 
             if not os.path.exists(self.db_file_path):
                 memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
@@ -685,6 +692,28 @@ class FilterMateApp:
             cur.close()
             conn.close()
 
+            # if "FILTER" in self.CONFIG_DATA["CURRENT_PROJECT"] and "app_postgresql_temp_schema" in self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]:
+            #     self.app_postgresql_temp_schema = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"]
+            # else:
+            #     self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"] = 'filterMate_temp'
+            #     self.app_postgresql_temp_schema = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"]
+
+
+
+    def add_project_datasource(self, layer):
+
+        connexion, source_uri = get_datasource_connexion_from_layer(layer)
+
+        sql_statement = 'CREATE SCHEMA IF NOT EXISTS {app_temp_schema} AUTHORIZATION postgres;'.format(app_temp_schema=self.app_postgresql_temp_schema)
+
+        print(sql_statement)
+
+
+        with connexion.cursor() as cursor:
+            cursor.execute(sql_statement)
+
+
+
             
     def save_project_variables(self, name=None):
 
@@ -724,6 +753,13 @@ class FilterMateApp:
 
         self.PROJECT_LAYERS = result_project_layers
         self.PROJECT = QgsProject.instance()
+        global PATH_ABSOLUTE_PROJECT
+        PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
+        if PATH_ABSOLUTE_PROJECT =='./':
+            if PLATFORM.startswith('win'):
+                PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+            else:
+                PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.environ['HOME'])
 
         if self.dockwidget != None:
 
@@ -739,7 +775,37 @@ class FilterMateApp:
                             except:
                                 pass
 
-                else:                    
+                        layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
+                        if layer_source_type not in self.project_datasources:
+                            self.project_datasources[layer_source_type] = {}
+
+                    
+                        layer_props = self.PROJECT_LAYERS[layer_key]
+                        layer = None
+                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
+                        if len(layers) == 1:
+                            layer = layers[0]
+                        source_uri, authcfg_id = get_data_source_uri(layer)
+
+                        if authcfg_id != None:
+                            if authcfg_id not in self.project_datasources[layer_source_type].keys():
+                                connexion, source_uri = get_datasource_connexion_from_layer(layer)
+                                self.project_datasources[layer_source_type][authcfg_id] = connexion
+                        
+                        else:
+                            uri = source_uri.uri().strip()
+                            relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
+                            layer_name = uri.split('|')[1] if len(uri.split('|')) == 2 else None
+                            absolute_path = os.path.join(os.path.normpath(PATH_ABSOLUTE_PROJECT), os.path.normpath(relative_path))
+                            if absolute_path not in self.project_datasources[layer_source_type].keys():
+                                self.project_datasources[layer_source_type][absolute_path] = []
+                            
+                            if uri not in self.project_datasources[layer_source_type][absolute_path]:
+                                self.project_datasources[layer_source_type][absolute_path].append(absolute_path + ('|' + layer_name if layer_name is not None else ''))
+                            
+
+                else:
+                                       
                     for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
                         if layer_key not in self.PROJECT_LAYERS.keys():
                             cur.execute("""DELETE FROM fm_project_layers_properties 
@@ -752,13 +818,101 @@ class FilterMateApp:
                             try:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
                             except:
-                                pass          
+                                pass
+
+                        layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
+                        if layer_source_type not in self.project_datasources:
+                            self.project_datasources[layer_source_type] = {}
+
+                    
+                        layer_props = self.PROJECT_LAYERS[layer_key]
+                        layer = None
+                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
+                        if len(layers) == 1:
+                            layer = layers[0]
+                        source_uri, authcfg_id = get_data_source_uri(layer)
+
+                        if authcfg_id != None:
+
+                            if authcfg_id not in self.project_datasources[layer_source_type].keys():
+                                connexion, source_uri = get_datasource_connexion_from_layer(layer)
+                                self.project_datasources[layer_source_type][authcfg_id] = connexion
+                            
+                        
+                        else:
+
+                            uri = source_uri.uri().strip()
+                            relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
+                            absolute_path = os.path.normpath(os.path.join(PATH_ABSOLUTE_PROJECT, relative_path))
+                            if absolute_path in self.project_datasources[layer_source_type].keys():
+                                self.project_datasources[layer_source_type][absolute_path].remove(uri)
+                            if uri in self.project_datasources[layer_source_type][absolute_path]:
+                                self.project_datasources[layer_source_type][absolute_path].remove(uri)
+                
                 
                 self.save_project_variables()                    
                 self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
+            self.MapLayerStore = self.PROJECT.layerStore()
+            self.update_datasource()
+            print(self.project_datasources)
             cur.close()
             conn.close()
+            
+    def update_datasource(self):
+
+        ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
+        ogr_driver_list.sort()
+        print(ogr_driver_list)
+
+        list(self.project_datasources['postgresql'].keys())
+        if len(self.project_datasources['postgresql']) >= 1:
+            postgresql_connexions = list(self.project_datasources['postgresql'].keys())
+            if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] == "":
+                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = self.project_datasources['postgresql'][postgresql_connexions[0]]
+                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = True
+        else:
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = False
+
+        for current_datasource in list(self.project_datasources.keys()):
+            if current_datasource != "postgresql":
+                for project_datasource in self.project_datasources[current_datasource].keys():
+                    datasources = self.project_datasources[current_datasource][project_datasource]
+                    for datasource in datasources:
+                        datasource_ext = datasource.split('|')[0].split('.')[1] if len(datasource.split('|')[0]) >= 1 and len(datasource.split('|')[0].split('.')) >= 1 else datasource
+                        datasource_type_name = [ogr_name for ogr_name in ogr_driver_list if ogr_name.upper() == datasource_ext.upper()]
+
+                    if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] is True:
+                        self.create_foreign_data_wrapper(project_datasource, os.path.basename(project_datasource), datasource_type_name[0])
+                        
+
+
+
+
+    def create_foreign_data_wrapper(self, project_datasource, datasource, format):
+
+        sql_request = """CREATE EXTENSION IF NOT EXISTS ogr_fdw;
+                        CREATE SCHEMA IF NOT EXISTS filter_mate_temp AUTHORIZATION postgres; 
+                        DROP SERVER IF exists server_{datasource_name}  CASCADE;
+                        CREATE SERVER server_{datasource_name} 
+                        FOREIGN DATA WRAPPER ogr_fdw OPTIONS (
+                            datasource '{datasource}', 
+                            format '{format}');
+                        IMPORT FOREIGN SCHEMA ogr_all
+                        FROM SERVER server_{datasource_name} INTO filter_mate_temp;""".format(datasource_name=datasource.replace('.', '_').replace('-', '_').replace('@', '_'),
+                                                                                        datasource=project_datasource.replace('\\\\', '\\'),
+                                                                                        format=format)
+
+        if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] is True:
+            connexion = self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"]
+            with connexion.cursor() as cursor:
+                cursor.execute(sql_request)
+
+            
+        
+
+
 
     def can_cast(self, dest_type, source_value):
         try:

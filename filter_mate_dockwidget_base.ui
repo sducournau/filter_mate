@@ -444,7 +444,7 @@ background: #bdc3c7;
       </property>
       <widget class="QFrame" name="frame_exploring">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
@@ -458,7 +458,7 @@ background: #bdc3c7;
        <property name="maximumSize">
         <size>
          <width>16777215</width>
-         <height>400</height>
+         <height>16777215</height>
         </size>
        </property>
        <property name="baseSize">
@@ -511,7 +511,7 @@ background: #bdc3c7;
              <x>0</x>
              <y>0</y>
              <width>383</width>
-             <height>359</height>
+             <height>321</height>
             </rect>
            </property>
            <layout class="QGridLayout" name="gridLayout_2">
@@ -963,7 +963,7 @@ color:black;
                     </spacer>
                    </item>
                    <item>
-                    <widget class="QPushButton" name="pushButton_exploring_change_all_layer_properties">
+                    <widget class="QPushButton" name="pushButton_exploring_reset_layer_properties">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                        <horstretch>0</horstretch>
@@ -1051,7 +1051,7 @@ color:black;
                    <cursorShape>PointingHandCursor</cursorShape>
                   </property>
                   <property name="styleSheet">
-                   <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+                   <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
                   </property>
                   <property name="title">
                    <string>SINGLE SELECTION</string>
@@ -1298,7 +1298,7 @@ QComboBox QAbstractItemView {
                    <cursorShape>PointingHandCursor</cursorShape>
                   </property>
                   <property name="styleSheet">
-                   <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+                   <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
                   </property>
                   <property name="title">
                    <string>MULTIPLE SELECTION</string>
@@ -1424,7 +1424,7 @@ QComboBox QAbstractItemView {
                    <cursorShape>PointingHandCursor</cursorShape>
                   </property>
                   <property name="styleSheet">
-                   <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
+                   <string notr="true">QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;} QgsCollapsibleGroupBoxBasic { border: none; }QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}QgsCollapsibleGroupBoxBasic::title, QgsCollapsibleGroupBox::title {  subcontrol-origin: margin;  subcontrol-position: top left;  margin-left: 20px;  margin-right: 5px;  left: 0px;  top: 1px;}</string>
                   </property>
                   <property name="title">
                    <string>CUSTOM SELECTION</string>
@@ -1576,6 +1576,12 @@ QComboBox QAbstractItemView {
        </layout>
       </widget>
       <widget class="QFrame" name="frame_toolset">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
        <property name="minimumSize">
         <size>
          <width>0</width>
@@ -1585,7 +1591,7 @@ QComboBox QAbstractItemView {
        <property name="maximumSize">
         <size>
          <width>16777215</width>
-         <height>600</height>
+         <height>16777215</height>
         </size>
        </property>
        <property name="font">
@@ -1669,7 +1675,7 @@ QComboBox QAbstractItemView {
                <x>0</x>
                <y>0</y>
                <width>381</width>
-               <height>356</height>
+               <height>394</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -1716,7 +1722,7 @@ color:black;
                 </property>
                 <layout class="QVBoxLayout" name="verticalLayout_10">
                  <item>
-                  <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0">
+                  <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                    <item>
                     <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
                      <property name="sizePolicy">
@@ -2233,7 +2239,7 @@ color:black;
                     </spacer>
                    </item>
                    <item>
-                    <widget class="QPushButton" name="pushButton_checkable_filtering_buffer">
+                    <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_value">
                      <property name="enabled">
                       <bool>false</bool>
                      </property>
@@ -2284,6 +2290,41 @@ color:black;
                      <property name="styleSheet">
                       <string notr="true"/>
                      </property>
+                     <property name="text">
+                      <string/>
+                     </property>
+                     <property name="iconSize">
+                      <size>
+                       <width>20</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                     <property name="checkable">
+                      <bool>true</bool>
+                     </property>
+                     <property name="flat">
+                      <bool>true</bool>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <spacer name="verticalSpacer_14">
+                     <property name="orientation">
+                      <enum>Qt::Vertical</enum>
+                     </property>
+                     <property name="sizeType">
+                      <enum>QSizePolicy::Preferred</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>20</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                    </spacer>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type">
                      <property name="text">
                       <string/>
                      </property>
@@ -2776,7 +2817,7 @@ QComboBox QAbstractItemView {
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_2">
                   <item>
-                   <widget class="QgsPropertyOverrideButton" name="mPropertyOverrideButton_filtering_buffer_property">
+                   <widget class="QgsPropertyOverrideButton" name="mPropertyOverrideButton_filtering_buffer_value_property">
                     <property name="font">
                      <font>
                       <family>Segoe UI Semibold</family>
@@ -2840,7 +2881,7 @@ QComboBox QAbstractItemView {
                    </widget>
                   </item>
                   <item>
-                   <widget class="QgsDoubleSpinBox" name="mQgsDoubleSpinBox_filtering_buffer">
+                   <widget class="QgsDoubleSpinBox" name="mQgsDoubleSpinBox_filtering_buffer_value">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -2929,13 +2970,13 @@ border: 2px solid black;
                    </widget>
                   </item>
                   <item>
-                   <widget class="QLineEdit" name="lineEdit_filtering_buffer_expression">
+                   <widget class="QLineEdit" name="lineEdit_filtering_buffer_value_expression">
                     <property name="enabled">
                      <bool>true</bool>
                     </property>
                     <property name="minimumSize">
                      <size>
-                      <width>30</width>
+                      <width>26</width>
                       <height>30</height>
                      </size>
                     </property>
@@ -2972,6 +3013,89 @@ border: 2px solid black;
                  </layout>
                 </item>
                 <item>
+                 <spacer name="verticalSpacer_7">
+                  <property name="orientation">
+                   <enum>Qt::Vertical</enum>
+                  </property>
+                  <property name="sizeType">
+                   <enum>QSizePolicy::Preferred</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>20</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QComboBox" name="comboBox_filtering_buffer_type">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>30</width>
+                    <height>30</height>
+                   </size>
+                  </property>
+                  <property name="maximumSize">
+                   <size>
+                    <width>16777215</width>
+                    <height>30</height>
+                   </size>
+                  </property>
+                  <property name="baseSize">
+                   <size>
+                    <width>0</width>
+                    <height>30</height>
+                   </size>
+                  </property>
+                  <property name="styleSheet">
+                   <string notr="true">QComboBox
+{
+ background-color:#bdc3c7;
+border: 1px solid black;
+border-radius: 3px;
+padding: 3px 3px 3px 3px;
+color:black;
+
+}
+
+QComboBox:hover
+{
+
+border: 2px solid black;
+
+}
+
+QComboBox QAbstractItemView {
+
+  background: #bdc3c7;
+  selection-background-color: #34495e;
+	color:black;
+}
+
+
+
+
+</string>
+                  </property>
+                  <property name="editable">
+                   <bool>true</bool>
+                  </property>
+                  <property name="iconSize">
+                   <size>
+                    <width>20</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </widget>
+                </item>
+                <item>
                  <spacer name="verticalSpacer_31">
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>
@@ -2997,7 +3121,7 @@ border: 2px solid black;
                <x>0</x>
                <y>0</y>
                <width>381</width>
-               <height>356</height>
+               <height>394</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -3923,7 +4047,7 @@ QComboBox QAbstractItemView {
                <x>0</x>
                <y>0</y>
                <width>381</width>
-               <height>356</height>
+               <height>394</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -3935,7 +4059,7 @@ QComboBox QAbstractItemView {
              </attribute>
              <layout class="QVBoxLayout" name="verticalLayout_8">
               <item>
-               <layout class="QVBoxLayout" name="verticalLayout_11">
+               <layout class="QVBoxLayout" name="verticalLayout_configurationPanel">
                 <item>
                  <spacer name="verticalSpacer_34">
                   <property name="orientation">

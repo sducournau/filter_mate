@@ -8,11 +8,10 @@ from qgis.PyQt import QtCore, QtGui, QtWidgets
 
 
 TypeRole = QtCore.Qt.UserRole + 1
-PLUGIN_DIR = None
+PLUGIN_DIR = ''
 
 class DataType(object):
     """Base class for data types."""
-
     COLOR = QtCore.Qt.black
 
     def matches(self, data):
@@ -89,9 +88,7 @@ class NoneType(DataType):
     """None"""
 
     def matches(self, data):
-        if data == None:
-            data = 'None'
-        return data
+        return data is None
 
     def value_item(self, value, model, key=None):
         item = super(NoneType, self).value_item(value, model, key)
@@ -114,7 +111,7 @@ class StrType(DataType):
     """Strings and unicodes"""
 
     def matches(self, data):
-        return isinstance(data, str)
+        return isinstance(data, str) or isinstance(data, unicode)
 
 
 class IntType(DataType):
@@ -535,5 +532,4 @@ def match_type(data):
             return type_
 
 def set_plugin_dir(plugin_dir):
-    global PLUGIN_DIR
     PLUGIN_DIR = plugin_dir

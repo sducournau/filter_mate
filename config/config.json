@@ -1,106 +1,148 @@
 {
-    "DOCKWIDGET": {
-        "PushButton": {
-            "STYLE": {
-                "QPushButton": {
-                    "border-radius": "10px;",
-                    "padding": "10px 10px 10px 10px;",
-                    "background-color": "#F0F0F0;"
-                },
-                "QPushButton:hover": {
-                    "background-color": "#CCCCCC;"
-                },
-                "QPushButton:pressed": {
-                    "background-color": "#CCCCCC;",
-                    "border": "2px solid black;"
-                },
-                "QPushButton:checked": {
-                    "background-color": "#CCCCCC;",
-                    "border": "2px solid black;"
-                }
-            },
-            "ICONS_SIZES": {
-                "ACTION": 25,
-                "OTHERS": 20
-            },
-            "ICONS": {
-                "ACTION": {
-                    "FILTER": "filter.png",
-                    "UNFILTER": "unfilter.png",
-                    "RESET": "reset.png",
-                    "EXPORT": "export.png",
-                    "ABOUT": "icon.png"
-                },
-                "EXPLORING": {
-                    "IDENTIFY": "identify_alt.png",
-                    "ZOOM": "zoom.png",
-                    "IS_SELECTING": "select_black.png",
-                    "IS_TRACKING": "track.png",
-                    "IS_LINKING": "link.png",
-                    "IS_CHANGING_ALL_LAYER_PROPERTIES": {
-                        "ICON_ON_TRUE": "save_properties.png",
-                        "ICON_ON_FALSE": "reset_properties.png"
+    "APP": {
+        "DOCKWIDGET": {
+            "PushButton": {
+                "STYLE": {
+                    "QPushButton": {
+                        "border-radius": "10px;",
+                        "padding": "10px 10px 10px 10px;",
+                        "background-color": "#F0F0F0;"
+                    },
+                    "QPushButton:hover": {
+                        "background-color": "#CCCCCC;"
+                    },
+                    "QPushButton:pressed": {
+                        "background-color": "#CCCCCC;",
+                        "border": "2px solid black;"
+                    },
+                    "QPushButton:checked": {
+                        "background-color": "#CCCCCC;",
+                        "border": "2px solid black;"
                     }
                 },
-                "FILTERING": {
-                    "AUTO_CURRENT_LAYER": "auto_layer_white.png",
-                    "HAS_LAYERS_TO_FILTER": "layers.png",
-                    "HAS_COMBINE_OPERATOR": "add_multi.png",
-                    "HAS_GEOMETRIC_PREDICATES": "geo_predicates.png",
-                    "HAS_BUFFER": "geo_tampon.png"
+                "ICONS_SIZES": {
+                    "ACTION": 25,
+                    "OTHERS": 20
                 },
-                "EXPORTING": {
-                    "HAS_LAYERS_TO_EXPORT": "layers.png",
-                    "HAS_PROJECTION_TO_EXPORT": "projection_black.png",
-                    "HAS_STYLES_TO_EXPORT": "styles_black.png",
-                    "HAS_DATATYPE_TO_EXPORT": "datatype.png",
-                    "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png",
-                    "HAS_ZIP_TO_EXPORT": "zip.png"
+                "ICONS": {
+                    "ACTION": {
+                        "FILTER": "filter.png",
+                        "UNFILTER": "unfilter.png",
+                        "RESET": "reset.png",
+                        "EXPORT": "export.png",
+                        "ABOUT": "icon.png"
+                    },
+                    "EXPLORING": {
+                        "IDENTIFY": "identify_alt.png",
+                        "ZOOM": "zoom.png",
+                        "IS_SELECTING": "select_black.png",
+                        "IS_TRACKING": "track.png",
+                        "IS_LINKING": "link.png",
+                        "RESET_ALL_LAYER_PROPERTIES": "save_properties.png"
+                    },
+                    "FILTERING": {
+                        "AUTO_CURRENT_LAYER": "auto_layer_white.png",
+                        "HAS_LAYERS_TO_FILTER": "layers.png",
+                        "HAS_COMBINE_OPERATOR": "add_multi.png",
+                        "HAS_GEOMETRIC_PREDICATES": "geo_predicates.png",
+                        "HAS_BUFFER_VALUE": "buffer_value.png",
+                        "HAS_BUFFER_TYPE": "buffer_type.png"
+                    },
+                    "EXPORTING": {
+                        "HAS_LAYERS_TO_EXPORT": "layers.png",
+                        "HAS_PROJECTION_TO_EXPORT": "projection_black.png",
+                        "HAS_STYLES_TO_EXPORT": "styles_black.png",
+                        "HAS_DATATYPE_TO_EXPORT": "datatype.png",
+                        "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png",
+                        "HAS_ZIP_TO_EXPORT": "zip.png"
+                    }
                 }
+            },
+            "COLORS": {
+                "BACKGROUND": [
+                    "white",
+                    "#CCCCCC",
+                    "#F0F0F0",
+                    "#757575"
+                ],
+                "FONT": [
+                    "black",
+                    "black",
+                    "#a3a3a3"
+                ]
             }
         },
-        "COLORS": {
-            "BACKGROUND": [
-                "white",
-                "#CCCCCC",
-                "#F0F0F0",
-                "#757575"
-            ],
-            "FONT": [
-                "black",
-                "black",
-                "#a3a3a3"
-            ]
+        "OPTIONS": {
+            "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
+            "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
+            "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
+            "APP_SQLITE_PATH": "C:\\Users\\simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\FilterMate",
+            "FRESH_RELOAD_FLAG": false
         }
     },
     "CURRENT_PROJECT": {
-        "EXPORT": {
-            "has_layers_to_export": false,
-            "layers_to_export": [],
-            "has_projection_to_export": false,
-            "projection_to_export": "EPSG:2154",
-            "has_styles_to_export": false,
-            "styles_to_export": "QML",
-            "has_datatype_to_export": false,
-            "datatype_to_export": "GPKG",
-            "has_output_folder_to_export": false,
-            "output_folder_to_export": "",
-            "has_zip_to_export": false,
-            "zip_to_export": ""
+        "EXPORTING": {
+            "HAS_LAYERS_TO_EXPORT": false,
+            "LAYERS_TO_EXPORT": [
+                "COURS_D_EAU_9b6039fc_6089_4cc2_a083_3eacceea1752",
+                "HAIE_4ea2cd51_54b3_43f9_a032_b6c7d3462142",
+                "ROUTE_NUMEROTEE_OU_NOMMEE_7ffd0212_1114_40f2_ac5a_a86629c2ffff",
+                "SECTION_DE_POINTS_DE_REPERE_923b3421_d837_4a70_b01f_b08daaf4bf67",
+                "TRANSPORT_PAR_CABLE_efb27733_fcca_487c_9b88_8f44af03b0b5",
+                "TRONCON_DE_ROUTE_c27034ec_7853_4d67_a3d1_1340b7b84945",
+                "TRONCON_DE_VOIE_FERREE_e688f402_636f_49aa_b53a_03306abbc5b5",
+                "TRONCON_HYDROGRAPHIQUE_cd12a801_dbdb_4506_b032_e67ccfbf7394",
+                "osm_metro_line_toulouse_59bb46a3_9653_411b_b8f6_6cb1ba549ae0",
+                "osm_metro_point_toulouse_98756318_ffc4_48fc_bdab_86f12e1b3730",
+                "osm_money_toulouse_35b3a7ba_2cfc_4790_8bc3_ecb9e648aafc",
+                "osm_shop_toulouse_f41a3cf8_edd1_41b6_8e91_28fbf8a051ea",
+                "AERODROME_4ad32435_ca6d_4547_a0ff_bfc19aa7350f",
+                "ARRONDISSEMENT_bbb2218c_9bc5_418c_bcf7_6b36e6b64da4",
+                "BASSIN_VERSANT_TOPOGRAPHIQUE_94d30e13_1c1a_45ae_9fe0_6576a2a6741a",
+                "BATIMENT_caa89afa_3f52_4920_ab98_272464d018b2",
+                "CIMETIERE_d59890a0_9f4a_4f94_b785_c79020304965",
+                "COLLECTIVITE_TERRITORIALE_a04c6cf7_0df1_40a4_a103_b4c22d85bfd0",
+                "COMMUNE_181ab287_d74d_40b7_a1c1_ab16ba9817b9",
+                "COMMUNE_ASSOCIEE_OU_DELEGUEE_50607406_6bbd_4f9e_83b8_81e651c69974",
+                "CONSTRUCTION_SURFACIQUE_e55ee2d1_06db_4579_b409_90926f4fef37",
+                "DEPARTEMENT_18ce67f6_b930_4c05_ad51_7eee939f7537",
+                "EPCI_e32e645e_5a98_4240_9a06_7cd10fe4e69b",
+                "EQUIPEMENT_DE_TRANSPORT_5f079422_6809_4a87_987b_cedc7d12d047",
+                "FORET_PUBLIQUE_0d94070d_d7fa_440e_b175_a33aeceb22ca",
+                "PARC_OU_RESERVE_3af908c3_faf8_4a9d_9324_652f8b1572ef",
+                "PISTE_D_AERODROME_2ccba6d1_16b6_4f92_86a8_e8f375c1b492",
+                "PLAN_D_EAU_3801d2ea_c3c3_4f9d_858c_8dde8c848abf",
+                "POSTE_DE_TRANSFORMATION_91061a8a_d014_4658_81db_5ab5b9f99ac9",
+                "REGION_6abd3132_d16c_4d17_9f18_252e3eca527d",
+                "RESERVOIR_52e745b5_ee21_4b57_858c_164318fff7ac",
+                "SURFACE_HYDROGRAPHIQUE_48f9ef5e_63c5_4c3b_8127_94951d5af786",
+                "TERRAIN_DE_SPORT_b8c9e282_c109_4aef_b8c8_0505a9685f0f",
+                "ZONE_DE_VEGETATION_19644bd1_4d70_4b55_9d23_1c0f57400703",
+                "ZONE_D_ACTIVITE_OU_D_INTERET_e9e846ed_4658_4afc_9946_a1958d924c6d",
+                "ZONE_D_HABITATION_c81499a0_84da_4deb_9b77_82549ba31538"
+            ],
+            "HAS_PROJECTION_TO_EXPORT": false,
+            "PROJECTION_TO_EXPORT": "EPSG:3857",
+            "HAS_STYLES_TO_EXPORT": false,
+            "STYLES_TO_EXPORT": "QML",
+            "HAS_DATATYPE_TO_EXPORT": false,
+            "DATATYPE_TO_EXPORT": "GPKG",
+            "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
+            "OUTPUT_FOLDER_TO_EXPORT": "",
+            "HAS_ZIP_TO_EXPORT": false,
+            "ZIP_TO_EXPORT": ""
         },
-        "META": {
-            "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,
-            "LAYER_PROPERTIES_COUNT": 0
-        },
-        "FILTER": {
-            "feature_count_limit": 10000
+        "OPTIONS": {
+            "LAYERS": {
+                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
+                "LAYER_PROPERTIES_COUNT": 33,
+                "FEATURE_COUNT_LIMIT": 10000
+            },
+            "PROJECT_ID": "",
+            "PROJECT_PATH": "",
+            "PROJECT_SQLITE_PATH": "",
+            "ACTIVE_POSTGRESQL": "",
+            "IS_ACTIVE_POSTGRESQL": false
         }
-    },
-    "APP": {
-        "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
-        "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
-        "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
-        "SQLITE_PATH": "",
-        "FRESH_RELOAD_FLAG": true
     }
 }
