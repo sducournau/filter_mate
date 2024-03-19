@@ -6,7 +6,7 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a Qgis plugin, a daily companion that allows you to easily explore, filter and export vector data
-version=1.7
+version=1.8
 author=imagodata
 email=imagodata+filter_mate@skiff.com
 
@@ -31,6 +31,7 @@ hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
 
 changelog=
+    Rework the filtering logic : use of temporary materialized views and indexes
     Add spatialite management : project metadata and subset history
     Rebuild QgsCheckableComboBoxFeaturesListPickerWidget to show filtered entities
     Rework the combine logic filter
