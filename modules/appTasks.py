@@ -271,7 +271,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                         param_source_table=self.param_source_table,
                                                                                                                                                                                                                         expression=self.expression
                                                                                                                                                                                                                         )  
-                        self.manage_layer_subset_strings(self.source_layer, expression, self.primary_key_name)
+                        self.manage_layer_subset_strings(self.source_layer, expression, self.primary_key_name, self.param_source_geom, False)
 
 
         if result is False:
@@ -306,7 +306,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                     param_source_table=self.param_source_table,
                                                                                                                                                                                                                     expression=self.expression
                                                                                                                                                                                                                     )  
-                    self.manage_layer_subset_strings(self.source_layer, expression, self.primary_key_name)
+                    self.manage_layer_subset_strings(self.source_layer, expression, self.primary_key_name, self.param_source_geom, False)
 
 
 
@@ -403,7 +403,7 @@ class FilterEngineTask(QgsTask):
             self.param_buffer_expression = self.qgis_expression_to_postgis(self.param_buffer_expression)    
 
             
-            result = self.manage_layer_subset_strings(self.source_layer, None, self.primary_key_name, True)
+            result = self.manage_layer_subset_strings(self.source_layer, None, self.primary_key_name, self.param_source_geom, True)
 
 
             layer_name = self.source_layer.name()
@@ -566,9 +566,10 @@ class FilterEngineTask(QgsTask):
                 
                 if param_has_to_reproject_layer:
 
-                    param_distant_geom_expression = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid})'.format(param_distant_geom_expression=param_distant_geom_expression,
-                                                                                                                            param_layer_srid=param_layer_crs_authid.split(':')[1])
-                    
+                    param_distant_geom_expression = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid}) as {geometry_field}'.format(param_distant_geom_expression=param_distant_geom_expression,
+                                                                                                                                                    param_layer_srid=param_layer_crs_authid.split(':')[1],
+                                                                                                                                                    geometry_field=param_distant_geometry_field)
+                                            
                     
 
                 postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},{param_distant_geom_expression})'.format(source_sub_expression_geom=self.postgresql_source_geom,
@@ -759,7 +760,7 @@ class FilterEngineTask(QgsTask):
                 
                 param_expression = param_expression.replace(string_to_replace, string_replacement)
 
-                self.manage_layer_subset_strings(layer, param_expression, param_distant_primary_key_name, False)
+                self.manage_layer_subset_strings(layer, param_expression, param_distant_primary_key_name, param_distant_geometry_field, False)
 
 
         if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql'):
@@ -873,7 +874,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                                                                                         param_distant_table=param_distant_table,
                                                                                                                                                                                                                         expression=param_expression
                                                                                                                                                                                                                         )  
-                    self.manage_layer_subset_strings(layer, expression, param_distant_primary_key_name, False)
+                    self.manage_layer_subset_strings(layer, expression, param_distant_primary_key_name, param_distant_geometry_field, False)
                         
         return result
 
@@ -936,12 +937,12 @@ class FilterEngineTask(QgsTask):
 
         i = 1
 
-        self.manage_layer_subset_strings(self.source_layer, None, self.primary_key_name)
+        self.manage_layer_subset_strings(self.source_layer, None, self.primary_key_name, self.param_source_geom, False)
         self.setProgress((i/self.layers_count)*100)
 
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                self.manage_layer_subset_strings(layer, None, layer_props["primary_key_name"])
+                self.manage_layer_subset_strings(layer, None, layer_props["primary_key_name"], layer_props["geometry_field"], False)
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
@@ -1097,7 +1098,7 @@ class FilterEngineTask(QgsTask):
         return True
 
 
-    def manage_layer_subset_strings(self, layer, sql_subset_string=None, distant_primary_key_name=None, custom=False):
+    def manage_layer_subset_strings(self, layer, sql_subset_string=None, primary_key_name=None, geom_key_name=None, custom=False):
 
         conn = spatialite_connect(self.db_file_path)
         cur = conn.cursor()
@@ -1109,9 +1110,9 @@ class FilterEngineTask(QgsTask):
         name = layer.id().replace(layer_name, '').replace('-', '_')
 
         cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                        fk_project=self.project_uuid,
-                                                                                                                                                        layer_id=layer.id()
-                                                                                                                                                        )
+                                                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                                                layer_id=layer.id()
+                                                                                                                                                                )
         )
 
         results = cur.fetchall()
@@ -1126,10 +1127,13 @@ class FilterEngineTask(QgsTask):
 
             if custom is False:
 
-                sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}";'.format(schema=self.current_materialized_view_schema,
-                                                                                                    name=name)
+                sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                    name=name
+                                                                                                                                                                    )
 
-                sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(schema=self.current_materialized_view_schema,
+                sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+                                                                                                                                                                schema=self.current_materialized_view_schema,
                                                                                                                                                                 name=name,
                                                                                                                                                                 sql_subset_string=sql_subset_string
                                                                                                                                                                 )
@@ -1141,9 +1145,9 @@ class FilterEngineTask(QgsTask):
             elif custom is True:
 
                 cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                                    layer_id=layer.id()
-                                                                                                                                                    )
+                                                                                                                                                                        fk_project=self.project_uuid,
+                                                                                                                                                                        layer_id=layer.id()
+                                                                                                                                                                        )
                 )
 
                 results = cur.fetchall()
@@ -1168,35 +1172,51 @@ class FilterEngineTask(QgsTask):
                             where_clause_fields_arr.append(where_clause.split(' ')[0])
 
 
-                sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}";'.format(schema=self.current_materialized_view_schema,
-                                                                                                    name=name)
+                sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                    name=name
+                                                                                                                                                                    )
 
 
                 if last_subset_id != None:
                     sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT "{table_source}".geom, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
-                                                                                                                                                                                                                                                                                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                            name=name,
-                                                                                                                                                                                                                                                                                                                                                                                                                            schema_source=self.param_source_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                            primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                            table_source=self.param_source_table,
-                                                                                                                                                                                                                                                                                                                                                                                                                            where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                            param_buffer_expression=self.param_buffer_expression.replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                            source_new_subset=sql_subset_string,
-                                                                                                                                                                                                                                                                                                                                                                                                                            where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
-                                                                                                                                                                                                                                                                                                                                                                                                                        )
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    name=name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    schema_source=self.param_source_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    primary_key_name=self.primary_key_name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    table_source=self.param_source_table,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    param_buffer_expression=self.param_buffer_expression.replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    source_new_subset=sql_subset_string,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                )
                 else:
                     sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT "{table_source}".geom, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
-                                                                                                                                                                                                                                                                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                name=name,
-                                                                                                                                                                                                                                                                                                                                                                                                                schema_source=self.param_source_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                table_source=self.param_source_table,
-                                                                                                                                                                                                                                                                                                                                                                                                                where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                param_buffer_expression=self.param_buffer_expression.replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                source_new_subset=sql_subset_string,
-                                                                                                                                                                                                                                                                                                                                                                                                                where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
-                                                                                                                                                                                                                                                                                                                                                                                                            )
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    name=name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    schema_source=self.param_source_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    primary_key_name=self.primary_key_name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    table_source=self.param_source_table,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    param_buffer_expression=self.param_buffer_expression.replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    source_new_subset=sql_subset_string,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                )
+                
+            sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
+                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                    name=name,
+                                                                                                                                                    geometry_field=geom_key_name
+                                                                                                                                                    )
 
+            sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
+                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                        name=name
+                                                                                                                                        )
+            sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
+                                                                                    schema=self.current_materialized_view_schema,
+                                                                                    name=name
+                                                                                    )
 
             sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()                                                        
             print("sql_drop_request", sql_drop_request)
@@ -1215,23 +1235,29 @@ class FilterEngineTask(QgsTask):
                 connexion.commit()
                 cursor.execute(sql_create_request)
                 connexion.commit()
+                cursor.execute(sql_create_index)
+                connexion.commit()
+                cursor.execute(sql_cluster_request)
+                connexion.commit()
+                cursor.execute(sql_analyze_request)
+                connexion.commit()      
 
             cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
-                                                                                                                                                                                    id=uuid.uuid4(),
-                                                                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                                                                    layer_id=layer.id(),
-                                                                                                                                                                                    layer_source_id=self.source_layer.id(),
-                                                                                                                                                                                    seq_order=current_seq_order,
-                                                                                                                                                                                    subset_string=sql_subset_string.replace("\'","\'\'")
-                                                                                                                                                                                    )
+                                                                                                                                                                                id=uuid.uuid4(),
+                                                                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                                                                layer_id=layer.id(),
+                                                                                                                                                                                layer_source_id=self.source_layer.id(),
+                                                                                                                                                                                seq_order=current_seq_order,
+                                                                                                                                                                                subset_string=sql_subset_string.replace("\'","\'\'")
+                                                                                                                                                                                )
             )
             conn.commit()
 
-            layer_subsetString = '"{distant_primary_key_name}" IN (SELECT "mv_{name}"."{distant_primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                        name=name,
-                                                                                                                                                        distant_primary_key_name=distant_primary_key_name
-                                                                                                                                                        )
+            layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
+                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                        name=name,
+                                                                                                                                        primary_key_name=primary_key_name
+                                                                                                                                        )
             print("layer_subsetString", layer_subsetString)
             layer.setSubsetString(layer_subsetString)
 
@@ -1246,8 +1272,11 @@ class FilterEngineTask(QgsTask):
 
                 conn.commit()
 
-                sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}";'.format(schema=self.current_materialized_view_schema,
-                                                                                                    name=name)
+                sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                            name=name
+                                                                                                            )
+                
                 connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
 
                 try:
@@ -1273,9 +1302,9 @@ class FilterEngineTask(QgsTask):
                 conn.commit()
 
             cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                fk_project=self.project_uuid,
-                                                                                                                                                layer_id=layer.id()
-                                                                                                                                                )
+                                                                                                                                                                    fk_project=self.project_uuid,
+                                                                                                                                                                    layer_id=layer.id()
+                                                                                                                                                                    )
             )
 
             results = cur.fetchall()
@@ -1284,19 +1313,35 @@ class FilterEngineTask(QgsTask):
                 sql_subset_string = result[-1]
             
 
-                sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}";'.format(schema=self.current_materialized_view_schema,
-                                                                                                name=name)
+                sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                                name=name
+                                                                                                                                                                )
 
-                sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(schema=self.current_materialized_view_schema,
-                                                                                                                                                                   name=name,
-                                                                                                                                                                   sql_subset_string=sql_subset_string
-                                                                                                                                                                   )
+                sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                    name=name,
+                                                                                                                                                                    sql_subset_string=sql_subset_string
+                                                                                                                                                                    )
                  
+                sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
+                                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                                        name=name,
+                                                                                                                                                        geometry_field=geom_key_name
+                                                                                                                                                        )
 
+                sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
+                                                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                                                            name=name
+                                                                                                                                            )
 
+                sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
+                                                                                    schema=self.current_materialized_view_schema,
+                                                                                    name=name
+                                                                                    )
+                
                 sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()
 
-                print(sql_create_request)
                 connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
 
                 try:
@@ -1310,12 +1355,18 @@ class FilterEngineTask(QgsTask):
                     connexion.commit()
                     cursor.execute(sql_create_request)
                     connexion.commit()
+                    cursor.execute(sql_create_index)
+                    connexion.commit()
+                    cursor.execute(sql_cluster_request)
+                    connexion.commit()
+                    cursor.execute(sql_analyze_request)
+                    connexion.commit()  
 
-                layer_subsetString = '"{distant_primary_key_name}" IN (SELECT "mv_{name}"."{distant_primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                            name=name,
-                                                                                                                                                            distant_primary_key_name=distant_primary_key_name
-                                                                                                                                                            )
+                layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
+                                                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                                                            name=name,
+                                                                                                                                            primary_key_name=primary_key_name
+                                                                                                                                            )
                 layer.setSubsetString(layer_subsetString)    
 
             else:
@@ -1654,7 +1705,7 @@ class LayersManagementEngineTask(QgsTask):
                                                                                                                                 table=table,
                                                                                                                                 geometry_field=geometry_field)
             
-            sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
+            sql_statement = sql_statement + 'ANALYZE VERBOSE "{schema}"."{table}";'.format(schema=schema,
                                                                                     table=table)
 
 
