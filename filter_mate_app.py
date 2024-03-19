@@ -48,7 +48,7 @@ class FilterMateApp:
         
         self.dockwidget = None
         self.flags = {}
-        self.CONFIG_DATA = CONFIG_DATA
+
 
         self.plugin_dir = plugin_dir
         self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None}
@@ -63,12 +63,16 @@ class FilterMateApp:
                                     'new_project':'New project',
                                     'project_read':'Existing project loaded'
                                     }
+        init_env_vars()
         
-        self.PROJECT = QgsProject.instance()
+        global ENV_VARS
+
+        self.CONFIG_DATA = ENV_VARS["CONFIG_DATA"]
+        self.PROJECT = ENV_VARS["PROJECT"]
+
         self.MapLayerStore = self.PROJECT.layerStore()
-        self.PLUGIN_CONFIG_DIRECTORY = PLUGIN_CONFIG_DIRECTORY
         self.db_name = 'filterMate_db.sqlite'
-        self.db_file_path = os.path.normpath(self.PLUGIN_CONFIG_DIRECTORY + os.sep + self.db_name)
+        self.db_file_path = os.path.normpath(ENV_VARS["PLUGIN_CONFIG_DIRECTORY"] + os.sep + self.db_name)
         self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
         self.project_file_path = self.PROJECT.absolutePath()
         self.project_uuid = ''
@@ -80,7 +84,14 @@ class FilterMateApp:
 
     def run(self):
         if self.dockwidget == None:
+
             
+        
+            global ENV_VARS
+
+            self.CONFIG_DATA = ENV_VARS["CONFIG_DATA"]
+            self.PROJECT = ENV_VARS["PROJECT"]
+
             QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')    
 
             init_layers = list(self.PROJECT.mapLayers().values())
@@ -143,7 +154,10 @@ class FilterMateApp:
         if task_name in ('project_read', 'new_project'):
             self.app_postgresql_temp_schema_setted = False
             QgsApplication.taskManager().cancelAll()
-            self.PROJECT = QgsProject.instance()
+            init_env_vars()
+
+            global ENV_VARS
+            self.PROJECT = ENV_VARS["PROJECT"]
             self.MapLayerStore = self.PROJECT.layerStore()
             init_layers = list(self.PROJECT.mapLayers().values())
             self.init_filterMate_db()
@@ -254,7 +268,7 @@ class FilterMateApp:
                 
                 elif task_name == 'reset':
 
-                    task_parameters["task"] = {"features": features, "expression": expression,
+                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
                                                 "layers": layers_to_filter,
                                                 "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
                     return task_parameters
@@ -572,7 +586,7 @@ class FilterMateApp:
                 try: 
                     os.remove(self.db_file_path)
                     self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] = False
-                    with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+                    with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
                     print(error)
@@ -716,6 +730,8 @@ class FilterMateApp:
 
             
     def save_project_variables(self, name=None):
+        
+        global ENV_VARS
 
         if self.dockwidget != None:
 
@@ -745,21 +761,27 @@ class FilterMateApp:
             cur.close()
             conn.close()
 
-            with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
+            with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
 
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
 
+        init_env_vars()
+
+        global ENV_VARS
+
         self.PROJECT_LAYERS = result_project_layers
-        self.PROJECT = QgsProject.instance()
-        global PATH_ABSOLUTE_PROJECT
-        PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
-        if PATH_ABSOLUTE_PROJECT =='./':
-            if PLATFORM.startswith('win'):
-                PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+        self.PROJECT = ENV_VARS["PROJECT"]
+    
+        
+
+        ENV_VARS["PATH_ABSOLUTE_PROJECT"] = os.path.normpath(self.PROJECT.readPath("./"))
+        if ENV_VARS["PATH_ABSOLUTE_PROJECT"] =='./':
+            if ENV_VARS["PLATFORM"].startswith('win'):
+                ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
             else:
-                PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.environ['HOME'])
+                ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.environ['HOME'])
 
         if self.dockwidget != None:
 
@@ -796,7 +818,7 @@ class FilterMateApp:
                             uri = source_uri.uri().strip()
                             relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
                             layer_name = uri.split('|')[1] if len(uri.split('|')) == 2 else None
-                            absolute_path = os.path.join(os.path.normpath(PATH_ABSOLUTE_PROJECT), os.path.normpath(relative_path))
+                            absolute_path = os.path.join(os.path.normpath(ENV_VARS["PATH_ABSOLUTE_PROJECT"]), os.path.normpath(relative_path))
                             if absolute_path not in self.project_datasources[layer_source_type].keys():
                                 self.project_datasources[layer_source_type][absolute_path] = []
                             
@@ -843,7 +865,7 @@ class FilterMateApp:
 
                             uri = source_uri.uri().strip()
                             relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
-                            absolute_path = os.path.normpath(os.path.join(PATH_ABSOLUTE_PROJECT, relative_path))
+                            absolute_path = os.path.normpath(os.path.join(ENV_VARS["PATH_ABSOLUTE_PROJECT"], relative_path))
                             if absolute_path in self.project_datasources[layer_source_type].keys():
                                 self.project_datasources[layer_source_type][absolute_path].remove(uri)
                             if uri in self.project_datasources[layer_source_type][absolute_path]:

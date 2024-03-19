@@ -122,7 +122,7 @@
                 "ZONE_D_HABITATION_c81499a0_84da_4deb_9b77_82549ba31538"
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:3857",
+            "PROJECTION_TO_EXPORT": "EPSG:2154",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,
