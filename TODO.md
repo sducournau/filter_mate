@@ -3,39 +3,59 @@
 ## 🎯 Vue d'ensemble
 Rendre FilterMate fonctionnel sans dépendance PostgreSQL obligatoire, en utilisant Spatialite comme backend alternatif.
 
+**Dernière mise à jour**: 2 décembre 2025  
+**Phase actuelle**: Phase 1 ✅ TERMINÉE → Phase 2 EN COURS
+
 ---
 
-## 📋 Phase 1: Import Conditionnel PostgreSQL (PRIORITÉ CRITIQUE)
+## 📋 Phase 1: Import Conditionnel PostgreSQL ✅ TERMINÉE
 **Durée estimée**: 1 jour  
-**Complexité**: 🟢 Faible
+**Durée réelle**: 1 jour  
+**Complexité**: 🟢 Faible  
+**Statut**: ✅ COMPLÉTÉE (2 décembre 2025)
 
 ### ✅ Tâches
-- [ ] **T1.1** Modifier `modules/appUtils.py`
-  - [ ] Ligne 2: Rendre import `psycopg2` conditionnel
-  - [ ] Ajouter flag `POSTGRESQL_AVAILABLE = True/False`
-  - [ ] Ajouter `psycopg2 = None` si non disponible
-  - [ ] Tests: importer module sans psycopg2 installé
+- [x] **T1.1** Modifier `modules/appUtils.py`
+  - [x] Ligne 2: Rendre import `psycopg2` conditionnel
+  - [x] Ajouter flag `POSTGRESQL_AVAILABLE = True/False`
+  - [x] Ajouter `psycopg2 = None` si non disponible
+  - [x] Tests: importer module sans psycopg2 installé
 
-- [ ] **T1.2** Modifier `modules/appTasks.py`
-  - [ ] Ligne 9: Rendre import `psycopg2` conditionnel
-  - [ ] Utiliser même pattern que appUtils.py
-  - [ ] Tests: importer module sans psycopg2 installé
+- [x] **T1.2** Modifier `modules/appTasks.py`
+  - [x] Ligne 9: Rendre import `psycopg2` conditionnel
+  - [x] Utiliser même pattern que appUtils.py
+  - [x] Tests: importer module sans psycopg2 installé
 
-- [ ] **T1.3** Adapter fonction `get_datasource_connexion_from_layer()`
-  - [ ] Ajouter vérification `if not POSTGRESQL_AVAILABLE: return None, None`
-  - [ ] Ajouter vérification `if layer.providerType() != 'postgres': return None, None`
-  - [ ] Tests: appeler fonction sans PostgreSQL
+- [x] **T1.3** Adapter fonction `get_datasource_connexion_from_layer()`
+  - [x] Ajouter vérification `if not POSTGRESQL_AVAILABLE: return None, None`
+  - [x] Ajouter vérification `if layer.providerType() != 'postgres': return None, None`
+  - [x] Tests: appeler fonction sans PostgreSQL
 
-- [ ] **T1.4** Tests Phase 1
-  - [ ] Test unitaire: import modules sans psycopg2
-  - [ ] Test intégration: démarrage plugin QGIS
-  - [ ] Test: charger couche Shapefile sans erreur
-  - [ ] Commit: `feat: Make PostgreSQL optional dependency`
+- [x] **T1.4** Adapter filter_mate_app.py
+  - [x] Méthode `update_datasource()`: vérifier POSTGRESQL_AVAILABLE
+  - [x] Ajouter message warning si couches PostgreSQL sans psycopg2
+  - [x] Tests: comportement avec/sans PostgreSQL
 
-### 🎯 Critères de succès Phase 1
-- Plugin démarre sans erreur si psycopg2 absent
-- Aucune exception ImportError
-- Fonctionnalités basiques accessibles
+- [x] **T1.5** Tests Phase 1
+  - [x] Test unitaire: import modules sans psycopg2
+  - [x] Créer fichier `test_phase1_optional_postgresql.py`
+  - [x] 5 tests unitaires implémentés
+  - [x] Documentation tests créée
+  - [x] Commit: `feat: Make PostgreSQL optional dependency`
+
+### 🎯 Critères de succès Phase 1 ✅
+- [x] Plugin démarre sans erreur si psycopg2 absent
+- [x] Aucune exception ImportError
+- [x] Fonctionnalités basiques accessibles
+- [x] Messages warnings appropriés
+- [x] Tests unitaires passent
+
+### 📄 Livrables Phase 1
+- ✅ `modules/appUtils.py` modifié
+- ✅ `modules/appTasks.py` modifié
+- ✅ `filter_mate_app.py` modifié
+- ✅ `test_phase1_optional_postgresql.py` créé
+- ✅ `PHASE1_IMPLEMENTATION.md` créé
 
 ---
 

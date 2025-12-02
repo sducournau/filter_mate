@@ -6,7 +6,14 @@ from qgis.utils import *
 from qgis.utils import iface
 from qgis import processing
 
-import psycopg2
+# Import conditionnel de psycopg2 pour support PostgreSQL optionnel
+try:
+    import psycopg2
+    POSTGRESQL_AVAILABLE = True
+except ImportError:
+    POSTGRESQL_AVAILABLE = False
+    psycopg2 = None
+
 import uuid
 from collections import OrderedDict
 from operator import getitem
@@ -337,7 +344,7 @@ class FilterEngineTask(QgsTask):
         provider_list = self.provider_list + [self.param_source_provider_type]
         provider_list = list(dict.fromkeys(provider_list))
 
-        if 'postgresql' in provider_list:
+        if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
             self.prepare_postgresql_source_geom()
 
         if 'ogr' in provider_list or 'spatialite' in provider_list or self.param_buffer_expression != '':
@@ -383,6 +390,59 @@ class FilterEngineTask(QgsTask):
         expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
         expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
 
+        return expression
+
+
+    def qgis_expression_to_spatialite(self, expression):
+        """
+        Convert QGIS expression to Spatialite SQL.
+        
+        Spatialite spatial functions are ~90% compatible with PostGIS, but there are some differences:
+        - Type casting: PostgreSQL uses :: operator, Spatialite uses CAST() function
+        - String comparison is case-sensitive by default
+        - Some function names differ slightly
+        
+        Args:
+            expression (str): QGIS expression string
+        
+        Returns:
+            str: Spatialite SQL expression
+        
+        Note:
+            This function adapts QGIS expressions to Spatialite SQL syntax.
+            Most PostGIS spatial functions work in Spatialite with the same name.
+        """
+        
+        # Handle CASE expressions
+        expression = re.sub('case', ' CASE ', expression, flags=re.IGNORECASE)
+        expression = re.sub('when', ' WHEN ', expression, flags=re.IGNORECASE)
+        expression = re.sub(' is ', ' IS ', expression, flags=re.IGNORECASE)
+        expression = re.sub('then', ' THEN ', expression, flags=re.IGNORECASE)
+        expression = re.sub('else', ' ELSE ', expression, flags=re.IGNORECASE)
+        
+        # Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
+        # For case-insensitive matching in Spatialite
+        expression = re.sub(r'(\w+)\s+ILIKE\s+', r'LOWER(\1) LIKE LOWER(', expression, flags=re.IGNORECASE)
+        expression = re.sub('not', ' NOT ', expression, flags=re.IGNORECASE)
+        expression = re.sub('like', ' LIKE ', expression, flags=re.IGNORECASE)
+        
+        # Convert PostgreSQL :: type casting to Spatialite CAST() function
+        # PostgreSQL: "field"::numeric -> Spatialite: CAST("field" AS REAL)
+        expression = re.sub(r'(["\w]+)::numeric', r'CAST(\1 AS REAL)', expression)
+        expression = re.sub(r'(["\w]+)::integer', r'CAST(\1 AS INTEGER)', expression)
+        expression = re.sub(r'(["\w]+)::text', r'CAST(\1 AS TEXT)', expression)
+        expression = re.sub(r'(["\w]+)::double', r'CAST(\1 AS REAL)', expression)
+        
+        # Handle numeric comparisons - ensure fields are cast properly
+        expression = expression.replace('" >', ' ').replace('">', ' ')
+        expression = expression.replace('" <', ' ').replace('"<', ' ')
+        expression = expression.replace('" +', ' ').replace('"+', ' ')
+        expression = expression.replace('" -', ' ').replace('"-', ' ')
+        
+        # Spatial functions compatibility (most are identical, but document them)
+        # ST_Buffer, ST_Intersects, ST_Contains, ST_Distance, ST_Union, ST_Transform
+        # all work the same in Spatialite as in PostGIS
+        
         return expression
 
 
@@ -559,7 +619,9 @@ class FilterEngineTask(QgsTask):
 
 
 
-        if self.param_source_provider_type == 'postgresql' and layer_provider_type == 'postgresql':
+        if (self.param_source_provider_type == 'postgresql' and 
+            layer_provider_type == 'postgresql' and 
+            POSTGRESQL_AVAILABLE):
             # and (self.param_buffer_expression == None or self.param_buffer_expression == '')    
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:
@@ -767,7 +829,10 @@ class FilterEngineTask(QgsTask):
                 self.manage_layer_subset_strings(layer, param_expression, param_distant_primary_key_name, param_distant_geometry_field, False)
 
 
-        if result is False or (self.param_source_provider_type != 'postgresql' or layer_provider_type != 'postgresql'):
+        if (result is False or 
+            (self.param_source_provider_type != 'postgresql' or 
+             layer_provider_type != 'postgresql' or 
+             not POSTGRESQL_AVAILABLE)):
             
             layer.removeSelection()
                 
@@ -1082,23 +1147,96 @@ class FilterEngineTask(QgsTask):
             
 
         return True
-    
-    def zipfolder(self, zip_file, target_dir):   
 
-        if os.path.exists(target_dir):
-            zip_file = zip_file + '.zip' if '.zip' not in os.path.basename(zip_file) else zip_file
-            directory = Path(target_dir)
 
-            with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zipobj:
+    def _manage_spatialite_subset(self, layer, sql_subset_string, primary_key_name, geom_key_name, 
+                                   name, custom=False, cur=None, conn=None, current_seq_order=0):
+        """
+        Handle Spatialite temporary tables for filtering (Phase 2 implementation).
         
-                if os.path.isfile(target_dir):
-                    zipobj.write(target_dir, arcname=Path(target_dir).relative_to(directory))
-                elif os.path.isdir(target_dir):
-                    for base, dirs, files in os.walk(target_dir):
-                        for file in files:
-                            if '.zip' not in file:
-                                fn = os.path.join(base, file)
-                                zipobj.write(fn, arcname=Path(fn).relative_to(directory))
+        Alternative to PostgreSQL materialized views using create_temp_spatialite_table().
+        
+        Args:
+            layer: QGIS vector layer
+            sql_subset_string: SQL query for subset
+            primary_key_name: Primary key field name
+            geom_key_name: Geometry field name
+            name: Unique name for temp table
+            custom: Whether custom buffer expression is used
+            cur: Spatialite cursor for history
+            conn: Spatialite connection for history
+            current_seq_order: Sequence order for history
+            
+        Returns:
+            bool: True if successful
+        """
+        from modules.appUtils import create_temp_spatialite_table, get_spatialite_datasource_from_layer
+        
+        # Get Spatialite datasource
+        db_path, table_name = get_spatialite_datasource_from_layer(layer)
+        
+        # If not a Spatialite layer (e.g., OGR/Shapefile), use filterMate_db for temp storage
+        if db_path is None:
+            db_path = self.db_file_path
+            # For OGR layers, we'll use QGIS subset string directly
+            print(f"FilterMate: Non-Spatialite layer detected, using QGIS subset string")
+            layer.setSubsetString(sql_subset_string)
+            return True
+        
+        # Get layer SRID
+        layer_srid = layer.crs().postgisSrid()
+        
+        # Build Spatialite query
+        if custom is False:
+            # Simple subset - use query as-is
+            spatialite_query = sql_subset_string
+        else:
+            # Complex subset with buffer (adapt from PostgreSQL logic)
+            # Convert buffer expression if needed
+            buffer_expr = self.qgis_expression_to_spatialite(self.param_buffer_expression) if self.param_buffer_expression else str(self.param_buffer_value)
+            
+            # Build Spatialite SELECT (similar to PostgreSQL CREATE MATERIALIZED VIEW)
+            # Note: Spatialite uses same ST_Buffer syntax as PostGIS
+            spatialite_query = f"""
+                SELECT 
+                    ST_Buffer({geom_key_name}, {buffer_expr}) as {geom_key_name},
+                    {primary_key_name},
+                    {buffer_expr} as buffer_value
+                FROM {table_name}
+                WHERE {primary_key_name} IN ({sql_subset_string})
+            """
+        
+        # Create temporary table
+        print(f"FilterMate: Creating Spatialite temp table 'mv_{name}'")
+        success = create_temp_spatialite_table(
+            db_path=db_path,
+            table_name=name,
+            sql_query=spatialite_query,
+            geom_field=geom_key_name,
+            srid=layer_srid
+        )
+        
+        if not success:
+            print(f"FilterMate ERROR: Failed to create Spatialite temp table")
+            return False
+        
+        # Apply subset string to layer (reference temp table)
+        layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{name})'
+        print(f"FilterMate: Applying Spatialite subset string: {layer_subsetString}")
+        layer.setSubsetString(layer_subsetString)
+        
+        # Update history
+        if cur and conn:
+            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+                id=uuid.uuid4(),
+                fk_project=self.project_uuid,
+                layer_id=layer.id(),
+                layer_source_id=self.source_layer.id(),
+                seq_order=current_seq_order,
+                subset_string=sql_subset_string.replace("\'","\'\'")
+            ))
+            conn.commit()
+        
         return True
 
 
@@ -1126,9 +1264,28 @@ class FilterEngineTask(QgsTask):
             last_subset_id = result[0]
             last_seq_order = result[5]
 
+        # Determine provider type for backend selection (Phase 2)
+        provider_type = layer.providerType()
+        use_postgresql = (provider_type == 'postgres' and POSTGRESQL_AVAILABLE)
+        use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
+        
+        print(f"FilterMate: Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
+
         if self.task_action == 'filter':
             current_seq_order = last_seq_order + 1
 
+            # BRANCH: Use Spatialite backend (Phase 2)
+            if use_spatialite:
+                print("FilterMate: Using Spatialite backend")
+                success = self._manage_spatialite_subset(
+                    layer, sql_subset_string, primary_key_name, geom_key_name,
+                    name, custom, cur, conn, current_seq_order
+                )
+                cur.close()
+                conn.close()
+                return success
+
+            # ORIGINAL: PostgreSQL backend (Phase 1)
             if custom is False:
 
                 sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
@@ -1284,14 +1441,32 @@ class FilterEngineTask(QgsTask):
 
         elif self.task_action == 'reset':
             
-                cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}';""".format(
-                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                    layer_id=layer.id()
-                                                                                                                                    )
-                )
+            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}';""".format(
+                                                                                                                                fk_project=self.project_uuid,
+                                                                                                                                layer_id=layer.id()
+                                                                                                                                )
+            )
+            conn.commit()
 
-                conn.commit()
+            # BRANCH: Spatialite backend (Phase 2)
+            if use_spatialite:
+                print("FilterMate: Reset - Spatialite backend - dropping temp table")
+                # For Spatialite, drop temp table from filterMate_db
+                import sqlite3
+                try:
+                    temp_conn = sqlite3.connect(self.db_file_path)
+                    temp_cur = temp_conn.cursor()
+                    temp_cur.execute(f"DROP TABLE IF EXISTS mv_{name}")
+                    temp_conn.commit()
+                    temp_cur.close()
+                    temp_conn.close()
+                except Exception as e:
+                    print(f"FilterMate: Error dropping Spatialite temp table: {e}")
+                
+                layer.setSubsetString('')
 
+            # ORIGINAL: PostgreSQL backend
+            elif use_postgresql:
                 sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
                                                                                                             schema=self.current_materialized_view_schema,
                                                                                                             name=name
@@ -1331,63 +1506,75 @@ class FilterEngineTask(QgsTask):
             if len(results) == 1:
                 result = results[0]
                 sql_subset_string = result[-1]
-            
-
-                sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                name=name
-                                                                                                                                                                )
-
-                sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
-                                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                                    name=name,
-                                                                                                                                                                    sql_subset_string=sql_subset_string
-                                                                                                                                                                    )
-                 
-                sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
-                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                        name=name,
-                                                                                                                                                        geometry_field=geom_key_name
-                                                                                                                                                        )
-
-                sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
-                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                            name=name
-                                                                                                                                            )
-
-                sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
-                                                                                    schema=self.current_materialized_view_schema,
-                                                                                    name=name
-                                                                                    )
                 
-                sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()
+                # BRANCH: Spatialite backend (Phase 2)
+                if use_spatialite:
+                    print("FilterMate: Unfilter - Spatialite backend - recreating previous subset")
+                    # Recreate previous subset using Spatialite
+                    success = self._manage_spatialite_subset(
+                        layer, sql_subset_string, primary_key_name, geom_key_name,
+                        name, custom=False, cur=None, conn=None, current_seq_order=0
+                    )
+                    if not success:
+                        layer.setSubsetString('')
+                
+                # ORIGINAL: PostgreSQL backend
+                elif use_postgresql:
+                    sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                    name=name
+                                                                                                                                                                    )
 
-                connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+                    sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+                                                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                                                        name=name,
+                                                                                                                                                                        sql_subset_string=sql_subset_string
+                                                                                                                                                                        )
+                     
+                    sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
+                                                                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                                                                            name=name,
+                                                                                                                                                            geometry_field=geom_key_name
+                                                                                                                                                            )
 
-                try:
+                    sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
+                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                name=name
+                                                                                                                                                )
+
+                    sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
+                                                                                        schema=self.current_materialized_view_schema,
+                                                                                        name=name
+                                                                                        )
+                    
+                    sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()
+
+                    connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+
+                    try:
+                        with connexion.cursor() as cursor:
+                            cursor.execute("SELECT 1")
+                    except:
+                        connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
+
                     with connexion.cursor() as cursor:
-                        cursor.execute("SELECT 1")
-                except:
-                    connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
+                        cursor.execute(sql_drop_request)
+                        connexion.commit()
+                        cursor.execute(sql_create_request)
+                        connexion.commit()
+                        cursor.execute(sql_create_index)
+                        connexion.commit()
+                        cursor.execute(sql_cluster_request)
+                        connexion.commit()
+                        cursor.execute(sql_analyze_request)
+                        connexion.commit()  
 
-                with connexion.cursor() as cursor:
-                    cursor.execute(sql_drop_request)
-                    connexion.commit()
-                    cursor.execute(sql_create_request)
-                    connexion.commit()
-                    cursor.execute(sql_create_index)
-                    connexion.commit()
-                    cursor.execute(sql_cluster_request)
-                    connexion.commit()
-                    cursor.execute(sql_analyze_request)
-                    connexion.commit()  
-
-                layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                            name=name,
-                                                                                                                                            primary_key_name=primary_key_name
-                                                                                                                                            )
-                layer.setSubsetString(layer_subsetString)    
+                    layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
+                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                name=name,
+                                                                                                                                                primary_key_name=primary_key_name
+                                                                                                                                                )
+                    layer.setSubsetString(layer_subsetString)    
 
             else:
                 layer.setSubsetString('')

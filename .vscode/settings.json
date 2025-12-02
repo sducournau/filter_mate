@@ -1,0 +1,64 @@
+{
+  "github.copilot.advanced": {
+    "debug.useNodeFetcher": true
+  },
+  "github.copilot.referencedFiles": [
+    ".github/copilot-instructions.md",
+    ".serena/project_memory.md",
+    ".serena/optimization_rules.md"
+  ],
+  "github.copilot.chat.codeGeneration.instructions": [
+    {
+      "text": "Read .github/copilot-instructions.md for FilterMate coding guidelines"
+    },
+    {
+      "text": "Use Serena symbolic tools efficiently - read .serena/optimization_rules.md"
+    },
+    {
+      "text": "Always check POSTGRESQL_AVAILABLE before PostgreSQL operations"
+    },
+    {
+      "text": "Use get_symbols_overview() before reading large files"
+    }
+  ],
+  "github.copilot.chat.welcomeMessage": "FilterMate QGIS Plugin Assistant\n\n✅ Phase 1 Complete: PostgreSQL optional\n🔄 Phase 2 In Progress: Spatialite backend\n\nSerena symbolic tools available for efficient code analysis.\nReference: .serena/optimization_rules.md",
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/*/**": true,
+    "**/.hg/store/**": true,
+    "**/__pycache__/**": true
+  },
+  "python.analysis.extraPaths": [
+    ".",
+    "./modules"
+  ],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": true,
+  "python.linting.flake8Args": [
+    "--max-line-length=120",
+    "--ignore=E501,W503"
+  ],
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": [
+    "--line-length=120"
+  ],
+  "[python]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false,
+    "editor.rulers": [120]
+  },
+  "files.associations": {
+    "*.ui": "xml",
+    "*.qrc": "xml"
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/i18n/*.ts": true
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://aka.ms/copilot-context-schema",
+  "version": "1.0",
+  "contextFiles": [
+    ".github/copilot-instructions.md",
+    ".serena/project_memory.md",
+    ".serena/optimization_rules.md",
+    "README.md",
+    "TODO.md"
+  ],
+  "ignoredFiles": [
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "**/i18n/*.ts",
+    "**/.pytest_cache/**",
+    "**/resources.py"
+  ],
+  "instructions": {
+    "global": [
+      "This is FilterMate, a QGIS plugin with multi-backend support (PostgreSQL/Spatialite/OGR).",
+      "Phase 1 is complete: PostgreSQL is now optional.",
+      "Phase 2 is in progress: Implementing Spatialite backend alternatives.",
+      "Always check POSTGRESQL_AVAILABLE flag before PostgreSQL operations.",
+      "Use Serena symbolic tools for efficient code analysis - avoid reading entire large files.",
+      "Follow patterns in .github/copilot-instructions.md for coding standards.",
+      "Consult .serena/optimization_rules.md for Serena tool usage best practices."
+    ],
+    "codeGeneration": [
+      "Follow PEP 8 with 4-space indentation and 120 char line limit.",
+      "Use snake_case for functions/methods, PascalCase for classes, UPPER_SNAKE_CASE for constants.",
+      "Always wrap PostgreSQL code with: if POSTGRESQL_AVAILABLE and provider_type == 'postgresql'",
+      "Provide Spatialite alternatives for PostgreSQL-specific features.",
+      "Use QgsTask for async operations, never block main thread.",
+      "Close database connections in try/finally blocks.",
+      "Add docstrings with Args/Returns/Raises sections."
+    ],
+    "analysis": [
+      "Use get_symbols_overview() before reading large files.",
+      "Use find_symbol() with include_body=False first to see structure.",
+      "Use find_referencing_symbols() before modifying any function.",
+      "Restrict searches with relative_path parameter.",
+      "Use search_for_pattern() for discovery when symbol names unknown."
+    ]
+  },
+  "projectMetadata": {
+    "name": "FilterMate",
+    "type": "QGIS Plugin",
+    "language": "Python",
+    "framework": "QGIS API 3.0+",
+    "status": "Phase 1 Complete, Phase 2 In Progress",
+    "criticalFiles": [
+      "filter_mate_app.py",
+      "modules/appTasks.py",
+      "modules/appUtils.py"
+    ]
+  }
+}

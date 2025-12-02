@@ -882,17 +882,35 @@ class FilterMateApp:
             conn.close()
             
     def update_datasource(self):
+        # Import POSTGRESQL_AVAILABLE pour vérifier disponibilité
+        from modules.appUtils import POSTGRESQL_AVAILABLE
 
         ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
         ogr_driver_list.sort()
         print(ogr_driver_list)
 
-        list(self.project_datasources['postgresql'].keys())
-        if len(self.project_datasources['postgresql']) >= 1:
-            postgresql_connexions = list(self.project_datasources['postgresql'].keys())
-            if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] == "":
-                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = self.project_datasources['postgresql'][postgresql_connexions[0]]
-                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = True
+        # Vérifier si PostgreSQL est disponible et s'il y a des connexions PostgreSQL
+        if 'postgresql' in self.project_datasources and POSTGRESQL_AVAILABLE:
+            list(self.project_datasources['postgresql'].keys())
+            if len(self.project_datasources['postgresql']) >= 1:
+                postgresql_connexions = list(self.project_datasources['postgresql'].keys())
+                if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] == "":
+                    self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = self.project_datasources['postgresql'][postgresql_connexions[0]]
+                    self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = True
+            else:
+                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""
+                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = False
+        elif 'postgresql' in self.project_datasources and not POSTGRESQL_AVAILABLE:
+            # PostgreSQL layers detected but psycopg2 not available
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = False
+            self.iface.messageBar().pushWarning(
+                "FilterMate",
+                "PostgreSQL layers detected but psycopg2 is not installed. "
+                "Using local Spatialite backend. "
+                "For better performance with large datasets, install psycopg2.",
+                duration=10
+            )
         else:
             self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""
             self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = False
