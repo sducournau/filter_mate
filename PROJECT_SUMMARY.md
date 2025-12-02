@@ -128,7 +128,7 @@ def manage_layer_subset_strings(layer, action, ...):
 **Avantages pattern** :
 - Séparation concerns (1 backend = 1 fonction)
 - Extensibilité (ajout MongoDB/etc. = nouvelle branche)
-- Testabilité (mock provider pour tests)
+- Testabilité (mock provider pour tests)register
 - Maintenance (debug isolé par backend)
 
 ### Conversion Expressions (Innovation Clé)

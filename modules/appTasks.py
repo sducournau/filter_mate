@@ -1170,7 +1170,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        from modules.appUtils import create_temp_spatialite_table, get_spatialite_datasource_from_layer
+        from .appUtils import create_temp_spatialite_table, get_spatialite_datasource_from_layer
         
         # Get Spatialite datasource
         db_path, table_name = get_spatialite_datasource_from_layer(layer)

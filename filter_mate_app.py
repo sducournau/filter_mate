@@ -19,6 +19,7 @@ from functools import partial
 import json
 from .modules.customExceptions import *
 from .modules.appTasks import *
+from .modules.appUtils import POSTGRESQL_AVAILABLE
 from .resources import *
 import uuid
 
@@ -882,9 +883,7 @@ class FilterMateApp:
             conn.close()
             
     def update_datasource(self):
-        # Import POSTGRESQL_AVAILABLE pour vérifier disponibilité
-        from modules.appUtils import POSTGRESQL_AVAILABLE
-
+        # POSTGRESQL_AVAILABLE est maintenant importé au niveau du module
         ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
         ogr_driver_list.sort()
         print(ogr_driver_list)
