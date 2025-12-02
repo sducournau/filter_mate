@@ -5,6 +5,10 @@ from qgis.core import *
 from qgis.utils import *
 from qgis.utils import iface
 from qgis import processing
+import logging
+
+# Get FilterMate logger
+logger = logging.getLogger('FilterMate')
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:
@@ -94,6 +98,9 @@ class FilterEngineTask(QgsTask):
         global ENV_VARS
         self.PROJECT = ENV_VARS["PROJECT"]
         self.current_materialized_view_schema = 'filter_mate_temp'
+        
+        # Track active database connections for cleanup on cancellation
+        self.active_connections = []
 
     def run(self):
         """Main function that run the right method from init parameters"""
@@ -573,7 +580,62 @@ class FilterEngineTask(QgsTask):
 
         self.ogr_source_geom = layer
 
-        print("prepare_ogr_source_geom", self.ogr_source_geom) 
+        logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
+
+
+    def _verify_and_create_spatial_index(self, layer, layer_name=None):
+        """
+        Verify that spatial index exists on layer, create if missing.
+        
+        This method checks if a layer has a spatial index and creates one automatically
+        if it's missing. Spatial indexes dramatically improve performance of spatial
+        operations (intersect, contains, etc.).
+        
+        Args:
+            layer: QgsVectorLayer to check
+            layer_name: Optional display name for user messages
+            
+        Returns:
+            bool: True if index exists or was created successfully, False otherwise
+        """
+        if not layer or not layer.isValid():
+            logger.warning("Cannot verify spatial index: invalid layer")
+            return False
+        
+        display_name = layer_name or layer.name()
+        
+        # Check if layer already has spatial index
+        if layer.hasSpatialIndex():
+            logger.debug(f"Spatial index already exists for layer: {display_name}")
+            return True
+        
+        # No spatial index - create one
+        logger.info(f"Creating spatial index for layer: {display_name}")
+        
+        # Notify user via message bar
+        try:
+            from qgis.utils import iface
+            iface.messageBar().pushMessage(
+                "FilterMate - Performance",
+                f"Creating spatial index for '{display_name}' to improve performance...",
+                Qgis.Info,
+                duration=5
+            )
+        except Exception as e:
+            logger.debug(f"Could not display message bar: {e}")
+        
+        # Create spatial index
+        try:
+            processing.run('qgis:createspatialindex', {
+                'INPUT': layer
+            })
+            logger.info(f"Successfully created spatial index for: {display_name}")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Could not create spatial index for {display_name}: {e}")
+            logger.info(f"Proceeding without spatial index - performance may be reduced")
+            return False 
 
 
     def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
@@ -581,6 +643,9 @@ class FilterEngineTask(QgsTask):
         result = False
         postgis_predicates = list(self.current_predicates.values())
         param_combine_operator = ''
+        
+        # Verify spatial index exists before filtering - critical for performance
+        self._verify_and_create_spatial_index(layer, layer_props.get('infos', {}).get('layer_name'))
         param_old_subset = ''
 
         if layer.subsetString() != '':
@@ -861,6 +926,9 @@ class FilterEngineTask(QgsTask):
                 current_layer.selectAll()
 
                 if self.param_other_layers_combine_operator == 'OR':
+                    # Ensure spatial index exists for better performance
+                    self._verify_and_create_spatial_index(current_layer)
+                    
                     current_layer.setSubsetString(param_old_subset)
                     current_layer.selectAll()
                     current_layer.setSubsetString('')
@@ -874,6 +942,8 @@ class FilterEngineTask(QgsTask):
                     processing.run("qgis:selectbylocation", alg_params_select)
 
                 elif self.param_other_layers_combine_operator == 'AND':
+                    # Ensure spatial index exists for better performance
+                    self._verify_and_create_spatial_index(current_layer)
 
                     alg_params_select = {
                         'INPUT': current_layer,
@@ -884,6 +954,8 @@ class FilterEngineTask(QgsTask):
                     processing.run("qgis:selectbylocation", alg_params_select)
                 
                 elif self.param_other_layers_combine_operator == 'NOT AND':
+                    # Ensure spatial index exists for better performance
+                    self._verify_and_create_spatial_index(current_layer)
 
                     alg_params_select = {
                         'INPUT': current_layer,
@@ -894,6 +966,8 @@ class FilterEngineTask(QgsTask):
                     processing.run("qgis:selectbylocation", alg_params_select)
 
                 else:
+                    # Ensure spatial index exists for better performance
+                    self._verify_and_create_spatial_index(current_layer)
 
                     alg_params_select = {
                         'INPUT': current_layer,
@@ -904,6 +978,8 @@ class FilterEngineTask(QgsTask):
                     processing.run("qgis:selectbylocation", alg_params_select)
 
             else:
+                # Ensure spatial index exists for better performance
+                self._verify_and_create_spatial_index(current_layer)
 
                 alg_params_select = {
                         'INPUT': current_layer,
@@ -1179,7 +1255,7 @@ class FilterEngineTask(QgsTask):
         if db_path is None:
             db_path = self.db_file_path
             # For OGR layers, we'll use QGIS subset string directly
-            print(f"FilterMate: Non-Spatialite layer detected, using QGIS subset string")
+            logger.info("Non-Spatialite layer detected, using QGIS subset string")
             layer.setSubsetString(sql_subset_string)
             return True
         
@@ -1207,7 +1283,7 @@ class FilterEngineTask(QgsTask):
             """
         
         # Create temporary table
-        print(f"FilterMate: Creating Spatialite temp table 'mv_{name}'")
+        logger.info(f"Creating Spatialite temp table 'mv_{name}'")
         success = create_temp_spatialite_table(
             db_path=db_path,
             table_name=name,
@@ -1217,18 +1293,18 @@ class FilterEngineTask(QgsTask):
         )
         
         if not success:
-            print(f"FilterMate ERROR: Failed to create Spatialite temp table")
+            logger.error("Failed to create Spatialite temp table")
             from qgis.utils import iface
             iface.messageBar().pushCritical(
                 "FilterMate - Error",
                 "Failed to create temporary Spatialite table. Check QGIS logs for details.",
-                duration=10
+                10
             )
             return False
         
         # Apply subset string to layer (reference temp table)
         layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{name})'
-        print(f"FilterMate: Applying Spatialite subset string: {layer_subsetString}")
+        logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
         layer.setSubsetString(layer_subsetString)
         
         # Update history
@@ -1248,26 +1324,32 @@ class FilterEngineTask(QgsTask):
 
     def manage_layer_subset_strings(self, layer, sql_subset_string=None, primary_key_name=None, geom_key_name=None, custom=False):
 
-        conn = spatialite_connect(self.db_file_path)
-        cur = conn.cursor()
+        conn = None
+        cur = None
+        
+        try:
+            conn = spatialite_connect(self.db_file_path)
+            # Track connection for cleanup on cancellation
+            self.active_connections.append(conn)
+            cur = conn.cursor()
 
-        current_seq_order = 0
-        last_seq_order = 0
-        last_subset_id = None
-        layer_name = layer.name()
-        name = layer.id().replace(layer_name, '').replace('-', '_')
+            current_seq_order = 0
+            last_seq_order = 0
+            last_subset_id = None
+            layer_name = layer.name()
+            name = layer.id().replace(layer_name, '').replace('-', '_')
 
-        cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                                fk_project=self.project_uuid,
-                                                                                                                                                                layer_id=layer.id()
-                                                                                                                                                                )
-        )
+            cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
+                                                                                                                                                                    fk_project=self.project_uuid,
+                                                                                                                                                                    layer_id=layer.id()
+                                                                                                                                                                    )
+            )
 
-        results = cur.fetchall()
+            results = cur.fetchall()
 
-        if len(results) == 1:
-            result = results[0]
-            last_subset_id = result[0]
+            if len(results) == 1:
+                result = results[0]
+                last_subset_id = result[0]
             last_seq_order = result[5]
 
         # Determine provider type for backend selection (Phase 2)
@@ -1275,16 +1357,16 @@ class FilterEngineTask(QgsTask):
         use_postgresql = (provider_type == 'postgres' and POSTGRESQL_AVAILABLE)
         use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
         
-        print(f"FilterMate: Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
+        logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
         
         # User feedback: Inform about backend being used (Phase 3)
         if use_spatialite and layer.featureCount() > 50000:
             from qgis.utils import iface
-            iface.messageBar().pushInfo(
+            iface.messageBar().pushMessage(
                 "FilterMate - Performance",
                 f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
                 f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL.",
-                duration=8
+                Qgis.Info, 8
             )
 
         if self.task_action == 'filter':
@@ -1292,14 +1374,14 @@ class FilterEngineTask(QgsTask):
 
             # BRANCH: Use Spatialite backend (Phase 2)
             if use_spatialite:
-                print("FilterMate: Using Spatialite backend")
+                logger.info("Using Spatialite backend")
                 # User feedback: Backend info (Phase 3)
                 from qgis.utils import iface
                 backend_name = "Spatialite" if provider_type == 'spatialite' else "Local (OGR)"
-                iface.messageBar().pushInfo(
+                iface.messageBar().pushMessage(
                     "FilterMate",
                     f"Filtering with {backend_name} backend...",
-                    duration=3
+                    Qgis.Info, 3
                 )
                 success = self._manage_spatialite_subset(
                     layer, sql_subset_string, primary_key_name, geom_key_name,
@@ -1474,7 +1556,7 @@ class FilterEngineTask(QgsTask):
 
             # BRANCH: Spatialite backend (Phase 2)
             if use_spatialite:
-                print("FilterMate: Reset - Spatialite backend - dropping temp table")
+                logger.info("Reset - Spatialite backend - dropping temp table")
                 # For Spatialite, drop temp table from filterMate_db
                 import sqlite3
                 try:
@@ -1485,7 +1567,7 @@ class FilterEngineTask(QgsTask):
                     temp_cur.close()
                     temp_conn.close()
                 except Exception as e:
-                    print(f"FilterMate: Error dropping Spatialite temp table: {e}")
+                    logger.error(f"Error dropping Spatialite temp table: {e}")
                 
                 layer.setSubsetString('')
 
@@ -1533,7 +1615,7 @@ class FilterEngineTask(QgsTask):
                 
                 # BRANCH: Spatialite backend (Phase 2)
                 if use_spatialite:
-                    print("FilterMate: Unfilter - Spatialite backend - recreating previous subset")
+                    logger.info("Unfilter - Spatialite backend - recreating previous subset")
                     # Recreate previous subset using Spatialite
                     success = self._manage_spatialite_subset(
                         layer, sql_subset_string, primary_key_name, geom_key_name,
@@ -1603,12 +1685,36 @@ class FilterEngineTask(QgsTask):
             else:
                 layer.setSubsetString('')
 
-        cur.close()
-        conn.close()
-        return True
+            return True
+            
+        finally:
+            # Always cleanup connections, even if cancelled or exception occurs
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                # Remove from active connections list
+                if conn in self.active_connections:
+                    self.active_connections.remove(conn)
 
 
     def cancel(self):
+        """Cancel task and cleanup all active database connections"""
+        # Cleanup all active database connections
+        for conn in self.active_connections[:]:
+            try:
+                conn.close()
+            except Exception as e:
+                # Log but don't fail - connection may already be closed
+                pass
+        self.active_connections.clear()
+        
         QgsMessageLog.logMessage(
             '"{name}" task was canceled'.format(name=self.description()),
             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info)
@@ -1886,12 +1992,15 @@ class LayersManagementEngineTask(QgsTask):
     def search_primary_key_from_layer(self, layer):
         """For each layer we search the primary key"""
 
+        # Cache feature count - expensive operation that was being called repeatedly
+        feature_count = layer.featureCount()
+        
         primary_key_index = layer.primaryKeyAttributes()
         if len(primary_key_index) > 0:
             for field_id in primary_key_index:
                 if self.isCanceled():
                     return False
-                if len(layer.uniqueValues(field_id)) == layer.featureCount():
+                if len(layer.uniqueValues(field_id)) == feature_count:
                     field = layer.fields()[field_id]
                     return (field.name(), field_id, field.typeName(), field.isNumeric())
         else:
@@ -1899,13 +2008,13 @@ class LayersManagementEngineTask(QgsTask):
                 if self.isCanceled():
                     return False
                 if 'id' in str(field.name()).lower():
-                    if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
+                    if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                         return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                     
             for field in layer.fields():
                 if self.isCanceled():
                     return False
-                if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == layer.featureCount():
+                if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 
         new_field = QgsField('virtual_id', QVariant.LongLong)

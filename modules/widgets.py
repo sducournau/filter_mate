@@ -531,11 +531,12 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     self.build_task(description, action, True)
                     self.launch_task(action)
 
-        except:
+        except (AttributeError, RuntimeError) as e:
+            # Handle case where widgets don't exist or are being destroyed
             try:
                 self.filter_le.clear()
                 self.items_le.clear()
-            except:
+            except (AttributeError, RuntimeError):
                 pass
     
 
@@ -630,13 +631,15 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                     try:
                         self.filter_le.editingFinished.disconnect()
-                    except:
+                    except TypeError:
+                        # Signal not connected
                         pass
                     self.filter_le.textChanged.connect(self.filter_items)
                 else:
                     try:
                         self.filter_le.textChanged.disconnect()
-                    except:
+                    except TypeError:
+                        # Signal not connected
                         pass
                     self.filter_le.editingFinished.connect(self.filter_items)
 
@@ -657,11 +660,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             for task in self.tasks:
                 try:
                     del self.tasks[task][layer_id]
-                except:
+                except KeyError:
+                    # Task doesn't exist for this layer
                     pass
             try:
                 del self.list_widgets[layer_id]
-            except:
+            except KeyError:
+                # Widget already removed
                 pass
 
     def reset(self):
@@ -680,7 +685,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             if widget:
                 try:
                     widget.close()
-                except:
+                except RuntimeError:
+                    # Widget already deleted or being destroyed
                     pass
 
         self.list_widgets = {}
@@ -731,7 +737,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         if silent_flag is False:
             try:
                 self.tasks[action][self.layer.id()].begun.connect(lambda:  iface.messageBar().pushMessage(self.layer.name() + " : " + description))
-            except:
+            except (AttributeError, RuntimeError):
+                # Task or message bar not available
                 pass
 
 
@@ -1068,12 +1075,15 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
 
         text = index.data(QtCore.Qt.DisplayRole)
         if text:
-           painter.drawText(x + isw*2 + 4, y + 4 + ish/2 , text)
+           painter.drawText(int(x + isw*2 + 4), int(y + 4 + ish/2), text)
 
         # Decoration
         pic = index.data(QtCore.Qt.DecorationRole)
         if pic:
-            painter.drawPixmap(x + isw, y, pic.pixmap(isw, ish))
+            if isinstance(pic, QtGui.QIcon):
+                painter.drawPixmap(x + isw, y, pic.pixmap(int(isw), int(ish)))
+            elif isinstance(pic, QtGui.QPixmap):
+                painter.drawPixmap(x + isw, y, pic.scaled(int(isw), int(ish), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
 
         # Indicate Selected
         painter.setPen(QtGui.QPen(QtCore.Qt.NoPen))

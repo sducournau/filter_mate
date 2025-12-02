@@ -216,7 +216,8 @@ class FilterMateApp:
                     key_active_task = [k for k, v in self.tasks_descriptions.items() if v == active_task.description()][0]
                     if key_active_task in ('filter','reset','unfilter'):
                         active_task.cancel()
-        except:
+        except (IndexError, KeyError, AttributeError) as e:
+            # Ignore errors in task cancellation - task may have completed already
             pass
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
@@ -795,7 +796,8 @@ class FilterMateApp:
                         if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
                             try:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                            except:
+                            except (KeyError, AttributeError, RuntimeError) as e:
+                                # Widget may not exist or already removed
                                 pass
 
                         layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
@@ -840,7 +842,8 @@ class FilterMateApp:
                             conn.commit()
                             try:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                            except:
+                            except (KeyError, AttributeError, RuntimeError) as e:
+                                # Widget may not exist or already removed
                                 pass
 
                         layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
@@ -908,7 +911,7 @@ class FilterMateApp:
                 "PostgreSQL layers detected but psycopg2 is not installed. "
                 "Using local Spatialite backend. "
                 "For better performance with large datasets, install psycopg2.",
-                duration=10
+                10
             )
         else:
             self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""
@@ -957,7 +960,7 @@ class FilterMateApp:
         try:
             dest_type(source_value)
             return True
-        except:
+        except (ValueError, TypeError):
             return False
 
 

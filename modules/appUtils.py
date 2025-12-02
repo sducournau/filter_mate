@@ -1,4 +1,18 @@
 import math
+import logging
+
+# Configure FilterMate logger
+logger = logging.getLogger('FilterMate')
+if not logger.handlers:
+    # Only configure if not already configured
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)  # Default level, can be changed via QGIS settings
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:
@@ -16,6 +30,12 @@ except ImportError:
 
 from qgis.core import *
 from qgis.utils import *
+
+# Provider type constants (QGIS providerType() returns these values)
+PROVIDER_POSTGRES = 'postgres'      # PostgreSQL/PostGIS
+PROVIDER_SPATIALITE = 'spatialite'  # Spatialite
+PROVIDER_OGR = 'ogr'                # OGR (Shapefile, GeoPackage, etc.)
+PROVIDER_MEMORY = 'memory'          # In-memory layers
 
 def truncate(number, digits) -> float:
     # Improve accuracy with floating point operations, to avoid truncate(16.4, 2) = 16.39 or truncate(-1.13, 2) = -1.12
@@ -101,66 +121,72 @@ def create_temp_spatialite_table(db_path, table_name, sql_query, geom_field='geo
     import sqlite3
     
     try:
-        # Connect to Spatialite database
-        conn = sqlite3.connect(db_path)
-        conn.enable_load_extension(True)
-        
-        # Load Spatialite extension (try multiple paths for compatibility)
-        try:
-            conn.load_extension('mod_spatialite')
-        except:
+        # Connect to Spatialite database using context manager (ensures cleanup)
+        with sqlite3.connect(db_path) as conn:
+            conn.enable_load_extension(True)
+            
+            # Load Spatialite extension (try multiple paths for compatibility)
             try:
-                conn.load_extension('mod_spatialite.dll')  # Windows
-            except:
-                conn.load_extension('libspatialite')  # Linux/Mac alternative
+                conn.load_extension('mod_spatialite')
+            except (OSError, sqlite3.OperationalError):
+                try:
+                    conn.load_extension('mod_spatialite.dll')  # Windows
+                except (OSError, sqlite3.OperationalError):
+                    try:
+                        conn.load_extension('libspatialite')  # Linux/Mac alternative
+                    except (OSError, sqlite3.OperationalError) as e:
+                        raise RuntimeError(
+                            "FilterMate: Spatialite extension not available. "
+                            "Install spatialite or use PostgreSQL for spatial operations."
+                        ) from e
+            
+            cursor = conn.cursor()
+            
+            try:
+                # Full table name with mv_ prefix for compatibility with existing code
+                full_table_name = f"mv_{table_name}"
+                
+                # Drop existing table and its spatial index if exists
+                cursor.execute(f"DROP TABLE IF EXISTS {full_table_name}")
+                conn.commit()
+                
+                # Create temp table from query
+                # Note: We don't use "CREATE TEMP TABLE" because we need persistence across connections
+                create_sql = f"CREATE TABLE {full_table_name} AS {sql_query}"
+                cursor.execute(create_sql)
+                conn.commit()
+                
+                # Register geometry column in Spatialite metadata
+                # This is essential for spatial operations
+                cursor.execute(f"""
+                    SELECT RecoverGeometryColumn('{full_table_name}', '{geom_field}', {srid}, 
+                                                (SELECT GeometryType({geom_field}) FROM {full_table_name} LIMIT 1),
+                                                (SELECT CoordDimension({geom_field}) FROM {full_table_name} LIMIT 1))
+                """)
+                conn.commit()
+                
+                # Create spatial index (R-tree) for performance
+                cursor.execute(f"SELECT CreateSpatialIndex('{full_table_name}', '{geom_field}')")
+                conn.commit()
+                
+                # Optimize table (similar to PostgreSQL ANALYZE)
+                cursor.execute(f"ANALYZE {full_table_name}")
+                conn.commit()
+                
+                return True
+                
+            finally:
+                cursor.close()
+                # conn.close() is automatic with context manager
         
-        cursor = conn.cursor()
-        
-        # Full table name with mv_ prefix for compatibility with existing code
-        full_table_name = f"mv_{table_name}"
-        
-        # Drop existing table and its spatial index if exists
-        cursor.execute(f"DROP TABLE IF EXISTS {full_table_name}")
-        conn.commit()
-        
-        # Create temp table from query
-        # Note: We don't use "CREATE TEMP TABLE" because we need persistence across connections
-        create_sql = f"CREATE TABLE {full_table_name} AS {sql_query}"
-        cursor.execute(create_sql)
-        conn.commit()
-        
-        # Register geometry column in Spatialite metadata
-        # This is essential for spatial operations
-        cursor.execute(f"""
-            SELECT RecoverGeometryColumn('{full_table_name}', '{geom_field}', {srid}, 
-                                        (SELECT GeometryType({geom_field}) FROM {full_table_name} LIMIT 1),
-                                        (SELECT CoordDimension({geom_field}) FROM {full_table_name} LIMIT 1))
-        """)
-        conn.commit()
-        
-        # Create spatial index (R-tree) for performance
-        cursor.execute(f"SELECT CreateSpatialIndex('{full_table_name}', '{geom_field}')")
-        conn.commit()
-        
-        # Optimize table (similar to PostgreSQL ANALYZE)
-        cursor.execute(f"ANALYZE {full_table_name}")
-        conn.commit()
-        
-        cursor.close()
-        conn.close()
-        
-        return True
+    except RuntimeError as e:
+        # Re-raise spatialite extension errors with clear message
+        logger.error(str(e))
+        return False
         
     except Exception as e:
-        error_msg = f"FilterMate: Error creating Spatialite temp table '{table_name}': {str(e)}"
-        print(error_msg)
-        
-        # Detailed error for common issues
-        if "mod_spatialite" in str(e) or "load_extension" in str(e):
-            print("FilterMate: Spatialite extension not available. Install spatialite or use PostgreSQL for spatial operations.")
-        
-        if 'conn' in locals():
-            conn.close()
+        error_msg = f"Error creating Spatialite temp table '{table_name}': {str(e)}"
+        logger.error(error_msg)
         return False
 
 

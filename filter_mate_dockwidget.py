@@ -1109,7 +1109,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 for widget in self.widgets[widget_group]:
                     try:
                         self.manageSignal([widget_group, widget], 'connect')
-                    except:
+                    except (AttributeError, RuntimeError, TypeError) as e:
+                        # Widget may not exist or signal not available
                         pass
 
     def disconnect_widgets_signals(self):
@@ -1119,7 +1120,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 for widget in self.widgets[widget_group]:
                     try:
                         self.manageSignal([widget_group, widget], 'disconnect')
-                    except:
+                    except (AttributeError, RuntimeError, TypeError) as e:
+                        # Widget may not exist or signal not connected
                         pass
 
 
@@ -1331,12 +1333,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 
             return features, expression
         
+        return [], ''
+        
 
     def exploring_zoom_clicked(self, features=[]):
 
         if self.widgets_initialized is True and self.current_layer != None:
 
-            if len(features) == 0:   
+            if not features or len(features) == 0:   
                 features, expression = self.get_current_features()
             
 
@@ -1347,7 +1351,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         
         if self.widgets_initialized is True and self.current_layer != None:
 
-            if len(features) == 0:        
+            # Safety check: ensure features is a list
+            if not features or not isinstance(features, list) or len(features) == 0:        
                 extent = self.current_layer.extent()
                 self.iface.mapCanvas().zoomToFeatureExtent(extent) 
 
@@ -1418,6 +1423,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 features = self.exploring_features_changed([], False, expression)
 
             return features, expression
+        
+        return [], ''
     
 
     def exploring_deselect_features(self):
@@ -1445,7 +1452,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.current_layer.removeSelection()
 
             if len(features) == 0:
-                return features
+                return []
         
             if layer_props["exploring"]["is_selecting"] == True:
                 self.current_layer.removeSelection()
@@ -1455,6 +1462,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.zooming_to_features(features)  
 
             return features
+        
+        return []
 
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
@@ -1462,7 +1471,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         if self.widgets_initialized is True and self.current_layer != None:
 
             if self.current_layer == None:
-                return
+                return [], None
             
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             features = []
@@ -1721,7 +1730,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     
                 self.exploring_link_widgets()
                 
-        except:
+        except (AttributeError, KeyError, RuntimeError) as e:
+            # Widget initialization may not be complete
             pass
 
 

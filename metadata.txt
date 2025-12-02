@@ -8,7 +8,7 @@ qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
 version=1.9.0
 author=imagodata
-email=imagodata+filter_mate@skiff.com
+email=simon.ducournau+filter_mate@gmail.com
 
 about=FilterMate v1.9 - Now works WITHOUT PostgreSQL!
 
