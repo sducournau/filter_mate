@@ -5,21 +5,30 @@
 [general]
 name=FilterMate
 qgisMinimumVersion=3.0
-description=FilterMate is a Qgis plugin, a daily companion that allows you to easily explore, filter and export vector data
-version=1.8
+description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
+version=1.9.0
 author=imagodata
 email=imagodata+filter_mate@skiff.com
 
-about=FilterMate will change your daily life with QGIS, it allows you to:
+about=FilterMate v1.9 - Now works WITHOUT PostgreSQL!
 
- - a more intuitive search for entities in a layer.
- - make selections simplier.
- - be able to review each entity.
- - filter your vector layers by expression and by geometric predicates, using a buffer if necessary.
- - it allows you to configure the differents widgets and save them independently for each layer.
- - export your layers more intuitively.
+ NEW in v1.9:
+ - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
+ - Automatic backend selection (PostgreSQL, Spatialite, or Local)
+ - No PostgreSQL server required (optional for large datasets)
+ - Performance warnings for large datasets
+ - Improved error messages and user feedback
  
- It adapts to your data, takes advantage of PostGIS when possible, manages differents CRS by reprojecting on the fly. The layers keep a history of each subset, making it easy to return to the previous state.
+ Core features:
+ - Intuitive search and selection of entities
+ - Filter vector layers by expression and geometric predicates
+ - Buffer support for geometric filtering
+ - Configure widgets independently for each layer
+ - Export layers intuitively
+ - Automatic CRS reprojection on the fly
+ - Filter history with easy undo/redo
+ 
+ Performance: Automatically uses PostgreSQL when available for optimal speed, falls back to Spatialite or local backend otherwise.
 
 tracker=https://github.com/sducournau/filter_mate/issues
 repository=https://github.com/sducournau/filter_mate
@@ -28,13 +37,27 @@ repository=https://github.com/sducournau/filter_mate
 # Recommended items: regexp
 
 hasProcessingProvider=no
-# Uncomment the following line and add your changelog:
 
 changelog=
-    Rework the filtering logic : use of temporary materialized views and indexes
-    Add spatialite management : project metadata and subset history
-    Rebuild QgsCheckableComboBoxFeaturesListPickerWidget to show filtered entities
-    Rework the combine logic filter
+    Version 1.9.0 (December 2025) - Major Update
+    NEW: Works WITHOUT PostgreSQL! Plugin now supports any data source
+    NEW: Automatic backend selection (PostgreSQL/Spatialite/Local OGR)
+    NEW: Full Spatialite backend with spatial indexing
+    NEW: Support for Shapefile, GeoPackage, and all OGR formats
+    NEW: Performance warnings for large datasets
+    NEW: Improved user messages and error handling
+    NEW: Comprehensive documentation (INSTALLATION.md, MIGRATION guide)
+    IMPROVED: PostgreSQL remains optional but recommended for large datasets
+    IMPROVED: Better error messages with troubleshooting hints
+    FIXED: Plugin starts even if psycopg2 not installed
+    PERFORMANCE: Same speed as before with PostgreSQL, new Spatialite backend for other formats
+    BREAKING: None (100% backward compatible with v1.8)
+    
+    Version 1.8 (Previous)
+    - Rework filtering logic: use of temporary materialized views and indexes
+    - Add spatialite management: project metadata and subset history
+    - Rebuild QgsCheckableComboBoxFeaturesListPickerWidget to show filtered entities
+    - Rework combine logic filter
 
 
 # Tags are comma separated with spaces allowed

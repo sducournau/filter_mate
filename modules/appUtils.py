@@ -152,7 +152,13 @@ def create_temp_spatialite_table(db_path, table_name, sql_query, geom_field='geo
         return True
         
     except Exception as e:
-        print(f"FilterMate: Error creating Spatialite temp table '{table_name}': {str(e)}")
+        error_msg = f"FilterMate: Error creating Spatialite temp table '{table_name}': {str(e)}"
+        print(error_msg)
+        
+        # Detailed error for common issues
+        if "mod_spatialite" in str(e) or "load_extension" in str(e):
+            print("FilterMate: Spatialite extension not available. Install spatialite or use PostgreSQL for spatial operations.")
+        
         if 'conn' in locals():
             conn.close()
         return False

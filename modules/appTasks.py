@@ -1218,6 +1218,12 @@ class FilterEngineTask(QgsTask):
         
         if not success:
             print(f"FilterMate ERROR: Failed to create Spatialite temp table")
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate - Error",
+                "Failed to create temporary Spatialite table. Check QGIS logs for details.",
+                duration=10
+            )
             return False
         
         # Apply subset string to layer (reference temp table)
@@ -1270,6 +1276,16 @@ class FilterEngineTask(QgsTask):
         use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
         
         print(f"FilterMate: Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
+        
+        # User feedback: Inform about backend being used (Phase 3)
+        if use_spatialite and layer.featureCount() > 50000:
+            from qgis.utils import iface
+            iface.messageBar().pushInfo(
+                "FilterMate - Performance",
+                f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
+                f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL.",
+                duration=8
+            )
 
         if self.task_action == 'filter':
             current_seq_order = last_seq_order + 1
@@ -1277,6 +1293,14 @@ class FilterEngineTask(QgsTask):
             # BRANCH: Use Spatialite backend (Phase 2)
             if use_spatialite:
                 print("FilterMate: Using Spatialite backend")
+                # User feedback: Backend info (Phase 3)
+                from qgis.utils import iface
+                backend_name = "Spatialite" if provider_type == 'spatialite' else "Local (OGR)"
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    f"Filtering with {backend_name} backend...",
+                    duration=3
+                )
                 success = self._manage_spatialite_subset(
                     layer, sql_subset_string, primary_key_name, geom_key_name,
                     name, custom, cur, conn, current_seq_order
