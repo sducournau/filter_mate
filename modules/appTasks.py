@@ -635,22 +635,404 @@ class FilterEngineTask(QgsTask):
         except Exception as e:
             logger.warning(f"Could not create spatial index for {display_name}: {e}")
             logger.info(f"Proceeding without spatial index - performance may be reduced")
-            return False 
+            return False
+
+
+    def _build_postgis_predicates(self, postgis_predicates, layer_props, param_has_to_reproject_layer, param_layer_crs_authid):
+        """
+        Build PostGIS spatial predicates array for geometric filtering.
+        
+        Args:
+            postgis_predicates: List of PostGIS predicate functions (ST_Intersects, etc.)
+            layer_props: Layer properties dict with schema, table, geometry field
+            param_has_to_reproject_layer: Whether layer needs reprojection
+            param_layer_crs_authid: Target CRS authority ID
+            
+        Returns:
+            tuple: (postgis_sub_expression_array, param_distant_geom_expression)
+        """
+        param_distant_table = layer_props["layer_name"]
+        param_distant_geometry_field = layer_props["geometry_field"]
+        
+        postgis_sub_expression_array = []
+        param_distant_geom_expression = '"{distant_table}"."{distant_geometry_field}"'.format(
+            distant_table=param_distant_table,
+            distant_geometry_field=param_distant_geometry_field
+        )
+        
+        for postgis_predicate in postgis_predicates:
+            current_geom_expr = param_distant_geom_expression
+            
+            if param_has_to_reproject_layer:
+                current_geom_expr = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid}) as {geometry_field}'.format(
+                    param_distant_geom_expression=param_distant_geom_expression,
+                    param_layer_srid=param_layer_crs_authid.split(':')[1],
+                    geometry_field=param_distant_geometry_field
+                )
+            
+            postgis_sub_expression_array.append(
+                postgis_predicate + '({source_sub_expression_geom},{param_distant_geom_expression})'.format(
+                    source_sub_expression_geom=self.postgresql_source_geom,
+                    param_distant_geom_expression=current_geom_expr
+                )
+            )
+        
+        return postgis_sub_expression_array, param_distant_geom_expression
+
+
+    def _build_postgis_filter_expression(self, layer_props, param_postgis_sub_expression, sub_expression, param_old_subset, param_combine_operator):
+        """
+        Build complete PostGIS filter expression for subset string.
+        
+        Args:
+            layer_props: Layer properties dict
+            param_postgis_sub_expression: PostGIS spatial predicate expression
+            sub_expression: Source layer subset expression
+            param_old_subset: Existing subset string from layer
+            param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT)
+            
+        Returns:
+            str: Complete filter expression for setSubsetString()
+        """
+        param_distant_primary_key_name = layer_props["primary_key_name"]
+        param_distant_schema = layer_props["layer_schema"]
+        param_distant_table = layer_props["layer_name"]
+        
+        # Build subquery based on whether expression is a field or complex query
+        if QgsExpression(self.expression).isField() is False:
+            if self.has_combine_operator is True:
+                if self.current_materialized_view_name is not None:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_subset_schema_name=self.current_materialized_view_schema,
+                        source_subset_table_name=self.current_materialized_view_name,
+                        postgis_sub_expression=param_postgis_sub_expression
+                    )
+                else:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        postgis_sub_expression=param_postgis_sub_expression,
+                        source_subset=sub_expression
+                    )
+            else:
+                if self.current_materialized_view_name is not None:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression} WHERE {source_subset})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_subset_schema_name=self.current_materialized_view_schema,
+                        source_subset_table_name=self.current_materialized_view_name,
+                        postgis_sub_expression=param_postgis_sub_expression
+                    )
+                else:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_schema=self.param_source_schema,
+                        source_table=self.param_source_table,
+                        postgis_sub_expression=param_postgis_sub_expression,
+                        source_subset=sub_expression
+                    )
+        else:  # Expression is a field
+            if self.has_combine_operator is True:
+                if self.current_materialized_view_name is not None:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_subset_schema_name=self.current_materialized_view_schema,
+                        source_subset_table_name=self.current_materialized_view_name,
+                        postgis_sub_expression=param_postgis_sub_expression
+                    )
+                else:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_subset=sub_expression,
+                        postgis_sub_expression=param_postgis_sub_expression
+                    )
+            else:
+                if self.current_materialized_view_name is not None:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_subset_schema_name=self.current_materialized_view_schema,
+                        source_subset_table_name=self.current_materialized_view_name,
+                        postgis_sub_expression=param_postgis_sub_expression
+                    )
+                else:
+                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
+                        distant_primary_key_name=param_distant_primary_key_name,
+                        distant_schema=param_distant_schema,
+                        distant_table=param_distant_table,
+                        source_subset=self.param_source_table,
+                        postgis_sub_expression=param_postgis_sub_expression
+                    )
+        
+        # Apply combine operator if needed
+        if param_old_subset != '' and param_combine_operator != '':
+            expression = '"{distant_primary_key_name}" IN ( {param_old_subset} {param_combine_operator} {expression} )'.format(
+                distant_primary_key_name=param_distant_primary_key_name,
+                param_old_subset=param_old_subset,
+                param_combine_operator=param_combine_operator,
+                expression=param_expression
+            )
+        else:
+            expression = '"{distant_primary_key_name}" IN {expression}'.format(
+                distant_primary_key_name=param_distant_primary_key_name,
+                expression=param_expression
+            )
+        
+        return expression, param_expression
+
+
+    def _execute_ogr_spatial_selection(self, layer, current_layer, param_old_subset):
+        """
+        Execute spatial selection using QGIS processing for OGR/non-PostgreSQL layers.
+        
+        Args:
+            layer: Original layer
+            current_layer: Potentially reprojected working layer
+            param_old_subset: Existing subset string
+            
+        Returns:
+            None (modifies current_layer selection)
+        """
+        if self.has_combine_operator is True:
+            current_layer.selectAll()
+            
+            if self.param_other_layers_combine_operator == 'OR':
+                self._verify_and_create_spatial_index(current_layer)
+                current_layer.setSubsetString(param_old_subset)
+                current_layer.selectAll()
+                current_layer.setSubsetString('')
+                
+                alg_params_select = {
+                    'INPUT': current_layer,
+                    'INTERSECT': self.ogr_source_geom,
+                    'METHOD': 1,
+                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                }
+                processing.run("qgis:selectbylocation", alg_params_select)
+                
+            elif self.param_other_layers_combine_operator == 'AND':
+                self._verify_and_create_spatial_index(current_layer)
+                alg_params_select = {
+                    'INPUT': current_layer,
+                    'INTERSECT': self.ogr_source_geom,
+                    'METHOD': 2,
+                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                }
+                processing.run("qgis:selectbylocation", alg_params_select)
+                
+            elif self.param_other_layers_combine_operator == 'NOT AND':
+                self._verify_and_create_spatial_index(current_layer)
+                alg_params_select = {
+                    'INPUT': current_layer,
+                    'INTERSECT': self.ogr_source_geom,
+                    'METHOD': 3,
+                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                }
+                processing.run("qgis:selectbylocation", alg_params_select)
+                
+            else:
+                self._verify_and_create_spatial_index(current_layer)
+                alg_params_select = {
+                    'INPUT': current_layer,
+                    'INTERSECT': self.ogr_source_geom,
+                    'METHOD': 0,
+                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                }
+                processing.run("qgis:selectbylocation", alg_params_select)
+        else:
+            self._verify_and_create_spatial_index(current_layer)
+            alg_params_select = {
+                'INPUT': current_layer,
+                'INTERSECT': self.ogr_source_geom,
+                'METHOD': 0,
+                'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+            }
+            processing.run("qgis:selectbylocation", alg_params_select)
+
+
+    def _build_ogr_filter_from_selection(self, current_layer, layer_props, param_distant_geom_expression):
+        """
+        Build filter expression from selected features for OGR layers.
+        
+        Args:
+            current_layer: Layer with selected features
+            layer_props: Layer properties dict
+            param_distant_geom_expression: Geometry field expression
+            
+        Returns:
+            tuple: (success_bool, filter_expression or None)
+        """
+        param_distant_primary_key_name = layer_props["primary_key_name"]
+        param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
+        param_distant_schema = layer_props["layer_schema"]
+        param_distant_table = layer_props["layer_name"]
+        param_distant_geometry_field = layer_props["geometry_field"]
+        
+        # Extract feature IDs from selection
+        features_ids = []
+        for feature in current_layer.selectedFeatures():
+            features_ids.append(str(feature[param_distant_primary_key_name]))
+        
+        if len(features_ids) == 0:
+            return False, None
+        
+        # Build IN clause based on key type
+        if param_distant_primary_key_is_numeric:
+            param_expression = '"{distant_primary_key_name}" IN '.format(
+                distant_primary_key_name=param_distant_primary_key_name
+            ) + "(" + ", ".join(features_ids) + ")"
+        else:
+            param_expression = '"{distant_primary_key_name}" IN '.format(
+                distant_primary_key_name=param_distant_primary_key_name
+            ) + "('" + "', '".join(features_ids) + "')"
+        
+        # Build full SELECT expression for manage_layer_subset_strings
+        expression = 'SELECT "{param_distant_table}"."{param_distant_primary_key_name}", {param_distant_geom_expression} FROM "{param_distant_schema}"."{param_distant_table}" WHERE {expression}'.format(
+            param_distant_primary_key_name=param_distant_primary_key_name,
+            param_distant_geom_expression=param_distant_geom_expression,
+            param_distant_schema=param_distant_schema,
+            param_distant_table=param_distant_table,
+            expression=param_expression
+        )
+        
+        return param_expression, expression
+
+
+    def _qualify_field_names_in_expression(self, expression, field_names, primary_key_name, table_name, is_postgresql):
+        """
+        Qualify field names with table prefix for PostgreSQL expressions.
+        
+        This helper adds table qualifiers to field names in QGIS expressions to make them
+        compatible with PostgreSQL queries (e.g., "field" becomes "table"."field").
+        
+        Args:
+            expression: Raw QGIS expression string
+            field_names: List of field names to qualify
+            primary_key_name: Primary key field name
+            table_name: Source table name
+            is_postgresql: Whether target is PostgreSQL (True) or other provider (False)
+            
+        Returns:
+            str: Expression with qualified field names
+        """
+        result_expression = expression
+        
+        # Handle primary key
+        if primary_key_name in result_expression:
+            if table_name not in result_expression:
+                if f' "{primary_key_name}" ' in result_expression:
+                    if is_postgresql:
+                        result_expression = result_expression.replace(
+                            f'"{primary_key_name}"',
+                            f'"{table_name}"."{primary_key_name}"'
+                        )
+                elif f" {primary_key_name} " in result_expression:
+                    if is_postgresql:
+                        result_expression = result_expression.replace(
+                            primary_key_name,
+                            f'"{table_name}"."{primary_key_name}"'
+                        )
+                    else:
+                        result_expression = result_expression.replace(
+                            primary_key_name,
+                            f'"{primary_key_name}"'
+                        )
+        
+        # Handle other fields
+        existing_fields = [x for x in field_names if x in result_expression]
+        if existing_fields and table_name not in result_expression:
+            for field_name in existing_fields:
+                if f' "{field_name}" ' in result_expression:
+                    if is_postgresql:
+                        result_expression = result_expression.replace(
+                            f'"{field_name}"',
+                            f'"{table_name}"."{field_name}"'
+                        )
+                elif f" {field_name} " in result_expression:
+                    if is_postgresql:
+                        result_expression = result_expression.replace(
+                            field_name,
+                            f'"{table_name}"."{field_name}"'
+                        )
+                    else:
+                        result_expression = result_expression.replace(
+                            field_name,
+                            f'"{field_name}"'
+                        )
+        
+        return result_expression
+
+
+    def _build_combined_filter_expression(self, new_expression, old_subset, combine_operator):
+        """
+        Combine new filter expression with existing subset using specified operator.
+        
+        Args:
+            new_expression: New filter expression to apply
+            old_subset: Existing subset string from layer
+            combine_operator: SQL operator ('AND', 'OR', 'NOT')
+            
+        Returns:
+            str: Combined filter expression
+        """
+        if not old_subset or not combine_operator:
+            return new_expression
+        
+        # Extract WHERE clause from old subset if present
+        param_old_subset_where_clause = ''
+        param_source_old_subset = old_subset
+        
+        index_where_clause = old_subset.find('WHERE')
+        if index_where_clause > -1:
+            param_old_subset_where_clause = old_subset[index_where_clause:]
+            if param_old_subset_where_clause.endswith('))'):
+                param_old_subset_where_clause = param_old_subset_where_clause[:-1]
+            param_source_old_subset = old_subset[:index_where_clause]
+        
+        # Combine expressions
+        combined = f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {new_expression} )'
+        return combined 
 
 
     def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
-
+        """
+        Execute geometric filtering on layer using spatial predicates.
+        
+        This method applies geometric filtering based on layer provider type:
+        - PostgreSQL layers: Use optimized PostGIS queries with spatial joins
+        - Other layers: Use QGIS processing selectbylocation algorithm
+        
+        The method has been refactored to use helper methods for better maintainability.
+        
+        Args:
+            layer_provider_type: Provider type ('postgresql', 'spatialite', 'ogr', etc.)
+            layer: QgsVectorLayer to filter
+            layer_props: Dict containing layer schema, table, geometry field, etc.
+            
+        Returns:
+            bool: True if filtering succeeded, False otherwise
+        """
         result = False
         postgis_predicates = list(self.current_predicates.values())
         param_combine_operator = ''
         
         # Verify spatial index exists before filtering - critical for performance
         self._verify_and_create_spatial_index(layer, layer_props.get('infos', {}).get('layer_name'))
-        param_old_subset = ''
+        param_old_subset = layer.subsetString() if layer.subsetString() != '' else ''
 
-        if layer.subsetString() != '':
-            param_old_subset = layer.subsetString()
-
+        # Determine SQL set operator for combining filters
         if self.has_combine_operator is True:
             if self.param_other_layers_combine_operator == 'AND':
                 param_combine_operator = 'INTERSECT'
@@ -659,7 +1041,7 @@ class FilterEngineTask(QgsTask):
             elif self.param_other_layers_combine_operator == 'OR':
                 param_combine_operator = 'UNION'
 
-
+        # Extract layer properties
         param_distant_schema = layer_props["layer_schema"]
         param_distant_table = layer_props["layer_name"]
         param_distant_primary_key_name = layer_props["primary_key_name"]
@@ -667,23 +1049,20 @@ class FilterEngineTask(QgsTask):
         param_distant_geometry_field = layer_props["geometry_field"]
         param_layer_crs_authid = layer_props["layer_crs_authid"]
         
-        
-        param_layer_feature_count = 0
+        # Check if layer needs reprojection
         param_has_to_reproject_layer = False
         param_layer_crs = layer.sourceCrs()
         param_layer_crs_distance_unit = param_layer_crs.mapUnits()
+        
         if param_layer_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] and param_layer_crs.isGeographic() is False:
-
             if param_layer_crs_authid != self.source_layer_crs_authid:
                 param_has_to_reproject_layer = True
                 param_layer_crs_authid = self.source_layer_crs_authid
-
         else:
             param_has_to_reproject_layer = True
             param_layer_crs_authid = self.source_layer_crs_authid
 
-
-
+        # ===== POSTGRESQL PATH =====
         if (self.param_source_provider_type == 'postgresql' and 
             layer_provider_type == 'postgresql' and 
             POSTGRESQL_AVAILABLE):
