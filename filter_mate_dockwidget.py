@@ -91,6 +91,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.widgets_initialized = False
         self.current_exploring_groupbox = None
         self.tabTools_current_index = 0
+        self.backend_indicator_label = None
 
         self.predicates = None
         self.buffer_property_has_been_init = False
@@ -200,6 +201,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def setupUiCustom(self):
         self.set_multiple_checkable_combobox()
+
+        # Create backend indicator label
+        self.backend_indicator_label = QtWidgets.QLabel(self)
+        self.backend_indicator_label.setObjectName("label_backend_indicator")
+        self.backend_indicator_label.setText("Backend: Detecting...")
+        self.backend_indicator_label.setStyleSheet("color: gray; font-size: 10px; padding: 2px;")
+        self.backend_indicator_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        # Add to the main layout (top of the widget)
+        if hasattr(self, 'verticalLayout'):
+            self.verticalLayout.insertWidget(0, self.backend_indicator_label)
 
         layout = self.verticalLayout_exploring_multiple_selection
         layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
@@ -1681,6 +1693,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
                 if lastLayer != None and lastLayer.id() != self.current_layer.id():
                     self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
+
+                # Update backend indicator
+                if 'provider_type' in layer_props.get('infos', {}):
+                    self._update_backend_indicator(layer_props['infos']['provider_type'])
 
                 """SINGLE SELECTION"""
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)

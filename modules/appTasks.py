@@ -28,6 +28,9 @@ except ImportError:
     psycopg2 = None
     logger.warning("PostgreSQL support disabled (psycopg2 not found)")
 
+# Import backend architecture
+from modules.backends import BackendFactory
+
 import uuid
 from collections import OrderedDict
 from operator import getitem
@@ -155,6 +158,9 @@ class FilterEngineTask(QgsTask):
             if 'project_uuid' in self.task_parameters["task"] and self.task_parameters["task"]['project_uuid'] not in (None, ''):
                 self.project_uuid = self.task_parameters["task"]['project_uuid']
 
+            # Set initial progress
+            self.setProgress(0)
+            logger.info(f"Starting {self.task_action} task for {self.layers_count} layer(s)")
 
             if self.task_action == 'filter':
                 """We will filter layers"""
@@ -187,6 +193,9 @@ class FilterEngineTask(QgsTask):
                 else:
                     return False
             
+            # Task completed successfully
+            self.setProgress(100)
+            logger.info(f"{self.task_action.capitalize()} task completed successfully")
             return True
     
         except Exception as e:
@@ -362,22 +371,26 @@ class FilterEngineTask(QgsTask):
         provider_list = list(dict.fromkeys(provider_list))
 
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
+            logger.info("Preparing PostgreSQL source geometry...")
             self.prepare_postgresql_source_geom()
 
         if 'ogr' in provider_list or 'spatialite' in provider_list or self.param_buffer_expression != '':
+            logger.info("Preparing OGR/Spatialite source geometry...")
             self.prepare_ogr_source_geom()
 
 
         i = 1
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
+                logger.info(f"Filtering layer {i}/{self.layers_count}: {layer.name()} ({layer_provider_type})")
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
                 if result == True:
                     logger.info(f"{layer.name()} has been filtered")
                 else:
                     logger.error(f"{layer.name()} - errors occurred during filtering")
                 i += 1
-                self.setProgress((i/self.layers_count)*100)
+                progress_percent = int((i / self.layers_count) * 100)
+                self.setProgress(progress_percent)
                 if self.isCanceled():
                     return False
                 
@@ -1020,11 +1033,8 @@ class FilterEngineTask(QgsTask):
         """
         Execute geometric filtering on layer using spatial predicates.
         
-        This method applies geometric filtering based on layer provider type:
-        - PostgreSQL layers: Use optimized PostGIS queries with spatial joins
-        - Other layers: Use QGIS processing selectbylocation algorithm
-        
-        The method has been refactored to use helper methods for better maintainability.
+        REFACTORED: Now uses backend pattern for cleaner, maintainable code.
+        Delegates to specialized backends (PostgreSQL, Spatialite, OGR) based on provider type.
         
         Args:
             layer_provider_type: Provider type ('postgresql', 'spatialite', 'ogr', etc.)
@@ -1034,48 +1044,104 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
-        result = False
-        postgis_predicates = list(self.current_predicates.values())
-        param_combine_operator = ''
+        try:
+            logger.info(f"Executing geometric filtering for {layer.name()} ({layer_provider_type})")
+            
+            # Verify spatial index exists before filtering - critical for performance
+            self._verify_and_create_spatial_index(layer, layer_props.get('infos', {}).get('layer_name'))
+            
+            # Get appropriate backend for this layer
+            backend = BackendFactory.get_backend(layer_provider_type, layer, self.task_parameters)
+            
+            # Get current subset and combine operator
+            old_subset = layer.subsetString() if layer.subsetString() != '' else None
+            combine_operator = self._get_combine_operator()
+            
+            # Prepare source geometry based on backend type
+            source_geom = self._prepare_source_geometry(layer_provider_type)
+            
+            # Build filter expression using backend
+            expression = backend.build_expression(
+                layer_props=layer_props,
+                predicates=self.current_predicates,
+                source_geom=source_geom,
+                buffer_value=self.param_buffer_value if hasattr(self, 'param_buffer_value') else None,
+                buffer_expression=self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
+            )
+            
+            if not expression:
+                logger.warning(f"No expression generated for {layer.name()}")
+                return False
+            
+            # Apply filter using backend
+            result = backend.apply_filter(
+                layer=layer,
+                expression=expression,
+                old_subset=old_subset,
+                combine_operator=combine_operator
+            )
+            
+            if result:
+                # Store subset string for history/undo functionality
+                self.manage_layer_subset_strings(
+                    layer,
+                    expression,
+                    layer_props.get("primary_key_name"),
+                    layer_props.get("geometry_field"),
+                    False
+                )
+                logger.info(f"✓ Successfully filtered {layer.name()}: {layer.featureCount()} features match")
+            else:
+                logger.error(f"✗ Failed to filter {layer.name()}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in execute_geometric_filtering for {layer.name()}: {e}", exc_info=True)
+            return False
+    
+    def _get_combine_operator(self):
+        """
+        Get SQL operator for combining with existing filters.
         
-        # Verify spatial index exists before filtering - critical for performance
-        self._verify_and_create_spatial_index(layer, layer_props.get('infos', {}).get('layer_name'))
-        param_old_subset = layer.subsetString() if layer.subsetString() != '' else ''
-
-        # Determine SQL set operator for combining filters
-        if self.has_combine_operator is True:
-            if self.param_other_layers_combine_operator == 'AND':
-                param_combine_operator = 'INTERSECT'
-            elif self.param_other_layers_combine_operator == 'AND NOT': 
-                param_combine_operator = 'EXCEPT'
-            elif self.param_other_layers_combine_operator == 'OR':
-                param_combine_operator = 'UNION'
-
-        # Extract layer properties
-        param_distant_schema = layer_props["layer_schema"]
-        param_distant_table = layer_props["layer_name"]
-        param_distant_primary_key_name = layer_props["primary_key_name"]
-        param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
-        param_distant_geometry_field = layer_props["geometry_field"]
-        param_layer_crs_authid = layer_props["layer_crs_authid"]
+        Returns:
+            str: 'AND', 'OR', 'INTERSECT', 'UNION', 'EXCEPT', or None
+        """
+        if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
+            return None
         
-        # Check if layer needs reprojection
-        param_has_to_reproject_layer = False
-        param_layer_crs = layer.sourceCrs()
-        param_layer_crs_distance_unit = param_layer_crs.mapUnits()
+        operator_map = {
+            'AND': 'INTERSECT',
+            'AND NOT': 'EXCEPT',
+            'OR': 'UNION'
+        }
         
-        if param_layer_crs_distance_unit not in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] and param_layer_crs.isGeographic() is False:
-            if param_layer_crs_authid != self.source_layer_crs_authid:
-                param_has_to_reproject_layer = True
-                param_layer_crs_authid = self.source_layer_crs_authid
-        else:
-            param_has_to_reproject_layer = True
-            param_layer_crs_authid = self.source_layer_crs_authid
-
-        # ===== POSTGRESQL PATH =====
-        if (self.param_source_provider_type == 'postgresql' and 
-            layer_provider_type == 'postgresql' and 
-            POSTGRESQL_AVAILABLE):
+        other_op = getattr(self, 'param_other_layers_combine_operator', None)
+        return operator_map.get(other_op, other_op)
+    
+    def _prepare_source_geometry(self, layer_provider_type):
+        """
+        Prepare source geometry expression based on provider type.
+        
+        Args:
+            layer_provider_type: Target layer provider type
+        
+        Returns:
+            str: Source geometry expression or layer reference
+        """
+        if layer_provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
+            if hasattr(self, 'postgresql_source_geom'):
+                return self.postgresql_source_geom
+        
+        # For OGR/Spatialite, return the source layer or geometry
+        if hasattr(self, 'ogr_source_geom'):
+            return self.ogr_source_geom
+        
+        # Fallback: return source layer
+        if hasattr(self, 'source_layer'):
+            return self.source_layer
+        
+        return None
             # and (self.param_buffer_expression == None or self.param_buffer_expression == '')    
             postgis_sub_expression_array = []
             for postgis_predicate in postgis_predicates:

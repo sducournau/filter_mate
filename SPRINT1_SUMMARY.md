@@ -1,8 +1,8 @@
 # FilterMate - Changements Récents (Sprint 1)
 
 **Date**: 3 décembre 2025  
-**Version**: 1.9.1 (en développement)  
-**Status**: ✅ Sprint 1 complété
+**Version**: 1.9.1  
+**Status**: ✅ Sprint 1 100% complété
 
 ---
 
@@ -41,7 +41,18 @@ Ce sprint a focalisé sur les **corrections critiques** et l'amélioration de la
   - Après: ~0.01ms par appel
   - **Gain: 50x** sur affichage de 100+ couches
 
-#### 4. Infrastructure de Tests
+#### 4. Messages de Feedback Utilisateur
+- **Nouveaux éléments**:
+  - Indicateur de backend dans l'UI (PostgreSQL ⚡ / Spatialite 💾 / OGR 📁)
+  - Code couleur: vert (PostgreSQL), bleu (Spatialite), orange (OGR)
+  - Messages de progression détaillés dans les logs
+  - Pourcentage de progression amélioré dans FilterEngineTask
+- **Fichiers modifiés**:
+  - `filter_mate_dockwidget.py`: Méthode `_update_backend_indicator()`
+  - `modules/appTasks.py`: Logs de progression améliorés
+- **Impact**: Meilleure visibilité sur le backend actif et la progression
+
+#### 5. Infrastructure de Tests
 - **Nouveaux fichiers**:
   - `tests/test_appUtils.py`: 20+ tests unitaires
   - `tests/conftest.py`: Fixtures pytest
@@ -53,7 +64,7 @@ Ce sprint a focalisé sur les **corrections critiques** et l'amélioration de la
   - Cache d'icônes
   - Gestion d'erreurs
 
-#### 5. Documentation de Planification
+#### 6. Documentation de Planification
 - **Nouveaux fichiers**:
   - `ROADMAP.md`: Feuille de route complète
   - `IMPLEMENTATION_PLAN.md`: Plan d'implémentation détaillé
@@ -68,6 +79,8 @@ Ce sprint a focalisé sur les **corrections critiques** et l'amélioration de la
 - ✅ Logging structuré implémenté
 - ✅ Cache d'icônes optimisé
 - ✅ 20+ tests unitaires créés
+- ✅ Backend indicator UI implémenté
+- ✅ Messages de progression améliorés
 
 ### Performance
 - ✅ Affichage icônes: **50x plus rapide**
