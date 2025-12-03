@@ -70,7 +70,36 @@ layer_geometry_type = f"GeometryType.{QgsWkbTypes.geometryDisplayString(layer.ge
 
 ## Resolved Issues
 
-(None yet - this is first audit)
+### 1. ✅ Combobox Layer Icons Fixed (3 Dec 2025)
+
+**Issue**: Geometry type enum was being converted to numeric string instead of expected format
+**Location**: `modules/appTasks.py:2311` and utility functions
+**Solution Implemented**:
+- Created `geometry_type_to_string()` utility function in `appUtils.py`
+- Converts `QgsWkbTypes` enums to proper string format ('GeometryType.Point', etc.)
+- Updated `add_project_layer()` to use utility function
+**Testing**: Verify icons display correctly for Point, Line, Polygon, and Table layers
+
+### 2. ✅ Layer Sorting Performance Optimized (3 Dec 2025)
+
+**Issue**: Layers were being re-sorted on every iteration when adding multiple layers
+**Location**: `modules/appTasks.py:2236` (now ~2237)
+**Solution Implemented**:
+- Moved sorting operation outside the loop in `manage_project_layers()`
+- Now sorts only once after all layers are processed
+- Significant performance improvement when adding many layers (10+)
+**Impact**: ~N times faster when adding N layers
+
+### 3. ✅ Provider Type Detection Refactored (3 Dec 2025)
+
+**Issue**: Provider type detection logic was duplicated in multiple places
+**Location**: `modules/appTasks.py` (multiple locations)
+**Solution Implemented**:
+- Created `detect_layer_provider_type()` utility function in `appUtils.py`
+- Handles OGR vs Spatialite distinction via capability check
+- Updated `add_project_layer()` to use utility function
+- Reduced code duplication by ~30 lines
+**Benefits**: More maintainable, consistent behavior, easier to extend
 
 ---
 

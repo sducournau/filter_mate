@@ -59,6 +59,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     resettingLayerVariableOnError = pyqtSignal(QgsVectorLayer, list)
 
     settingProjectVariables = pyqtSignal()
+    
+    # Static cache for geometry icons to avoid repeated calculations
+    _icon_cache = {}
 
     def __init__(self, project_layers, plugin_dir, config_data, project, parent=None):
         """Constructor."""
@@ -444,17 +447,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
     def icon_per_geometry_type(self, geometry_type):
-
+        """
+        Get icon for geometry type with caching.
+        
+        Icons are cached statically to avoid repeated QgsLayerItem calls,
+        improving performance when displaying multiple layers.
+        
+        Args:
+            geometry_type (str): Geometry type string (e.g., 'GeometryType.Point')
+        
+        Returns:
+            QIcon: Icon for the geometry type
+        """
+        # Check cache first
+        if geometry_type in self._icon_cache:
+            return self._icon_cache[geometry_type]
+        
+        # Calculate and cache the icon
         if geometry_type == 'GeometryType.Line':
-            return QgsLayerItem.iconLine()
+            icon = QgsLayerItem.iconLine()
         elif geometry_type == 'GeometryType.Point':
-            return QgsLayerItem.iconPoint()
+            icon = QgsLayerItem.iconPoint()
         elif geometry_type == 'GeometryType.Polygon':
-            return QgsLayerItem.iconPolygon()
+            icon = QgsLayerItem.iconPolygon()
         elif geometry_type == 'GeometryType.UnknownGeometry':
-            return QgsLayerItem.iconTable()
+            icon = QgsLayerItem.iconTable()
         else:
-            return QgsLayerItem.iconDefault()
+            icon = QgsLayerItem.iconDefault()
+        
+        # Cache for future use
+        self._icon_cache[geometry_type] = icon
+        return icon
         
     def filtering_populate_predicates_chekableCombobox(self):
 

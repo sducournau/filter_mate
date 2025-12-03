@@ -1,18 +1,17 @@
 import math
 import logging
+import os
 
-# Configure FilterMate logger
-logger = logging.getLogger('FilterMate')
-if not logger.handlers:
-    # Only configure if not already configured
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)  # Default level, can be changed via QGIS settings
+# Import logging configuration
+from modules.logging_config import setup_logger
+from config.config import ENV_VARS
+
+# Setup logger with rotation
+logger = setup_logger(
+    'FilterMate.Utils',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_utils.log'),
+    level=logging.INFO
+)
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:
@@ -21,9 +20,8 @@ try:
 except ImportError:
     POSTGRESQL_AVAILABLE = False
     psycopg2 = None
-    import warnings
-    warnings.warn(
-        "FilterMate: PostgreSQL support disabled (psycopg2 not found). "
+    logger.warning(
+        "PostgreSQL support disabled (psycopg2 not found). "
         "Plugin will work with local files (Shapefile, GeoPackage, etc.) and Spatialite. "
         "For better performance with large datasets, consider installing psycopg2."
     )
@@ -44,6 +42,84 @@ def truncate(number, digits) -> float:
         return number
     stepper = 10.0 ** digits
     return math.trunc(stepper * number) / stepper
+
+
+def detect_layer_provider_type(layer):
+    """
+    Detect the provider type of a QGIS vector layer.
+    
+    Handles the distinction between Spatialite and OGR layers, as both
+    can report 'ogr' as providerType() but Spatialite layers have 'Transactions' capability.
+    
+    Args:
+        layer (QgsVectorLayer): QGIS vector layer
+    
+    Returns:
+        str: One of 'postgresql', 'spatialite', 'ogr', 'memory', or 'unknown'
+    
+    Examples:
+        >>> layer_type = detect_layer_provider_type(layer)
+        >>> if layer_type == 'postgresql' and POSTGRESQL_AVAILABLE:
+        ...     # Use PostgreSQL optimized path
+    """
+    if not isinstance(layer, QgsVectorLayer):
+        return 'unknown'
+    
+    provider_type = layer.providerType()
+    
+    if provider_type == PROVIDER_POSTGRES:
+        return 'postgresql'
+    elif provider_type == PROVIDER_SPATIALITE:
+        return 'spatialite'
+    elif provider_type == PROVIDER_MEMORY:
+        return 'memory'
+    elif provider_type == PROVIDER_OGR:
+        # Check if it's actually Spatialite masquerading as OGR
+        capabilities = layer.capabilitiesString().split(', ')
+        if 'Transactions' in capabilities:
+            return 'spatialite'
+        else:
+            return 'ogr'
+    else:
+        # Fallback for OGR-like providers
+        capabilities = layer.capabilitiesString().split(', ')
+        if 'Transactions' in capabilities:
+            return 'spatialite'
+        else:
+            return 'ogr'
+
+
+def geometry_type_to_string(layer):
+    """
+    Convert QGIS geometry type enum to string format expected by FilterMate UI.
+    
+    Args:
+        layer (QgsVectorLayer): QGIS vector layer
+    
+    Returns:
+        str: Geometry type string like 'GeometryType.Point', 'GeometryType.Line', etc.
+    
+    Examples:
+        >>> geom_str = geometry_type_to_string(layer)
+        >>> icon = icon_per_geometry_type(geom_str)
+    """
+    if not isinstance(layer, QgsVectorLayer):
+        return 'GeometryType.UnknownGeometry'
+    
+    geometry_type = layer.geometryType()
+    
+    if geometry_type == QgsWkbTypes.PointGeometry:
+        return 'GeometryType.Point'
+    elif geometry_type == QgsWkbTypes.LineGeometry:
+        return 'GeometryType.Line'
+    elif geometry_type == QgsWkbTypes.PolygonGeometry:
+        return 'GeometryType.Polygon'
+    elif geometry_type == QgsWkbTypes.UnknownGeometry:
+        return 'GeometryType.UnknownGeometry'
+    elif geometry_type == QgsWkbTypes.NullGeometry:
+        return 'GeometryType.UnknownGeometry'
+    else:
+        return 'GeometryType.UnknownGeometry'
 
 
 def get_datasource_connexion_from_layer(layer):        

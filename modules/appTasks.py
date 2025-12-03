@@ -6,9 +6,18 @@ from qgis.utils import *
 from qgis.utils import iface
 from qgis import processing
 import logging
+import os
 
-# Get FilterMate logger
-logger = logging.getLogger('FilterMate')
+# Import logging configuration
+from modules.logging_config import setup_logger
+from config.config import ENV_VARS
+
+# Setup logger with rotation
+logger = setup_logger(
+    'FilterMate.Tasks',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:
@@ -17,6 +26,7 @@ try:
 except ImportError:
     POSTGRESQL_AVAILABLE = False
     psycopg2 = None
+    logger.warning("PostgreSQL support disabled (psycopg2 not found)")
 
 import uuid
 from collections import OrderedDict
@@ -1729,234 +1739,153 @@ class FilterEngineTask(QgsTask):
             if len(results) == 1:
                 result = results[0]
                 last_subset_id = result[0]
-            last_seq_order = result[5]
+                last_seq_order = result[5]
+            else:
+                last_seq_order = 0
 
-        # Determine provider type for backend selection (Phase 2)
-        provider_type = layer.providerType()
-        use_postgresql = (provider_type == 'postgres' and POSTGRESQL_AVAILABLE)
-        use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
+            # Determine provider type for backend selection (Phase 2)
+            provider_type = layer.providerType()
+            use_postgresql = (provider_type == 'postgres' and POSTGRESQL_AVAILABLE)
+            use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
         
-        logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
+            logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
         
-        # User feedback: Inform about backend being used (Phase 3)
-        if use_spatialite and layer.featureCount() > 50000:
-            from qgis.utils import iface
-            iface.messageBar().pushMessage(
-                "FilterMate - Performance",
-                f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
-                f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL.",
-                Qgis.Info, 8
-            )
-
-        if self.task_action == 'filter':
-            current_seq_order = last_seq_order + 1
-
-            # BRANCH: Use Spatialite backend (Phase 2)
-            if use_spatialite:
-                logger.info("Using Spatialite backend")
-                # User feedback: Backend info (Phase 3)
+            # User feedback: Inform about backend being used (Phase 3)
+            if use_spatialite and layer.featureCount() > 50000:
                 from qgis.utils import iface
-                backend_name = "Spatialite" if provider_type == 'spatialite' else "Local (OGR)"
                 iface.messageBar().pushMessage(
-                    "FilterMate",
-                    f"Filtering with {backend_name} backend...",
-                    Qgis.Info, 3
+                    "FilterMate - Performance",
+                    f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
+                    f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL.",
+                    Qgis.Info, 8
                 )
-                success = self._manage_spatialite_subset(
-                    layer, sql_subset_string, primary_key_name, geom_key_name,
-                    name, custom, cur, conn, current_seq_order
-                )
-                cur.close()
-                conn.close()
-                return success
 
-            # ORIGINAL: PostgreSQL backend (Phase 1)
-            if custom is False:
+            if self.task_action == 'filter':
+                current_seq_order = last_seq_order + 1
 
-                sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                                    name=name
-                                                                                                                                                                    )
+                # BRANCH: Use Spatialite backend (Phase 2)
+                if use_spatialite:
+                    logger.info("Using Spatialite backend")
+                    # User feedback: Backend info (Phase 3)
+                    from qgis.utils import iface
+                    backend_name = "Spatialite" if provider_type == 'spatialite' else "Local (OGR)"
+                    iface.messageBar().pushMessage(
+                        "FilterMate",
+                        f"Filtering with {backend_name} backend...",
+                        Qgis.Info, 3
+                    )
+                    success = self._manage_spatialite_subset(
+                        layer, sql_subset_string, primary_key_name, geom_key_name,
+                        name, custom, cur, conn, current_seq_order
+                    )
+                    cur.close()
+                    conn.close()
+                    return success
 
-                sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
-                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                name=name,
-                                                                                                                                                                sql_subset_string=sql_subset_string
-                                                                                                                                                                )
-                
+                # ORIGINAL: PostgreSQL backend (Phase 1)
+                if custom is False:
 
-
-
-            
-            elif custom is True:
-
-                cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                                        fk_project=self.project_uuid,
-                                                                                                                                                                        layer_id=layer.id()
+                    sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                                                        name=name
                                                                                                                                                                         )
-                )
 
-                results = cur.fetchall()
-                if len(results) == 1:
-                    result = results[0]
-                    sql_subset_string = result[-1]
-                    last_subset_id = result[0]
+                    sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+                                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                                    name=name,
+                                                                                                                                                                    sql_subset_string=sql_subset_string
+                                                                                                                                                                    )
+                
+
+
+
+            
+                elif custom is True:
+
+                    cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
+                                                                                                                                                                            fk_project=self.project_uuid,
+                                                                                                                                                                            layer_id=layer.id()
+                                                                                                                                                                            )
+                    )
+
+                    results = cur.fetchall()
+                    if len(results) == 1:
+                        result = results[0]
+                        sql_subset_string = result[-1]
+                        last_subset_id = result[0]
                     
-                self.where_clause = self.param_buffer_expression.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
-                where_clauses_in_arr = self.where_clause.split('WHEN')
+                    self.where_clause = self.param_buffer_expression.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
+                    where_clauses_in_arr = self.where_clause.split('WHEN')
 
-                where_clause_out_arr = []
-                where_clause_fields_arr = []
+                    where_clause_out_arr = []
+                    where_clause_fields_arr = []
                 
-                for where_then_clause in where_clauses_in_arr:
-                    if len(where_then_clause.split('THEN')) >= 1:
-                        where_clause = where_then_clause.split('THEN')[0]
-                        where_clause = where_clause.replace('WHEN', ' ')
-                        if where_clause.strip() != '':
-                            where_clause = where_clause.strip()
-                            where_clause_out_arr.append(where_clause)
-                            where_clause_fields_arr.append(where_clause.split(' ')[0])
+                    for where_then_clause in where_clauses_in_arr:
+                        if len(where_then_clause.split('THEN')) >= 1:
+                            where_clause = where_then_clause.split('THEN')[0]
+                            where_clause = where_clause.replace('WHEN', ' ')
+                            if where_clause.strip() != '':
+                                where_clause = where_clause.strip()
+                                where_clause_out_arr.append(where_clause)
+                                where_clause_fields_arr.append(where_clause.split(' ')[0])
 
 
-                sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}_dump" CASCADE;'.format(
-                                                                                                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                    name=name
-                                                                                                                                                                                                                                    )
-                if self.has_to_reproject_source_layer is True:
-                    self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                                    source_layer_srid=self.source_layer_crs_authid.split(':')[1])
+                    sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}_dump" CASCADE;'.format(
+                                                                                                                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                                                                                                                        name=name
+                                                                                                                                                                                                                                        )
+                    if self.has_to_reproject_source_layer is True:
+                        self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                                        source_layer_srid=self.source_layer_crs_authid.split(':')[1])
 
-                if last_subset_id != None:
-                    sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            name=name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            geometry_field=geom_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            schema_source=self.param_source_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            table_source=self.param_source_table,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            param_buffer_expression=self.param_buffer.replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            source_new_subset=sql_subset_string,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        )
-                else:
-                    sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            name=name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            geometry_field=geom_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            schema_source=self.param_source_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            table_source=self.param_source_table,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            param_buffer_expression=self.param_buffer.replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            source_new_subset=sql_subset_string,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        )
+                    if last_subset_id != None:
+                        sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                name=name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                geometry_field=geom_key_name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema_source=self.param_source_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                primary_key_name=self.primary_key_name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                table_source=self.param_source_table,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                param_buffer_expression=self.param_buffer.replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                source_new_subset=sql_subset_string,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            )
+                    else:
+                        sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                name=name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                postgresql_source_geom=self.postgresql_source_geom,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                geometry_field=geom_key_name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema_source=self.param_source_schema,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                primary_key_name=self.primary_key_name,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                table_source=self.param_source_table,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                param_buffer_expression=self.param_buffer.replace('mv_',''),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                source_new_subset=sql_subset_string,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            )
                 
-            sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
-                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                    name=name,
-                                                                                                                                                    geometry_field=geom_key_name
-                                                                                                                                                    )
+                sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
+                                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                                        name=name,
+                                                                                                                                                        geometry_field=geom_key_name
+                                                                                                                                                        )
 
-            sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
-                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                        name=name
-                                                                                                                                        )
-            sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
-                                                                                    schema=self.current_materialized_view_schema,
-                                                                                    name=name
-                                                                                    )
+                sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
+                                                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                                                            name=name
+                                                                                                                                            )
+                sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
+                                                                                        schema=self.current_materialized_view_schema,
+                                                                                        name=name
+                                                                                        )
             
-            sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()                                                        
-            logger.debug(f"SQL drop request: {sql_drop_request}")
-            logger.debug(f"SQL create request: {sql_create_request}")
+                sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()                                                        
+                logger.debug(f"SQL drop request: {sql_drop_request}")
+                logger.debug(f"SQL create request: {sql_create_request}")
 
-            connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
-
-            try:
-                with connexion.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-            except:
-                connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
-
-            with connexion.cursor() as cursor:
-                cursor.execute(sql_drop_request)
-                connexion.commit()
-                cursor.execute(sql_create_request)
-                connexion.commit()
-                cursor.execute(sql_create_index)
-                connexion.commit()
-                cursor.execute(sql_cluster_request)
-                connexion.commit()
-                cursor.execute(sql_analyze_request)
-                connexion.commit()
-
-                if custom is True:
-                    sql_dump_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}_dump" as SELECT ST_Union("{geometry_field}") as {geometry_field} from "{schema}"."mv_{name}";'.format(
-                                                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                                                            name=name,
-                                                                                                                                                                                            geometry_field=geom_key_name
-                                                                                                                                                                                            )
-
-                    cursor.execute(sql_dump_request)
-                    connexion.commit()
-
-            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
-                                                                                                                                                                                id=uuid.uuid4(),
-                                                                                                                                                                                fk_project=self.project_uuid,
-                                                                                                                                                                                layer_id=layer.id(),
-                                                                                                                                                                                layer_source_id=self.source_layer.id(),
-                                                                                                                                                                                seq_order=current_seq_order,
-                                                                                                                                                                                subset_string=sql_subset_string.replace("\'","\'\'")
-                                                                                                                                                                                )
-            )
-            conn.commit()
-
-            layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                        name=name,
-                                                                                                                                        primary_key_name=primary_key_name
-                                                                                                                                        )
-            logger.debug(f"Layer subset string: {layer_subsetString}")
-            layer.setSubsetString(layer_subsetString)
-
-
-        elif self.task_action == 'reset':
-            
-            cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}';""".format(
-                                                                                                                                fk_project=self.project_uuid,
-                                                                                                                                layer_id=layer.id()
-                                                                                                                                )
-            )
-            conn.commit()
-
-            # BRANCH: Spatialite backend (Phase 2)
-            if use_spatialite:
-                logger.info("Reset - Spatialite backend - dropping temp table")
-                # For Spatialite, drop temp table from filterMate_db
-                import sqlite3
-                try:
-                    temp_conn = sqlite3.connect(self.db_file_path)
-                    temp_cur = temp_conn.cursor()
-                    temp_cur.execute(f"DROP TABLE IF EXISTS mv_{name}")
-                    temp_conn.commit()
-                    temp_cur.close()
-                    temp_conn.close()
-                except Exception as e:
-                    logger.error(f"Error dropping Spatialite temp table: {e}")
-                
-                layer.setSubsetString('')
-
-            # ORIGINAL: PostgreSQL backend
-            elif use_postgresql:
-                sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                            name=name
-                                                                                                            )
-                
                 connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
 
                 try:
@@ -1968,72 +1897,78 @@ class FilterEngineTask(QgsTask):
                 with connexion.cursor() as cursor:
                     cursor.execute(sql_drop_request)
                     connexion.commit()
+                    cursor.execute(sql_create_request)
+                    connexion.commit()
+                    cursor.execute(sql_create_index)
+                    connexion.commit()
+                    cursor.execute(sql_cluster_request)
+                    connexion.commit()
+                    cursor.execute(sql_analyze_request)
+                    connexion.commit()
 
-                layer.setSubsetString('')
+                    if custom is True:
+                        sql_dump_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}_dump" as SELECT ST_Union("{geometry_field}") as {geometry_field} from "{schema}"."mv_{name}";'.format(
+                                                                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                                                                name=name,
+                                                                                                                                                                                                geometry_field=geom_key_name
+                                                                                                                                                                                                )
 
-        elif self.task_action == 'unfilter':
-            if last_subset_id != None:
-                cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND id = '{last_subset_id}';""".format(
-                                                                                                                                                                fk_project=self.project_uuid,
-                                                                                                                                                                layer_id=layer.id(),
-                                                                                                                                                                last_subset_id=last_subset_id
-                                                                                                                                                                )
+                        cursor.execute(sql_dump_request)
+                        connexion.commit()
+
+                cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+                                                                                                                                                                                    id=uuid.uuid4(),
+                                                                                                                                                                                    fk_project=self.project_uuid,
+                                                                                                                                                                                    layer_id=layer.id(),
+                                                                                                                                                                                    layer_source_id=self.source_layer.id(),
+                                                                                                                                                                                    seq_order=current_seq_order,
+                                                                                                                                                                                    subset_string=sql_subset_string.replace("\'","\'\'")
+                                                                                                                                                                                    )
                 )
                 conn.commit()
 
-            cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                                                    layer_id=layer.id()
-                                                                                                                                                                    )
-            )
+                layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
+                                                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                                                            name=name,
+                                                                                                                                            primary_key_name=primary_key_name
+                                                                                                                                            )
+                logger.debug(f"Layer subset string: {layer_subsetString}")
+                layer.setSubsetString(layer_subsetString)
 
-            results = cur.fetchall()
-            if len(results) == 1:
-                result = results[0]
-                sql_subset_string = result[-1]
-                
+
+            elif self.task_action == 'reset':
+            
+                cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}';""".format(
+                                                                                                                                    fk_project=self.project_uuid,
+                                                                                                                                    layer_id=layer.id()
+                                                                                                                                    )
+                )
+                conn.commit()
+
                 # BRANCH: Spatialite backend (Phase 2)
                 if use_spatialite:
-                    logger.info("Unfilter - Spatialite backend - recreating previous subset")
-                    # Recreate previous subset using Spatialite
-                    success = self._manage_spatialite_subset(
-                        layer, sql_subset_string, primary_key_name, geom_key_name,
-                        name, custom=False, cur=None, conn=None, current_seq_order=0
-                    )
-                    if not success:
-                        layer.setSubsetString('')
+                    logger.info("Reset - Spatialite backend - dropping temp table")
+                    # For Spatialite, drop temp table from filterMate_db
+                    import sqlite3
+                    try:
+                        temp_conn = sqlite3.connect(self.db_file_path)
+                        temp_cur = temp_conn.cursor()
+                        temp_cur.execute(f"DROP TABLE IF EXISTS mv_{name}")
+                        temp_conn.commit()
+                        temp_cur.close()
+                        temp_conn.close()
+                    except Exception as e:
+                        logger.error(f"Error dropping Spatialite temp table: {e}")
                 
+                    layer.setSubsetString('')
+
                 # ORIGINAL: PostgreSQL backend
                 elif use_postgresql:
-                    sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                                    name=name
-                                                                                                                                                                    )
-
-                    sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
-                                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                                        name=name,
-                                                                                                                                                                        sql_subset_string=sql_subset_string
-                                                                                                                                                                        )
-                     
-                    sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
-                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                            name=name,
-                                                                                                                                                            geometry_field=geom_key_name
-                                                                                                                                                            )
-
-                    sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
-                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                name=name
-                                                                                                                                                )
-
-                    sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
-                                                                                        schema=self.current_materialized_view_schema,
-                                                                                        name=name
-                                                                                        )
-                    
-                    sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()
-
+                    sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                name=name
+                                                                                                                )
+                
                     connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
 
                     try:
@@ -2045,39 +1980,116 @@ class FilterEngineTask(QgsTask):
                     with connexion.cursor() as cursor:
                         cursor.execute(sql_drop_request)
                         connexion.commit()
-                        cursor.execute(sql_create_request)
-                        connexion.commit()
-                        cursor.execute(sql_create_index)
-                        connexion.commit()
-                        cursor.execute(sql_cluster_request)
-                        connexion.commit()
-                        cursor.execute(sql_analyze_request)
-                        connexion.commit()  
 
-                    layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                name=name,
-                                                                                                                                                primary_key_name=primary_key_name
-                                                                                                                                                )
-                    layer.setSubsetString(layer_subsetString)    
+                    layer.setSubsetString('')
 
-            else:
-                layer.setSubsetString('')
+            elif self.task_action == 'unfilter':
+                if last_subset_id != None:
+                    cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND id = '{last_subset_id}';""".format(
+                                                                                                                                                                    fk_project=self.project_uuid,
+                                                                                                                                                                    layer_id=layer.id(),
+                                                                                                                                                                    last_subset_id=last_subset_id
+                                                                                                                                                                    )
+                    )
+                    conn.commit()
 
-            return True
+                cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
+                                                                                                                                                                        fk_project=self.project_uuid,
+                                                                                                                                                                        layer_id=layer.id()
+                                                                                                                                                                        )
+                )
+
+                results = cur.fetchall()
+                if len(results) == 1:
+                    result = results[0]
+                    sql_subset_string = result[-1]
+                
+                    # BRANCH: Spatialite backend (Phase 2)
+                    if use_spatialite:
+                        logger.info("Unfilter - Spatialite backend - recreating previous subset")
+                        # Recreate previous subset using Spatialite
+                        success = self._manage_spatialite_subset(
+                            layer, sql_subset_string, primary_key_name, geom_key_name,
+                            name, custom=False, cur=None, conn=None, current_seq_order=0
+                        )
+                        if not success:
+                            layer.setSubsetString('')
+                
+                    # ORIGINAL: PostgreSQL backend
+                    elif use_postgresql:
+                        sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
+                                                                                                                                                                        schema=self.current_materialized_view_schema,
+                                                                                                                                                                        name=name
+                                                                                                                                                                        )
+
+                        sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+                                                                                                                                                                            schema=self.current_materialized_view_schema,
+                                                                                                                                                                            name=name,
+                                                                                                                                                                            sql_subset_string=sql_subset_string
+                                                                                                                                                                            )
+                     
+                        sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
+                                                                                                                                                                schema=self.current_materialized_view_schema,
+                                                                                                                                                                name=name,
+                                                                                                                                                                geometry_field=geom_key_name
+                                                                                                                                                                )
+
+                        sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
+                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                    name=name
+                                                                                                                                                    )
+
+                        sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
+                                                                                            schema=self.current_materialized_view_schema,
+                                                                                            name=name
+                                                                                            )
+                    
+                        sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()
+
+                        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+
+                        try:
+                            with connexion.cursor() as cursor:
+                                cursor.execute("SELECT 1")
+                        except:
+                            connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
+
+                        with connexion.cursor() as cursor:
+                            cursor.execute(sql_drop_request)
+                            connexion.commit()
+                            cursor.execute(sql_create_request)
+                            connexion.commit()
+                            cursor.execute(sql_create_index)
+                            connexion.commit()
+                            cursor.execute(sql_cluster_request)
+                            connexion.commit()
+                            cursor.execute(sql_analyze_request)
+                            connexion.commit()  
+
+                        layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
+                                                                                                                                                    schema=self.current_materialized_view_schema,
+                                                                                                                                                    name=name,
+                                                                                                                                                    primary_key_name=primary_key_name
+                                                                                                                                                    )
+                        layer.setSubsetString(layer_subsetString)    
+
+                else:
+                    layer.setSubsetString('')
+
+                return True
             
         finally:
             # Always cleanup connections, even if cancelled or exception occurs
             if cur:
                 try:
                     cur.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not close database cursor: {e}")
             if conn:
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not close database connection: {e}")
                 # Remove from active connections list
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
@@ -2283,17 +2295,10 @@ class LayersManagementEngineTask(QgsTask):
                 layer_variables = {}
                 layer_props = {}
 
-                if layer.providerType() == 'ogr':
+                # Use utility function to detect provider type
+                layer_provider_type = detect_layer_provider_type(layer)
 
-                    capabilities = layer.capabilitiesString().split(', ')
-                    if 'Transactions' in capabilities:
-                        layer_provider_type = 'spatialite'
-                    else:
-                        layer_provider_type = 'ogr'
-
-                elif layer.providerType() == 'postgres':
-                    layer_provider_type = 'postgresql'
-                    
+                if layer_provider_type == 'postgresql':
                     layer_source = layer.source()
                     regexp_match_source_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)',layer_source)
                     if regexp_match_source_schema != None:
@@ -2302,27 +2307,9 @@ class LayersManagementEngineTask(QgsTask):
                     regexp_match_geometry_field = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))',layer_source)
                     if regexp_match_geometry_field != None:
                         geometry_field = regexp_match_geometry_field.group()
-                else:
-                    capabilities = layer.capabilitiesString().split(', ')
-                    if 'Transactions' in capabilities:
-                        layer_provider_type = 'spatialite'
-                    else:
-                        layer_provider_type = 'ogr'
 
-                # Convert QGIS geometry type enum to string format expected by icon_per_geometry_type()
-                geometry_type = layer.geometryType()
-                if geometry_type == QgsWkbTypes.PointGeometry:
-                    layer_geometry_type = 'GeometryType.Point'
-                elif geometry_type == QgsWkbTypes.LineGeometry:
-                    layer_geometry_type = 'GeometryType.Line'
-                elif geometry_type == QgsWkbTypes.PolygonGeometry:
-                    layer_geometry_type = 'GeometryType.Polygon'
-                elif geometry_type == QgsWkbTypes.UnknownGeometry:
-                    layer_geometry_type = 'GeometryType.UnknownGeometry'
-                elif geometry_type == QgsWkbTypes.NullGeometry:
-                    layer_geometry_type = 'GeometryType.UnknownGeometry'
-                else:
-                    layer_geometry_type = 'GeometryType.UnknownGeometry'
+                # Use utility function to convert geometry type
+                layer_geometry_type = geometry_type_to_string(layer)
                 
                 if layer_provider_type == 'spatialite':
                     geometry_field = 'GEOMETRY'

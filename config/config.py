@@ -64,6 +64,6 @@ def init_env_vars():
         try:
             os.makedirs(PLUGIN_CONFIG_DIRECTORY, exist_ok = True)
         except OSError as error:
-            pass
+            logger.warning(f"Could not create config directory {PLUGIN_CONFIG_DIRECTORY}: {error}")
 
 
