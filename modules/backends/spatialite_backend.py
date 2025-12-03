@@ -11,6 +11,7 @@ import sqlite3
 from qgis.core import QgsVectorLayer
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
+from ..constants import PROVIDER_SPATIALITE
 
 logger = get_tasks_logger()
 
@@ -45,7 +46,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         Returns:
             True if layer is from Spatialite provider
         """
-        return layer.providerType() == 'spatialite'
+        return layer.providerType() == PROVIDER_SPATIALITE
     
     def build_expression(
         self,

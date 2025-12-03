@@ -14,9 +14,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # Import backends
 from modules.backends.base_backend import GeometricFilterBackend
-from modules.backends.postgresql_backend import PostgreSQLBackend
-from modules.backends.spatialite_backend import SpatialiteBackend
-from modules.backends.ogr_backend import OGRBackend
+from modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+from modules.backends.spatialite_backend import SpatialiteGeometricFilter
+from modules.backends.ogr_backend import OGRGeometricFilter
 from modules.backends.factory import BackendFactory
 
 
@@ -28,19 +28,19 @@ class TestBackendFactory:
     """Test suite for BackendFactory"""
     
     def test_factory_returns_postgresql_backend(self, sample_pg_layer):
-        """Test that factory returns PostgreSQLBackend for postgres layers"""
+        """Test that factory returns PostgreSQLGeometricFilter for postgres layers"""
         backend = BackendFactory.get_backend(sample_pg_layer)
-        assert isinstance(backend, PostgreSQLBackend)
+        assert isinstance(backend, PostgreSQLGeometricFilter)
     
     def test_factory_returns_spatialite_backend(self, sample_spatialite_layer):
-        """Test that factory returns SpatialiteBackend for spatialite layers"""
+        """Test that factory returns SpatialiteGeometricFilter for spatialite layers"""
         backend = BackendFactory.get_backend(sample_spatialite_layer)
-        assert isinstance(backend, SpatialiteBackend)
+        assert isinstance(backend, SpatialiteGeometricFilter)
     
     def test_factory_returns_ogr_backend(self, sample_shapefile_layer):
-        """Test that factory returns OGRBackend for OGR layers"""
+        """Test that factory returns OGRGeometricFilter for OGR layers"""
         backend = BackendFactory.get_backend(sample_shapefile_layer)
-        assert isinstance(backend, OGRBackend)
+        assert isinstance(backend, OGRGeometricFilter)
     
     def test_factory_handles_unknown_provider(self):
         """Test that factory handles unknown provider gracefully"""
@@ -50,14 +50,14 @@ class TestBackendFactory:
         
         backend = BackendFactory.get_backend(layer)
         # Should fallback to OGR
-        assert isinstance(backend, OGRBackend)
+        assert isinstance(backend, OGRGeometricFilter)
     
     def test_factory_with_postgresql_unavailable(self, sample_pg_layer):
         """Test factory behavior when PostgreSQL is unavailable"""
         with patch('modules.backends.factory.POSTGRESQL_AVAILABLE', False):
             backend = BackendFactory.get_backend(sample_pg_layer)
             # Should fallback to OGR when psycopg2 not available
-            assert isinstance(backend, OGRBackend)
+            assert isinstance(backend, OGRGeometricFilter)
     
     def test_factory_singleton_pattern(self, sample_pg_layer):
         """Test that factory returns the same backend instance for same provider"""
@@ -67,25 +67,25 @@ class TestBackendFactory:
 
 
 # ============================================================================
-# PostgreSQLBackend Tests
+# PostgreSQLGeometricFilter Tests
 # ============================================================================
 
-class TestPostgreSQLBackend:
-    """Test suite for PostgreSQLBackend"""
+class TestPostgreSQLGeometricFilter:
+    """Test suite for PostgreSQLGeometricFilter"""
     
     def test_supports_postgres_layer(self, sample_pg_layer):
         """Test that backend supports PostgreSQL layers"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         assert backend.supports_layer(sample_pg_layer) is True
     
     def test_rejects_non_postgres_layer(self, sample_shapefile_layer):
         """Test that backend rejects non-PostgreSQL layers"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         assert backend.supports_layer(sample_shapefile_layer) is False
     
     def test_build_intersects_expression(self):
         """Test building ST_Intersects expression"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
@@ -102,7 +102,7 @@ class TestPostgreSQLBackend:
     
     def test_build_contains_expression(self):
         """Test building ST_Contains expression"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
@@ -118,7 +118,7 @@ class TestPostgreSQLBackend:
     
     def test_build_within_expression(self):
         """Test building ST_Within expression"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POINT(0.5 0.5)"
@@ -134,7 +134,7 @@ class TestPostgreSQLBackend:
     
     def test_apply_filter_with_valid_expression(self, sample_pg_layer):
         """Test applying filter with valid expression"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         expression = "ST_Intersects(geom, ST_GeomFromText('POINT(0 0)', 4326))"
         
         result = backend.apply_filter(sample_pg_layer, expression)
@@ -144,7 +144,7 @@ class TestPostgreSQLBackend:
     
     def test_apply_filter_handles_errors(self, sample_pg_layer):
         """Test that apply_filter handles errors gracefully"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         sample_pg_layer.setSubsetString.side_effect = Exception("Database error")
         
         result = backend.apply_filter(sample_pg_layer, "invalid_expression")
@@ -153,7 +153,7 @@ class TestPostgreSQLBackend:
     
     def test_unsupported_predicate_raises_error(self):
         """Test that unsupported predicate raises ValueError"""
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         mock_geometry = Mock()
         
         with pytest.raises(ValueError, match="Unsupported predicate"):
@@ -165,25 +165,25 @@ class TestPostgreSQLBackend:
 
 
 # ============================================================================
-# SpatialiteBackend Tests
+# SpatialiteGeometricFilter Tests
 # ============================================================================
 
-class TestSpatialiteBackend:
-    """Test suite for SpatialiteBackend"""
+class TestSpatialiteGeometricFilter:
+    """Test suite for SpatialiteGeometricFilter"""
     
     def test_supports_spatialite_layer(self, sample_spatialite_layer):
         """Test that backend supports Spatialite layers"""
-        backend = SpatialiteBackend()
+        backend = SpatialiteGeometricFilter()
         assert backend.supports_layer(sample_spatialite_layer) is True
     
     def test_rejects_non_spatialite_layer(self, sample_pg_layer):
         """Test that backend rejects non-Spatialite layers"""
-        backend = SpatialiteBackend()
+        backend = SpatialiteGeometricFilter()
         assert backend.supports_layer(sample_pg_layer) is False
     
     def test_build_intersects_expression_compatible_with_postgis(self):
         """Test that Spatialite expressions are similar to PostGIS"""
-        backend = SpatialiteBackend()
+        backend = SpatialiteGeometricFilter()
         
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
@@ -200,7 +200,7 @@ class TestSpatialiteBackend:
     
     def test_performance_warning_for_large_dataset(self, sample_spatialite_layer, caplog):
         """Test that performance warning is logged for >50k features"""
-        backend = SpatialiteBackend()
+        backend = SpatialiteGeometricFilter()
         sample_spatialite_layer.featureCount.return_value = 75000
         
         mock_geometry = Mock()
@@ -218,7 +218,7 @@ class TestSpatialiteBackend:
     
     def test_apply_filter_success(self, sample_spatialite_layer):
         """Test successful filter application"""
-        backend = SpatialiteBackend()
+        backend = SpatialiteGeometricFilter()
         expression = "ST_Intersects(geom, GeomFromText('POINT(0 0)', 4326))"
         
         result = backend.apply_filter(sample_spatialite_layer, expression)
@@ -228,26 +228,26 @@ class TestSpatialiteBackend:
 
 
 # ============================================================================
-# OGRBackend Tests
+# OGRGeometricFilter Tests
 # ============================================================================
 
-class TestOGRBackend:
-    """Test suite for OGRBackend"""
+class TestOGRGeometricFilter:
+    """Test suite for OGRGeometricFilter"""
     
     def test_supports_ogr_layer(self, sample_shapefile_layer):
         """Test that backend supports OGR layers"""
-        backend = OGRBackend()
+        backend = OGRGeometricFilter()
         assert backend.supports_layer(sample_shapefile_layer) is True
     
     def test_supports_any_provider_as_fallback(self, sample_pg_layer):
         """Test that OGR backend accepts any layer as fallback"""
-        backend = OGRBackend()
+        backend = OGRGeometricFilter()
         # OGR should accept any layer as it's the universal fallback
         assert backend.supports_layer(sample_pg_layer) is True
     
     def test_build_qgis_expression(self):
         """Test building QGIS expression for OGR backend"""
-        backend = OGRBackend()
+        backend = OGRGeometricFilter()
         
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
@@ -264,7 +264,7 @@ class TestOGRBackend:
     
     def test_performance_warning_for_very_large_dataset(self, sample_shapefile_layer, caplog):
         """Test that performance warning is logged for >100k features"""
-        backend = OGRBackend()
+        backend = OGRGeometricFilter()
         sample_shapefile_layer.featureCount.return_value = 150000
         
         mock_geometry = Mock()
@@ -283,7 +283,7 @@ class TestOGRBackend:
     @patch('modules.backends.ogr_backend.processing')
     def test_uses_qgis_processing(self, mock_processing, sample_shapefile_layer):
         """Test that OGR backend uses QGIS processing algorithms"""
-        backend = OGRBackend()
+        backend = OGRGeometricFilter()
         
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
@@ -327,16 +327,16 @@ class TestBackendIntegration:
         spatialite_backend = BackendFactory.get_backend(spatialite_layer)
         ogr_backend = BackendFactory.get_backend(ogr_layer)
         
-        assert isinstance(pg_backend, PostgreSQLBackend)
-        assert isinstance(spatialite_backend, SpatialiteBackend)
-        assert isinstance(ogr_backend, OGRBackend)
+        assert isinstance(pg_backend, PostgreSQLGeometricFilter)
+        assert isinstance(spatialite_backend, SpatialiteGeometricFilter)
+        assert isinstance(ogr_backend, OGRGeometricFilter)
     
     def test_all_backends_support_basic_predicates(self):
         """Test that all backends support basic spatial predicates"""
         backends = [
-            PostgreSQLBackend(),
-            SpatialiteBackend(),
-            OGRBackend()
+            PostgreSQLGeometricFilter(),
+            SpatialiteGeometricFilter(),
+            OGRGeometricFilter()
         ]
         
         predicates = ['intersects', 'contains', 'within', 'touches', 'crosses']
@@ -361,9 +361,9 @@ class TestBackendIntegration:
     def test_backend_error_handling_consistency(self):
         """Test that all backends handle errors consistently"""
         backends = [
-            PostgreSQLBackend(),
-            SpatialiteBackend(),
-            OGRBackend()
+            PostgreSQLGeometricFilter(),
+            SpatialiteGeometricFilter(),
+            OGRGeometricFilter()
         ]
         
         # Create layer that will fail
@@ -389,7 +389,7 @@ class TestBackendPerformance:
         """Test that expression building is fast (<1ms)"""
         import time
         
-        backend = PostgreSQLBackend()
+        backend = PostgreSQLGeometricFilter()
         mock_geometry = Mock()
         mock_geometry.asWkt.return_value = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))"
         

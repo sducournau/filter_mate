@@ -28,6 +28,15 @@ except ImportError:
     psycopg2 = None
     logger.warning("PostgreSQL support disabled (psycopg2 not found)")
 
+# Import constants
+from .constants import (
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
+    PREDICATE_INTERSECTS, PREDICATE_WITHIN, PREDICATE_CONTAINS,
+    PREDICATE_OVERLAPS, PREDICATE_CROSSES, PREDICATE_TOUCHES,
+    PREDICATE_DISJOINT, PREDICATE_EQUALS,
+    get_provider_name, should_warn_performance
+)
+
 # Import backend architecture
 from .backends import BackendFactory
 
@@ -201,9 +210,6 @@ class FilterEngineTask(QgsTask):
         self.postgresql_source_geom = None
         self.spatialite_source_geom = None
         self.ogr_source_geom = None
-        
-        # Store subset result for thread-safe application
-        self._pending_subset_result = None
 
         self.current_predicates = {}
         self.outputs = {}
@@ -262,15 +268,38 @@ class FilterEngineTask(QgsTask):
                 raise OSError(f"Database directory exists but is not writable: {db_dir}")
             logger.debug(f"Database directory exists: {db_dir}")
         else:
+            # Validate parent directories before attempting creation
+            parent_dir = os.path.dirname(db_dir)
+            
+            if not parent_dir or not os.path.exists(parent_dir):
+                error_msg = (
+                    f"Cannot create database directory '{db_dir}': "
+                    f"parent directory '{parent_dir}' does not exist. "
+                    f"Original path: {self.db_file_path}"
+                )
+                logger.error(error_msg)
+                raise OSError(error_msg)
+            
+            if not os.access(parent_dir, os.W_OK):
+                error_msg = (
+                    f"Cannot create database directory '{db_dir}': "
+                    f"parent directory '{parent_dir}' is not writable. "
+                    f"Original path: {self.db_file_path}"
+                )
+                logger.error(error_msg)
+                raise OSError(error_msg)
+            
             # Create directory with all intermediate directories
             try:
                 os.makedirs(db_dir, exist_ok=True)
                 logger.info(f"Created database directory: {db_dir}")
             except OSError as e:
-                error_msg = f"Failed to create database directory '{db_dir}': {e}"
+                error_msg = (
+                    f"Failed to create database directory '{db_dir}': {e}. "
+                    f"Original path: {self.db_file_path}, "
+                    f"Normalized: {normalized_path}"
+                )
                 logger.error(error_msg)
-                logger.error(f"Original db_file_path: {self.db_file_path}")
-                logger.error(f"Normalized path: {normalized_path}")
                 raise OSError(error_msg) from e
     
     
@@ -358,18 +387,18 @@ class FilterEngineTask(QgsTask):
                 
                 # Determine active backend
                 backend_name = "Memory/QGIS"
-                if POSTGRESQL_AVAILABLE and self.param_source_provider_type == 'postgresql':
+                if POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES:
                     backend_name = "PostgreSQL/PostGIS"
-                elif self.param_source_provider_type == 'spatialite':
+                elif self.param_source_provider_type == PROVIDER_SPATIALITE:
                     backend_name = "Spatialite"
-                elif self.param_source_provider_type == 'ogr':
+                elif self.param_source_provider_type == PROVIDER_OGR:
                     backend_name = "OGR"
                 
                 logger.info(f"Using {backend_name} backend for filtering")
                 
                 # Performance warning for large datasets without PostgreSQL
                 feature_count = self.source_layer.featureCount()
-                if feature_count > 50000 and not (POSTGRESQL_AVAILABLE and self.param_source_provider_type == 'postgresql'):
+                if feature_count > 50000 and not (POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES):
                     logger.warning(
                         f"Large dataset detected ({feature_count:,} features) without PostgreSQL backend. "
                         "Performance may be reduced. Consider using PostgreSQL/PostGIS for optimal performance."
@@ -423,7 +452,7 @@ class FilterEngineTask(QgsTask):
         self.param_source_schema = self.task_parameters["infos"]["layer_schema"]
         self.param_source_table = self.task_parameters["infos"]["layer_name"]
         self.param_source_layer_id = self.task_parameters["infos"]["layer_id"]
-        self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
+        self.param_source_geom = self.task_parameters["infos"]["layer_geometry_field"]
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
         
         # Log filtering details for debugging and user feedback
@@ -459,10 +488,10 @@ class FilterEngineTask(QgsTask):
                     if self.expression.find(self.primary_key_name) > -1:
                         if self.expression.find(self.param_source_table) < 0:
                             if self.expression.find(' "' + self.primary_key_name + '" ') > -1:
-                                if self.param_source_provider_type == 'postgresql':
+                                if self.param_source_provider_type == PROVIDER_POSTGRES:
                                     self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
                             elif self.expression.find(" " + self.primary_key_name + " ") > -1:
-                                if self.param_source_provider_type == 'postgresql':
+                                if self.param_source_provider_type == PROVIDER_POSTGRES:
                                     self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
                                 else:
                                     self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=self.primary_key_name))
@@ -470,10 +499,10 @@ class FilterEngineTask(QgsTask):
                         if self.expression.find(self.param_source_table) < 0:
                             for field_name in existing_fields:
                                 if self.expression.find(' "' + field_name + '" ') > -1:
-                                    if self.param_source_provider_type == 'postgresql':
+                                    if self.param_source_provider_type == PROVIDER_POSTGRES:
                                         self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
                                 elif self.expression.find(" " + field_name + " ") > -1:
-                                    if self.param_source_provider_type == 'postgresql':
+                                    if self.param_source_provider_type == PROVIDER_POSTGRES:
                                         self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
                                     else:
                                         self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
@@ -575,33 +604,38 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filter applied successfully
         """
-        from qgis.PyQt.QtCore import QTimer, QEventLoop
-        import time
+        from qgis.PyQt.QtCore import QMetaObject, Qt, Q_ARG, Q_RETURN_ARG, QThread
+        from qgis.core import QgsApplication
+        
+        # If already in main thread, execute directly
+        if QThread.currentThread() == QgsApplication.instance().thread():
+            try:
+                return layer.setSubsetString(expression)
+            except Exception as e:
+                logger.error(f"Failed to apply subset string: {e}")
+                return False
         
         # Store result for thread-safe return
-        self._pending_subset_result = None
+        result_container = {'result': None, 'error': None}
         
         def apply_subset():
             """Inner function executed in main thread"""
             try:
-                result = layer.setSubsetString(expression)
-                self._pending_subset_result = result
-                return result
+                result_container['result'] = layer.setSubsetString(expression)
             except Exception as e:
                 logger.error(f"Failed to apply subset string: {e}")
-                self._pending_subset_result = False
-                return False
+                result_container['error'] = str(e)
+                result_container['result'] = False
         
-        # Execute in main thread using QTimer.singleShot
-        QTimer.singleShot(0, apply_subset)
+        # Execute in main thread using BlockingQueuedConnection
+        # This properly waits for the main thread to finish
+        QMetaObject.invokeMethod(
+            QgsApplication.instance(),
+            apply_subset,
+            Qt.BlockingQueuedConnection
+        )
         
-        # Wait for result with timeout (max 10 seconds)
-        timeout = 100  # 10 seconds (100 * 100ms)
-        while self._pending_subset_result is None and timeout > 0:
-            time.sleep(0.1)
-            timeout -= 1
-        
-        return self._pending_subset_result if self._pending_subset_result is not None else False
+        return result_container.get('result', False)
     
     def manage_distant_layers_geometric_filtering(self):
         """Filter layers from a prefiltered layer"""
@@ -1116,7 +1150,7 @@ class FilterEngineTask(QgsTask):
             tuple: (postgis_sub_expression_array, param_distant_geom_expression)
         """
         param_distant_table = layer_props["layer_name"]
-        param_distant_geometry_field = layer_props["geometry_field"]
+        param_distant_geometry_field = layer_props["layer_geometry_field"]
         
         postgis_sub_expression_array = []
         param_distant_geom_expression = '"{distant_table}"."{distant_geometry_field}"'.format(
@@ -1347,7 +1381,7 @@ class FilterEngineTask(QgsTask):
         param_distant_primary_key_is_numeric = layer_props["primary_key_is_numeric"]
         param_distant_schema = layer_props["layer_schema"]
         param_distant_table = layer_props["layer_name"]
-        param_distant_geometry_field = layer_props["geometry_field"]
+        param_distant_geometry_field = layer_props["layer_geometry_field"]
         
         # Extract feature IDs from selection
         features_ids = []
@@ -1597,12 +1631,12 @@ class FilterEngineTask(QgsTask):
             - Spatialite: WKT string  
             - OGR: QgsVectorLayer
         """
-        if layer_provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
+        if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
             if hasattr(self, 'postgresql_source_geom'):
                 return self.postgresql_source_geom
         
         # For Spatialite, return WKT string
-        if layer_provider_type == 'spatialite':
+        if layer_provider_type == PROVIDER_SPATIALITE:
             if hasattr(self, 'spatialite_source_geom'):
                 return self.spatialite_source_geom
         
@@ -1678,7 +1712,7 @@ class FilterEngineTask(QgsTask):
 
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                self.manage_layer_subset_strings(layer, None, layer_props["primary_key_name"], layer_props["geometry_field"], False)
+                self.manage_layer_subset_strings(layer, None, layer_props["primary_key_name"], layer_props["layer_geometry_field"], False)
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
@@ -2078,8 +2112,8 @@ class FilterEngineTask(QgsTask):
             # Determine provider type for backend selection (Phase 2)
             # Use detect_layer_provider_type for consistent detection
             provider_type = detect_layer_provider_type(layer)
-            use_postgresql = (provider_type == 'postgresql' and POSTGRESQL_AVAILABLE)
-            use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
+            use_postgresql = (provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE)
+            use_spatialite = (provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR] or not use_postgresql)
         
             logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
         
@@ -2096,7 +2130,7 @@ class FilterEngineTask(QgsTask):
 
                 # BRANCH: Use Spatialite backend (Phase 2)
                 if use_spatialite:
-                    backend_name = "Spatialite" if provider_type == 'spatialite' else "Local (OGR)"
+                    backend_name = "Spatialite" if provider_type == PROVIDER_SPATIALITE else "Local (OGR)"
                     logger.info(f"Using {backend_name} backend")
                     # NOTE: Cannot call iface.messageBar() from worker thread
                     success = self._manage_spatialite_subset(
@@ -2510,7 +2544,7 @@ class LayersManagementEngineTask(QgsTask):
         self.outputs = {}
         self.message = None
 
-        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"current_exploring_groupbox":"single_selection","single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round" }'
         
@@ -2542,14 +2576,39 @@ class LayersManagementEngineTask(QgsTask):
                 raise OSError(f"Database directory exists but is not writable: {db_dir}")
             logger.debug(f"Database directory exists: {db_dir}")
         else:
+            # Validate parent directories before attempting creation
+            parent_dir = os.path.dirname(db_dir)
+            
+            if not parent_dir or not os.path.exists(parent_dir):
+                error_msg = (
+                    f"Cannot create database directory '{db_dir}': "
+                    f"parent directory '{parent_dir}' does not exist. "
+                    f"Original path: {self.db_file_path}"
+                )
+                logger.error(error_msg)
+                raise OSError(error_msg)
+            
+            if not os.access(parent_dir, os.W_OK):
+                error_msg = (
+                    f"Cannot create database directory '{db_dir}': "
+                    f"parent directory '{parent_dir}' is not writable. "
+                    f"Original path: {self.db_file_path}"
+                )
+                logger.error(error_msg)
+                raise OSError(error_msg)
+            
             # Create directory with all intermediate directories
             try:
                 os.makedirs(db_dir, exist_ok=True)
                 logger.info(f"Created database directory: {db_dir}")
             except OSError as e:
-                error_msg = f"Failed to create database directory '{db_dir}': {e}"
+                error_msg = (
+                    f"Failed to create database directory '{db_dir}': {e}. "
+                    f"Original path: {self.db_file_path}, "
+                    f"Normalized: {normalized_path}"
+                )
                 logger.error(error_msg)
-                logger.error(f"Original db_file_path: {self.db_file_path}")
+                raise OSError(error_msg) from e
                 logger.error(f"Normalized path: {normalized_path}")
                 raise OSError(error_msg) from e
     
@@ -2668,6 +2727,32 @@ class LayersManagementEngineTask(QgsTask):
                         variable_key = "filterMate_{key_group}_{key}".format(key_group=property[0], key=property[1])
                         QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
 
+                # MIGRATION: Rename old 'geometry_field' key to 'layer_geometry_field'
+                if "geometry_field" in existing_layer_variables.get("infos", {}) and "layer_geometry_field" not in existing_layer_variables.get("infos", {}):
+                    existing_layer_variables["infos"]["layer_geometry_field"] = existing_layer_variables["infos"]["geometry_field"]
+                    del existing_layer_variables["infos"]["geometry_field"]
+                    logger.info(f"Migrated geometry_field to layer_geometry_field for layer {layer.id()}")
+                    
+                    # Update database with new key name
+                    try:
+                        conn = self._safe_spatialite_connect()
+                        cur = conn.cursor()
+                        
+                        # Update the database record
+                        cur.execute(
+                            """UPDATE fm_project_layers_properties 
+                               SET meta_key = 'layer_geometry_field'
+                               WHERE fk_project = ? AND layer_id = ? 
+                               AND meta_type = 'infos' AND meta_key = 'geometry_field'""",
+                            (str(self.project_uuid), layer.id())
+                        )
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+                        logger.debug(f"Updated database for layer {layer.id()}")
+                    except Exception as e:
+                        logger.warning(f"Could not update database for migration: {e}")
+
                 layer_variables["infos"] = existing_layer_variables["infos"]
                 layer_variables["exploring"] = existing_layer_variables["exploring"]
                 layer_variables["filtering"] = existing_layer_variables["filtering"]
@@ -2695,7 +2780,7 @@ class LayersManagementEngineTask(QgsTask):
                 # Use utility function to detect provider type
                 layer_provider_type = detect_layer_provider_type(layer)
 
-                if layer_provider_type == 'postgresql':
+                if layer_provider_type == PROVIDER_POSTGRES:
                     layer_source = layer.source()
                     regexp_match_source_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)',layer_source)
                     if regexp_match_source_schema != None:
@@ -2708,9 +2793,9 @@ class LayersManagementEngineTask(QgsTask):
                 # Use utility function to convert geometry type
                 layer_geometry_type = geometry_type_to_string(layer)
                 
-                if layer_provider_type == 'spatialite':
+                if layer_provider_type == PROVIDER_SPATIALITE:
                     geometry_field = 'GEOMETRY'
-                elif layer_provider_type == 'ogr':
+                elif layer_provider_type == PROVIDER_OGR:
                     geometry_field = '_ogr_geometry_'
 
                 new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
@@ -2741,7 +2826,7 @@ class LayersManagementEngineTask(QgsTask):
 
             self.insert_properties_to_spatialite(layer.id(), layer_props)
 
-            if layer_props["infos"]["layer_provider_type"] == 'postgresql':
+            if layer_props["infos"]["layer_provider_type"] == PROVIDER_POSTGRES:
                 try:
                     self.create_spatial_index_for_postgresql_layer(layer, layer_props)
                 except (psycopg2.Error, AttributeError, KeyError) as e:
@@ -2808,7 +2893,7 @@ class LayersManagementEngineTask(QgsTask):
 
             schema = layer_props["infos"]["layer_schema"]
             table = layer_props["infos"]["layer_name"]
-            geometry_field = layer_props["infos"]["geometry_field"]
+            geometry_field = layer_props["infos"]["layer_geometry_field"]
             primary_key_name = layer_props["infos"]["primary_key_name"]
 
             connexion, source_uri = get_datasource_connexion_from_layer(layer)

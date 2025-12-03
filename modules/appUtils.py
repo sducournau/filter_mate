@@ -29,11 +29,11 @@ except ImportError:
 from qgis.core import *
 from qgis.utils import *
 
-# Provider type constants (QGIS providerType() returns these values)
-PROVIDER_POSTGRES = 'postgres'      # PostgreSQL/PostGIS
-PROVIDER_SPATIALITE = 'spatialite'  # Spatialite
-PROVIDER_OGR = 'ogr'                # OGR (Shapefile, GeoPackage, etc.)
-PROVIDER_MEMORY = 'memory'          # In-memory layers
+# Import constants
+from .constants import (
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
+    get_provider_name
+)
 
 def truncate(number, digits) -> float:
     # Improve accuracy with floating point operations, to avoid truncate(16.4, 2) = 16.39 or truncate(-1.13, 2) = -1.12
@@ -68,11 +68,15 @@ def detect_layer_provider_type(layer):
     
     provider_type = layer.providerType()
     
-    if provider_type == PROVIDER_POSTGRES:
+    # Use helper to convert QGIS provider type to FilterMate constant
+    # This handles 'postgres' -> 'postgresql' conversion
+    normalized_type = get_provider_name(provider_type)
+    
+    if normalized_type == 'postgresql':
         return 'postgresql'
-    elif provider_type == PROVIDER_SPATIALITE:
+    elif normalized_type == PROVIDER_SPATIALITE:
         return 'spatialite'
-    elif provider_type == PROVIDER_MEMORY:
+    elif normalized_type == PROVIDER_MEMORY:
         return 'memory'
     elif provider_type == PROVIDER_OGR:
         # Check file extension first - .sqlite files are Spatialite

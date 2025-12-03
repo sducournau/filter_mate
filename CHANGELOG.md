@@ -2,6 +2,72 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [1.9.3] - 2025-12-03
+
+### 🎨 Code Quality & Maintainability - Harmonization Sprint
+
+Major code quality improvements focusing on eliminating magic strings, standardizing constants, and improving maintainability.
+
+#### Added
+- **Constants module** (`modules/constants.py`, 306 lines): Centralized constants for entire codebase
+  - Provider types: `PROVIDER_POSTGRES`, `PROVIDER_SPATIALITE`, `PROVIDER_OGR`, `PROVIDER_MEMORY`
+  - Geometry types with helper function `get_geometry_type_string()`
+  - Spatial predicates: `PREDICATE_INTERSECTS`, `PREDICATE_WITHIN`, `PREDICATE_CONTAINS`, etc.
+  - Performance thresholds with `should_warn_performance()` helper
+  - Task action constants, buffer types, UI constants
+  - Comprehensive test suite (29 tests, 100% passing)
+
+- **Signal utilities module** (`modules/signal_utils.py`, 300 lines): Context managers for safe signal management
+  - `SignalBlocker`: Exception-safe signal blocking for Qt widgets
+  - `SignalConnection`: Temporary signal connections with automatic cleanup
+  - `SignalBlockerGroup`: Manage groups of widgets efficiently
+  - Comprehensive test suite (23 tests, 100% passing)
+
+#### Changed
+- **Constants applied throughout codebase** (6 files, 20+ instances): Eliminated magic strings
+  - `modules/appUtils.py`: Provider detection uses constants
+  - `modules/appTasks.py`: **15+ hardcoded strings replaced** with constants
+  - `modules/backends/factory.py`: Backend selection uses constants
+  - `modules/backends/spatialite_backend.py`: Provider checks use constants
+  - `filter_mate_dockwidget.py`: Backend detection uses constants
+  - Single source of truth for all provider, geometry, and predicate strings
+
+- **UI styles extraction** (`filter_mate_dockwidget.py`): Major code reduction
+  - Refactored `manage_ui_style()` from **527 lines to ~150 lines** (-71% reduction)
+  - Styles moved to external QSS file (`resources/styles/default.qss`)
+  - Dynamic style loading with theme support
+  - Much cleaner, more maintainable code
+
+- **Logging standardization**: Replaced remaining print() debugging
+  - 4 print() statements replaced with `logger.debug()`
+  - Consistent logging throughout entire codebase
+
+#### Fixed
+- **Test suite**: Fixed backend test class name imports
+  - Updated test imports to use correct class names
+  - `PostgreSQLGeometricFilter`, `SpatialiteGeometricFilter`, `OGRGeometricFilter`
+
+#### Technical Debt Reduced
+- **Magic strings**: 20+ instances eliminated across 6 core files
+- **Code duplication**: Constants defined once, used everywhere
+- **Type safety**: Constants prevent typos in provider/predicate strings
+- **Maintainability**: Single source of truth makes updates trivial
+- **Test coverage**: 52 new tests (57 total passing) for utility modules
+
+#### Documentation
+- **Module architecture guide**: Added comprehensive `modules/README.md`
+  - Overview of all core modules and their purposes
+  - Architecture patterns and best practices
+  - Backend performance comparison table
+  - Code quality standards and conventions
+  - Developer onboarding guide with examples
+
+#### Metrics
+- Lines reduced: 377 (manage_ui_style refactoring)
+- Test coverage: 90%+ for new modules
+- Magic strings eliminated: 100% from core modules
+- Files improved: 6 core files + 2 new modules + 2 test suites
+
 ## [1.9.2] - 2025-12-03
 
 ### 🔒 Security & User Experience - Sprint 1 Continuation

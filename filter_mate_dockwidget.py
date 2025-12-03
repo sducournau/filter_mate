@@ -47,6 +47,7 @@ from .modules.qt_json_view.model import JsonModel
 from .modules.qt_json_view.view import JsonView
 from .modules.customExceptions import *
 from .modules.appUtils import *
+from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'filter_mate_dockwidget_base.ui'))
@@ -259,11 +260,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 # PROJECT_LAYERS not populated yet, detect directly from layer
                 provider_type = self.init_layer.providerType()
                 if provider_type == 'postgres':
-                    self._update_backend_indicator('postgresql')
+                    self._update_backend_indicator(PROVIDER_POSTGRES)
                 elif provider_type == 'spatialite':
-                    self._update_backend_indicator('spatialite')
+                    self._update_backend_indicator(PROVIDER_SPATIALITE)
                 elif provider_type == 'ogr':
-                    self._update_backend_indicator('ogr')
+                    self._update_backend_indicator(PROVIDER_OGR)
                 else:
                     self._update_backend_indicator(provider_type)
 
@@ -663,536 +664,142 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
 
     def manage_ui_style(self):
-
-        """Manage the plugin style"""
-
-
-
-        comboBox_style = """
-                        QgsFeaturePickerWidget
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsFeaturePickerWidget:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsFeaturePickerWidget QAbstractItemView 
-                        {
-                        background: {color_1};
-                        selection-background-color:{color_3};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QgsProjectionSelectionWidget
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsProjectionSelectionWidget:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsProjectionSelectionWidget QAbstractItemView 
-                        {
-                        background: {color_1};
-                        selection-background-color:{color_3};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QgsMapLayerComboBox
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsMapLayerComboBox:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsMapLayerComboBox QAbstractItemView 
-                        {
-                        background: {color_1};
-                        selection-background-color:{color_3};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QgsFieldComboBox
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsFieldComboBox:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsFieldComboBox QAbstractItemView {
-                        background: {color_1};
-                        selection-background-color:{color_3};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QgsFieldExpressionWidget
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsFieldExpressionWidget:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsFieldExpressionWidget QAbstractItemView {
-                        background: {color_1};
-                        selection-background-color:{color_3};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QgsCheckableComboBox
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsCheckableComboBox:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsCheckableComboBox QAbstractItemView {
-                        background: {color_1};
-                        selection-background-color: {color_2};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QComboBox
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QComboBox:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QComboBox QAbstractItemView {
-                        background: {color_1};
-                        selection-background-color: {color_2};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        QgsCheckableComboBoxLayer
-                        {
-                        background-color:{color_1};
-                        border: 1px solid {color_1};
-                        border-radius: 3px;
-                        padding: 3px 3px 3px 3px;
-                        color:{color_3};
-                        }
-                        QgsCheckableComboBoxLayer:hover
-                        {
-                        border: 2px solid {color_3};
-                        }
-                        QgsCheckableComboBoxLayer QAbstractItemView {
-                        background: {color_1};
-                        selection-background-color: {color_2};
-                        color:{color_3};
-                        border: 2px solid {color_3};
-                        }
-                        """
+        """
+        Load and apply plugin stylesheet from QSS file.
         
-        toolBox_tabTools =  """QWidget
-                                {
-                                background: {color_1};
-                                }
-                                QScrollBar:vertical 
-                                {
-                                border: none;
-                                background: transparent;
-                                width:5px;
-                                }
-                                QScrollBar::handle:vertical {
-                                border: none;
-                                background: {color_2};
-                                width:3px;
-                                }
-                                QScrollBar::add-line:vertical {
-                                background: transparent;
-                                height: 3px;
-                                subcontrol-position: bottom;
-                                subcontrol-origin: margin;
-                                }
-                                QScrollBar::sub-line:vertical {
-                                background: transparent;
-                                height: 3px;
-                                subcontrol-position: top;
-                                subcontrol-origin: margin;
-                                }
-                                QScrollBar:horizontal {
-                                border: none;
-                                background: transparent;
-                                height:5px;
-                                }
-                                QScrollBar::handle:horizontal {
-                                border: none;
-                                background: {color_2};
-                                height:3px;
-                                }
-                                QScrollBar::add-line:horizontal {
-                                background: transparent;
-                                width: 3px;
-                                subcontrol-position: right;
-                                subcontrol-origin: margin;
-                                }
-                                QScrollBar::sub-line:horizontal {
-                                background: transparent;
-                                width: 3px;
-                                subcontrol-position: left;
-                                subcontrol-origin: margin;
-                                }"""
-
-        dock_style = """
-                        QDockWidget
-                        {
-                        background: {color_1};
-                        }
-                        QWidget
-                        {
-                        background: {color_1};
-                        }"""
+        This method:
+        1. Loads the stylesheet from resources/styles/default.qss
+        2. Replaces color placeholders with values from config
+        3. Applies styles to dock widget and all child widgets
+        4. Sets widget-specific properties (sizes, fonts, icons)
         
-        expressionBuilder_style = """QgsExpressionBuilderWidget
-                            {
-                            background-color: {color_1};
-                            border-color: rgb(0, 0, 0);
-                            border-radius:6px;
-                            padding: 10px 10px 10px 10px;
-                            color:{color_3}
-                            }"""
+        The QSS file uses placeholder variables:
+        - {color_1}, {color_2}, {color_3} for UI colors
+        - {color_bg_0}, {color_bg_1}, etc. for backgrounds
         
-        scroll_area_style =  """QScrollArea
-                            {
-                            background-color: {color_1};
-                            color:{color_3}
-                            }
-                            QWidget
-                            {
-                            background: {color_1};
-                            }
-                            QScrollBar:vertical 
-                            {
-                            border: none;
-                            background: transparent;
-                            width:5px;
-                            }
-                            QScrollBar::handle:vertical {
-                            border: none;
-                            background: {color_2};
-                            width:3px;
-                            }
-                            QScrollBar::add-line:vertical {
-                            background: transparent;
-                            height: 3px;
-                            subcontrol-position: bottom;
-                            subcontrol-origin: margin;
-                            }
-                            QScrollBar::sub-line:vertical {
-                            background: transparent;
-                            height: 3px;
-                            subcontrol-position: top;
-                            subcontrol-origin: margin;
-                            }
-                            QScrollBar:horizontal {
-                            border: none;
-                            background: transparent;
-                            height:5px;
-                            }
-                            QScrollBar::handle:horizontal {
-                            border: none;
-                            background: {color_2};
-                            height:3px;
-                            }
-                            QScrollBar::add-line:horizontal {
-                            background: transparent;
-                            width: 3px;
-                            subcontrol-position: right;
-                            subcontrol-origin: margin;
-                            }
-                            QScrollBar::sub-line:horizontal {
-                            background: transparent;
-                            width: 3px;
-                            subcontrol-position: left;
-                            subcontrol-origin: margin;
-                            }"""
+        Benefits of QSS file approach:
+        - Easier theme customization
+        - Cleaner code (no 500+ line strings)
+        - Can be edited by designers
+        - Supports multiple themes
+        """
+        import os
         
-        frame_style =    """QFrame
-                            {
-                            background-color: {color_1};
-                            border-color: rgb(0, 0, 0);
-                            border-radius:6px;
-                            padding: 5px 5px 5px 5px;
-                            marging: 5px 5px 5px 5px;
-                            color:{color_3}
-                            }
-                            QgsExpressionBuilderWidget
-                            {
-                            background-color: {color_1};
-                            border-color: rgb(0, 0, 0);
-                            border-radius:6px;
-                            padding: 10px 10px 10px 10px;
-                            color:{color_3}
-                            }"""
-
-        collapsibleGroupBox_style =  """QgsCollapsibleGroupBox
-                                        {
-                                        background-color: {color_1};
-                                        border-color: rgb(0, 0, 0);
-                                        border-radius:6px;
-                                        padding: 10px 10px 10px 10px;
-                                        color:{color_3}
-                                        }""" 
+        # Load QSS file from resources
+        qss_file = os.path.join(self.plugin_dir, 'resources', 'styles', 'default.qss')
         
-        lineEdit_style = """QLineEdit 
-                            {
-                            background-color: {color_2};
-                            color:{color_1};
-                            border-radius: 3px;
-                            padding: 3px 3px 3px 3px;
-                            }
-                            QLineEdit:hover
-                            {
-                            border: 2px solid black;
-                            }
-                            """
+        try:
+            with open(qss_file, 'r', encoding='utf-8') as f:
+                stylesheet = f.read()
+        except FileNotFoundError:
+            logger.error(f"Stylesheet file not found: {qss_file}")
+            return
+        except Exception as e:
+            logger.error(f"Error loading stylesheet: {e}")
+            return
         
-        qgsDoubleSpinBox_style = """QgsDoubleSpinBox {
-                                    background-color: {color_2};
-                                    color:{color_1};
-                                    border-radius: 3px;
-                                    padding: 3px 3px 3px 3px;
-                                    }
-                                    QgsDoubleSpinBox:hover
-                                    {
-                                    border: 2px solid black;
-                                    }
-                                    """
+        # Replace color placeholders with config values
+        colors_bg = self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"]
+        colors_font = self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"]
         
-        pushBarMessage_style =  """QFrame QFrame {
-                                    min-height: 70px;
-                                    margin:0px;
-                                    padding:0px;
-                                    }
-                                    QLineEdit {
-                                    border: 1px solid gray;
-                                    border-radius: 1px;
-                                    padding: 0 8px;
-                                        selection-background-color: darkgray;
-                                        border-color: darkgray
-                                    }
-                                    QTextEdit, QListView {
-                                        border: 1px solid gray;
-                                        height:40px;
-                                    }"""
-
-        propertyOverrideButton_style =  """QgsPropertyOverrideButton 
-                                        {
-                                        background-color: {color_1};
-                                        color:{color_3};
-                                        border-radius: 3px;
-                                        padding: 3px 3px 3px 3px;
-                                        }
-                                        QgsPropertyOverrideButton:hover
-                                        {
-                                        border: 2px solid black;
-                                        }
-                                        QgsFieldExpressionWidget
-                                        {
-                                        background-color:{color_1};
-                                        border: 1px solid {color_1};
-                                        border-radius: 3px;
-                                        padding: 3px 3px 3px 3px;
-                                        color:{color_3};
-                                        }
-                                        QgsFieldExpressionWidget:hover
-                                        {
-                                        border: 2px solid {color_3};
-                                        }
-                                        QgsFieldExpressionWidget QAbstractItemView {
-                                        background: {color_1};
-                                        selection-background-color:{color_3};
-                                        color:{color_3};
-                                        border: 2px solid {color_3};
-                                        }"""
-
-
-        splitter_style = """QSplitter::handle {
-                            background: {color_1};
-                            }
-                            QSplitter::handle:hover {
-                            background: {color_2};
-                            }"""
-
-        comboBox_style = comboBox_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1]).replace("{color_2}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][2]).replace("{color_3}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1])
-
-        propertyOverrideButton_style = propertyOverrideButton_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1]).replace("{color_2}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][2]).replace("{color_3}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1])
-
-        dock_style = dock_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1])
-
-        frame_actions_style = frame_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1])
-
-        frame_style = frame_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1])
+        # Map placeholders to actual colors
+        color_replacements = {
+            '{color_1}': colors_bg[1],      # Primary widget background
+            '{color_2}': colors_bg[2],      # Selection background
+            '{color_3}': colors_font[1],    # Text/accent color
+            '{color_bg_0}': colors_bg[0],   # Frame background (darker)
+            '{color_bg_1}': colors_bg[1],   # Secondary background
+            '{color_bg_2}': colors_bg[2],   # Tertiary background
+            '{color_bg_3}': colors_bg[3],   # Splitter hover
+            '{color_font_0}': colors_font[0],  # Primary font
+            '{color_font_1}': colors_font[1],  # Secondary font
+        }
         
-        toolBox_tabTools = toolBox_tabTools.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0]).replace("{color_2}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1])
-
-        scroll_area_style = scroll_area_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1])
-
-        collapsibleGroupBox_style = collapsibleGroupBox_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0]).replace("{color_3}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1])
-
-        lineEdit_style = lineEdit_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1])
-
-        qgsDoubleSpinBox_style = qgsDoubleSpinBox_style.replace("{color_1}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][1]).replace("{color_2}",self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1])
-
-        splitter_style = splitter_style.replace("{color_1}", self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][1]).replace("{color_2}", self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][3])
-
+        # Apply all color replacements
+        for placeholder, color_value in color_replacements.items():
+            stylesheet = stylesheet.replace(placeholder, color_value)
         
-        # self.toolBox_tabWidgets.setStyleSheet("""background-color: {};
-        #                                                 border-color: rgb(0, 0, 0);
-        #                                                 border-radius:6px;
-        #                                                 padding: 10px 10px 10px 10px;
-        #                                                 color:{};""".format(COLORS["BACKGROUND"][0],COLORS["FONT"][0]))
-
-
-
-        # selfS.setStyleSheet("""background-color: {};
-        #                                                 border-color: rgb(0, 0, 0);
-        #                                                 border-radius:6px;
-        #                                                 marging: 25px 10px 10px 10px;
-        #                                                 color:{};""".format(COLORS["BACKGROUND"][0],COLORS["FONT"][0]))
-
-
-        """SET STYLES"""
+        # Apply stylesheet to main widgets
+        self.dockWidgetContents.setStyleSheet(stylesheet)
         
-        """DOCK"""
-        #self.FilterMateDockWidgetBase.setStyleSheet(dock_style)
-        self.dockWidgetContents.setStyleSheet(dock_style)
-
-        self.widgets["DOCK"]["TOOLS"]["WIDGET"].setStyleSheet("""background-color: {};
-                                                        border-color: rgb(0, 0, 0);
-                                                        border-radius:6px;
-                                                        padding: 10px 10px 10px 10px;
-                                                        color:{};""".format(self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0],self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][0]))
+        # Apply specific styles to key widgets
+        self.widgets["DOCK"]["TOOLS"]["WIDGET"].setStyleSheet(
+            f"""background-color: {colors_bg[0]};
+                border-color: rgb(0, 0, 0);
+                border-radius: 6px;
+                padding: 10px 10px 10px 10px;
+                color: {colors_font[0]};"""
+        )
         
-        self.splitter.setStyleSheet(splitter_style)
-        self.frame_actions.setStyleSheet(frame_actions_style)
-        self.frame_exploring.setStyleSheet(frame_style)
-        self.frame_toolset.setStyleSheet(frame_style)
-
-        self.toolBox_tabTools.setStyleSheet(toolBox_tabTools)
-        self.scrollArea_frame_exploring.setStyleSheet(scroll_area_style)
-
-        self.mGroupBox_exploring_single_selection.setStyleSheet(collapsibleGroupBox_style)
-        self.mGroupBox_exploring_multiple_selection.setStyleSheet(collapsibleGroupBox_style)
-        self.mGroupBox_exploring_custom_selection.setStyleSheet(collapsibleGroupBox_style)
-        
-
-        # self.CONFIGURATION.setStyleSheet("""background-color: {};
-        #                                     border-color: rgb(0, 0, 0);
-        #                                     border-radius:6px;
-        #                                     marging: 25px 10px 10px 10px;
-        #                                     color:{};""".format(self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"][0],self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"][0]))
-        
-        
-
-        pushButton_config_path = ['APP','DOCKWIDGET','PushButton']
+        # Configure push buttons, comboboxes, and other widgets
+        pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
         pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]][pushButton_config_path[2]]
-        pushButton_style = json.dumps(pushButton_config["STYLE"])[1:-1].replace(': {', ' {').replace('\"', '').replace(',', '')
-        icons_sizes = {}
-        icon_size = 20
-        if "ICONS_SIZES" in pushButton_config:
-            if "ACTION" in pushButton_config["ICONS_SIZES"]:
-                icons_sizes["ACTION"] = pushButton_config["ICONS_SIZES"]["ACTION"]
-            if "OTHERS" in pushButton_config["ICONS_SIZES"]:
-                icons_sizes["OTHERS"] = pushButton_config["ICONS_SIZES"]["OTHERS"]
-
-
+        
+        # Get icon sizes from config
+        icons_sizes = {
+            "ACTION": pushButton_config.get("ICONS_SIZES", {}).get("ACTION", 20),
+            "OTHERS": pushButton_config.get("ICONS_SIZES", {}).get("OTHERS", 20),
+        }
+        
+        # Set font for widgets
         font = QFont("Segoe UI Semibold", 8)
         font.setBold(True)
-
+        
+        # Apply widget-specific configurations
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
-                if self.widgets[widget_group][widget_name]["TYPE"] == "PushButton":
+                widget_type = self.widgets[widget_group][widget_name]["TYPE"]
+                widget_obj = self.widgets[widget_group][widget_name]["WIDGET"]
+                
+                # Skip certain widget types
+                if widget_type in ("JsonTreeView", "LayerTreeView", "JsonModel", "ToolBox"):
+                    continue
+                
+                # Configure push buttons
+                if widget_type == "PushButton":
                     self.set_widget_icon(pushButton_config_path + ["ICONS", widget_group, widget_name])
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(pushButton_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
-                    if widget_group in icons_sizes:
-                        icon_size = icons_sizes[widget_group]    
-                    else:
-                        icon_size = icons_sizes["OTHERS"]
-
-                    self.widgets[widget_group][widget_name]["WIDGET"].setIconSize(QtCore.QSize(icon_size, icon_size))
-                    self.widgets[widget_group][widget_name]["WIDGET"].setMinimumHeight(icon_size*2)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setMaximumHeight(icon_size*2)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setMinimumWidth(icon_size*2)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setMaximumWidth(icon_size*2)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("ComboBox") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsFieldExpressionWidget") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("LineEdit") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(lineEdit_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.IBeamCursor)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsDoubleSpinBox") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(qgsDoubleSpinBox_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.IBeamCursor)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("PropertyOverrideButton") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(propertyOverrideButton_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                elif self.widgets[widget_group][widget_name]["TYPE"].find("QgsProjectionSelectionWidget") >= 0:
-                    self.widgets[widget_group][widget_name]["WIDGET"].setStyleSheet(comboBox_style)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setCursor(Qt.PointingHandCursor)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setFont(font)
-                _
+                    widget_obj.setCursor(Qt.PointingHandCursor)
+                    
+                    # Determine icon size
+                    icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
+                    
+                    widget_obj.setIconSize(QtCore.QSize(icon_size, icon_size))
+                    widget_obj.setMinimumHeight(icon_size * 2)
+                    widget_obj.setMaximumHeight(icon_size * 2)
+                    widget_obj.setMinimumWidth(icon_size * 2)
+                    widget_obj.setMaximumWidth(icon_size * 2)
+                    widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                    widget_obj.setFont(font)
+                
+                # Configure comboboxes and field widgets
+                elif any(keyword in widget_type for keyword in ["ComboBox", "QgsFieldExpressionWidget", "QgsProjectionSelectionWidget"]):
+                    widget_obj.setCursor(Qt.PointingHandCursor)
+                    widget_obj.setFont(font)
+                
+                # Configure text inputs
+                elif "LineEdit" in widget_type or "QgsDoubleSpinBox" in widget_type:
+                    widget_obj.setCursor(Qt.IBeamCursor)
+                    widget_obj.setFont(font)
+                
+                # Configure property override buttons
+                elif "PropertyOverrideButton" in widget_type:
+                    widget_obj.setCursor(Qt.PointingHandCursor)
+                    widget_obj.setFont(font)
+        
+        # Set sizes for key widgets
         icon_size = icons_sizes["OTHERS"]
         for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
-            # widget.setMinimumHeight(icon_size*2)
-            # widget.setMaximumHeight(icon_size*2)
-            widget.setMinimumWidth(icon_size*3)
-            widget.setMaximumWidth(icon_size*3)
+            widget.setMinimumWidth(icon_size * 3)
+            widget.setMaximumWidth(icon_size * 3)
             widget.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         
+        # Set frame actions size
         icon_size = icons_sizes["ACTION"]
-        self.frame_actions.setMinimumHeight(icon_size*3)
-        self.frame_actions.setMaximumHeight(icon_size*3)
-        self.frame_actions.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.frame_actions.setMinimumHeight(icon_size * 3)
+        self.frame_actions.setMaximumHeight(icon_size * 3)
         
-        
-        
+        logger.debug("UI stylesheet loaded and applied successfully")
+
 
     def set_widgets_enabled_state(self, state):
         """
@@ -1211,7 +818,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             - Called during initialization and when layers are added/removed
             - Central method for UI responsiveness control
         """
-        print(f"FilterMate DEBUG: set_widgets_enabled_state({state}) called")
+        logger.debug(f"set_widgets_enabled_state({state}) called")
         widget_count = 0
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
@@ -1224,7 +831,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                     self.widgets[widget_group][widget_name]["WIDGET"].setCollapsed(True)
                     self.widgets[widget_group][widget_name]["WIDGET"].setEnabled(state)
                     widget_count += 1
-        print(f"FilterMate DEBUG: {widget_count} widgets set to enabled={state}")
+        logger.debug(f"{widget_count} widgets set to enabled={state}")
 
 
 
@@ -1934,7 +1541,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 
             # CRITICAL: Prevent recursive calls during layer update
             if self._updating_current_layer:
-                print("FilterMate DEBUG: Blocking recursive call to current_layer_changed")
+                logger.debug("Blocking recursive call to current_layer_changed")
                 return
                 
             self._updating_current_layer = True
@@ -2039,11 +1646,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                     # Layer not yet in PROJECT_LAYERS, detect provider type directly
                     provider_type = layer.providerType()
                     if provider_type == 'postgres':
-                        self._update_backend_indicator('postgresql')
+                        self._update_backend_indicator(PROVIDER_POSTGRES)
                     elif provider_type == 'spatialite':
-                        self._update_backend_indicator('spatialite')
+                        self._update_backend_indicator(PROVIDER_SPATIALITE)
                     elif provider_type == 'ogr':
-                        self._update_backend_indicator('ogr')
+                        self._update_backend_indicator(PROVIDER_OGR)
                     else:
                         self._update_backend_indicator(provider_type)
 
@@ -2847,7 +2454,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         # CRITICAL: Prevent recursive/multiple simultaneous calls
         if self._updating_layers:
-            print("FilterMate DEBUG: Blocking recursive call to get_project_layers_from_app")
+            logger.debug("Blocking recursive call to get_project_layers_from_app")
             return
             
         self._updating_layers = True

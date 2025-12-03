@@ -43,14 +43,66 @@ def init_env_vars():
     # Remove trailing separator if present
     QGIS_SETTINGS_PATH = QGIS_SETTINGS_PATH.rstrip(os.sep).rstrip('/')
 
+    # Determine the plugin config directory
     if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != '':
-        PLUGIN_CONFIG_DIRECTORY = os.path.normpath(CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"])
+        configured_path = os.path.normpath(CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"])
+        
+        # Validate that parent directories exist and are accessible
+        parent_dir = os.path.dirname(configured_path)
+        path_is_valid = False
+        
+        if parent_dir and os.path.exists(parent_dir):
+            # Check if parent directory is accessible
+            try:
+                if os.access(parent_dir, os.W_OK):
+                    path_is_valid = True
+                else:
+                    QgsMessageLog.logMessage(
+                        f"Configured path parent directory is not writable: {parent_dir}. Falling back to current profile.",
+                        "FilterMate",
+                        Qgis.Warning
+                    )
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Cannot access configured path: {configured_path}. Error: {e}. Falling back to current profile.",
+                    "FilterMate",
+                    Qgis.Warning
+                )
+        else:
+            QgsMessageLog.logMessage(
+                f"Configured path parent directory does not exist: {parent_dir}. Falling back to current profile.",
+                "FilterMate",
+                Qgis.Warning
+            )
+        
+        if path_is_valid:
+            PLUGIN_CONFIG_DIRECTORY = configured_path
+        else:
+            # Fall back to current profile
+            PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
+            CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
+            try:
+                with open(DIR_CONFIG + os.sep + 'config.json', 'w') as outfile:
+                    outfile.write(json.dumps(CONFIG_DATA, indent=4))
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Could not update config.json with new path: {e}",
+                    "FilterMate",
+                    Qgis.Warning
+                )
     else:
         # Use os.path.join for proper cross-platform path construction
         PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
         CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
-        with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
-            outfile.write(json.dumps(CONFIG_DATA, indent=4))
+        try:
+            with open(DIR_CONFIG + os.sep + 'config.json', 'w') as outfile:
+                outfile.write(json.dumps(CONFIG_DATA, indent=4))
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Could not update config.json: {e}",
+                "FilterMate",
+                Qgis.Warning
+            )
 
     global ENV_VARS
     ENV_VARS["PROJECT"] = PROJECT
@@ -61,14 +113,20 @@ def init_env_vars():
     ENV_VARS["QGIS_SETTINGS_PATH"] = QGIS_SETTINGS_PATH
     ENV_VARS["PLUGIN_CONFIG_DIRECTORY"] = PLUGIN_CONFIG_DIRECTORY
 
+    # Create the plugin config directory if it doesn't exist
     if not os.path.isdir(PLUGIN_CONFIG_DIRECTORY):
         try:
-            os.makedirs(PLUGIN_CONFIG_DIRECTORY, exist_ok = True)
+            os.makedirs(PLUGIN_CONFIG_DIRECTORY, exist_ok=True)
+            QgsMessageLog.logMessage(
+                f"Created plugin config directory: {PLUGIN_CONFIG_DIRECTORY}",
+                "FilterMate",
+                Qgis.Info
+            )
         except OSError as error:
             QgsMessageLog.logMessage(
                 f"Could not create config directory {PLUGIN_CONFIG_DIRECTORY}: {error}",
                 "FilterMate",
-                Qgis.Warning
+                Qgis.Critical
             )
 
 

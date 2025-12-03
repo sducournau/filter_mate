@@ -13,6 +13,7 @@ from .postgresql_backend import PostgreSQLGeometricFilter, POSTGRESQL_AVAILABLE
 from .spatialite_backend import SpatialiteGeometricFilter
 from .ogr_backend import OGRGeometricFilter
 from ..logging_config import get_tasks_logger
+from ..constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 
 logger = get_tasks_logger()
 
@@ -47,14 +48,14 @@ class BackendFactory:
         logger.debug(f"Selecting backend for provider type: {layer_provider_type}")
         
         # Try PostgreSQL backend first if available
-        if layer_provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
+        if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
             backend = PostgreSQLGeometricFilter(task_params)
             if backend.supports_layer(layer):
                 logger.info(f"Using PostgreSQL backend for {layer.name()}")
                 return backend
         
         # Try Spatialite backend
-        if layer_provider_type == 'spatialite':
+        if layer_provider_type == PROVIDER_SPATIALITE:
             backend = SpatialiteGeometricFilter(task_params)
             if backend.supports_layer(layer):
                 logger.info(f"Using Spatialite backend for {layer.name()}")
@@ -79,9 +80,9 @@ class BackendFactory:
         Returns:
             Backend instance
         """
-        if provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
+        if provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
             return PostgreSQLGeometricFilter(task_params)
-        elif provider_type == 'spatialite':
+        elif provider_type == PROVIDER_SPATIALITE:
             return SpatialiteGeometricFilter(task_params)
         else:
             return OGRGeometricFilter(task_params)
