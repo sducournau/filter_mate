@@ -80,7 +80,8 @@ class JsonModel(QtGui.QStandardItemModel):
             key = self.input.key.text()
             try:
                 value = json.loads(self.input.value.toPlainText())
-            except:
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, treat as plain text
                 value = self.input.value.toPlainText()
 
             type_ = match_type(value)

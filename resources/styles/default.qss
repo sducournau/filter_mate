@@ -1,0 +1,380 @@
+/* FilterMate Default Stylesheet
+ * Modern, clean styling for FilterMate plugin widgets
+ * Color scheme: Dark theme with blue accents
+ */
+
+/* Variables (will be replaced dynamically):
+ * {color_1} - Primary background (widgets)
+ * {color_2} - Secondary background (selected items)
+ * {color_3} - Accent/text color (light blue)
+ * {color_bg_0} - Frame background (darker)
+ * {color_bg_3} - Splitter hover color
+ */
+
+/* QGIS Widgets - Common Styling */
+QgsFeaturePickerWidget,
+QgsProjectionSelectionWidget,
+QgsMapLayerComboBox,
+QgsFieldComboBox,
+QgsFieldExpressionWidget,
+QgsCheckableComboBox,
+QComboBox,
+QgsCheckableComboBoxLayer {
+    background-color: {color_1};
+    border: 1px solid {color_1};
+    border-radius: 3px;
+    padding: 3px 3px 3px 3px;
+    color: {color_3};
+}
+
+QgsFeaturePickerWidget:hover,
+QgsProjectionSelectionWidget:hover,
+QgsMapLayerComboBox:hover,
+QgsFieldComboBox:hover,
+QgsFieldExpressionWidget:hover,
+QgsCheckableComboBox:hover,
+QComboBox:hover,
+QgsCheckableComboBoxLayer:hover {
+    border: 2px solid {color_3};
+}
+
+QgsFeaturePickerWidget QAbstractItemView,
+QgsProjectionSelectionWidget QAbstractItemView,
+QgsMapLayerComboBox QAbstractItemView,
+QgsFieldComboBox QAbstractItemView,
+QgsFieldExpressionWidget QAbstractItemView,
+QgsCheckableComboBox QAbstractItemView,
+QComboBox QAbstractItemView,
+QgsCheckableComboBoxLayer QAbstractItemView {
+    background: {color_1};
+    selection-background-color: {color_2};
+    color: {color_3};
+    border: 2px solid {color_3};
+}
+
+/* ToolBox TabWidget */
+QWidget {
+    background-color: {color_bg_0};
+}
+
+QWidget > QToolBox {
+    background-color: {color_bg_0};
+}
+
+QWidget > QToolBox::tab {
+    background: {color_1};
+    border-radius: 5px;
+    color: {color_3};
+}
+
+/* DockWidget */
+QDockWidget {
+    background: {color_1};
+}
+
+/* Frames */
+QFrame {
+    background-color: {color_bg_0};
+    border-color: rgb(0, 0, 0);
+    border-radius: 6px;
+    padding: 5px 5px 5px 5px;
+    margin: 5px 5px 5px 5px;
+    color: {color_3};
+}
+
+/* Expression Builder */
+QgsExpressionBuilderWidget {
+    background-color: {color_bg_0};
+    border-color: rgb(0, 0, 0);
+    border-radius: 6px;
+    padding: 10px 10px 10px 10px;
+    color: {color_3};
+}
+
+/* Scroll Area */
+QScrollArea {
+    background-color: {color_bg_0};
+    color: {color_3};
+}
+
+/* Collapsible Group Box */
+QgsCollapsibleGroupBox {
+    background-color: {color_bg_0};
+    border-color: rgb(0, 0, 0);
+    border-radius: 6px;
+    padding: 10px 10px 10px 10px;
+    color: {color_3};
+}
+
+/* Splitter */
+QSplitter::handle {
+    background: {color_1};
+}
+
+QSplitter::handle:hover {
+    background: {color_bg_3};
+}
+
+/* Property Override Button */
+QgsPropertyOverrideButton {
+    background-color: {color_1};
+    color: {color_3};
+    border-radius: 3px;
+    padding: 3px 3px 3px 3px;
+}
+
+QgsPropertyOverrideButton:hover {
+    border: 2px solid black;
+}
+
+/* ScrollBar - Vertical */
+QScrollBar:vertical {
+    border: none;
+    background: transparent;
+    width: 5px;
+}
+
+QScrollBar::handle:vertical {
+    border: none;
+    background: {color_1};
+    width: 3px;
+}
+
+QScrollBar::add-line:vertical {
+    background: transparent;
+    height: 3px;
+    subcontrol-position: bottom;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::sub-line:vertical {
+    background: transparent;
+    height: 3px;
+    subcontrol-position: top;
+    subcontrol-origin: margin;
+}
+
+/* ScrollBar - Horizontal */
+QScrollBar:horizontal {
+    border: none;
+    background: transparent;
+    height: 5px;
+}
+
+QScrollBar::handle:horizontal {
+    border: none;
+    background: {color_1};
+    height: 3px;
+}
+
+QScrollBar::add-line:horizontal {
+    background: transparent;
+    width: 3px;
+    subcontrol-position: right;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::sub-line:horizontal {
+    background: transparent;
+    width: 3px;
+    subcontrol-position: left;
+    subcontrol-origin: margin;
+}
+
+/* GroupBox Styling */
+QGroupBox {
+    background-color: transparent;
+    border: 2px solid {color_3};
+    border-radius: 5px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: {color_3};
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px;
+    color: {color_3};
+}
+
+/* Exploring Tab */
+QGroupBox#groupBoxExploring {
+    border-color: #3daee9;
+}
+
+QGroupBox#groupBoxExploring::title {
+    color: #3daee9;
+}
+
+/* Filtering Tab */
+QGroupBox#groupBoxFiltering {
+    border-color: #27ae60;
+}
+
+QGroupBox#groupBoxFiltering::title {
+    color: #27ae60;
+}
+
+/* Exporting Tab */
+QGroupBox#groupBoxExporting {
+    border-color: #f39c12;
+}
+
+QGroupBox#groupBoxExporting::title {
+    color: #f39c12;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: {color_2};
+    border: 1px solid {color_3};
+    border-radius: 3px;
+    padding: 5px 10px;
+    color: {color_3};
+}
+
+QPushButton:hover {
+    background-color: {color_3};
+    color: {color_1};
+    border: 1px solid {color_3};
+}
+
+QPushButton:pressed {
+    background-color: {color_1};
+    border: 2px solid {color_3};
+}
+
+QPushButton:disabled {
+    background-color: {color_1};
+    color: #666;
+    border: 1px solid #666;
+}
+
+/* SpinBox & DoubleSpinBox */
+QSpinBox,
+QDoubleSpinBox,
+QgsDoubleSpinBox {
+    background-color: {color_1};
+    border: 1px solid {color_1};
+    border-radius: 3px;
+    padding: 3px;
+    color: {color_3};
+}
+
+QSpinBox:hover,
+QDoubleSpinBox:hover,
+QgsDoubleSpinBox:hover {
+    border: 2px solid {color_3};
+}
+
+/* LineEdit */
+QLineEdit {
+    background-color: {color_1};
+    border: 1px solid {color_1};
+    border-radius: 3px;
+    padding: 3px;
+    color: {color_3};
+}
+
+QLineEdit:hover {
+    border: 2px solid {color_3};
+}
+
+QLineEdit:focus {
+    border: 2px solid {color_3};
+}
+
+/* CheckBox */
+QCheckBox {
+    color: {color_3};
+    spacing: 5px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid {color_3};
+    border-radius: 3px;
+    background-color: {color_1};
+}
+
+QCheckBox::indicator:checked {
+    background-color: {color_3};
+}
+
+QCheckBox::indicator:hover {
+    border: 2px solid {color_3};
+}
+
+/* RadioButton */
+QRadioButton {
+    color: {color_3};
+    spacing: 5px;
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid {color_3};
+    border-radius: 9px;
+    background-color: {color_1};
+}
+
+QRadioButton::indicator:checked {
+    background-color: {color_3};
+}
+
+/* TabWidget */
+QTabWidget::pane {
+    border: 1px solid {color_3};
+    border-radius: 3px;
+    background-color: {color_1};
+}
+
+QTabBar::tab {
+    background-color: {color_2};
+    border: 1px solid {color_3};
+    border-bottom: none;
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    padding: 5px 10px;
+    color: {color_3};
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background-color: {color_3};
+    color: {color_1};
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: {color_2};
+}
+
+/* Label */
+QLabel {
+    color: {color_3};
+    background-color: transparent;
+}
+
+/* Backend Indicator Label */
+QLabel#label_backend_indicator {
+    font-size: 10px;
+    padding: 2px;
+    text-align: right;
+}
+
+/* Progress Bar */
+QProgressBar {
+    border: 1px solid {color_3};
+    border-radius: 3px;
+    background-color: {color_1};
+    text-align: center;
+    color: {color_3};
+}
+
+QProgressBar::chunk {
+    background-color: {color_3};
+    border-radius: 2px;
+}

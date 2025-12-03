@@ -21,15 +21,11 @@
  ***************************************************************************/
 """
 
-from qgis.PyQt.QtCore import *
-from qgis.PyQt.QtGui import *
-from qgis.PyQt import QtGui
-from qgis.PyQt.QtWidgets import *
-from qgis.core import *
-from qgis.gui import *
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction, QApplication
 from qgis.utils import iface
 from functools import partial
-from qgis.PyQt.QtWidgets import QApplication
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -231,6 +227,10 @@ class FilterMate:
         """Removes the plugin menu item and icon from QGIS GUI."""
 
         #print "** UNLOAD FilterMate"
+        
+        # Nettoyer les ressources de l'application FilterMate
+        if self.app:
+            self.app.cleanup()
 
         for action in self.actions:
             self.iface.removePluginMenu(

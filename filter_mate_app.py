@@ -47,8 +47,69 @@ class FilterMateApp:
 
     PROJECT_LAYERS = {} 
 
+    def cleanup(self):
+        """
+        Clean up plugin resources on unload or reload.
+        
+        Safely removes widgets, clears data structures, and prevents memory leaks.
+        Called when plugin is disabled or QGIS is closing.
+        
+        Cleanup steps:
+        1. Clear list_widgets from multiple selection widget
+        2. Reset async tasks
+        3. Clear PROJECT_LAYERS dictionary
+        4. Clear datasource connections
+        
+        Notes:
+            - Uses try/except to handle already-deleted widgets
+            - Safe to call multiple times
+            - Prevents KeyError on plugin reload
+        """
+        if self.dockwidget is not None:
+            # Nettoyer tous les widgets list_widgets pour éviter les KeyError
+            if hasattr(self.dockwidget, 'widgets'):
+                try:
+                    multiple_selection_widget = self.dockwidget.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                    if multiple_selection_widget and hasattr(multiple_selection_widget, 'list_widgets'):
+                        # Nettoyer tous les list_widgets
+                        multiple_selection_widget.list_widgets.clear()
+                        # Réinitialiser les tasks
+                        if hasattr(multiple_selection_widget, 'tasks'):
+                            multiple_selection_widget.tasks.clear()
+                except (KeyError, AttributeError, RuntimeError) as e:
+                    # Les widgets peuvent déjà être supprimés
+                    pass
+            
+            # Nettoyer PROJECT_LAYERS
+            if hasattr(self.dockwidget, 'PROJECT_LAYERS'):
+                self.dockwidget.PROJECT_LAYERS.clear()
+        
+        # Réinitialiser les structures de données de l'app
+        self.PROJECT_LAYERS.clear()
+        self.project_datasources.clear()
 
     def __init__(self, plugin_dir):
+        """
+        Initialize FilterMate application controller.
+        
+        Sets up the main application state, task registry, and environment variables.
+        Does not create UI - that happens in run() when plugin is activated.
+        
+        Args:
+            plugin_dir (str): Absolute path to plugin directory
+            
+        Attributes:
+            PROJECT_LAYERS (dict): Registry of all managed layers with metadata
+            appTasks (dict): Active QgsTask instances for async operations
+            tasks_descriptions (dict): Human-readable task names for UI
+            project_datasources (dict): Data source connection information
+            db_file_path (str): Path to Spatialite database for project
+            
+        Notes:
+            - Initializes environment variables via init_env_vars()
+            - Sets up QGIS project and layer store references
+            - Prepares task manager for PostgreSQL/Spatialite operations
+        """
         self.iface = iface
         
         self.dockwidget = None
@@ -88,6 +149,15 @@ class FilterMateApp:
 
 
     def run(self):
+        """
+        Initialize and display the FilterMate dockwidget.
+        
+        Creates the dockwidget if it doesn't exist, initializes the database,
+        connects signals for layer management, and displays the UI.
+        Also processes any existing layers in the project on first run.
+        
+        This method should only be called once when the plugin is activated.
+        """
         if self.dockwidget == None:
 
             
@@ -104,22 +174,25 @@ class FilterMateApp:
             self.init_filterMate_db()
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
 
-            if init_layers != None and len(init_layers) > 0:
-                self.manage_task('add_layers', init_layers)
-
             # show the dockwidget
             # TODO: fix to allow choice of dock location
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
+            
+            # Process existing layers AFTER dockwidget is shown and fully initialized
+            # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
+            if init_layers != None and len(init_layers) > 0:
+                from qgis.PyQt.QtCore import QTimer
+                QTimer.singleShot(100, lambda: self.manage_task('add_layers', init_layers))
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
-        self.iface.projectRead.connect(lambda x='project_read': self.manage_task(x))
-        self.iface.newProjectCreated.connect(lambda x='new_project': self.manage_task(x))
-        self.MapLayerStore.layerWasAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
-        self.MapLayerStore.layersAdded.connect(lambda layers, x='add_layers': self.manage_task(x, layers))
-        self.MapLayerStore.layersWillBeRemoved.connect(lambda layers, x='remove_layers': self.manage_task(x, layers))
-        self.MapLayerStore.allLayersRemoved.connect(lambda layers, x='remove_all_layers': self.manage_task(x))
+        self.iface.projectRead.connect(lambda: self.manage_task('project_read'))
+        self.iface.newProjectCreated.connect(lambda: self.manage_task('new_project'))
+        # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
+        self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+        self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+        self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
 
@@ -131,6 +204,28 @@ class FilterMateApp:
         self.PROJECT.fileNameChanged.connect(lambda name: self.save_project_variables(name))
         
 
+    def get_spatialite_connection(self):
+        """
+        Get a Spatialite connection with proper error handling.
+        
+        Returns:
+            Connection object or None if connection fails
+        """
+        if not os.path.exists(self.db_file_path):
+            error_msg = f"Database file does not exist: {self.db_file_path}"
+            logger.error(error_msg)
+            iface.messageBar().pushCritical("FilterMate", error_msg)
+            return None
+            
+        try:
+            conn = spatialite_connect(self.db_file_path)
+            return conn
+        except Exception as error:
+            error_msg = f"Failed to connect to database {self.db_file_path}: {error}"
+            logger.error(error_msg)
+            iface.messageBar().pushCritical("FilterMate", error_msg)
+            return None
+
         
         """Overload configuration qtreeview model to keep configuration file up to date"""
         # 
@@ -139,7 +234,33 @@ class FilterMateApp:
 
 
     def manage_task(self, task_name, data=None):
-        """Manage the different tasks"""
+        """
+        Orchestrate execution of FilterMate tasks.
+        
+        Central dispatcher for all plugin operations including filtering, layer management,
+        and project operations. Creates appropriate task objects and manages their execution
+        through QGIS task manager.
+        
+        Args:
+            task_name (str): Name of task to execute. Must be one of:
+                - 'filter': Apply filters to layers
+                - 'unfilter': Remove filters from layers
+                - 'reset': Reset layer state
+                - 'add_layers': Process newly added layers
+                - 'remove_layers': Clean up removed layers
+                - 'remove_all_layers': Clear all layer data
+                - 'project_read': Handle project load
+                - 'new_project': Initialize new project
+            data: Task-specific data (layers list, parameters, etc.)
+                
+        Raises:
+            AssertionError: If task_name is not recognized
+            
+        Notes:
+            - Cancels conflicting active tasks before starting new ones
+            - Shows progress messages in QGIS message bar
+            - Automatically connects task completion signals
+        """
 
         assert task_name in list(self.tasks_descriptions.keys())
 
@@ -150,7 +271,7 @@ class FilterMateApp:
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
 
         if task_name == 'remove_all_layers':
-           QgsApplication.taskManager().cancelAll()
+           self._safe_cancel_all_tasks()
            self.dockwidget.disconnect_widgets_signals()
            self.dockwidget.reset_multiple_checkable_combobox()
            self.layer_management_engine_task_completed({}, task_name)
@@ -158,7 +279,7 @@ class FilterMateApp:
         
         if task_name in ('project_read', 'new_project'):
             self.app_postgresql_temp_schema_setted = False
-            QgsApplication.taskManager().cancelAll()
+            self._safe_cancel_all_tasks()
             init_env_vars()
 
             global ENV_VARS
@@ -194,6 +315,24 @@ class FilterMateApp:
                 for temp_layer in temp_layers:
                     if temp_layer.id() in layers_ids:
                         layers.append(temp_layer)
+            
+            # Show informational message about task starting
+            if task_name == 'filter':
+                layer_count = len(layers) + 1  # +1 for current layer
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    f"Starting filter operation on {layer_count} layer(s)..."
+                )
+            elif task_name == 'unfilter':
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "Removing filters..."
+                )
+            elif task_name == 'reset':
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "Resetting layers..."
+                )
 
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
             self.appTasks[task_name].taskCompleted.connect(lambda task_name=task_name, current_layer=current_layer, task_parameters=task_parameters: self.filter_engine_task_completed(task_name, current_layer, task_parameters))
@@ -205,7 +344,7 @@ class FilterMateApp:
                 self.appTasks[task_name].setDependentLayers([layer for layer in task_parameters["task"]["layers"]])
                 self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
-                self.appTasks[task_name].begun.connect(self.dockwidget.on_remove_layer_task_begun)
+                self.appTasks[task_name].begun.connect(self.on_remove_layer_task_begun)
             
             # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
@@ -225,12 +364,47 @@ class FilterMateApp:
             pass
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
+    def _safe_cancel_all_tasks(self):
+        """Safely cancel all tasks in the task manager to avoid access violations."""
+        try:
+            task_manager = QgsApplication.taskManager()
+            if task_manager and task_manager.count() > 0:
+                task_manager.cancelAll()
+        except Exception as e:
+            print(f"FilterMate: Warning - Could not cancel tasks: {e}")
+
     def on_remove_layer_task_begun(self):
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
     
 
     def get_task_parameters(self, task_name, data=None):
+        """
+        Build parameter dictionary for task execution.
+        
+        Constructs the complete parameter set needed by FilterEngineTask or
+        LayersManagementEngineTask, including layer properties, configuration,
+        and backend-specific settings.
+        
+        Args:
+            task_name (str): Name of the task requiring parameters
+            data: Task-specific input data (typically layers or properties)
+            
+        Returns:
+            dict: Complete task parameter dictionary with structure:
+                {
+                    'plugin_dir': str,
+                    'config_data': dict,
+                    'project': QgsProject,
+                    'project_layers': dict,
+                    'task': dict  # Task-specific parameters
+                }
+                
+        Notes:
+            - For filtering tasks: includes current layer and layers to filter
+            - For layer management: includes layers being added/removed
+            - Automatically detects PostgreSQL availability
+        """
 
         
 
@@ -343,6 +517,24 @@ class FilterMateApp:
 
 
     def filter_engine_task_completed(self, task_name, source_layer, task_parameters):
+        """
+        Handle completion of filtering operations.
+        
+        Called when FilterEngineTask completes successfully. Applies results to layers,
+        updates UI, saves layer variables, and shows success messages.
+        
+        Args:
+            task_name (str): Name of completed task ('filter', 'unfilter', 'reset')
+            source_layer (QgsVectorLayer): Primary layer that was filtered
+            task_parameters (dict): Original task parameters including results
+            
+        Notes:
+            - Applies subset filters to all affected layers
+            - Updates layer variables in Spatialite database
+            - Refreshes dockwidget UI state
+            - Shows success message with feature counts
+            - Handles both single and multi-layer filtering
+        """
 
         if task_name in ('filter','unfilter','reset'):
 
@@ -379,6 +571,24 @@ class FilterMateApp:
 
             self.iface.mapCanvas().refreshAllLayers()
             self.iface.mapCanvas().refresh()
+            
+            # Show success message with feature count
+            feature_count = source_layer.featureCount()
+            if task_name == 'filter':
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Filter applied successfully - {feature_count:,} features visible"
+                )
+            elif task_name == 'unfilter':
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Filter removed - {feature_count:,} features visible"
+                )
+            elif task_name == 'reset':
+                iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    f"Layer reset - {feature_count:,} features visible"
+                )
 
         extent = source_layer.extent()
         self.iface.mapCanvas().zoomToFeatureExtent(extent)  
@@ -387,10 +597,27 @@ class FilterMateApp:
 
 
     def apply_subset_filter(self, task_name, layer):
-        conn = None
-        cur = None
-        try:
-            conn = spatialite_connect(self.db_file_path)
+        """
+        Apply or remove subset filter expression on a layer.
+        
+        Retrieves filter expression from layer variables and applies it using
+        QgsVectorLayer.setSubsetString(). Handles both applying and removing filters.
+        
+        Args:
+            task_name (str): Type of operation ('filter', 'unfilter', 'reset')
+            layer (QgsVectorLayer): Layer to apply filter to
+            
+        Notes:
+            - For 'unfilter'/'reset': Clears subset string (shows all features)
+            - For 'filter': Applies expression from layer variables
+            - Expression is read from filterMate_filtering_layer_filter_expression variable
+            - Changes trigger layer refresh automatically
+        """
+        conn = self.get_spatialite_connection()
+        if conn is None:
+            return
+        
+        with conn:
             cur = conn.cursor()
 
             last_subset_string = ''
@@ -420,11 +647,6 @@ class FilterMateApp:
             elif task_name == 'reset':
                 layer.setSubsetString('')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-        finally:
-            if cur:
-                cur.close()
-            if conn:
-                conn.close()
 
 
         # layer_props = self.PROJECT_LAYERS[layer.id()]
@@ -470,6 +692,25 @@ class FilterMateApp:
 
 
     def save_variables_from_layer(self, layer, layer_properties=[]):
+        """
+        Save layer filtering properties to both QGIS variables and Spatialite database.
+        
+        Stores layer properties in two locations:
+        1. QGIS layer variables (for runtime access)
+        2. Spatialite database (for persistence across sessions)
+        
+        Args:
+            layer (QgsVectorLayer): Layer to save properties for
+            layer_properties (list): List of tuples (key_group, key, value, type)
+                Example: [('filtering', 'layer_filter_expression', 'population > 1000', 'str')]
+                
+        Notes:
+            - Uses parameterized SQL queries to prevent injection
+            - Converts string values to proper types before storing
+            - Creates filterMate_{key_group}_{key} variable names
+            - Stores in fm_project_layers_properties table
+            - Uses context manager for automatic connection cleanup
+        """
 
         layer_all_properties_flag = False
 
@@ -479,10 +720,11 @@ class FilterMateApp:
             layer_all_properties_flag = True
 
         if layer.id() in self.PROJECT_LAYERS.keys():
-            conn = None
-            cur = None
-            try:
-                conn = spatialite_connect(self.db_file_path)
+            conn = self.get_spatialite_connection()
+            if conn is None:
+                return
+            
+            with conn:
                 cur = conn.cursor()
 
                 if layer_all_properties_flag is True:
@@ -500,7 +742,6 @@ class FilterMateApp:
                                 (str(uuid.uuid4()), str(self.project_uuid), layer.id(), 
                                  key_group, key, str(value_typped))
                             )
-                            conn.commit()
 
                 else:
                     for layer_property in layer_properties:
@@ -519,14 +760,26 @@ class FilterMateApp:
                                     (str(uuid.uuid4()), str(self.project_uuid), layer.id(),
                                      layer_property[0], layer_property[1], str(value_typped))
                                 )
-                                conn.commit()
-            finally:
-                if cur:
-                    cur.close()
-                if conn:
-                    conn.close()
 
     def remove_variables_from_layer(self, layer, layer_properties=[]):
+        """
+        Remove layer filtering properties from QGIS variables and Spatialite database.
+        
+        Clears stored properties from both runtime variables and persistent storage.
+        Used when resetting filters or cleaning up removed layers.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to remove properties from
+            layer_properties (list): List of tuples (key_group, key, value, type)
+                If empty, removes ALL filterMate variables for the layer
+                
+        Notes:
+            - Sets QGIS variables to empty string (effectively removes them)
+            - Deletes corresponding rows from Spatialite database
+            - Uses parameterized queries for SQL injection protection
+            - Handles both selective and bulk removal
+            - Uses context manager for safe database operations
+        """
         
         layer_all_properties_flag = False
 
@@ -536,10 +789,11 @@ class FilterMateApp:
             layer_all_properties_flag = True
 
         if layer.id() in self.PROJECT_LAYERS.keys():
-            conn = None
-            cur = None
-            try:
-                conn = spatialite_connect(self.db_file_path)
+            conn = self.get_spatialite_connection()
+            if conn is None:
+                return
+            
+            with conn:
                 cur = conn.cursor()
 
                 if layer_all_properties_flag is True:
@@ -549,7 +803,6 @@ class FilterMateApp:
                            WHERE fk_project = ? and layer_id = ?""",
                         (str(self.project_uuid), layer.id())
                     )
-                    conn.commit()
                     QgsExpressionContextUtils.setLayerVariables(layer, {})
 
                 else:
@@ -564,14 +817,8 @@ class FilterMateApp:
                                     (str(self.project_uuid), layer.id(), 
                                      layer_property[0], layer_property[1])
                                 )
-                                conn.commit()
                                 variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                                 QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
-            finally:
-                if cur:
-                    cur.close()
-                if conn:
-                    conn.close()
 
       
 
@@ -584,12 +831,41 @@ class FilterMateApp:
     
 
     def init_filterMate_db(self):
+        """
+        Initialize FilterMate Spatialite database with required schema.
+        
+        Creates database file and tables if they don't exist. Sets up schema for
+        storing project configurations, layer properties, and datasource information.
+        
+        Tables created:
+        - fm_projects: Project metadata and UUIDs
+        - fm_project_layers_properties: Layer filtering/export settings
+        - fm_project_datasources: Data source connection info
+        
+        Notes:
+            - Database location: <project_dir>/.filterMate/<project_name>.db
+            - Enables Spatialite extension for spatial operations
+            - Idempotent: safe to call multiple times
+            - Sets up project UUID in QGIS variables
+            - Creates directory structure if missing
+        """
 
         if self.PROJECT != None and len(list(self.PROJECT.mapLayers().values())) > 0:
 
             self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
             self.project_file_path = self.PROJECT.absolutePath()
             
+            # Ensure database directory exists
+            db_dir = os.path.dirname(self.db_file_path)
+            if not os.path.exists(db_dir):
+                try:
+                    os.makedirs(db_dir, exist_ok=True)
+                    logger.info(f"Created database directory: {db_dir}")
+                except OSError as error:
+                    error_msg = f"Could not create database directory {db_dir}: {error}"
+                    logger.error(error_msg)
+                    iface.messageBar().pushCritical("FilterMate", error_msg)
+                    return
 
             logger.debug(f"Database file path: {self.db_file_path}")
 
@@ -611,98 +887,72 @@ class FilterMateApp:
                 layer = QgsVectorLayer(memory_uri, layer_name, "memory")
 
                 crs = QgsCoordinateReferenceSystem("epsg:4326")
-                QgsVectorFileWriter.writeAsVectorFormat(layer, self.db_file_path, "utf-8", crs, driverName="SQLite", datasourceOptions=["SPATIALITE=YES","SQLITE_MAX_LENGTH=100000000",])
+                
+                try:
+                    QgsVectorFileWriter.writeAsVectorFormat(layer, self.db_file_path, "utf-8", crs, driverName="SQLite", datasourceOptions=["SPATIALITE=YES","SQLITE_MAX_LENGTH=100000000",])
+                except Exception as error:
+                    error_msg = f"Failed to create database file {self.db_file_path}: {error}"
+                    logger.error(error_msg)
+                    iface.messageBar().pushCritical("FilterMate", error_msg)
+                    return
             
-                conn = spatialite_connect(self.db_file_path)
-                cur = conn.cursor()
+            conn = self.get_spatialite_connection()
+            if conn is None:
+                return
 
+            with conn:
+                cur = conn.cursor()
                 cur.execute("""PRAGMA foreign_keys = ON;""")
-                cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
-                                                                                                                                plugin_name='FilterMate',
-                                                                                                                                version='1.6'
-                                                                                                                                )
-                )
-
-                cur.execute("""CREATE TABLE fm_projects (
-                                project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                _created_at DATETIME NOT NULL,
-                                _updated_at DATETIME NOT NULL,
-                                project_name VARYING CHARACTER(255) NOT NULL,
-                                project_path VARYING CHARACTER(255) NOT NULL,
-                                project_settings TEXT NOT NULL);
-                                """)
-
-                cur.execute("""CREATE TABLE fm_subset_history (
-                                id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                _updated_at DATETIME NOT NULL,
-                                fk_project VARYING CHARACTER(255) NOT NULL,
-                                layer_id VARYING CHARACTER(255) NOT NULL,
-                                layer_source_id VARYING CHARACTER(255) NOT NULL,
-                                seq_order INTEGER NOT NULL,
-                                subset_string TEXT NOT NULL,
-                                FOREIGN KEY (fk_project)  
-                                REFERENCES fm_projects(project_id));
-                                """)
                 
-                cur.execute("""CREATE TABLE fm_project_layers_properties (
-                                id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                _updated_at DATETIME NOT NULL,
-                                fk_project VARYING CHARACTER(255) NOT NULL,
-                                layer_id VARYING CHARACTER(255) NOT NULL,
-                                meta_type VARYING CHARACTER(255) NOT NULL,
-                                meta_key VARYING CHARACTER(255) NOT NULL,
-                                meta_value TEXT NOT NULL,
-                                FOREIGN KEY (fk_project)  
-                                REFERENCES fm_projects(project_id),
-                                CONSTRAINT property_unicity
-                                UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                                """)
+                # Check if database is already initialized
+                cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_projects';""")
+                tables_exist = cur.fetchone()[0] > 0
                 
-                self.project_uuid = uuid.uuid4()
-            
-                cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
-                                                                                                                                                                    project_id=self.project_uuid,
-                                                                                                                                                                    project_name=self.project_file_name,
-                                                                                                                                                                    project_path=self.project_file_path,
-                                                                                                                                                                    project_settings=json.dumps(project_settings).replace("\'","\'\'")
-                                                                                                                                                                    )
-                )
+                if not tables_exist:
+                    # Initialize database only if tables don't exist
+                    cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
+                                                                                                                                    plugin_name='FilterMate',
+                                                                                                                                    version='1.6'
+                                                                                                                                    )
+                    )
 
-                conn.commit()
+                    cur.execute("""CREATE TABLE fm_projects (
+                                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                    _created_at DATETIME NOT NULL,
+                                    _updated_at DATETIME NOT NULL,
+                                    project_name VARYING CHARACTER(255) NOT NULL,
+                                    project_path VARYING CHARACTER(255) NOT NULL,
+                                    project_settings TEXT NOT NULL);
+                                    """)
 
-                QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-
-
-
-            else:
-                conn = spatialite_connect(self.db_file_path)
-                cur = conn.cursor()
-                cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
-                                                                                                                                                project_name=self.project_file_name,
-                                                                                                                                                project_path=self.project_file_path
-                                                                                                                                                )
-                )
-
-                results = cur.fetchall()
-
-                if len(results) == 1:
-                    result = results[0]
-                    project_settings = result[-1].replace("\'\'", "\'")
-                    self.project_uuid = result[0]
-                    self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
-                    QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-
-                    # cur.execute("""UPDATE fm_projects 
-                    #                 SET _updated_at = datetime(),
-                    #                     project_settings = '{project_settings}' 
-                    #                 WHERE project_id = '{project_id}'""".format(
-                    #                                                             project_settings=project_settings,
-                    #                                                             project_id=project_id
-                    #                                                             )
-                    # )
-
-                else:
+                    cur.execute("""CREATE TABLE fm_subset_history (
+                                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                    _updated_at DATETIME NOT NULL,
+                                    fk_project VARYING CHARACTER(255) NOT NULL,
+                                    layer_id VARYING CHARACTER(255) NOT NULL,
+                                    layer_source_id VARYING CHARACTER(255) NOT NULL,
+                                    seq_order INTEGER NOT NULL,
+                                    subset_string TEXT NOT NULL,
+                                    FOREIGN KEY (fk_project)  
+                                    REFERENCES fm_projects(project_id));
+                                    """)
+                    
+                    cur.execute("""CREATE TABLE fm_project_layers_properties (
+                                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                    _updated_at DATETIME NOT NULL,
+                                    fk_project VARYING CHARACTER(255) NOT NULL,
+                                    layer_id VARYING CHARACTER(255) NOT NULL,
+                                    meta_type VARYING CHARACTER(255) NOT NULL,
+                                    meta_key VARYING CHARACTER(255) NOT NULL,
+                                    meta_value TEXT NOT NULL,
+                                    FOREIGN KEY (fk_project)  
+                                    REFERENCES fm_projects(project_id),
+                                    CONSTRAINT property_unicity
+                                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
+                                    """)
+                    
                     self.project_uuid = uuid.uuid4()
+                
                     cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
                                                                                                                                                                         project_id=self.project_uuid,
                                                                                                                                                                         project_name=self.project_file_name,
@@ -710,9 +960,49 @@ class FilterMateApp:
                                                                                                                                                                         project_settings=json.dumps(project_settings).replace("\'","\'\'")
                                                                                                                                                                         )
                     )
-                    QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
 
-                conn.commit()
+                    conn.commit()
+                    
+                    # Set the project UUID for newly initialized database
+                    QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+                else:
+                    # Database already initialized, check if this project exists
+                    cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
+                                                                                                                                                    project_name=self.project_file_name,
+                                                                                                                                                    project_path=self.project_file_path
+                                                                                                                                                    )
+                    )
+
+                    results = cur.fetchall()
+
+                    if len(results) == 1:
+                        result = results[0]
+                        project_settings = result[-1].replace("\'\'", "\'")
+                        self.project_uuid = result[0]
+                        self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
+                        QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+
+                        # cur.execute("""UPDATE fm_projects 
+                        #                 SET _updated_at = datetime(),
+                        #                     project_settings = '{project_settings}' 
+                        #                 WHERE project_id = '{project_id}'""".format(
+                        #                                                             project_settings=project_settings,
+                        #                                                             project_id=project_id
+                        #                                                             )
+                        # )
+
+                    else:
+                        self.project_uuid = uuid.uuid4()
+                        cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+                                                                                                                                                                            project_id=self.project_uuid,
+                                                                                                                                                                            project_name=self.project_file_name,
+                                                                                                                                                                            project_path=self.project_file_path,
+                                                                                                                                                                            project_settings=json.dumps(project_settings).replace("\'","\'\'")
+                                                                                                                                                                            )
+                        )
+                        QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+
+                    conn.commit()
 
             cur.close()
             conn.close()
@@ -731,7 +1021,7 @@ class FilterMateApp:
 
         sql_statement = 'CREATE SCHEMA IF NOT EXISTS {app_temp_schema} AUTHORIZATION postgres;'.format(app_temp_schema=self.app_postgresql_temp_schema)
 
-        logger.debug(f\"SQL statement: {sql_statement}\")
+        logger.debug(f"SQL statement: {sql_statement}")
 
 
         with connexion.cursor() as cursor:
@@ -749,7 +1039,9 @@ class FilterMateApp:
             conn = None
             cur = None
             try:
-                conn = spatialite_connect(self.db_file_path)
+                conn = self.get_spatialite_connection()
+                if conn is None:
+                    return
                 cur = conn.cursor()
 
                 if name != None:
@@ -781,6 +1073,23 @@ class FilterMateApp:
 
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):
+        """
+        Handle completion of layer management tasks.
+        
+        Called when LayersManagementEngineTask completes. Updates internal layer registry,
+        refreshes UI, and handles layer addition/removal cleanup.
+        
+        Args:
+            result_project_layers (dict): Updated PROJECT_LAYERS dictionary with all layer metadata
+            task_name (str): Type of task completed ('add_layers', 'remove_layers', etc.)
+            
+        Notes:
+            - Updates dockwidget's PROJECT_LAYERS reference
+            - Calls get_project_layers_from_app() to refresh UI
+            - Handles special cases for layer removal and project reset
+            - Updates layer comboboxes and enables/disables controls
+            - Reconnects widget signals after changes
+        """
 
         init_env_vars()
 
@@ -800,7 +1109,11 @@ class FilterMateApp:
 
         if self.dockwidget != None:
 
-            conn = spatialite_connect(self.db_file_path)
+            conn = self.get_spatialite_connection()
+            if conn is None:
+                # Even if DB connection fails, we must update the UI
+                self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+                return
             cur = conn.cursor()
 
             if task_name in ("add_layers","remove_layers","remove_all_layers"):
@@ -823,6 +1136,11 @@ class FilterMateApp:
                         layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
                         if len(layers) == 1:
                             layer = layers[0]
+                        
+                        # Skip if layer not found
+                        if layer is None:
+                            continue
+                        
                         source_uri, authcfg_id = get_data_source_uri(layer)
 
                         if authcfg_id != None:
@@ -869,6 +1187,11 @@ class FilterMateApp:
                         layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
                         if len(layers) == 1:
                             layer = layers[0]
+                        
+                        # Skip if layer not found
+                        if layer is None:
+                            continue
+                        
                         source_uri, authcfg_id = get_data_source_uri(layer)
 
                         if authcfg_id != None:
@@ -923,8 +1246,7 @@ class FilterMateApp:
                 "FilterMate",
                 "PostgreSQL layers detected but psycopg2 is not installed. "
                 "Using local Spatialite backend. "
-                "For better performance with large datasets, install psycopg2.",
-                10
+                "For better performance with large datasets, install psycopg2."
             )
         else:
             self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""

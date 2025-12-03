@@ -1,4 +1,4 @@
-from qgis.core import QgsApplication, QgsProject, QgsUserProfileManager, QgsUserProfile
+from qgis.core import QgsApplication, QgsProject, QgsUserProfileManager, QgsUserProfile, QgsMessageLog, Qgis
 import os, sys
 import json
 
@@ -40,13 +40,14 @@ def init_env_vars():
         CONFIG_DATA = json.load(f)
 
     QGIS_SETTINGS_PATH = QgsApplication.qgisSettingsDirPath()
-    if QGIS_SETTINGS_PATH[-1] in ('\,/'):
-        QGIS_SETTINGS_PATH = QGIS_SETTINGS_PATH[:-1]
+    # Remove trailing separator if present
+    QGIS_SETTINGS_PATH = QGIS_SETTINGS_PATH.rstrip(os.sep).rstrip('/')
 
     if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != '':
         PLUGIN_CONFIG_DIRECTORY = os.path.normpath(CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"])
     else:
-        PLUGIN_CONFIG_DIRECTORY = os.path.normpath(QGIS_SETTINGS_PATH + '\FilterMate')
+        # Use os.path.join for proper cross-platform path construction
+        PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
         CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
         with open(DIR_CONFIG +  os.sep + 'config.json', 'w') as outfile:
             outfile.write(json.dumps(CONFIG_DATA, indent=4))
@@ -64,6 +65,10 @@ def init_env_vars():
         try:
             os.makedirs(PLUGIN_CONFIG_DIRECTORY, exist_ok = True)
         except OSError as error:
-            logger.warning(f"Could not create config directory {PLUGIN_CONFIG_DIRECTORY}: {error}")
+            QgsMessageLog.logMessage(
+                f"Could not create config directory {PLUGIN_CONFIG_DIRECTORY}: {error}",
+                "FilterMate",
+                Qgis.Warning
+            )
 
 

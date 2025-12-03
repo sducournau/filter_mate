@@ -226,26 +226,26 @@ def qgis_expression_to_spatialite(self, expression):
 ## Error Handling
 
 ### User-Facing Errors
-Use QGIS message bar for user feedback:
+Use QGIS message bar for user feedback. **Note: duration is a positional argument, not a keyword argument.**
 
 ```python
 from qgis.utils import iface
 
-# Success
-iface.messageBar().pushSuccess("FilterMate", "Filter applied successfully")
+# Success (with optional duration in seconds)
+iface.messageBar().pushSuccess("FilterMate", "Filter applied successfully", 3)
 
 # Info
-iface.messageBar().pushInfo("FilterMate", "Using Spatialite backend")
+iface.messageBar().pushInfo("FilterMate", "Using Spatialite backend", 3)
 
-# Warning
+# Warning (duration as positional argument)
 iface.messageBar().pushWarning(
     "FilterMate", 
     "Large dataset detected. Consider using PostgreSQL for better performance.",
-    duration=10
+    10
 )
 
 # Error
-iface.messageBar().pushCritical("FilterMate", f"Error: {str(error)}")
+iface.messageBar().pushCritical("FilterMate", f"Error: {str(error)}", 5)
 ```
 
 ### Development Errors

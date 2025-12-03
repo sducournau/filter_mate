@@ -75,6 +75,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         self.log_debug(f"Preparing OGR processing for {layer_props.get('layer_name', 'unknown')}")
         
+        # Store source_geom for later use in apply_filter
+        self.source_geom = source_geom
+        
         # For OGR, we'll use QGIS processing, so we just return predicate names
         # The actual filtering will be done in apply_filter()
         import json
@@ -98,7 +101,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Args:
             layer: Layer to filter
             expression: JSON parameters for processing
-            old_subset: Existing subset (not used for OGR)
+            old_subset: Existing subset (not used for OGR - uses selection instead)
             combine_operator: Combine operator (not used for OGR)
         
         Returns:
@@ -106,36 +109,125 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         try:
             import json
+            from qgis import processing
+            
             params = json.loads(expression) if expression else {}
+            predicates = params.get('predicates', [])
+            buffer_value = params.get('buffer_value')
             
             self.log_info(f"Applying OGR filter to {layer.name()} using QGIS processing")
             
-            # Use QGIS processing selectbylocation
-            # This will select features that match the spatial predicate
-            # The actual implementation would need access to the source layer
-            # which is stored in self.task_params
+            # Get source layer - should be set by build_expression
+            source_layer = getattr(self, 'source_geom', None)
+            if not source_layer:
+                self.log_error("No source layer/geometry provided for geometric filtering")
+                return False
             
-            # For now, we log a warning that OGR filtering is simplified
-            self.log_warning(
-                f"OGR backend uses QGIS processing. "
-                f"Performance may be reduced compared to PostgreSQL/Spatialite."
-            )
-            
-            # Warn for large datasets
+            # Warn about performance for OGR backend
             feature_count = layer.featureCount()
             if feature_count > 100000:
                 self.log_warning(
                     f"Very large dataset ({feature_count} features) with OGR provider. "
-                    "Consider using PostgreSQL for much better performance."
+                    "Performance may be reduced. Consider using PostgreSQL for better performance."
+                )
+            else:
+                self.log_info(
+                    f"OGR backend uses QGIS processing algorithms. "
+                    f"Performance acceptable for {feature_count} features."
                 )
             
-            # TODO: Implement actual QGIS processing call
-            # For now, return True to indicate the method structure is correct
-            self.log_info("OGR filter logic placeholder - needs full implementation")
-            return True
+            # Apply buffer to source layer if specified
+            intersect_layer = source_layer
+            if buffer_value and buffer_value > 0:
+                self.log_info(f"Applying buffer of {buffer_value} to source layer")
+                try:
+                    buffer_result = processing.run("native:buffer", {
+                        'INPUT': source_layer,
+                        'DISTANCE': buffer_value,
+                        'SEGMENTS': 5,
+                        'END_CAP_STYLE': 0,  # Round
+                        'JOIN_STYLE': 0,  # Round
+                        'MITER_LIMIT': 2,
+                        'DISSOLVE': False,
+                        'OUTPUT': 'memory:'
+                    })
+                    intersect_layer = buffer_result['OUTPUT']
+                    self.log_debug(f"Buffer applied successfully")
+                except Exception as buffer_error:
+                    self.log_error(f"Buffer operation failed: {str(buffer_error)}")
+                    return False
+            
+            # Map predicate names to QGIS processing predicate codes
+            # 0: intersect, 1: contain, 2: disjoint, 3: equal, 4: touch, 5: overlap, 6: within, 7: cross
+            predicate_map = {
+                'intersects': [0],
+                'contains': [1],
+                'disjoint': [2],
+                'equal': [3],
+                'touches': [4],
+                'overlaps': [5],
+                'within': [6],
+                'crosses': [7]
+            }
+            
+            # Convert predicate names to codes
+            predicate_codes = []
+            for pred in predicates:
+                if pred in predicate_map:
+                    predicate_codes.extend(predicate_map[pred])
+            
+            if not predicate_codes:
+                # Default to intersects if no predicates specified
+                predicate_codes = [0]
+                self.log_info("No predicates specified, defaulting to 'intersects'")
+            
+            # Apply selectbylocation to select features
+            self.log_info(f"Selecting features using predicates: {predicate_codes}")
+            try:
+                select_result = processing.run("native:selectbylocation", {
+                    'INPUT': layer,
+                    'PREDICATE': predicate_codes,
+                    'INTERSECT': intersect_layer,
+                    'METHOD': 0  # creating new selection
+                })
+                
+                selected_count = layer.selectedFeatureCount()
+                self.log_info(f"Selection complete: {selected_count} features selected")
+                
+                # Convert selection to subset filter using selected feature IDs
+                # This allows the filter to persist even after deselection
+                if selected_count > 0:
+                    selected_ids = [f.id() for f in layer.selectedFeatures()]
+                    # Build subset string with feature IDs
+                    # Use $id for QGIS internal feature ID
+                    id_list = ','.join(str(fid) for fid in selected_ids)
+                    subset_expression = f"$id IN ({id_list})"
+                    
+                    # Apply subset filter
+                    result = layer.setSubsetString(subset_expression)
+                    if result:
+                        self.log_info(f"Subset filter applied: {layer.featureCount()} features match")
+                        # Clear selection after applying filter
+                        layer.removeSelection()
+                        return True
+                    else:
+                        self.log_error("Failed to apply subset filter")
+                        layer.removeSelection()
+                        return False
+                else:
+                    self.log_warning("No features selected by geometric filter")
+                    # Still apply empty filter to show no results
+                    layer.setSubsetString("$id IN ()")
+                    return True
+                
+            except Exception as select_error:
+                self.log_error(f"Select by location failed: {str(select_error)}")
+                return False
             
         except Exception as e:
             self.log_error(f"Error applying OGR filter: {str(e)}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
             return False
     
     def get_backend_name(self) -> str:

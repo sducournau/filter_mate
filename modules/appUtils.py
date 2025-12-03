@@ -3,8 +3,8 @@ import logging
 import os
 
 # Import logging configuration
-from modules.logging_config import setup_logger
-from config.config import ENV_VARS
+from .logging_config import setup_logger
+from ..config.config import ENV_VARS
 
 # Setup logger with rotation
 logger = setup_logger(
@@ -50,6 +50,7 @@ def detect_layer_provider_type(layer):
     
     Handles the distinction between Spatialite and OGR layers, as both
     can report 'ogr' as providerType() but Spatialite layers have 'Transactions' capability.
+    Also checks file extension to detect .sqlite files as Spatialite.
     
     Args:
         layer (QgsVectorLayer): QGIS vector layer
@@ -74,7 +75,13 @@ def detect_layer_provider_type(layer):
     elif provider_type == PROVIDER_MEMORY:
         return 'memory'
     elif provider_type == PROVIDER_OGR:
-        # Check if it's actually Spatialite masquerading as OGR
+        # Check file extension first - .sqlite files are Spatialite
+        source = layer.source()
+        source_path = source.split('|')[0] if '|' in source else source
+        if source_path.lower().endswith('.sqlite'):
+            return 'spatialite'
+        
+        # Check if it's Spatialite via 'Transactions' capability
         capabilities = layer.capabilitiesString().split(', ')
         if 'Transactions' in capabilities:
             return 'spatialite'
@@ -82,6 +89,11 @@ def detect_layer_provider_type(layer):
             return 'ogr'
     else:
         # Fallback for OGR-like providers
+        source = layer.source()
+        source_path = source.split('|')[0] if '|' in source else source
+        if source_path.lower().endswith('.sqlite'):
+            return 'spatialite'
+        
         capabilities = layer.capabilitiesString().split(', ')
         if 'Transactions' in capabilities:
             return 'spatialite'
@@ -163,9 +175,20 @@ def get_datasource_connexion_from_layer(layer):
     return connexion, source_uri
 
 def get_data_source_uri(layer):
-
+    """
+    Extract data source URI and authentication config ID from a layer.
+    
+    Args:
+        layer: QgsVectorLayer or None
+    
+    Returns:
+        tuple: (source_uri, authcfg_id) or (None, None) if layer is None
+    """
+    if layer is None:
+        return None, None
+    
     source_uri = QgsDataSourceUri(layer.source()) if str(QgsDataSourceUri(layer.source())) != '' else None
-    authcfg_id = source_uri.param('authcfg') if str(source_uri.param('authcfg')) != '' else None
+    authcfg_id = source_uri.param('authcfg') if source_uri and str(source_uri.param('authcfg')) != '' else None
     return source_uri, authcfg_id
 
 

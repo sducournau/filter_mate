@@ -9,8 +9,8 @@ import logging
 import os
 
 # Import logging configuration
-from modules.logging_config import setup_logger
-from config.config import ENV_VARS
+from .logging_config import setup_logger, safe_log
+from ..config.config import ENV_VARS
 
 # Setup logger with rotation
 logger = setup_logger(
@@ -29,7 +29,7 @@ except ImportError:
     logger.warning("PostgreSQL support disabled (psycopg2 not found)")
 
 # Import backend architecture
-from modules.backends import BackendFactory
+from .backends import BackendFactory
 
 import uuid
 from collections import OrderedDict
@@ -44,6 +44,104 @@ import json
 from ..config.config import *
 from .appUtils import *
 from qgis.utils import iface
+
+def get_best_metric_crs(project, source_crs):
+    """
+    Détermine le meilleur CRS métrique à utiliser pour les calculs.
+    Priorité:
+    1. CRS du projet s'il est métrique
+    2. CRS suggéré par QGIS basé sur l'emprise
+    3. EPSG:3857 (Web Mercator) par défaut
+    
+    Args:
+        project: QgsProject instance
+        source_crs: QgsCoordinateReferenceSystem du layer source
+    
+    Returns:
+        str: authid du CRS métrique optimal (ex: 'EPSG:3857')
+    """
+    # 1. Vérifier le CRS du projet
+    project_crs = project.crs()
+    if project_crs and not project_crs.isGeographic():
+        # Le CRS du projet est métrique, l'utiliser
+        map_units = project_crs.mapUnits()
+        if map_units not in [QgsUnitTypes.DistanceUnit.Degrees, QgsUnitTypes.DistanceUnit.Unknown]:
+            logger.info(f"Using project CRS for metric calculations: {project_crs.authid()}")
+            return project_crs.authid()
+    
+    # 2. Essayer d'obtenir un CRS suggéré basé sur l'emprise
+    if source_crs and hasattr(QgsCoordinateReferenceSystem, 'createFromWkt'):
+        try:
+            # Obtenir les limites du layer
+            extent = None
+            if hasattr(source_crs, 'bounds'):
+                extent = source_crs.bounds()
+            
+            # Si possible, obtenir un CRS UTM approprié basé sur la longitude centrale
+            if extent and extent.isFinite():
+                center_lon = (extent.xMinimum() + extent.xMaximum()) / 2
+                center_lat = (extent.yMinimum() + extent.yMaximum()) / 2
+                
+                # Calculer la zone UTM
+                utm_zone = int((center_lon + 180) / 6) + 1
+                
+                # Déterminer si hémisphère nord ou sud
+                if center_lat >= 0:
+                    # Hémisphère nord
+                    utm_epsg = 32600 + utm_zone
+                else:
+                    # Hémisphère sud
+                    utm_epsg = 32700 + utm_zone
+                
+                utm_crs = QgsCoordinateReferenceSystem(f"EPSG:{utm_epsg}")
+                if utm_crs.isValid():
+                    logger.info(f"Using calculated UTM CRS for metric calculations: EPSG:{utm_epsg}")
+                    return f"EPSG:{utm_epsg}"
+        except Exception as e:
+            logger.debug(f"Could not calculate optimal UTM CRS: {e}")
+    
+    # 3. Par défaut, utiliser Web Mercator (EPSG:3857)
+    logger.info("Using default Web Mercator (EPSG:3857) for metric calculations")
+    return "EPSG:3857"
+
+
+def should_reproject_layer(layer, target_crs_authid):
+    """
+    Détermine si un layer doit être reprojeté vers le CRS cible.
+    
+    Args:
+        layer: QgsVectorLayer à vérifier
+        target_crs_authid: CRS cible (ex: 'EPSG:3857')
+    
+    Returns:
+        bool: True si reprojection nécessaire
+    """
+    if not layer or not target_crs_authid:
+        return False
+    
+    layer_crs = layer.sourceCrs()
+    
+    # Vérifier si les CRS sont différents
+    if layer_crs.authid() == target_crs_authid:
+        logger.debug(f"Layer {layer.name()} already in target CRS {target_crs_authid}")
+        return False
+    
+    # Vérifier si le CRS du layer est géographique
+    if layer_crs.isGeographic():
+        logger.info(f"Layer {layer.name()} has geographic CRS {layer_crs.authid()}, will reproject to {target_crs_authid}")
+        return True
+    
+    # Vérifier les unités de distance
+    map_units = layer_crs.mapUnits()
+    if map_units in [QgsUnitTypes.DistanceUnit.Degrees, QgsUnitTypes.DistanceUnit.Unknown]:
+        logger.info(f"Layer {layer.name()} has non-metric units, will reproject to {target_crs_authid}")
+        return True
+    
+    # Le layer est déjà dans un CRS métrique mais différent
+    # Pour la cohérence, reprojetons quand même vers le CRS cible commun
+    logger.info(f"Layer {layer.name()} will be reprojected from {layer_crs.authid()} to {target_crs_authid} for consistency")
+    return True
+
 
 MESSAGE_TASKS_CATEGORIES = {
                             'filter':'FilterLayers',
@@ -103,6 +201,9 @@ class FilterEngineTask(QgsTask):
         self.postgresql_source_geom = None
         self.spatialite_source_geom = None
         self.ogr_source_geom = None
+        
+        # Store subset result for thread-safe application
+        self._pending_subset_result = None
 
         self.current_predicates = {}
         self.outputs = {}
@@ -114,6 +215,63 @@ class FilterEngineTask(QgsTask):
         
         # Track active database connections for cleanup on cancellation
         self.active_connections = []
+
+    
+    def _ensure_db_directory_exists(self):
+        """
+        Ensure the database directory exists before connecting.
+        
+        Raises:
+            OSError: If directory cannot be created
+            ValueError: If db_file_path is invalid
+        """
+        if not self.db_file_path:
+            raise ValueError("db_file_path is not set")
+        
+        # Normalize path to handle any separator inconsistencies
+        normalized_path = os.path.normpath(self.db_file_path)
+        db_dir = os.path.dirname(normalized_path)
+        
+        if not db_dir:
+            raise ValueError(f"Invalid database path: {self.db_file_path}")
+        
+        if os.path.exists(db_dir):
+            # Directory already exists, check if it's writable
+            if not os.access(db_dir, os.W_OK):
+                raise OSError(f"Database directory exists but is not writable: {db_dir}")
+            logger.debug(f"Database directory exists: {db_dir}")
+        else:
+            # Create directory with all intermediate directories
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"Created database directory: {db_dir}")
+            except OSError as e:
+                error_msg = f"Failed to create database directory '{db_dir}': {e}"
+                logger.error(error_msg)
+                logger.error(f"Original db_file_path: {self.db_file_path}")
+                logger.error(f"Normalized path: {normalized_path}")
+                raise OSError(error_msg) from e
+    
+    
+    def _safe_spatialite_connect(self):
+        """
+        Safely connect to Spatialite database, ensuring directory exists.
+        
+        Returns:
+            sqlite3.Connection: Database connection
+            
+        Raises:
+            OSError: If directory cannot be created
+            sqlite3.OperationalError: If database cannot be opened
+        """
+        self._ensure_db_directory_exists()
+        
+        try:
+            conn = spatialite_connect(self.db_file_path)
+            return conn
+        except Exception as e:
+            logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
+            raise
 
     def run(self):
         """Main function that run the right method from init parameters"""
@@ -128,9 +286,20 @@ class FilterEngineTask(QgsTask):
                 source_crs_distance_unit = self.source_crs.mapUnits()
                 self.source_layer_crs_authid = self.task_parameters["infos"]["layer_crs_authid"]
                 
+                # Vérifier si le CRS source est géographique ou non métrique
                 if source_crs_distance_unit in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] or self.source_crs.isGeographic() is True:
                     self.has_to_reproject_source_layer = True
-                    self.source_layer_crs_authid = "EPSG:3857"
+                    # Utiliser la fonction pour obtenir le meilleur CRS métrique
+                    self.source_layer_crs_authid = get_best_metric_crs(self.PROJECT, self.source_crs)
+                    logger.info(f"Source layer will be reprojected to {self.source_layer_crs_authid} for metric calculations")
+                else:
+                    # Le CRS est déjà métrique, vérifier s'il est optimal
+                    logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
+                    # Optionnel: toujours utiliser le meilleur CRS pour la cohérence
+                    # best_crs = get_best_metric_crs(self.PROJECT, self.source_crs)
+                    # if best_crs != self.source_layer_crs_authid:
+                    #     self.has_to_reproject_source_layer = True
+                    #     self.source_layer_crs_authid = best_crs
 
 
 
@@ -161,9 +330,29 @@ class FilterEngineTask(QgsTask):
             # Set initial progress
             self.setProgress(0)
             logger.info(f"Starting {self.task_action} task for {self.layers_count} layer(s)")
-
+            
+            # Add backend indicator and performance warnings
             if self.task_action == 'filter':
                 """We will filter layers"""
+                
+                # Determine active backend
+                backend_name = "Memory/QGIS"
+                if POSTGRESQL_AVAILABLE and self.param_source_provider_type == 'postgresql':
+                    backend_name = "PostgreSQL/PostGIS"
+                elif self.param_source_provider_type == 'spatialite':
+                    backend_name = "Spatialite"
+                elif self.param_source_provider_type == 'ogr':
+                    backend_name = "OGR"
+                
+                logger.info(f"Using {backend_name} backend for filtering")
+                
+                # Performance warning for large datasets without PostgreSQL
+                feature_count = self.source_layer.featureCount()
+                if feature_count > 50000 and not (POSTGRESQL_AVAILABLE and self.param_source_provider_type == 'postgresql'):
+                    logger.warning(
+                        f"Large dataset detected ({feature_count:,} features) without PostgreSQL backend. "
+                        "Performance may be reduced. Consider using PostgreSQL/PostGIS for optimal performance."
+                    )
 
                 result = self.execute_filtering()
                 if self.isCanceled() or result is False:
@@ -200,7 +389,7 @@ class FilterEngineTask(QgsTask):
     
         except Exception as e:
             self.exception = e
-            logger.error(f'FilterEngineTask run() failed: {e}', exc_info=True)
+            safe_log(logger, logging.ERROR, f'FilterEngineTask run() failed: {e}', exc_info=True)
             return False
 
 
@@ -215,6 +404,9 @@ class FilterEngineTask(QgsTask):
         self.param_source_layer_id = self.task_parameters["infos"]["layer_id"]
         self.param_source_geom = self.task_parameters["infos"]["geometry_field"]
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
+        
+        # Log filtering details for debugging and user feedback
+        logger.debug(f"Filtering layer: {self.param_source_table} (Provider: {self.param_source_provider_type})")
         self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
         self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
 
@@ -296,7 +488,8 @@ class FilterEngineTask(QgsTask):
                     
                     # if validation_check[0] is True:
 
-                    result = self.source_layer.setSubsetString(self.expression)
+                    # CRITICAL FIX: setSubsetString must be called from main thread to avoid crash
+                    result = self._safe_set_subset_string(self.source_layer, self.expression)
                     if result is True:
                         expression = 'SELECT "{param_source_table}"."{primary_key_name}", "{param_source_table}"."{param_source_geom}" FROM "{param_source_schema}"."{param_source_table}" WHERE {expression}'.format(
                                                                                                                                                                                                                         primary_key_name=self.primary_key_name,
@@ -331,7 +524,8 @@ class FilterEngineTask(QgsTask):
                 # print(validation_check)
                 # if validation_check[0] is True:
 
-                result = self.source_layer.setSubsetString(self.expression)
+                # CRITICAL FIX: setSubsetString must be called from main thread to avoid crash
+                result = self._safe_set_subset_string(self.source_layer, self.expression)
                 if result is True:
                     expression = 'SELECT "{param_source_table}"."{primary_key_name}", "{param_source_table}"."{param_source_geom}" FROM "{param_source_schema}"."{param_source_table}" WHERE {expression}'.format(
                                                                                                                                                                                                                     primary_key_name=self.primary_key_name,
@@ -345,6 +539,48 @@ class FilterEngineTask(QgsTask):
 
 
         return result
+    
+    def _safe_set_subset_string(self, layer, expression):
+        """
+        Thread-safe wrapper for layer.setSubsetString().
+        
+        CRITICAL: setSubsetString() MUST be called from the main Qt thread.
+        Calling it from QgsTask thread causes QGIS crashes (access violation).
+        
+        Args:
+            layer: QgsVectorLayer to filter
+            expression: Filter expression string
+        
+        Returns:
+            bool: True if filter applied successfully
+        """
+        from qgis.PyQt.QtCore import QTimer, QEventLoop
+        import time
+        
+        # Store result for thread-safe return
+        self._pending_subset_result = None
+        
+        def apply_subset():
+            """Inner function executed in main thread"""
+            try:
+                result = layer.setSubsetString(expression)
+                self._pending_subset_result = result
+                return result
+            except Exception as e:
+                logger.error(f"Failed to apply subset string: {e}")
+                self._pending_subset_result = False
+                return False
+        
+        # Execute in main thread using QTimer.singleShot
+        QTimer.singleShot(0, apply_subset)
+        
+        # Wait for result with timeout (max 10 seconds)
+        timeout = 100  # 10 seconds (100 * 100ms)
+        while self._pending_subset_result is None and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 1
+        
+        return self._pending_subset_result if self._pending_subset_result is not None else False
     
     def manage_distant_layers_geometric_filtering(self):
         """Filter layers from a prefiltered layer"""
@@ -373,8 +609,22 @@ class FilterEngineTask(QgsTask):
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
             logger.info("Preparing PostgreSQL source geometry...")
             self.prepare_postgresql_source_geom()
+        
+        # Prepare Spatialite source geometry (WKT string)
+        if 'spatialite' in provider_list:
+            logger.info("Preparing Spatialite source geometry...")
+            try:
+                self.prepare_spatialite_source_geom()
+                if not hasattr(self, 'spatialite_source_geom') or self.spatialite_source_geom is None:
+                    logger.error("Failed to prepare Spatialite source geometry - no geometry generated")
+                    return False
+            except Exception as e:
+                logger.error(f"Error preparing Spatialite source geometry: {e}")
+                import traceback
+                logger.debug(f"Traceback: {traceback.format_exc()}")
+                return False
 
-        if 'ogr' in provider_list or 'spatialite' in provider_list or self.param_buffer_expression != '':
+        if 'ogr' in provider_list or self.param_buffer_expression != '':
             logger.info("Preparing OGR/Spatialite source geometry...")
             self.prepare_ogr_source_geom()
 
@@ -530,33 +780,79 @@ class FilterEngineTask(QgsTask):
 
 
     def prepare_spatialite_source_geom(self):
-
-        raw_geometries = [feature.geometry() for feature in self.task_parameters["task"]["features"] if feature.hasGeometry()]
+        """
+        Prepare source geometry for Spatialite filtering.
+        
+        Converts selected features to WKT format for use in Spatialite spatial queries.
+        Handles reprojection and buffering if needed.
+        """
+        # Get features from task parameters
+        features = self.task_parameters["task"]["features"]
+        logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
+        
+        raw_geometries = [feature.geometry() for feature in features if feature.hasGeometry()]
+        logger.debug(f"prepare_spatialite_source_geom: {len(raw_geometries)} geometries with geometry")
+        
+        if len(raw_geometries) == 0:
+            logger.error("prepare_spatialite_source_geom: No geometries found in source features")
+            self.spatialite_source_geom = None
+            return
+        
         geometries = []
 
         if self.has_to_reproject_source_layer is True:
-            transform = QgsCoordinateTransform(QgsCoordinateReferenceSystem(self.source_crs.authid()), QgsCoordinateReferenceSystem( self.source_layer_crs_authid), self.PROJECT)
+            transform = QgsCoordinateTransform(
+                QgsCoordinateReferenceSystem(self.source_crs.authid()), 
+                QgsCoordinateReferenceSystem(self.source_layer_crs_authid), 
+                self.PROJECT
+            )
+            logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
 
         for geometry in raw_geometries:
             if geometry.isEmpty() is False:
-                if geometry.isMultipart():
-                    geometry.convertToSingleType()
+                # Make a copy to avoid modifying original
+                geom_copy = QgsGeometry(geometry)
+                
+                if geom_copy.isMultipart():
+                    geom_copy.convertToSingleType()
+                    
                 if self.has_to_reproject_source_layer is True:
-                    geometry.transform(transform)
-                if self.param_buffer_value != None:
-                    geometry = geometry.buffer(self.param_buffer_value, 5)
-                geometries.append(geometry)
+                    geom_copy.transform(transform)
+                    
+                if self.param_buffer_value is not None and self.param_buffer_value > 0:
+                    geom_copy = geom_copy.buffer(self.param_buffer_value, 5)
+                    logger.debug(f"Applied buffer of {self.param_buffer_value}")
+                    
+                geometries.append(geom_copy)
 
-        collected_geometry = QgsGeometry().collectGeometry(geometries)
-        self.spatialite_source_geom = collected_geometry.asWkt().strip()
+        if len(geometries) == 0:
+            logger.error("prepare_spatialite_source_geom: No valid geometries after processing")
+            self.spatialite_source_geom = None
+            return
 
-        logger.debug(f"prepare_spatialite_source_geom: {self.spatialite_source_geom}") 
+        # Collect all geometries into one
+        collected_geometry = QgsGeometry.collectGeometry(geometries)
+        wkt = collected_geometry.asWkt()
+        
+        # Escape single quotes for SQL
+        self.spatialite_source_geom = wkt.replace("'", "''")
+
+        logger.debug(f"prepare_spatialite_source_geom: WKT length = {len(self.spatialite_source_geom)} chars")
+        logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...") 
 
 
     def prepare_ogr_source_geom(self):
 
         layer = self.source_layer
         param_buffer_distance = None 
+
+        # Fix invalid geometries from source layer to prevent processing errors
+        alg_params_fixgeometries_source = {
+            'INPUT': layer,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        self.outputs['alg_source_layer_params_fixgeometries_source'] = processing.run('qgis:fixgeometries', alg_params_fixgeometries_source)
+        layer = self.outputs['alg_source_layer_params_fixgeometries_source']['OUTPUT']
 
         if self.has_to_reproject_source_layer is True:
         
@@ -567,6 +863,14 @@ class FilterEngineTask(QgsTask):
             }
             self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_source_layer_params_reprojectlayer)
             layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
+
+            # Fix invalid geometries after reprojection
+            alg_params_fixgeometries = {
+                'INPUT': layer,
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+            }
+            self.outputs['alg_source_layer_params_fixgeometries_reproject'] = processing.run('qgis:fixgeometries', alg_params_fixgeometries)
+            layer = self.outputs['alg_source_layer_params_fixgeometries_reproject']['OUTPUT']
 
             alg_params_createspatialindex = {
                 "INPUT": layer
@@ -581,24 +885,130 @@ class FilterEngineTask(QgsTask):
             else:
                 param_buffer_distance = float(self.param_buffer_value)   
 
-            alg_source_layer_params_buffer = {
-                'DISSOLVE': True,
-                'DISTANCE': param_buffer_distance,
-                'END_CAP_STYLE': 0,
-                'INPUT': layer,
-                'JOIN_STYLE': 0,
-                'MITER_LIMIT': 2,
-                'SEGMENTS': 5,
-                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-            }
+            # Try QGIS buffer algorithm first, fallback to manual buffer if it fails
+            try:
+                # Fix invalid geometries before buffer operation
+                alg_params_fixgeometries = {
+                    'INPUT': layer,
+                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+                }
+                self.outputs['alg_source_layer_params_fixgeometries_buffer'] = processing.run('qgis:fixgeometries', alg_params_fixgeometries)
+                layer = self.outputs['alg_source_layer_params_fixgeometries_buffer']['OUTPUT']
+                
+                # Log layer info before buffer
+                logger.debug(f"Layer before buffer: {layer.featureCount()} features, "
+                           f"CRS: {layer.crs().authid()}, "
+                           f"Geometry type: {layer.geometryType()}")
 
-            self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_source_layer_params_buffer)
-            layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']   
+                alg_source_layer_params_buffer = {
+                    'DISSOLVE': True,
+                    'DISTANCE': param_buffer_distance,
+                    'END_CAP_STYLE': 0,
+                    'INPUT': layer,
+                    'JOIN_STYLE': 0,
+                    'MITER_LIMIT': 2,
+                    'SEGMENTS': 5,
+                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+                }
 
-            alg_params_createspatialindex = {
-                "INPUT": layer
-            }
-            processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+                self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_source_layer_params_buffer)
+                layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']   
+
+                alg_params_createspatialindex = {
+                    "INPUT": layer
+                }
+                processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+                
+            except Exception as e:
+                # Fallback: manual buffer using QgsGeometry
+                logger.warning(f"QGIS buffer algorithm failed: {str(e)}, using manual buffer approach")
+                
+                # Check if layer has features
+                feature_count = layer.featureCount()
+                logger.debug(f"Layer has {feature_count} features before manual buffer")
+                
+                if feature_count == 0:
+                    raise Exception(f"Cannot buffer layer: source layer has no features. Original error: {str(e)}")
+                
+                # Determine buffer distance
+                if isinstance(param_buffer_distance, QgsProperty):
+                    # For expression-based buffer, use first feature to evaluate
+                    features = list(layer.getFeatures())
+                    if features:
+                        context = QgsExpressionContext()
+                        context.setFeature(features[0])
+                        buffer_dist = param_buffer_distance.value(context, 0)
+                    else:
+                        buffer_dist = 0
+                else:
+                    buffer_dist = param_buffer_distance
+                
+                logger.debug(f"Manual buffer distance: {buffer_dist}")
+                
+                # Create memory layer for buffered geometries
+                geom_type = "Polygon" if layer.geometryType() in [0, 1] else "MultiPolygon"
+                buffered_layer = QgsVectorLayer(
+                    f"{geom_type}?crs={layer.crs().authid()}",
+                    "buffered_temp",
+                    "memory"
+                )
+                
+                provider = buffered_layer.dataProvider()
+                
+                # Buffer each feature and collect geometries
+                geometries = []
+                valid_features = 0
+                invalid_features = 0
+                
+                for feature in layer.getFeatures():
+                    geom = feature.geometry()
+                    if geom and not geom.isEmpty():
+                        try:
+                            # Make valid before buffer
+                            if not geom.isGeosValid():
+                                geom = geom.makeValid()
+                            
+                            # Apply buffer
+                            buffered_geom = geom.buffer(float(buffer_dist), 5)
+                            
+                            if buffered_geom and not buffered_geom.isEmpty():
+                                geometries.append(buffered_geom)
+                                valid_features += 1
+                            else:
+                                invalid_features += 1
+                        except Exception as feat_error:
+                            logger.debug(f"Skipping invalid feature during manual buffer: {feat_error}")
+                            invalid_features += 1
+                            continue
+                    else:
+                        invalid_features += 1
+                
+                logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
+                
+                # Dissolve all geometries into one
+                if geometries:
+                    dissolved_geom = QgsGeometry.unaryUnion(geometries)
+                    
+                    # Create feature with dissolved geometry
+                    feat = QgsFeature()
+                    feat.setGeometry(dissolved_geom)
+                    provider.addFeatures([feat])
+                    
+                    buffered_layer.updateExtents()
+                    layer = buffered_layer
+                    
+                    # Create spatial index
+                    alg_params_createspatialindex = {
+                        "INPUT": layer
+                    }
+                    processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+                else:
+                    error_msg = (f"No valid geometries could be buffered. "
+                                f"Total features: {feature_count}, "
+                                f"Valid after buffer: {valid_features}, "
+                                f"Invalid: {invalid_features}. "
+                                f"Original QGIS error: {str(e)}")
+                    raise Exception(error_msg)
 
 
         self.ogr_source_geom = layer
@@ -635,17 +1045,9 @@ class FilterEngineTask(QgsTask):
         # No spatial index - create one
         logger.info(f"Creating spatial index for layer: {display_name}")
         
-        # Notify user via message bar
-        try:
-            from qgis.utils import iface
-            iface.messageBar().pushMessage(
-                "FilterMate - Performance",
-                f"Creating spatial index for '{display_name}' to improve performance...",
-                Qgis.Info,
-                duration=5
-            )
-        except Exception as e:
-            logger.debug(f"Could not display message bar: {e}")
+        # NOTE: Cannot display message bar from worker thread - would cause crash
+        # Message bar operations MUST run in main thread
+        # Spatial index creation is logged instead
         
         # Create spatial index
         try:
@@ -683,15 +1085,19 @@ class FilterEngineTask(QgsTask):
             distant_geometry_field=param_distant_geometry_field
         )
         
+        # Utiliser le CRS métrique du source layer pour tous les calculs
+        target_crs_srid = self.source_layer_crs_authid.split(':')[1] if hasattr(self, 'source_layer_crs_authid') else '3857'
+        
         for postgis_predicate in postgis_predicates:
             current_geom_expr = param_distant_geom_expression
             
             if param_has_to_reproject_layer:
-                current_geom_expr = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid}) as {geometry_field}'.format(
+                # Reprojeter le layer distant dans le même CRS métrique que le source
+                current_geom_expr = 'ST_Transform({param_distant_geom_expression}, {target_crs_srid})'.format(
                     param_distant_geom_expression=param_distant_geom_expression,
-                    param_layer_srid=param_layer_crs_authid.split(':')[1],
-                    geometry_field=param_distant_geometry_field
+                    target_crs_srid=target_crs_srid
                 )
+                logger.debug(f"Layer will be reprojected to {self.source_layer_crs_authid} for comparison")
             
             postgis_sub_expression_array.append(
                 postgis_predicate + '({source_sub_expression_geom},{param_distant_geom_expression})'.format(
@@ -833,9 +1239,10 @@ class FilterEngineTask(QgsTask):
             
             if self.param_other_layers_combine_operator == 'OR':
                 self._verify_and_create_spatial_index(current_layer)
-                current_layer.setSubsetString(param_old_subset)
+                # CRITICAL FIX: Thread-safe subset string application
+                self._safe_set_subset_string(current_layer, param_old_subset)
                 current_layer.selectAll()
-                current_layer.setSubsetString('')
+                self._safe_set_subset_string(current_layer, '')
                 
                 alg_params_select = {
                     'INPUT': current_layer,
@@ -1097,7 +1504,7 @@ class FilterEngineTask(QgsTask):
             return result
             
         except Exception as e:
-            logger.error(f"Error in execute_geometric_filtering for {layer.name()}: {e}", exc_info=True)
+            safe_log(logger, logging.ERROR, f"Error in execute_geometric_filtering for {layer.name()}: {e}", exc_info=True)
             return False
     
     def _get_combine_operator(self):
@@ -1127,13 +1534,21 @@ class FilterEngineTask(QgsTask):
             layer_provider_type: Target layer provider type
         
         Returns:
-            str: Source geometry expression or layer reference
+            Source geometry (type depends on provider):
+            - PostgreSQL: SQL expression string
+            - Spatialite: WKT string  
+            - OGR: QgsVectorLayer
         """
         if layer_provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
             if hasattr(self, 'postgresql_source_geom'):
                 return self.postgresql_source_geom
         
-        # For OGR/Spatialite, return the source layer or geometry
+        # For Spatialite, return WKT string
+        if layer_provider_type == 'spatialite':
+            if hasattr(self, 'spatialite_source_geom'):
+                return self.spatialite_source_geom
+        
+        # For OGR, return the source layer
         if hasattr(self, 'ogr_source_geom'):
             return self.ogr_source_geom
         
@@ -1142,343 +1557,6 @@ class FilterEngineTask(QgsTask):
             return self.source_layer
         
         return None
-            # and (self.param_buffer_expression == None or self.param_buffer_expression == '')    
-            postgis_sub_expression_array = []
-            for postgis_predicate in postgis_predicates:
-
-
-                param_distant_geom_expression = '"{distant_table}"."{distant_geometry_field}"'.format(distant_table=param_distant_table,
-                                                                                                        distant_geometry_field=param_distant_geometry_field)
-                
-                if param_has_to_reproject_layer:
-
-                    param_distant_geom_expression = 'ST_Transform({param_distant_geom_expression}, {param_layer_srid}) as {geometry_field}'.format(param_distant_geom_expression=param_distant_geom_expression,
-                                                                                                                                                    param_layer_srid=param_layer_crs_authid.split(':')[1],
-                                                                                                                                                    geometry_field=param_distant_geometry_field)
-                                            
-                    
-
-                postgis_sub_expression_array.append(postgis_predicate + '({source_sub_expression_geom},{param_distant_geom_expression})'.format(source_sub_expression_geom=self.postgresql_source_geom,
-                                                                                                                                                    param_distant_geom_expression=param_distant_geom_expression)
-                                                                                                                                                    )
-            
-            if len(postgis_sub_expression_array) > 1:
-                param_postgis_sub_expression = ' OR '.join(postgis_sub_expression_array)
-            else:
-                param_postgis_sub_expression = postgis_sub_expression_array[0]
-
-            if QgsExpression(self.expression).isField() is True and self.param_source_old_subset != '':
-                sub_expression = self.param_source_old_subset
-            else:
-                sub_expression = self.expression
-
-            if self.has_combine_operator is True:
-                
-                
-                index = sub_expression.find('FROM "{source_schema}"."{source_table}"'.format(source_schema=self.param_source_schema,
-                                                                                            source_table=self.param_source_table
-                                                                                            ))
-                
-                
-                results_fields = []
-                sub_expression_results_fields = []
-                buffer_expression_results_fields = []
-
-                sub_expression_results_fields = re.findall(r'\"{source_table}\"\.[\"a-zA-Z_0_9-]*'.format(source_table=self.param_source_table), sub_expression[index:])
-
-                if self.param_buffer_expression != None and self.param_buffer_expression != '':
-                    buffer_expression_results_fields = re.findall(r'\"{source_table}\"\.[\"a-zA-Z_0_9-]*'.format(source_table='sub'), self.postgresql_source_geom)
-                    buffer_expression_results_fields = [item.replace('sub',self.param_source_table) for item in buffer_expression_results_fields]
-
-                results_fields = list(set(sub_expression_results_fields + buffer_expression_results_fields))
-
-                geom_column = '"{source_table}"."{source_geom}"'.format(source_table=self.param_source_table,source_geom=self.param_source_geom)
-                
-                if geom_column not in results_fields:
-                    results_fields.append(geom_column)
-
-                if len(results_fields) >= 1:
-                    if index > -1:
-                        sub_expression = '(SELECT ' + ' , '.join(results_fields) + ' {sub_expression}'.format(sub_expression=sub_expression[index:])
-                    else:
-                        sub_expression = '(SELECT ' + ' , '.join(results_fields) + ' FROM "{source_schema}"."{source_table}")'.format(source_schema=self.param_source_schema,
-                                                                                                                                        source_table=self.param_source_table
-                                                                                                                                        )
-
-                index = param_old_subset.find('(SELECT')
-                if index > -1:
-                    param_old_subset = param_old_subset[index:]
-                else:
-                    index = param_old_subset.find('(')
-                    if index > -1:
-                        param_old_subset[index:]
-
-
-
-            if QgsExpression(self.expression).isField() is False:
-                
-                if self.has_combine_operator is True:
-
-                    if self.current_materialized_view_name is not None:
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
-                                                                                                                                                                                                                                                distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                distant_table=param_distant_table,
-                                                                                                                                                                                                                                                source_subset_schema_name=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                source_subset_table_name=self.current_materialized_view_name,
-                                                                                                                                                                                                                                                postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                                                                )
-                    else:
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
-                                                                                                                                                                                                            distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                            distant_schema=param_distant_schema,    
-                                                                                                                                                                                                            distant_table=param_distant_table,
-                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression,
-                                                                                                                                                                                                            source_subset=sub_expression
-                                                                                                                                                                                                            )
-                else:
-                    if self.current_materialized_view_name is not None:
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression} WHERE {source_subset})'.format(
-                                                                                                                                                                                                                                                                            distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                                            distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                                            distant_table=param_distant_table,
-                                                                                                                                                                                                                                                                            source_subset_schema_name=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                            source_subset_table_name=self.current_materialized_view_name,
-                                                                                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                                                                                            )
-                    else:
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(
-                                                                                                                                                                                                                                                    distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                    distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                    distant_table=param_distant_table,
-                                                                                                                                                                                                                                                    source_schema=self.param_source_schema,    
-                                                                                                                                                                                                                                                    source_table=self.param_source_table,
-                                                                                                                                                                                                                                                    postgis_sub_expression=param_postgis_sub_expression,
-                                                                                                                                                                                                                                                    source_subset=sub_expression
-                                                                                                                                                                                                                                                    )
-            elif QgsExpression(self.expression).isField() is True:
-
-                if self.has_combine_operator is True:
-                    if self.current_materialized_view_name is not None:    
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
-                                                                                                                                                                                                                                                    distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                    distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                    distant_table=param_distant_table,  
-                                                                                                                                                                                                                                                    source_subset_schema_name=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                    source_subset_table_name=self.current_materialized_view_name,
-                                                                                                                                                                                                                                                    postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                                                                    )
-                                    
-                    else:        
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
-                                                                                                                                                                                                            distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                            distant_schema=param_distant_schema,    
-                                                                                                                                                                                                            distant_table=param_distant_table,  
-                                                                                                                                                                                                            source_subset=sub_expression,
-                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                            )
-        
-
-                else:
-                    if self.current_materialized_view_name is not None:
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
-                                                                                                                                                                                                                                                    distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                                                    distant_schema=param_distant_schema,    
-                                                                                                                                                                                                                                                    distant_table=param_distant_table,
-                                                                                                                                                                                                                                                    source_subset_schema_name=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                    source_subset_table_name=self.current_materialized_view_name,
-                                                                                                                                                                                                                                                    postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                                                                    )
-                        
-                    else:
-                        param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
-                                                                                                                                                                                                            distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                            distant_schema=param_distant_schema,    
-                                                                                                                                                                                                            distant_table=param_distant_table,
-                                                                                                                                                                                                            source_subset=self.param_source_table,
-                                                                                                                                                                                                            postgis_sub_expression=param_postgis_sub_expression
-                                                                                                                                                                                                            )
-                    
-            if param_old_subset != '' and param_combine_operator != '':
-                
-                expression = '"{distant_primary_key_name}" IN ( {param_old_subset} {param_combine_operator} {expression} )'.format(
-                                                                                                                                    distant_primary_key_name=param_distant_primary_key_name,    
-                                                                                                                                    param_old_subset=param_old_subset, 
-                                                                                                                                    param_combine_operator=param_combine_operator, 
-                                                                                                                                    expression=param_expression
-                                                                                                                                    )
-            else:
-                expression = '"{distant_primary_key_name}" IN {expression}'.format(
-                                                                                    distant_primary_key_name=param_distant_primary_key_name,                
-                                                                                    expression=param_expression
-                                                                                    )
-
-            param_expression = param_expression.replace(' " ', ' ')
-            expression = expression.replace(' " ', ' ')
-            logger.debug(f"Parameter expression: {param_expression}")
-
-            global ENV_VARS
-            with open(ENV_VARS["PATH_ABSOLUTE_PROJECT"] + os.sep + 'logs.txt', 'a') as f:
-                f.write(param_expression)
-
-            # sql_expression = QgsSQLStatement('SELECT * FROM  "{distant_schema}"."{distant_table}" WHERE {expression}'.format(distant_schema=param_distant_schema,
-            #                                                                                                                 distant_table=param_distant_table,
-            #                                                                                                                 expression=param_expression),
-            #                                                                                                                 True)
-            # validation_check = sql_expression.doBasicValidationChecks()
-            # print(validation_check)
-            # if validation_check[0] is True:
-
-            result = layer.setSubsetString(expression)
-            if result is True:
-                string_to_replace = 'SELECT "{distant_table}"."{distant_primary_key_name}" FROM'.format(
-                                                                                                    distant_table=param_distant_table,
-                                                                                                    distant_primary_key_name=param_distant_primary_key_name
-                                                                                                    )
-
-                string_replacement = 'SELECT "{distant_table}"."{distant_primary_key_name}", {param_distant_geom_expression} FROM'.format(
-                                                                                                                                    distant_table=param_distant_table,
-                                                                                                                                    distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                    param_distant_geom_expression=param_distant_geom_expression
-                                                                                                                                    )
-                logger.debug(f"String to replace: {string_to_replace}")
-                logger.debug(f"String replacement: {string_replacement}")
-                
-                param_expression = param_expression.replace(string_to_replace, string_replacement)
-
-                self.manage_layer_subset_strings(layer, param_expression, param_distant_primary_key_name, param_distant_geometry_field, False)
-
-
-        if (result is False or 
-            (self.param_source_provider_type != 'postgresql' or 
-             layer_provider_type != 'postgresql' or 
-             not POSTGRESQL_AVAILABLE)):
-            
-            layer.removeSelection()
-                
-            if self.has_combine_operator is False or (self.has_combine_operator is True and self.param_other_layers_combine_operator == 'OR'):
-                layer.setSubsetString('')
-
-            if param_has_to_reproject_layer:
-
-                alg_layer_params_reprojectlayer = {
-                    'INPUT': layer,
-                    'TARGET_CRS': param_layer_crs_authid,
-                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-                }
-                self.outputs['alg_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_layer_params_reprojectlayer)
-                current_layer = self.outputs['alg_layer_params_reprojectlayer']['OUTPUT']
-
-                alg_params_createspatialindex = {
-                    "INPUT": current_layer
-                }
-                processing.run('qgis:createspatialindex', alg_params_createspatialindex)
-            else:
-                current_layer = layer
-                
-
-            if self.has_combine_operator is True:
-                current_layer.selectAll()
-
-                if self.param_other_layers_combine_operator == 'OR':
-                    # Ensure spatial index exists for better performance
-                    self._verify_and_create_spatial_index(current_layer)
-                    
-                    current_layer.setSubsetString(param_old_subset)
-                    current_layer.selectAll()
-                    current_layer.setSubsetString('')
-
-                    alg_params_select = {
-                        'INPUT': current_layer,
-                        'INTERSECT': self.ogr_source_geom,
-                        'METHOD': 1,
-                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-                    }
-                    processing.run("qgis:selectbylocation", alg_params_select)
-
-                elif self.param_other_layers_combine_operator == 'AND':
-                    # Ensure spatial index exists for better performance
-                    self._verify_and_create_spatial_index(current_layer)
-
-                    alg_params_select = {
-                        'INPUT': current_layer,
-                        'INTERSECT': self.ogr_source_geom,
-                        'METHOD': 2,
-                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-                    }
-                    processing.run("qgis:selectbylocation", alg_params_select)
-                
-                elif self.param_other_layers_combine_operator == 'NOT AND':
-                    # Ensure spatial index exists for better performance
-                    self._verify_and_create_spatial_index(current_layer)
-
-                    alg_params_select = {
-                        'INPUT': current_layer,
-                        'INTERSECT': self.ogr_source_geom,
-                        'METHOD': 3,
-                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-                    }
-                    processing.run("qgis:selectbylocation", alg_params_select)
-
-                else:
-                    # Ensure spatial index exists for better performance
-                    self._verify_and_create_spatial_index(current_layer)
-
-                    alg_params_select = {
-                        'INPUT': current_layer,
-                        'INTERSECT': self.ogr_source_geom,
-                        'METHOD': 0,
-                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-                    }
-                    processing.run("qgis:selectbylocation", alg_params_select)
-
-            else:
-                # Ensure spatial index exists for better performance
-                self._verify_and_create_spatial_index(current_layer)
-
-                alg_params_select = {
-                        'INPUT': current_layer,
-                        'INTERSECT': self.ogr_source_geom,
-                        'METHOD': 0,
-                        'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
-                    }
-                processing.run("qgis:selectbylocation", alg_params_select)
-                
-            features_ids = []
-            for feature in current_layer.selectedFeatures():
-                features_ids.append(str(feature[param_distant_primary_key_name]))
-
-            current_layer.removeSelection()
-            current_layer = None
-
-            if len(features_ids) > 0:
-                if param_distant_primary_key_is_numeric == True:
-                    param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(" + ", ".join(features_ids) + ")"
-                else:
-                    param_expression = '"{distant_primary_key_name}" IN '.format(distant_primary_key_name=param_distant_primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
-
-                # sql_expression = QgsSQLStatement('SELECT * FROM  "{distant_schema}"."{distant_table}" WHERE {expression}'.format(distant_schema=param_distant_schema,
-                #                                                                                                                 distant_table=param_distant_table,
-                #                                                                                                                 expression=param_expression),
-                #                                                                                                                 True)
-                # validation_check = sql_expression.doBasicValidationChecks()
-                # print(validation_check)
-                # if validation_check[0] is True:
-
-                result = layer.setSubsetString(param_expression)
-                if result is True:
-                    expression = 'SELECT "{param_distant_table}"."{param_distant_primary_key_name}", {param_distant_geom_expression} FROM "{param_distant_schema}"."{param_distant_table}" WHERE {expression}'.format(
-                                                                                                                                                                                                                        param_distant_primary_key_name=param_distant_primary_key_name,
-                                                                                                                                                                                                                        param_distant_geom_expression=param_distant_geom_expression,
-                                                                                                                                                                                                                        param_distant_schema=param_distant_schema,
-                                                                                                                                                                                                                        param_distant_table=param_distant_table,
-                                                                                                                                                                                                                        expression=param_expression
-                                                                                                                                                                                                                        )  
-                    self.manage_layer_subset_strings(layer, expression, param_distant_primary_key_name, param_distant_geometry_field, False)
-                        
-        return result
-
-
 
     def execute_filtering(self):
         """Manage the advanced filtering"""
@@ -1621,61 +1699,190 @@ class FilterEngineTask(QgsTask):
 
         if layers_to_export != None:
             if datatype_to_export == 'GPKG':
+                # CRITICAL FIX: Thread-safe GPKG export using processing
+                logger.info(f"Exporting {len(layers_to_export)} layer(s) to GPKG: {output_folder_to_export}")
+                
+                # Prepare layer objects
+                layer_objects = []
+                for layer_name in layers_to_export:
+                    layers_found = self.PROJECT.mapLayersByName(layer_name)
+                    if layers_found:
+                        layer_objects.append(layers_found[0])
+                    else:
+                        logger.warning(f"Layer '{layer_name}' not found in project")
+                
+                if not layer_objects:
+                    logger.error("No valid layers found for export")
+                    return False
+                
                 alg_parameters_export = {
-                    'LAYERS': [self.PROJECT.mapLayersByName(layer)[0] for layer in layers_to_export],
-                    'OVERWRITE':True,
-                    'SAVE_STYLES':self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"],
-                    'OUTPUT':output_folder_to_export
-
-                    }
-                output = processing.run("qgis:package", alg_parameters_export)
+                    'LAYERS': layer_objects,
+                    'OVERWRITE': True,
+                    'SAVE_STYLES': self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"],
+                    'OUTPUT': output_folder_to_export
+                }
+                
+                try:
+                    # NOTE: processing.run() is thread-safe for file operations
+                    # but may have issues with UI feedback from worker thread
+                    output = processing.run("qgis:package", alg_parameters_export)
+                    
+                    if not output or 'OUTPUT' not in output:
+                        logger.error("GPKG export failed: no output returned")
+                        return False
+                    
+                    logger.info(f"GPKG export successful: {output['OUTPUT']}")
+                    result = (0, None)  # Success code compatible with writeAsVectorFormat
+                    
+                except Exception as e:
+                    logger.error(f"GPKG export failed with exception: {e}")
+                    return False
 
             else:
+                # Non-GPKG formats (Shapefile, GeoJSON, etc.)
+                logger.info(f"Exporting {len(layers_to_export)} layer(s) to {datatype_to_export}")
+                
                 if os.path.exists(output_folder_to_export):
                     if os.path.isdir(output_folder_to_export) and len(layers_to_export) > 1:
-            
+                        # Multiple layers to directory
                         for layer_name in layers_to_export:
-                            layer = self.PROJECT.mapLayersByName(layer_name)[0]
+                            layers_found = self.PROJECT.mapLayersByName(layer_name)
+                            if not layers_found:
+                                logger.warning(f"Layer '{layer_name}' not found, skipping")
+                                continue
+                                
+                            layer = layers_found[0]
                             if projection_to_export == None:
                                 current_projection_to_export = layer.sourceCrs()
                             else:
                                 current_projection_to_export = projection_to_export
-                            result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(os.path.join(output_folder_to_export , layer_name)), "UTF-8", current_projection_to_export, datatype_to_export)
-                            if datatype_to_export != 'XLSX':
-                                if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
-                                    layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export , layer_name + '.{}'.format(styles_to_export))))
-                            if self.isCanceled() or list(result)[0] != 0:
+                            
+                            output_path = os.path.normcase(os.path.join(output_folder_to_export, layer_name))
+                            logger.debug(f"Exporting layer '{layer_name}' to {output_path}")
+                            
+                            try:
+                                # CRITICAL: QgsVectorFileWriter is generally thread-safe for file I/O
+                                result = QgsVectorFileWriter.writeAsVectorFormat(
+                                    layer, 
+                                    output_path, 
+                                    "UTF-8", 
+                                    current_projection_to_export, 
+                                    datatype_to_export
+                                )
+                                
+                                if result[0] != QgsVectorFileWriter.NoError:
+                                    logger.error(f"Export failed for layer '{layer_name}': {result[1]}")
+                                    return False
+                                
+                                # Save style if requested (and format supports it)
+                                if datatype_to_export != 'XLSX':
+                                    if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
+                                        style_path = os.path.normcase(
+                                            os.path.join(output_folder_to_export, f"{layer_name}.{styles_to_export}")
+                                        )
+                                        try:
+                                            layer.saveNamedStyle(style_path)
+                                            logger.debug(f"Style saved: {style_path}")
+                                        except Exception as e:
+                                            logger.warning(f"Could not save style for '{layer_name}': {e}")
+                                
+                                if self.isCanceled():
+                                    logger.info("Export cancelled by user")
+                                    return False
+                                    
+                            except Exception as e:
+                                logger.error(f"Export exception for layer '{layer_name}': {e}")
                                 return False
-
-                elif len(layers_to_export) == 1:
-                    layer_name = layers_to_export[0]
-                    layer = self.PROJECT.mapLayersByName(layer_name)[0]
-                    if projection_to_export == None:
-                        current_projection_to_export = layer.sourceCrs()
+                    
                     else:
-                        current_projection_to_export = projection_to_export
-                    result = QgsVectorFileWriter.writeAsVectorFormat(layer, os.path.normcase(output_folder_to_export), "UTF-8", current_projection_to_export, datatype_to_export)
-                    if datatype_to_export != 'XLSX':
-                        if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
-                            layer.saveNamedStyle(os.path.normcase(os.path.join(output_folder_to_export + '.{}'.format(styles_to_export))))
-
+                        # Single layer or single file output
+                        if len(layers_to_export) == 1:
+                            layer_name = layers_to_export[0]
+                            layers_found = self.PROJECT.mapLayersByName(layer_name)
+                            if not layers_found:
+                                logger.error(f"Layer '{layer_name}' not found")
+                                return False
+                                
+                            layer = layers_found[0]
+                            if projection_to_export == None:
+                                current_projection_to_export = layer.sourceCrs()
+                            else:
+                                current_projection_to_export = projection_to_export
+                            
+                            logger.debug(f"Exporting single layer '{layer_name}' to {output_folder_to_export}")
+                            
+                            try:
+                                result = QgsVectorFileWriter.writeAsVectorFormat(
+                                    layer, 
+                                    os.path.normcase(output_folder_to_export), 
+                                    "UTF-8", 
+                                    current_projection_to_export, 
+                                    datatype_to_export
+                                )
+                                
+                                if result[0] != QgsVectorFileWriter.NoError:
+                                    logger.error(f"Export failed: {result[1]}")
+                                    return False
+                                
+                                # Save style if requested
+                                if datatype_to_export != 'XLSX':
+                                    if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
+                                        style_path = os.path.normcase(f"{output_folder_to_export}.{styles_to_export}")
+                                        try:
+                                            layer.saveNamedStyle(style_path)
+                                            logger.debug(f"Style saved: {style_path}")
+                                        except Exception as e:
+                                            logger.warning(f"Could not save style: {e}")
+                                            
+                            except Exception as e:
+                                logger.error(f"Export exception: {e}")
+                                return False
+                        else:
+                            logger.error(f"Invalid export configuration: {len(layers_to_export)} layers but output is not a directory")
+                            return False
+                else:
+                    logger.error(f"Output path does not exist: {output_folder_to_export}")
+                    return False
             
             if self.isCanceled():
+                logger.info("Export cancelled by user before zip")
                 return False
 
+            # Zip if requested
             if zip_to_export != None:
                 directory, zipfile = os.path.split(output_folder_to_export)
                 if os.path.exists(directory) and os.path.isdir(directory):
-                    zip_result = self.zipfolder(zip_to_export, output_folder_to_export)
-                    if self.isCanceled() or zip_result is False:
+                    logger.info(f"Creating zip archive: {zip_to_export}")
+                    try:
+                        zip_result = self.zipfolder(zip_to_export, output_folder_to_export)
+                        if self.isCanceled() or zip_result is False:
+                            logger.warning("Zip creation failed or cancelled")
+                            return False
+                        logger.info("Zip archive created successfully")
+                    except Exception as e:
+                        logger.error(f"Zip creation failed: {e}")
                         return False
 
-            if list(result)[0] == 0:
-                self.message = 'Layer(s) has been exported to <a href="file:///{}">{}</a>'.format(output_folder_to_export, output_folder_to_export)
+            # Build success message
+            if result and result[0] == 0:
+                self.message = 'Layer(s) has been exported to <a href="file:///{}">{}</a>'.format(
+                    output_folder_to_export, output_folder_to_export
+                )
+            elif datatype_to_export == 'GPKG':
+                # GPKG export succeeded earlier
+                self.message = 'Layer(s) has been exported to <a href="file:///{}">{}</a>'.format(
+                    output_folder_to_export, output_folder_to_export
+                )
+            else:
+                logger.error("Export completed but result status unclear")
+                return False
+                
             if zip_result is True:
-                self.message = self.message + ' and ' + 'Zip file has been exported to <a href="file:///{}">{}</a>'.format(zip_to_export, zip_to_export)
-
+                self.message = self.message + ' and ' + 'Zip file has been exported to <a href="file:///{}">{}</a>'.format(
+                    zip_to_export, zip_to_export
+                )
             
+            logger.info("Export completed successfully")
 
         return True
 
@@ -1711,8 +1918,8 @@ class FilterEngineTask(QgsTask):
             db_path = self.db_file_path
             # For OGR layers, we'll use QGIS subset string directly
             logger.info("Non-Spatialite layer detected, using QGIS subset string")
-            layer.setSubsetString(sql_subset_string)
-            return True
+            # CRITICAL FIX: Thread-safe subset string application
+            return self._safe_set_subset_string(layer, sql_subset_string)
         
         # Get layer SRID
         layer_srid = layer.crs().postgisSrid()
@@ -1749,18 +1956,19 @@ class FilterEngineTask(QgsTask):
         
         if not success:
             logger.error("Failed to create Spatialite temp table")
-            from qgis.utils import iface
-            iface.messageBar().pushCritical(
-                "FilterMate - Error",
-                "Failed to create temporary Spatialite table. Check QGIS logs for details.",
-                10
-            )
+            # NOTE: Cannot call iface.messageBar() from worker thread - would cause crash
+            # Error is logged and will be handled in finished() method
             return False
         
         # Apply subset string to layer (reference temp table)
         layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{name})'
         logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
-        layer.setSubsetString(layer_subsetString)
+        # CRITICAL FIX: Thread-safe subset string application
+        result = self._safe_set_subset_string(layer, layer_subsetString)
+        
+        if not result:
+            logger.error("Failed to apply Spatialite subset string")
+            return False
         
         # Update history
         if cur and conn:
@@ -1783,7 +1991,7 @@ class FilterEngineTask(QgsTask):
         cur = None
         
         try:
-            conn = spatialite_connect(self.db_file_path)
+            conn = self._safe_spatialite_connect()
             # Track connection for cleanup on cancellation
             self.active_connections.append(conn)
             cur = conn.cursor()
@@ -1810,20 +2018,19 @@ class FilterEngineTask(QgsTask):
                 last_seq_order = 0
 
             # Determine provider type for backend selection (Phase 2)
-            provider_type = layer.providerType()
-            use_postgresql = (provider_type == 'postgres' and POSTGRESQL_AVAILABLE)
+            # Use detect_layer_provider_type for consistent detection
+            provider_type = detect_layer_provider_type(layer)
+            use_postgresql = (provider_type == 'postgresql' and POSTGRESQL_AVAILABLE)
             use_spatialite = (provider_type in ['spatialite', 'ogr'] or not use_postgresql)
         
             logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
         
-            # User feedback: Inform about backend being used (Phase 3)
+            # Log performance warning for large Spatialite datasets (Phase 3)
+            # NOTE: Cannot call iface.messageBar() from worker thread - would cause crash
             if use_spatialite and layer.featureCount() > 50000:
-                from qgis.utils import iface
-                iface.messageBar().pushMessage(
-                    "FilterMate - Performance",
+                logger.warning(
                     f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
-                    f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL.",
-                    Qgis.Info, 8
+                    f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL."
                 )
 
             if self.task_action == 'filter':
@@ -1831,15 +2038,9 @@ class FilterEngineTask(QgsTask):
 
                 # BRANCH: Use Spatialite backend (Phase 2)
                 if use_spatialite:
-                    logger.info("Using Spatialite backend")
-                    # User feedback: Backend info (Phase 3)
-                    from qgis.utils import iface
                     backend_name = "Spatialite" if provider_type == 'spatialite' else "Local (OGR)"
-                    iface.messageBar().pushMessage(
-                        "FilterMate",
-                        f"Filtering with {backend_name} backend...",
-                        Qgis.Info, 3
-                    )
+                    logger.info(f"Using {backend_name} backend")
+                    # NOTE: Cannot call iface.messageBar() from worker thread
                     success = self._manage_spatialite_subset(
                         layer, sql_subset_string, primary_key_name, geom_key_name,
                         name, custom, cur, conn, current_seq_order
@@ -1957,7 +2158,8 @@ class FilterEngineTask(QgsTask):
                 try:
                     with connexion.cursor() as cursor:
                         cursor.execute("SELECT 1")
-                except:
+                except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
+                    logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
                     connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
 
                 with connexion.cursor() as cursor:
@@ -1999,7 +2201,8 @@ class FilterEngineTask(QgsTask):
                                                                                                                                             primary_key_name=primary_key_name
                                                                                                                                             )
                 logger.debug(f"Layer subset string: {layer_subsetString}")
-                layer.setSubsetString(layer_subsetString)
+                # CRITICAL FIX: Thread-safe subset string application
+                self._safe_set_subset_string(layer, layer_subsetString)
 
 
             elif self.task_action == 'reset':
@@ -2026,7 +2229,8 @@ class FilterEngineTask(QgsTask):
                     except Exception as e:
                         logger.error(f"Error dropping Spatialite temp table: {e}")
                 
-                    layer.setSubsetString('')
+                    # CRITICAL FIX: Thread-safe subset string application
+                    self._safe_set_subset_string(layer, '')
 
                 # ORIGINAL: PostgreSQL backend
                 elif use_postgresql:
@@ -2040,14 +2244,16 @@ class FilterEngineTask(QgsTask):
                     try:
                         with connexion.cursor() as cursor:
                             cursor.execute("SELECT 1")
-                    except:
+                    except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
+                        logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
                         connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
 
                     with connexion.cursor() as cursor:
                         cursor.execute(sql_drop_request)
                         connexion.commit()
 
-                    layer.setSubsetString('')
+                    # CRITICAL FIX: Thread-safe subset string application
+                    self._safe_set_subset_string(layer, '')
 
             elif self.task_action == 'unfilter':
                 if last_subset_id != None:
@@ -2117,7 +2323,8 @@ class FilterEngineTask(QgsTask):
                         try:
                             with connexion.cursor() as cursor:
                                 cursor.execute("SELECT 1")
-                        except:
+                        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
+                            logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
                             connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
 
                         with connexion.cursor() as cursor:
@@ -2137,10 +2344,12 @@ class FilterEngineTask(QgsTask):
                                                                                                                                                     name=name,
                                                                                                                                                     primary_key_name=primary_key_name
                                                                                                                                                     )
-                        layer.setSubsetString(layer_subsetString)    
+                        # CRITICAL FIX: Thread-safe subset string application
+                        self._safe_set_subset_string(layer, layer_subsetString)
 
                 else:
-                    layer.setSubsetString('')
+                    # CRITICAL FIX: Thread-safe subset string application
+                    self._safe_set_subset_string(layer, '')
 
                 return True
             
@@ -2169,7 +2378,7 @@ class FilterEngineTask(QgsTask):
                 conn.close()
             except Exception as e:
                 # Log but don't fail - connection may already be closed
-                pass
+                logger.debug(f"Connection cleanup failed (may already be closed): {e}")
         self.active_connections.clear()
         
         QgsMessageLog.logMessage(
@@ -2229,7 +2438,6 @@ class LayersManagementEngineTask(QgsTask):
 
         QgsTask.__init__(self, description, QgsTask.CanCancel)
 
-
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
@@ -2245,11 +2453,68 @@ class LayersManagementEngineTask(QgsTask):
         self.message = None
 
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
-        self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"" }'
+        self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"current_exploring_groupbox":"single_selection","single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round" }'
         
         global ENV_VARS
         self.PROJECT = ENV_VARS["PROJECT"]
+
+    
+    def _ensure_db_directory_exists(self):
+        """
+        Ensure the database directory exists before connecting.
+        
+        Raises:
+            OSError: If directory cannot be created
+            ValueError: If db_file_path is invalid
+        """
+        if not self.db_file_path:
+            raise ValueError("db_file_path is not set")
+        
+        # Normalize path to handle any separator inconsistencies
+        normalized_path = os.path.normpath(self.db_file_path)
+        db_dir = os.path.dirname(normalized_path)
+        
+        if not db_dir:
+            raise ValueError(f"Invalid database path: {self.db_file_path}")
+        
+        if os.path.exists(db_dir):
+            # Directory already exists, check if it's writable
+            if not os.access(db_dir, os.W_OK):
+                raise OSError(f"Database directory exists but is not writable: {db_dir}")
+            logger.debug(f"Database directory exists: {db_dir}")
+        else:
+            # Create directory with all intermediate directories
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"Created database directory: {db_dir}")
+            except OSError as e:
+                error_msg = f"Failed to create database directory '{db_dir}': {e}"
+                logger.error(error_msg)
+                logger.error(f"Original db_file_path: {self.db_file_path}")
+                logger.error(f"Normalized path: {normalized_path}")
+                raise OSError(error_msg) from e
+    
+    
+    def _safe_spatialite_connect(self):
+        """
+        Safely connect to Spatialite database, ensuring directory exists.
+        
+        Returns:
+            sqlite3.Connection: Database connection
+            
+        Raises:
+            OSError: If directory cannot be created
+            sqlite3.OperationalError: If database cannot be opened
+        """
+        self._ensure_db_directory_exists()
+        
+        try:
+            conn = spatialite_connect(self.db_file_path)
+            return conn
+        except Exception as e:
+            logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
+            raise
 
 
     def run(self):
@@ -2283,7 +2548,15 @@ class LayersManagementEngineTask(QgsTask):
     
         except Exception as e:
             self.exception = e
-            logger.error(f'LayerManagementEngineTask run() failed: {e}', exc_info=True)
+            # Provide detailed error information for database issues
+            error_msg = f'LayerManagementEngineTask run() failed: {e}'
+            if 'unable to open database file' in str(e):
+                error_msg += f'\nDatabase path: {self.db_file_path}'
+                if self.db_file_path:
+                    db_dir = os.path.dirname(self.db_file_path)
+                    error_msg += f'\nDatabase directory: {db_dir}'
+                    error_msg += f'\nDirectory exists: {os.path.exists(db_dir) if db_dir else "N/A"}'
+            safe_log(logger, logging.ERROR, error_msg, exc_info=True)
             return False
 
 
@@ -2413,8 +2686,8 @@ class LayersManagementEngineTask(QgsTask):
             if layer_props["infos"]["layer_provider_type"] == 'postgresql':
                 try:
                     self.create_spatial_index_for_postgresql_layer(layer, layer_props)
-                except:
-                    pass
+                except (psycopg2.Error, AttributeError, KeyError) as e:
+                    logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
                 
             else:
                 self.create_spatial_index_for_layer(layer)
@@ -2510,13 +2783,56 @@ class LayersManagementEngineTask(QgsTask):
 
 
     def create_spatial_index_for_layer(self, layer):    
-
-        alg_params_createspatialindex = {
-            "INPUT": layer
-        }
-        processing.run('qgis:createspatialindex', alg_params_createspatialindex)
-        if self.isCanceled():
-            return False
+        """
+        Create spatial index for a layer with proper validation and error handling.
+        
+        Args:
+            layer: QgsVectorLayer to create spatial index for
+            
+        Returns:
+            bool: True if successful or index already exists, False if canceled
+        """
+        try:
+            # Skip if layer has no geometry or is already indexed
+            if not layer.isSpatial():
+                return True
+            
+            # Check if spatial index already exists
+            if layer.hasSpatialIndex() != QgsFeatureSource.SpatialIndexNotPresent:
+                return True
+            
+            # Validate layer has features with valid geometry
+            if layer.featureCount() == 0:
+                return True
+            
+            # Check for at least one valid geometry before attempting index creation
+            has_valid_geom = False
+            for feature in layer.getFeatures():
+                if feature.hasGeometry() and not feature.geometry().isNull():
+                    has_valid_geom = True
+                    break
+                if self.isCanceled():
+                    return False
+            
+            if not has_valid_geom:
+                # No valid geometries, skip spatial index creation
+                return True
+            
+            # Create spatial index
+            alg_params_createspatialindex = {
+                "INPUT": layer
+            }
+            processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+            
+            if self.isCanceled():
+                return False
+        
+        except Exception as e:
+            # Log error but don't fail the entire operation
+            safe_log(logger, logging.WARNING, 
+                    f"Failed to create spatial index for layer {layer.name()}: {str(e)}")
+            # Continue without spatial index - layer will still be usable
+            pass
     
         return True
 
@@ -2532,7 +2848,7 @@ class LayersManagementEngineTask(QgsTask):
 
         if layer.id() in self.PROJECT_LAYERS.keys():
 
-            conn = spatialite_connect(self.db_file_path)
+            conn = self._safe_spatialite_connect()
             cur = conn.cursor()
 
             if layer_all_properties_flag is True:
@@ -2543,15 +2859,20 @@ class LayersManagementEngineTask(QgsTask):
                             value_typped = json.dumps(value_typped)
                         variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
                         QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
-                        cur.execute("""INSERT INTO fm_project_layers_properties 
-                                        VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
-                                                                            id=uuid.uuid4(),
-                                                                            project_id=self.project_uuid,
-                                                                            layer_id=layer.id(),
-                                                                            meta_type=key_group,
-                                                                            meta_key=key,
-                                                                            meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
-                                                                            )
+                        # Emit signal to notify variable was saved
+                        self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                        # Use parameterized query to prevent SQL injection
+                        cur.execute(
+                            """INSERT INTO fm_project_layers_properties 
+                               VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                            (
+                                str(uuid.uuid4()),
+                                str(self.project_uuid),
+                                layer.id(),
+                                key_group,
+                                key,
+                                value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                            )
                         )
                         conn.commit()
 
@@ -2567,15 +2888,20 @@ class LayersManagementEngineTask(QgsTask):
                                 value_typped = json.dumps(value_typped)
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-                            cur.execute("""INSERT INTO fm_project_layers_properties 
-                                            VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
-                                                                                id=uuid.uuid4(),
-                                                                                project_id=self.project_uuid,
-                                                                                layer_id=layer.id(),
-                                                                                meta_type=layer_property[0],
-                                                                                meta_key=layer_property[1],
-                                                                                meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
-                                                                                )
+                            # Emit signal to notify variable was saved
+                            self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                            # Use parameterized query to prevent SQL injection
+                            cur.execute(
+                                """INSERT INTO fm_project_layers_properties 
+                                   VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                                (
+                                    str(uuid.uuid4()),
+                                    str(self.project_uuid),
+                                    layer.id(),
+                                    layer_property[0],
+                                    layer_property[1],
+                                    value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                )
                             )
                             conn.commit()
 
@@ -2593,15 +2919,15 @@ class LayersManagementEngineTask(QgsTask):
 
         if layer.id() in self.PROJECT_LAYERS.keys():
 
-            conn = spatialite_connect(self.db_file_path)
+            conn = self._safe_spatialite_connect()
             cur = conn.cursor()
 
             if layer_all_properties_flag is True:
-                cur.execute("""DELETE FROM fm_project_layers_properties 
-                                WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
-                                                                                                    project_id=self.project_uuid,
-                                                                                                    layer_id=layer.id()
-                                                                                                    )
+                # Use parameterized query to prevent SQL injection
+                cur.execute(
+                    """DELETE FROM fm_project_layers_properties 
+                       WHERE fk_project = ? AND layer_id = ?""",
+                    (str(self.project_uuid), layer.id())
                 )
                 conn.commit()
                 QgsExpressionContextUtils.setLayerVariables(layer, {})
@@ -2610,17 +2936,17 @@ class LayersManagementEngineTask(QgsTask):
                 for layer_property in layer_properties:
                     if layer_property[0] in ("infos", "exploring", "filtering"):
                         if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                            cur.execute("""DELETE FROM fm_project_layers_properties  
-                                            WHERE fk_project = '{project_id}' and layer_id = '{layer_id}' and meta_type = '{meta_type}' and meta_key = '{meta_key}');""".format(
-                                                                                                                                                                            project_id=self.project_uuid,
-                                                                                                                                                                            layer_id=layer.id(),
-                                                                                                                                                                            meta_type=layer_property[0],
-                                                                                                                                                                            meta_key=layer_property[1]                           
-                                                                                                                                                                            )
+                            # Use parameterized query to prevent SQL injection
+                            cur.execute(
+                                """DELETE FROM fm_project_layers_properties  
+                                   WHERE fk_project = ? AND layer_id = ? AND meta_type = ? AND meta_key = ?""",
+                                (str(self.project_uuid), layer.id(), layer_property[0], layer_property[1])
                             )
                             conn.commit()
                             variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
                             QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
+                            # Emit signal to notify variable was removed
+                            self.removingLayerVariable.emit(layer, variable_key)
 
             cur.close()
             conn.close()
@@ -2641,7 +2967,8 @@ class LayersManagementEngineTask(QgsTask):
                     layer.deleteStyleFromDatabase(name="FilterMate_style_{}".format(layer.name()))
                     result = layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
                     logger.debug(f"save_style_from_layer_id - style saved: {result}")
-                except:
+                except (RuntimeError, AttributeError) as e:
+                    logger.debug(f"Could not save style to database for layer {layer.name()}, falling back to file: {e}")
                     layer_path = layer.source().split('|')[0]
                     layer.saveNamedStyle(os.path.normcase(os.path.join(os.path.split(layer_path)[0], 'FilterMate_style_{}.qml'.format(layer.name()))))
 
@@ -2691,7 +3018,7 @@ class LayersManagementEngineTask(QgsTask):
 
         results = []
         
-        conn = spatialite_connect(self.db_file_path)
+        conn = self._safe_spatialite_connect()
         cur = conn.cursor()
 
         cur.execute("""SELECT meta_type, meta_key, meta_value FROM fm_project_layers_properties  
@@ -2711,7 +3038,7 @@ class LayersManagementEngineTask(QgsTask):
 
     def insert_properties_to_spatialite(self, layer_id, layer_props):
 
-        conn = spatialite_connect(self.db_file_path)
+        conn = self._safe_spatialite_connect()
         cur = conn.cursor()
 
         for key_group in layer_props:
@@ -2742,7 +3069,7 @@ class LayersManagementEngineTask(QgsTask):
         try:
             dest_type(source_value)
             return True
-        except:
+        except (ValueError, TypeError, OverflowError):
             return False
 
 
@@ -2805,10 +3132,10 @@ class LayersManagementEngineTask(QgsTask):
                     
                     
                     if self.task_action == 'add_layers':
-                        if len(self.layers) == len(list(self.project_layers.keys())):
-                            result_action = '{} layer(s) added'.format(str(len(list(self.project_layers.keys()))))
-                        else:
-                            result_action = '{} layer(s) added'.format(str(len(self.layers) - len(list(self.project_layers.keys()))))
+                        # Count how many layers were actually added (present in self.layers)
+                        # self.layers contains the layers being added
+                        # self.project_layers contains all layers after adding
+                        result_action = '{} layer(s) added'.format(str(len(self.layers)))
 
                     elif self.task_action == 'remove_layers':
                         result_action = '{} layer(s) removed'.format(str(len(list(self.project_layers.keys())) - len(self.layers)))

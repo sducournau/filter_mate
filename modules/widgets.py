@@ -29,14 +29,26 @@ class PopulateListEngineTask(QgsTask):
 
         self.silent_flag = silent_flag
         self.layer = self.parent.layer
-        self.identifier_field_name = self.parent.list_widgets[self.layer.id()].getIdentifierFieldName()
-        self.display_expression = self.parent.list_widgets[self.layer.id()].getDisplayExpression()
-        self.is_field_flag = self.parent.list_widgets[self.layer.id()].getExpressionFieldFlag()
+        
+        # Vérifier que le layer existe toujours dans list_widgets
+        if self.layer is None or self.layer.id() not in self.parent.list_widgets:
+            self.identifier_field_name = None
+            self.display_expression = None
+            self.is_field_flag = None
+        else:
+            self.identifier_field_name = self.parent.list_widgets[self.layer.id()].getIdentifierFieldName()
+            self.display_expression = self.parent.list_widgets[self.layer.id()].getDisplayExpression()
+            self.is_field_flag = self.parent.list_widgets[self.layer.id()].getExpressionFieldFlag()
 
 
     def run(self):
         """Main function that run the right method from init parameters"""
         try:
+            # Vérifier que le layer et les widgets existent toujours
+            if self.layer is None or self.layer.id() not in self.parent.list_widgets:
+                logger.warning(f'Layer no longer exists in list_widgets, skipping task: {self.action}')
+                return False
+                
             if self.action == 'buildFeaturesList':
                 self.buildFeaturesList()
             elif self.action == 'loadFeaturesList':
@@ -487,6 +499,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def checkedItems(self):
         selection = []
+        # Vérifier que le layer existe toujours dans list_widgets
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return selection
+            
         for i in range(self.list_widgets[self.layer.id()].count()):
             item = self.list_widgets[self.layer.id()].item(i)
             if item.checkState() == Qt.Checked:
@@ -508,6 +524,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
     def currentSelectedFeatures(self):
         if self.layer != None:
+            # Vérifier que le layer existe toujours dans list_widgets
+            if self.layer.id() not in self.list_widgets:
+                return False
             current_selected_features = self.list_widgets[self.layer.id()].getSelectedFeaturesList()
             return current_selected_features if len(current_selected_features) > 0 else False
         else:
@@ -515,6 +534,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
     def currentVisibleFeatures(self):
         if self.layer != None:
+            # Vérifier que le layer existe toujours dans list_widgets
+            if self.layer.id() not in self.list_widgets:
+                return False
             visible_features_list = self.list_widgets[self.layer.id()].getVisibleFeaturesList()
             return visible_features_list if len(visible_features_list) > 0 else False
         else:

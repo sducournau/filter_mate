@@ -16,6 +16,30 @@ Usage:
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
+
+
+class SafeStreamHandler(logging.StreamHandler):
+    """
+    StreamHandler that gracefully handles closed or None streams.
+    
+    This prevents AttributeError when QGIS shuts down while tasks are still
+    logging, or when the stream becomes None during handler cleanup.
+    """
+    
+    def emit(self, record):
+        """
+        Emit a record, with safe handling of None or closed streams.
+        """
+        try:
+            if self.stream is None:
+                # Stream has been closed or not initialized, skip emission
+                return
+            super().emit(record)
+        except (AttributeError, ValueError, OSError):
+            # Stream closed, invalid, or other IO error - silently ignore
+            # This is acceptable for console output during shutdown
+            pass
 
 
 def setup_logger(name, log_file, level=logging.INFO):
@@ -73,7 +97,8 @@ def setup_logger(name, log_file, level=logging.INFO):
         print(f"Warning: Could not create log file {log_file}: {e}")
     
     # Console handler for development (only WARNING and above)
-    console_handler = logging.StreamHandler()
+    # Use SafeStreamHandler to prevent crashes during QGIS shutdown
+    console_handler = SafeStreamHandler(sys.stderr)
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.WARNING)
     logger.addHandler(console_handler)
@@ -111,6 +136,36 @@ def set_log_level(logger_name, level):
     """
     logger = logging.getLogger(logger_name)
     logger.setLevel(level)
+
+
+def safe_log(logger, level, message, exc_info=False):
+    """
+    Safely log a message, catching any exceptions that might occur.
+    
+    This is useful in exception handlers or during shutdown when logging
+    infrastructure might be partially torn down.
+    
+    Args:
+        logger (logging.Logger): Logger instance
+        level (int): Logging level (logging.DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        message (str): Message to log
+        exc_info (bool): Include exception information if True
+    
+    Example:
+        >>> try:
+        >>>     risky_operation()
+        >>> except Exception as e:
+        >>>     safe_log(logger, logging.ERROR, f"Operation failed: {e}", exc_info=True)
+    """
+    try:
+        logger.log(level, message, exc_info=exc_info)
+    except (OSError, ValueError, AttributeError) as e:
+        # If logging fails completely, fall back to print
+        # This ensures we don't lose critical error information
+        try:
+            print(f"[FilterMate] {message}")
+        except (OSError, UnicodeError):
+            pass  # Absolute last resort - do nothing if even print fails
     for handler in logger.handlers:
         if isinstance(handler, RotatingFileHandler):
             handler.setLevel(level)

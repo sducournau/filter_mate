@@ -12,6 +12,20 @@ from unittest.mock import Mock, MagicMock
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Mock QGIS modules before any imports
+sys.modules['qgis'] = MagicMock()
+sys.modules['qgis.core'] = MagicMock()
+sys.modules['qgis.gui'] = MagicMock()
+sys.modules['qgis.PyQt'] = MagicMock()
+sys.modules['qgis.PyQt.QtCore'] = MagicMock()
+sys.modules['qgis.PyQt.QtGui'] = MagicMock()
+sys.modules['qgis.PyQt.QtWidgets'] = MagicMock()
+sys.modules['qgis.utils'] = MagicMock()
+sys.modules['PyQt5'] = MagicMock()
+sys.modules['PyQt5.QtCore'] = MagicMock()
+sys.modules['PyQt5.QtGui'] = MagicMock()
+sys.modules['PyQt5.QtWidgets'] = MagicMock()
+
 
 @pytest.fixture
 def mock_qgis_iface():

@@ -128,6 +128,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         Returns:
             True if filter applied successfully
         """
+        import time
+        start_time = time.time()
+        
         try:
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
@@ -145,9 +148,14 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             # Apply the filter
             result = layer.setSubsetString(final_expression)
             
+            elapsed = time.time() - start_time
+            
             if result:
                 feature_count = layer.featureCount()
-                self.log_info(f"Filter applied successfully. {feature_count} features match.")
+                self.log_info(f"Filter applied successfully in {elapsed:.2f}s. {feature_count} features match.")
+                
+                if elapsed > 5.0:
+                    self.log_warning(f"Slow filter operation ({elapsed:.2f}s) - consider optimizing query or adding spatial indexes")
             else:
                 self.log_error(f"Failed to apply filter to {layer.name()}")
             
