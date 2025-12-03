@@ -21,6 +21,10 @@ import json
 from .modules.customExceptions import *
 from .modules.appTasks import *
 from .modules.appUtils import POSTGRESQL_AVAILABLE
+from .modules.feedback_utils import (
+    show_backend_info, show_progress_message, show_success_with_backend,
+    show_performance_warning, show_error_with_context
+)
 from .resources import *
 import uuid
 
@@ -316,23 +320,16 @@ class FilterMateApp:
                     if temp_layer.id() in layers_ids:
                         layers.append(temp_layer)
             
-            # Show informational message about task starting
+            # Show informational message with backend awareness
+            layer_count = len(layers) + 1  # +1 for current layer
+            provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
+            
             if task_name == 'filter':
-                layer_count = len(layers) + 1  # +1 for current layer
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    f"Starting filter operation on {layer_count} layer(s)..."
-                )
+                show_backend_info(iface, provider_type, layer_count, operation='filter')
             elif task_name == 'unfilter':
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    "Removing filters..."
-                )
+                show_backend_info(iface, provider_type, layer_count, operation='unfilter')
             elif task_name == 'reset':
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    "Resetting layers..."
-                )
+                show_backend_info(iface, provider_type, layer_count, operation='reset')
 
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
             self.appTasks[task_name].taskCompleted.connect(lambda task_name=task_name, current_layer=current_layer, task_parameters=task_parameters: self.filter_engine_task_completed(task_name, current_layer, task_parameters))
@@ -597,22 +594,28 @@ class FilterMateApp:
             self.iface.mapCanvas().refreshAllLayers()
             self.iface.mapCanvas().refresh()
             
-            # Show success message with feature count
+            # Show success message with backend and feature count
             feature_count = source_layer.featureCount()
+            provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
+            layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
+            
             if task_name == 'filter':
-                iface.messageBar().pushSuccess(
+                show_success_with_backend(iface, provider_type, 'filter', layer_count)
+                iface.messageBar().pushInfo(
                     "FilterMate",
-                    f"Filter applied successfully - {feature_count:,} features visible"
+                    f"{feature_count:,} features visible in main layer"
                 )
             elif task_name == 'unfilter':
-                iface.messageBar().pushSuccess(
+                show_success_with_backend(iface, provider_type, 'unfilter', layer_count)
+                iface.messageBar().pushInfo(
                     "FilterMate",
-                    f"Filter removed - {feature_count:,} features visible"
+                    f"{feature_count:,} features visible in main layer"
                 )
             elif task_name == 'reset':
-                iface.messageBar().pushSuccess(
+                show_success_with_backend(iface, provider_type, 'reset', layer_count)
+                iface.messageBar().pushInfo(
                     "FilterMate",
-                    f"Layer reset - {feature_count:,} features visible"
+                    f"{feature_count:,} features visible in main layer"
                 )
 
         extent = source_layer.extent()

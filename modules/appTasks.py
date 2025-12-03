@@ -323,131 +323,206 @@ class FilterEngineTask(QgsTask):
             logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
             raise
 
-    def run(self):
-        """Main function that run the right method from init parameters"""
-
-
-        try:
-            self.layers_count = 1    
-            layers = [layer for layer in self.PROJECT.mapLayersByName(self.task_parameters["infos"]["layer_name"]) if layer.id() == self.task_parameters["infos"]["layer_id"]]
-            if len(layers) > 0:
-                self.source_layer = layers[0]
-                self.source_crs = self.source_layer.sourceCrs()
-                source_crs_distance_unit = self.source_crs.mapUnits()
-                self.source_layer_crs_authid = self.task_parameters["infos"]["layer_crs_authid"]
-                
-                # Vérifier si le CRS source est géographique ou non métrique
-                if source_crs_distance_unit in ['DistanceUnit.Degrees','DistanceUnit.Unknown'] or self.source_crs.isGeographic() is True:
-                    self.has_to_reproject_source_layer = True
-                    # Utiliser la fonction pour obtenir le meilleur CRS métrique
-                    self.source_layer_crs_authid = get_best_metric_crs(self.PROJECT, self.source_crs)
-                    logger.info(f"Source layer will be reprojected to {self.source_layer_crs_authid} for metric calculations")
-                else:
-                    # Le CRS est déjà métrique, vérifier s'il est optimal
-                    logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
-                    # Optionnel: toujours utiliser le meilleur CRS pour la cohérence
-                    # best_crs = get_best_metric_crs(self.PROJECT, self.source_crs)
-                    # if best_crs != self.source_layer_crs_authid:
-                    #     self.has_to_reproject_source_layer = True
-                    #     self.source_layer_crs_authid = best_crs
-
-
-
-                if "options" in self.task_parameters["task"] and "LAYERS" in self.task_parameters["task"]["options"] and "FEATURE_COUNT_LIMIT" in self.task_parameters["task"]["options"]["LAYERS"]:
-                    if isinstance(self.task_parameters["task"]["options"]["LAYERS"]["FEATURE_COUNT_LIMIT"], int) and self.task_parameters["task"]["options"]["LAYERS"]["FEATURE_COUNT_LIMIT"] > 0:
-                        self.feature_count_limit = self.task_parameters["task"]["options"]["LAYERS"]["FEATURE_COUNT_LIMIT"]
-
-            """We split the selected layers to be filtered in two categories sql and others"""
-
-            if self.task_parameters["filtering"]["has_layers_to_filter"] == True:
-                for layer_props in self.task_parameters["task"]["layers"]:
-                    if layer_props["layer_provider_type"] not in self.layers:
-                        self.layers[layer_props["layer_provider_type"]] = []
-
-                    layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
-                    if len(layers) > 0:
-                        self.layers[layer_props["layer_provider_type"]].append([layers[0], layer_props])
-                        self.layers_count += 1
-    
-                self.provider_list = list(self.layers)
-
-            if 'db_file_path' in self.task_parameters["task"] and self.task_parameters["task"]['db_file_path'] not in (None, ''):
-                self.db_file_path = self.task_parameters["task"]['db_file_path']
+    def _initialize_source_layer(self):
+        """
+        Initialize source layer and basic layer count.
         
-            if 'project_uuid' in self.task_parameters["task"] and self.task_parameters["task"]['project_uuid'] not in (None, ''):
-                self.project_uuid = self.task_parameters["task"]['project_uuid']
+        Returns:
+            bool: True if source layer found, False otherwise
+        """
+        self.layers_count = 1
+        layers = [
+            layer for layer in self.PROJECT.mapLayersByName(
+                self.task_parameters["infos"]["layer_name"]
+            ) 
+            if layer.id() == self.task_parameters["infos"]["layer_id"]
+        ]
+        
+        if not layers:
+            return False
+        
+        self.source_layer = layers[0]
+        self.source_crs = self.source_layer.sourceCrs()
+        self.source_layer_crs_authid = self.task_parameters["infos"]["layer_crs_authid"]
+        
+        # Extract feature count limit if provided
+        task_options = self.task_parameters.get("task", {}).get("options", {})
+        if "LAYERS" in task_options and "FEATURE_COUNT_LIMIT" in task_options["LAYERS"]:
+            limit = task_options["LAYERS"]["FEATURE_COUNT_LIMIT"]
+            if isinstance(limit, int) and limit > 0:
+                self.feature_count_limit = limit
+        
+        return True
 
-            # Set initial progress
+    def _configure_metric_crs(self):
+        """
+        Configure CRS for metric calculations, reprojecting if necessary.
+        
+        Sets has_to_reproject_source_layer flag and updates source_layer_crs_authid
+        if the source CRS is geographic or non-metric.
+        """
+        source_crs_distance_unit = self.source_crs.mapUnits()
+        
+        # Check if CRS is geographic or non-metric
+        is_non_metric = (
+            source_crs_distance_unit in ['DistanceUnit.Degrees', 'DistanceUnit.Unknown'] 
+            or self.source_crs.isGeographic()
+        )
+        
+        if is_non_metric:
+            self.has_to_reproject_source_layer = True
+            # Get optimal metric CRS for layer extent
+            self.source_layer_crs_authid = get_best_metric_crs(self.PROJECT, self.source_crs)
+            logger.info(
+                f"Source layer will be reprojected to {self.source_layer_crs_authid} "
+                "for metric calculations"
+            )
+        else:
+            logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
+
+    def _organize_layers_to_filter(self):
+        """
+        Organize layers to be filtered by provider type.
+        
+        Populates self.layers dictionary with layers grouped by provider,
+        and updates layers_count.
+        """
+        if not self.task_parameters["filtering"]["has_layers_to_filter"]:
+            return
+        
+        for layer_props in self.task_parameters["task"]["layers"]:
+            provider_type = layer_props["layer_provider_type"]
+            
+            # Initialize provider list if needed
+            if provider_type not in self.layers:
+                self.layers[provider_type] = []
+            
+            # Find layer by name and ID
+            layers = [
+                layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"])
+                if layer.id() == layer_props["layer_id"]
+            ]
+            
+            if layers:
+                self.layers[provider_type].append([layers[0], layer_props])
+                self.layers_count += 1
+        
+        self.provider_list = list(self.layers.keys())
+
+    def _log_backend_info(self):
+        """
+        Log backend information and performance warnings for filtering tasks.
+        
+        Only logs if task_action is 'filter'.
+        """
+        if self.task_action != 'filter':
+            return
+        
+        # Determine active backend
+        backend_name = "Memory/QGIS"
+        if POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES:
+            backend_name = "PostgreSQL/PostGIS"
+        elif self.param_source_provider_type == PROVIDER_SPATIALITE:
+            backend_name = "Spatialite"
+        elif self.param_source_provider_type == PROVIDER_OGR:
+            backend_name = "OGR"
+        
+        logger.info(f"Using {backend_name} backend for filtering")
+        
+        # Performance warning for large datasets without PostgreSQL
+        feature_count = self.source_layer.featureCount()
+        if feature_count > 50000 and not (
+            POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES
+        ):
+            logger.warning(
+                f"Large dataset detected ({feature_count:,} features) without PostgreSQL backend. "
+                "Performance may be reduced. Consider using PostgreSQL/PostGIS for optimal performance."
+            )
+
+    def _execute_task_action(self):
+        """
+        Execute the appropriate action based on task_action parameter.
+        
+        Returns:
+            bool: True if action succeeded, False otherwise
+        """
+        if self.task_action == 'filter':
+            return self.execute_filtering()
+        
+        elif self.task_action == 'unfilter':
+            return self.execute_unfiltering()
+        
+        elif self.task_action == 'reset':
+            return self.execute_reseting()
+        
+        elif self.task_action == 'export':
+            if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]:
+                return self.execute_exporting()
+            else:
+                return False
+        
+        return False
+
+    def run(self):
+        """
+        Main task orchestration method.
+        
+        Initializes layers, configures CRS, organizes filtering layers,
+        and executes the appropriate action based on task_action.
+        
+        Returns:
+            bool: True if task completed successfully, False otherwise
+        """
+        try:
+            # Initialize source layer
+            if not self._initialize_source_layer():
+                return False
+            
+            # Configure metric CRS if needed
+            self._configure_metric_crs()
+            
+            # Organize layers to filter by provider
+            self._organize_layers_to_filter()
+            
+            # Extract database and project configuration
+            if 'db_file_path' in self.task_parameters["task"]:
+                db_path = self.task_parameters["task"]['db_file_path']
+                if db_path not in (None, ''):
+                    self.db_file_path = db_path
+            
+            if 'project_uuid' in self.task_parameters["task"]:
+                proj_uuid = self.task_parameters["task"]['project_uuid']
+                if proj_uuid not in (None, ''):
+                    self.project_uuid = proj_uuid
+            
+            # Initialize progress and logging
             self.setProgress(0)
             logger.info(f"Starting {self.task_action} task for {self.layers_count} layer(s)")
             
-            # Add backend indicator and performance warnings
-            if self.task_action == 'filter':
-                """We will filter layers"""
-                
-                # Determine active backend
-                backend_name = "Memory/QGIS"
-                if POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES:
-                    backend_name = "PostgreSQL/PostGIS"
-                elif self.param_source_provider_type == PROVIDER_SPATIALITE:
-                    backend_name = "Spatialite"
-                elif self.param_source_provider_type == PROVIDER_OGR:
-                    backend_name = "OGR"
-                
-                logger.info(f"Using {backend_name} backend for filtering")
-                
-                # Performance warning for large datasets without PostgreSQL
-                feature_count = self.source_layer.featureCount()
-                if feature_count > 50000 and not (POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES):
-                    logger.warning(
-                        f"Large dataset detected ({feature_count:,} features) without PostgreSQL backend. "
-                        "Performance may be reduced. Consider using PostgreSQL/PostGIS for optimal performance."
-                    )
-
-                result = self.execute_filtering()
-                if self.isCanceled() or result is False:
-                    return False
-                    
-
-            elif self.task_action == 'unfilter':
-                """We will unfilter the layers"""
-
-                result = self.execute_unfiltering()
-                if self.isCanceled() or result is False:
-                    return False
-
-            elif self.task_action == 'reset':
-                """We will reset the layers"""
-
-                result = self.execute_reseting()
-                if self.isCanceled() or result is False:
-                    return False                
-
-            elif self.task_action == 'export':
-                """We will export layers"""
-                if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"] == True:
-                    result = self.execute_exporting()
-                    if self.isCanceled() or result is False:
-                        return False
-                else:
-                    return False
+            # Log backend info and performance warnings
+            self._log_backend_info()
+            
+            # Execute the appropriate action
+            result = self._execute_task_action()
+            if self.isCanceled() or result is False:
+                return False
             
             # Task completed successfully
             self.setProgress(100)
             logger.info(f"{self.task_action.capitalize()} task completed successfully")
             return True
-    
+        
         except Exception as e:
             self.exception = e
             safe_log(logger, logging.ERROR, f'FilterEngineTask run() failed: {e}', exc_info=True)
             return False
 
 
-    def execute_source_layer_filtering(self):
-        """Manage the creation of the origin filtering expression"""
-        result = False
+    def _initialize_source_filtering_parameters(self):
+        """Extract and initialize all parameters needed for source layer filtering"""
         self.param_source_old_subset = ''
-
+        
+        # Extract basic layer information
         self.param_source_provider_type = self.task_parameters["infos"]["layer_provider_type"]
         self.param_source_schema = self.task_parameters["infos"]["layer_schema"]
         self.param_source_table = self.task_parameters["infos"]["layer_name"]
@@ -455,139 +530,239 @@ class FilterEngineTask(QgsTask):
         self.param_source_geom = self.task_parameters["infos"]["layer_geometry_field"]
         self.primary_key_name = self.task_parameters["infos"]["primary_key_name"]
         
-        # Log filtering details for debugging and user feedback
         logger.debug(f"Filtering layer: {self.param_source_table} (Provider: {self.param_source_provider_type})")
+        
+        # Extract filtering configuration
         self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
-        self.source_layer_fields_names = [field.name() for field in self.source_layer.fields() if field.name() != self.primary_key_name]
-
-        if self.has_combine_operator == True:
+        self.source_layer_fields_names = [
+            field.name() for field in self.source_layer.fields() 
+            if field.name() != self.primary_key_name
+        ]
+        
+        if self.has_combine_operator:
             self.param_source_layer_combine_operator = self.task_parameters["filtering"]["source_layer_combine_operator"]
             self.param_other_layers_combine_operator = self.task_parameters["filtering"]["other_layers_combine_operator"]
-            if self.source_layer.subsetString() != '':
+            if self.source_layer.subsetString():
                 self.param_source_old_subset = self.source_layer.subsetString()
 
-                
+    def _qualify_field_names_in_expression(self, expression):
+        """
+        Add proper table qualifiers to field names in the expression.
+        
+        For PostgreSQL, converts field references to "table"."field" format.
+        For other providers, ensures proper quoting.
+        """
+        # Find fields that might be primary key or similar
+        fields_similar_to_pk = [
+            x for x in self.source_layer_fields_names 
+            if self.primary_key_name.find(x) > -1
+        ]
+        existing_fields = [
+            x for x in self.source_layer_fields_names 
+            if expression.find(x) > -1
+        ]
+        
+        # Qualify primary key field
+        if self.primary_key_name in expression:
+            if self.param_source_table not in expression:
+                if f' "{self.primary_key_name}" ' in expression:
+                    if self.param_source_provider_type == PROVIDER_POSTGRES:
+                        expression = expression.replace(
+                            f'"{self.primary_key_name}"',
+                            f'"{self.param_source_table}"."{self.primary_key_name}"'
+                        )
+                elif f" {self.primary_key_name} " in expression:
+                    if self.param_source_provider_type == PROVIDER_POSTGRES:
+                        expression = expression.replace(
+                            self.primary_key_name,
+                            f'"{self.param_source_table}"."{self.primary_key_name}"'
+                        )
+                    else:
+                        expression = expression.replace(
+                            self.primary_key_name,
+                            f'"{self.primary_key_name}"'
+                        )
+        
+        # Qualify other existing fields
+        elif existing_fields:
+            if self.param_source_table not in expression:
+                for field_name in existing_fields:
+                    if f' "{field_name}" ' in expression:
+                        if self.param_source_provider_type == PROVIDER_POSTGRES:
+                            expression = expression.replace(
+                                f'"{field_name}"',
+                                f'"{self.param_source_table}"."{field_name}"'
+                            )
+                    elif f" {field_name} " in expression:
+                        if self.param_source_provider_type == PROVIDER_POSTGRES:
+                            expression = expression.replace(
+                                field_name,
+                                f'"{self.param_source_table}"."{field_name}"'
+                            )
+                        else:
+                            expression = expression.replace(
+                                field_name,
+                                f'"{field_name}"'
+                            )
+        
+        return expression
 
-        logger.debug(f"Task expression: {self.task_parameters['task']['expression']}")
-        if self.task_parameters["task"]["expression"] != None:
+    def _process_qgis_expression(self, expression):
+        """
+        Process and validate a QGIS expression, converting it to appropriate SQL.
+        
+        Returns:
+            tuple: (processed_expression, is_field_expression) or (None, None) if invalid
+        """
+        if QgsExpression(expression).isField():
+            return None, None
+        
+        if not QgsExpression(expression).isValid():
+            return None, None
+        
+        # Add leading space and check for field equality
+        expression = " " + expression
+        is_field_expression = QgsExpression().isFieldEqualityExpression(
+            self.task_parameters["task"]["expression"]
+        )
+        
+        if is_field_expression[0]:
+            self.is_field_expression = is_field_expression
+        
+        # Qualify field names
+        expression = self._qualify_field_names_in_expression(expression)
+        
+        # Convert to PostGIS SQL
+        expression = self.qgis_expression_to_postgis(expression)
+        expression = expression.strip()
+        
+        # Handle CASE statements
+        if expression.startswith("CASE"):
+            expression = 'SELECT ' + expression
+        
+        return expression, is_field_expression
+
+    def _combine_with_old_subset(self, expression):
+        """
+        Combine new expression with existing subset string using combine operator.
+        
+        Returns:
+            str: Combined expression
+        """
+        if not self.param_source_old_subset or not self.param_source_layer_combine_operator:
+            return expression
+        
+        # Extract WHERE clause from old subset
+        index_where = self.param_source_old_subset.find('WHERE')
+        if index_where == -1:
+            return expression
+        
+        param_old_subset_where = self.param_source_old_subset[index_where:]
+        param_source_old_subset = self.param_source_old_subset[:index_where]
+        
+        # Remove trailing )) if present
+        if param_old_subset_where.endswith('))'):
+            param_old_subset_where = param_old_subset_where[:-1]
+        
+        combined = (
+            f'{param_source_old_subset} {param_old_subset_where} '
+            f'{self.param_source_layer_combine_operator} {expression} )'
+        )
+        
+        return combined
+
+    def _build_feature_id_expression(self, features_list):
+        """
+        Build SQL IN expression from list of feature IDs.
+        
+        Returns:
+            str: SQL expression like "table"."pk" IN (1,2,3) or "table"."pk" IN ('a','b','c')
+        """
+        features_ids = [str(feature[self.primary_key_name]) for feature in features_list]
+        
+        if not features_ids:
+            return None
+        
+        # Build IN clause based on primary key type
+        if self.task_parameters["infos"]["primary_key_is_numeric"]:
+            expression = (
+                f'"{self.param_source_table}"."{self.primary_key_name}" IN '
+                f'({", ".join(features_ids)})'
+            )
+        else:
+            expression = (
+                f'"{self.param_source_table}"."{self.primary_key_name}" IN '
+                f"('{\"\', \'\".join(features_ids)}')"
+            )
+        
+        # Combine with old subset if needed
+        if self.param_source_old_subset and self.param_source_layer_combine_operator:
+            expression = (
+                f'( {self.param_source_old_subset} ) '
+                f'{self.param_source_layer_combine_operator} {expression}'
+            )
+        
+        return expression
+
+    def _apply_filter_and_update_subset(self, expression):
+        """
+        Apply filter expression to source layer and update subset strings.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        # CRITICAL: setSubsetString must be called from main thread
+        result = self._safe_set_subset_string(self.source_layer, expression)
+        
+        if result:
+            # Build full SELECT expression for subset management
+            full_expression = (
+                f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
+                f'"{self.param_source_table}"."{self.param_source_geom}" '
+                f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
+                f'WHERE {expression}'
+            )
+            self.manage_layer_subset_strings(
+                self.source_layer,
+                full_expression,
+                self.primary_key_name,
+                self.param_source_geom,
+                False
+            )
+        
+        return result
+
+    def execute_source_layer_filtering(self):
+        """Manage the creation of the origin filtering expression"""
+        # Initialize all parameters and configuration
+        self._initialize_source_filtering_parameters()
+        
+        result = False
+        task_expression = self.task_parameters["task"]["expression"]
+        logger.debug(f"Task expression: {task_expression}")
+        
+        # Process QGIS expression if provided
+        if task_expression:
+            processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
             
-            self.expression = self.task_parameters["task"]["expression"]
-            if QgsExpression(self.expression).isField() is False:
-
-                if QgsExpression(self.expression).isValid() is True:
-
-                    self.expression = " " + self.expression
-                    is_field_expression =  QgsExpression().isFieldEqualityExpression(self.task_parameters["task"]["expression"])
-
-                    if is_field_expression[0] == True:
-                        self.is_field_expression = is_field_expression
-                    
-                    fields_similar_to_primary_key_name = [x for x in self.source_layer_fields_names if self.primary_key_name.find(x) > -1]
-                    fields_similar_to_primary_key_name_in_expression = [x for x in fields_similar_to_primary_key_name if self.expression.find(x) > -1]
-                    existing_fields = [x for x in self.source_layer_fields_names if self.expression.find(x) > -1]
-                    if self.expression.find(self.primary_key_name) > -1:
-                        if self.expression.find(self.param_source_table) < 0:
-                            if self.expression.find(' "' + self.primary_key_name + '" ') > -1:
-                                if self.param_source_provider_type == PROVIDER_POSTGRES:
-                                    self.expression = self.expression.replace('"' + self.primary_key_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
-                            elif self.expression.find(" " + self.primary_key_name + " ") > -1:
-                                if self.param_source_provider_type == PROVIDER_POSTGRES:
-                                    self.expression = self.expression.replace(self.primary_key_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=self.primary_key_name))
-                                else:
-                                    self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=self.primary_key_name))
-                    elif len(existing_fields) >= 1:
-                        if self.expression.find(self.param_source_table) < 0:
-                            for field_name in existing_fields:
-                                if self.expression.find(' "' + field_name + '" ') > -1:
-                                    if self.param_source_provider_type == PROVIDER_POSTGRES:
-                                        self.expression = self.expression.replace('"' + field_name + '"', '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
-                                elif self.expression.find(" " + field_name + " ") > -1:
-                                    if self.param_source_provider_type == PROVIDER_POSTGRES:
-                                        self.expression = self.expression.replace(field_name, '"{source_table}"."{field_name}"'.format(source_table=self.param_source_table, field_name=field_name))
-                                    else:
-                                        self.expression = self.expression.replace(self.primary_key_name,  '"{field_name}"'.format(field_name=field_name))    
-
-                    self.expression = self.qgis_expression_to_postgis(self.expression)
-                    self.expression = self.expression.strip()
-                    if self.expression.find("CASE") == 0:
-                        self.expression = 'SELECT ' + self.expression
-
-                    param_old_subset_where_clause = ''
-                    param_source_old_subset = ''
-                    if self.param_source_old_subset != '' and self.param_source_layer_combine_operator != '':
-                        index_where_clause = self.param_source_old_subset.find('WHERE')
-                        if index_where_clause > -1:
-                            param_old_subset_where_clause = self.param_source_old_subset[index_where_clause:]
-                            if param_old_subset_where_clause[-2:] == '))':
-                                param_old_subset_where_clause = param_old_subset_where_clause[:-1]
-                                param_source_old_subset = self.param_source_old_subset[:index_where_clause]
-
-                        self.expression = '{source_old_subset} {old_subset_where_clause} {param_combine_operator} {expression} )'.format(source_old_subset=param_source_old_subset,
-                                                                                                                                            old_subset_where_clause=param_old_subset_where_clause,   
-                                                                                                                                            param_combine_operator=self.param_source_layer_combine_operator, 
-                                                                                                                                            expression=self.expression)
-
-                    # sql_expression = QgsSQLStatement('SELECT * FROM  "{source_schema}"."{source_table}" WHERE {expression}'.format(source_schema=self.param_source_schema,
-                    #                                                                                                                 source_table=self.param_source_table,
-                    #                                                                                                                 expression=self.expression),
-                    #                                                                                                                 True)
-                    # validation_check = sql_expression.doBasicValidationChecks()
-                    # print(sql_expression)
-                    # print(sql_expression.dump())
-                    # print(validation_check)
-                    
-                    # if validation_check[0] is True:
-
-                    # CRITICAL FIX: setSubsetString must be called from main thread to avoid crash
-                    result = self._safe_set_subset_string(self.source_layer, self.expression)
-                    if result is True:
-                        expression = 'SELECT "{param_source_table}"."{primary_key_name}", "{param_source_table}"."{param_source_geom}" FROM "{param_source_schema}"."{param_source_table}" WHERE {expression}'.format(
-                                                                                                                                                                                                                        primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                        param_source_geom=self.param_source_geom,
-                                                                                                                                                                                                                        param_source_schema=self.param_source_schema,
-                                                                                                                                                                                                                        param_source_table=self.param_source_table,
-                                                                                                                                                                                                                        expression=self.expression
-                                                                                                                                                                                                                        )  
-                        self.manage_layer_subset_strings(self.source_layer, expression, self.primary_key_name, self.param_source_geom, False)
-
-
-        if result is False:
-            self.is_field_expression = None    
-            features_list = self.task_parameters["task"]["features"]
-
-            features_ids = [str(feature[self.primary_key_name]) for feature in features_list]
-
-            if len(features_ids) > 0:
-                if self.task_parameters["infos"]["primary_key_is_numeric"] is True:
-                    self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(" + ", ".join(features_ids) + ")"
-                else:
-                    self.expression = '"{source_table}"."{primary_key_name}" IN '.format(source_table=self.param_source_table, primary_key_name=self.primary_key_name) + "(\'" + "\', \'".join(features_ids) + "\')"
+            if processed_expr:
+                # Combine with existing subset if needed
+                self.expression = self._combine_with_old_subset(processed_expr)
                 
-                if self.param_source_old_subset != '' and self.param_source_layer_combine_operator != '':
-                    self.expression = '( {param_old_subset} ) {param_combine_operator} {expression}'.format(param_old_subset=self.param_source_old_subset, param_combine_operator=self.param_source_layer_combine_operator, expression=self.expression)
-
-                # sql_expression = QgsSQLStatement('SELECT * FROM  "{source_schema}"."{source_table}" WHERE {expression}'.format(source_schema=self.param_source_schema,
-                #                                                                                                                 source_table=self.param_source_table,
-                #                                                                                                                 expression=self.expression),
-                #                                                                                                                 True)
-                # validation_check = sql_expression.doBasicValidationChecks()
-                # print(validation_check)
-                # if validation_check[0] is True:
-
-                # CRITICAL FIX: setSubsetString must be called from main thread to avoid crash
-                result = self._safe_set_subset_string(self.source_layer, self.expression)
-                if result is True:
-                    expression = 'SELECT "{param_source_table}"."{primary_key_name}", "{param_source_table}"."{param_source_geom}" FROM "{param_source_schema}"."{param_source_table}" WHERE {expression}'.format(
-                                                                                                                                                                                                                    primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                    param_source_geom=self.param_source_geom,
-                                                                                                                                                                                                                    param_source_schema=self.param_source_schema,
-                                                                                                                                                                                                                    param_source_table=self.param_source_table,
-                                                                                                                                                                                                                    expression=self.expression
-                                                                                                                                                                                                                    )  
-                    self.manage_layer_subset_strings(self.source_layer, expression, self.primary_key_name, self.param_source_geom, False)
-
-
-
+                # Apply filter and update subset
+                result = self._apply_filter_and_update_subset(self.expression)
+        
+        # Fallback to feature ID list if expression processing failed
+        if not result:
+            self.is_field_expression = None
+            features_list = self.task_parameters["task"]["features"]
+            
+            if features_list:
+                self.expression = self._build_feature_id_expression(features_list)
+                
+                if self.expression:
+                    result = self._apply_filter_and_update_subset(self.expression)
+        
         return result
     
     def _safe_set_subset_string(self, layer, expression):
@@ -637,17 +812,20 @@ class FilterEngineTask(QgsTask):
         
         return result_container.get('result', False)
     
-    def manage_distant_layers_geometric_filtering(self):
-        """Filter layers from a prefiltered layer"""
-
-        result = False
+    def _initialize_source_subset_and_buffer(self):
+        """
+        Initialize source subset expression and buffer parameters.
         
+        Sets param_source_new_subset based on expression type and
+        extracts buffer value/expression from task parameters.
+        """
+        # Set source subset based on expression type
         if QgsExpression(self.expression).isField() is False:
             self.param_source_new_subset = self.expression
         else:
             self.param_source_new_subset = self.param_source_old_subset
 
-
+        # Extract buffer parameters if configured
         if self.task_parameters["filtering"]["has_buffer_value"] is True:
             if self.task_parameters["filtering"]["buffer_value_property"] is True:
                 if self.task_parameters["filtering"]["buffer_value_expression"] != '':
@@ -655,12 +833,19 @@ class FilterEngineTask(QgsTask):
                 else:
                     self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]
             else:
-                self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]  
+                self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]
 
+    def _prepare_geometries_by_provider(self, provider_list):
+        """
+        Prepare source geometries for each provider type.
         
-        provider_list = self.provider_list + [self.param_source_provider_type]
-        provider_list = list(dict.fromkeys(provider_list))
-
+        Args:
+            provider_list: List of unique provider types to prepare
+            
+        Returns:
+            bool: True if all required geometries prepared successfully
+        """
+        # Prepare PostgreSQL source geometry
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
             logger.info("Preparing PostgreSQL source geometry...")
             self.prepare_postgresql_source_geom()
@@ -697,27 +882,69 @@ class FilterEngineTask(QgsTask):
                     logger.error(f"OGR fallback failed: {e2}")
                     return False
 
+        # Prepare OGR geometry if needed for OGR layers or buffer expressions
         if 'ogr' in provider_list or self.param_buffer_expression != '':
             logger.info("Preparing OGR/Spatialite source geometry...")
             self.prepare_ogr_source_geom()
 
+        return True
 
+    def _filter_all_layers_with_progress(self):
+        """
+        Iterate through all layers and apply filtering with progress tracking.
+        
+        Updates task description to show current layer being processed.
+        Progress is visible in QGIS task manager panel.
+        
+        Returns:
+            bool: True if all layers processed (some may fail), False if canceled
+        """
         i = 1
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
+                # Update task description with current progress
+                self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer.name()}")
+                
                 logger.info(f"Filtering layer {i}/{self.layers_count}: {layer.name()} ({layer_provider_type})")
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
+                
                 if result == True:
                     logger.info(f"{layer.name()} has been filtered")
                 else:
                     logger.error(f"{layer.name()} - errors occurred during filtering")
+                
                 i += 1
                 progress_percent = int((i / self.layers_count) * 100)
                 self.setProgress(progress_percent)
+                
                 if self.isCanceled():
                     return False
-                
+        
         return True
+
+    def manage_distant_layers_geometric_filtering(self):
+        """
+        Filter layers from a prefiltered layer.
+        
+        Orchestrates the complete workflow: initialize parameters, prepare geometries,
+        and filter all layers with progress tracking.
+        
+        Returns:
+            bool: True if all layers processed successfully, False on error or cancellation
+        """
+        # Initialize source subset and buffer parameters
+        self._initialize_source_subset_and_buffer()
+        
+        # Build unique provider list including source layer provider
+        provider_list = self.provider_list + [self.param_source_provider_type]
+        provider_list = list(dict.fromkeys(provider_list))
+        
+        # Prepare geometries for all provider types
+        if not self._prepare_geometries_by_provider(provider_list):
+            return False
+        
+        # Filter all layers with progress tracking
+        return self._filter_all_layers_with_progress()
     
     def qgis_expression_to_postgis(self, expression):
 
@@ -914,179 +1141,315 @@ class FilterEngineTask(QgsTask):
         logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...") 
 
 
-    def prepare_ogr_source_geom(self):
-
-        layer = self.source_layer
-        param_buffer_distance = None 
-
-        # Fix invalid geometries from source layer to prevent processing errors
-        alg_params_fixgeometries_source = {
+    def _fix_invalid_geometries(self, layer, output_key):
+        """
+        Fix invalid geometries in layer using QGIS processing.
+        
+        Args:
+            layer: Input layer
+            output_key: Key to store output in self.outputs dict
+            
+        Returns:
+            QgsVectorLayer: Layer with fixed geometries
+        """
+        alg_params = {
             'INPUT': layer,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        self.outputs['alg_source_layer_params_fixgeometries_source'] = processing.run('qgis:fixgeometries', alg_params_fixgeometries_source)
-        layer = self.outputs['alg_source_layer_params_fixgeometries_source']['OUTPUT']
+        self.outputs[output_key] = processing.run('qgis:fixgeometries', alg_params)
+        return self.outputs[output_key]['OUTPUT']
 
-        if self.has_to_reproject_source_layer is True:
+
+    def _reproject_layer(self, layer, target_crs):
+        """
+        Reproject layer to target CRS and fix resulting geometries.
         
-            alg_source_layer_params_reprojectlayer = {
-                'INPUT': layer,
-                'TARGET_CRS': self.source_layer_crs_authid,
-                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-            }
-            self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_source_layer_params_reprojectlayer)
-            layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
+        Args:
+            layer: Input layer
+            target_crs: Target CRS authority ID (e.g., 'EPSG:3857')
+            
+        Returns:
+            QgsVectorLayer: Reprojected layer with fixed geometries
+        """
+        # Reproject
+        alg_params = {
+            'INPUT': layer,
+            'TARGET_CRS': target_crs,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_params)
+        layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
+        
+        # Fix geometries after reprojection
+        layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_reproject')
+        
+        # Create spatial index
+        processing.run('qgis:createspatialindex', {"INPUT": layer})
+        
+        return layer
 
-            # Fix invalid geometries after reprojection
-            alg_params_fixgeometries = {
-                'INPUT': layer,
-                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-            }
-            self.outputs['alg_source_layer_params_fixgeometries_reproject'] = processing.run('qgis:fixgeometries', alg_params_fixgeometries)
-            layer = self.outputs['alg_source_layer_params_fixgeometries_reproject']['OUTPUT']
 
-            alg_params_createspatialindex = {
-                "INPUT": layer
-            }
-            processing.run('qgis:createspatialindex', alg_params_createspatialindex)
+    def _get_buffer_distance_parameter(self):
+        """
+        Get buffer distance parameter from task configuration.
+        
+        Returns:
+            QgsProperty or float or None: Buffer distance
+        """
+        if self.param_buffer_expression:
+            return QgsProperty.fromExpression(self.param_buffer_expression)
+        elif self.param_buffer_value is not None:
+            return float(self.param_buffer_value)
+        return None
 
 
-        if self.param_buffer_value != None or self.param_buffer_expression != None:
+    def _apply_qgis_buffer(self, layer, buffer_distance):
+        """
+        Apply buffer using QGIS processing algorithm.
+        
+        Args:
+            layer: Input layer
+            buffer_distance: QgsProperty or float
+            
+        Returns:
+            QgsVectorLayer: Buffered layer
+            
+        Raises:
+            Exception: If buffer operation fails
+        """
+        # Fix geometries before buffer
+        layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
+        
+        # Log layer info
+        logger.debug(f"Layer before buffer: {layer.featureCount()} features, "
+                   f"CRS: {layer.crs().authid()}, "
+                   f"Geometry type: {layer.geometryType()}")
+        
+        # Apply buffer with dissolve
+        alg_params = {
+            'DISSOLVE': True,
+            'DISTANCE': buffer_distance,
+            'END_CAP_STYLE': 0,
+            'INPUT': layer,
+            'JOIN_STYLE': 0,
+            'MITER_LIMIT': 2,
+            'SEGMENTS': 5,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        
+        self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_params)
+        layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
+        
+        # Create spatial index
+        processing.run('qgis:createspatialindex', {"INPUT": layer})
+        
+        return layer
 
-            if self.param_buffer_expression != None and self.param_buffer_expression != '':    
-                param_buffer_distance = QgsProperty.fromExpression(self.param_buffer_expression)
-            else:
-                param_buffer_distance = float(self.param_buffer_value)   
 
-            # Try QGIS buffer algorithm first, fallback to manual buffer if it fails
-            try:
-                # Fix invalid geometries before buffer operation
-                alg_params_fixgeometries = {
-                    'INPUT': layer,
-                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-                }
-                self.outputs['alg_source_layer_params_fixgeometries_buffer'] = processing.run('qgis:fixgeometries', alg_params_fixgeometries)
-                layer = self.outputs['alg_source_layer_params_fixgeometries_buffer']['OUTPUT']
-                
-                # Log layer info before buffer
-                logger.debug(f"Layer before buffer: {layer.featureCount()} features, "
-                           f"CRS: {layer.crs().authid()}, "
-                           f"Geometry type: {layer.geometryType()}")
+    def _evaluate_buffer_distance(self, layer, buffer_param):
+        """
+        Evaluate buffer distance from parameter (handles expressions).
+        
+        Args:
+            layer: Layer to use for expression evaluation
+            buffer_param: QgsProperty or float
+            
+        Returns:
+            float: Evaluated buffer distance
+        """
+        if isinstance(buffer_param, QgsProperty):
+            # Expression-based buffer: use first feature to evaluate
+            features = list(layer.getFeatures())
+            if features:
+                context = QgsExpressionContext()
+                context.setFeature(features[0])
+                return buffer_param.value(context, 0)
+            return 0
+        return buffer_param
 
-                alg_source_layer_params_buffer = {
-                    'DISSOLVE': True,
-                    'DISTANCE': param_buffer_distance,
-                    'END_CAP_STYLE': 0,
-                    'INPUT': layer,
-                    'JOIN_STYLE': 0,
-                    'MITER_LIMIT': 2,
-                    'SEGMENTS': 5,
-                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-                }
+    def _create_memory_layer_for_buffer(self, layer):
+        """
+        Create empty memory layer for buffered features.
+        
+        Args:
+            layer: Source layer for CRS and geometry type
+            
+        Returns:
+            QgsVectorLayer: Empty memory layer configured for buffered geometries
+        """
+        geom_type = "Polygon" if layer.geometryType() in [0, 1] else "MultiPolygon"
+        buffered_layer = QgsVectorLayer(
+            f"{geom_type}?crs={layer.crs().authid()}",
+            "buffered_temp",
+            "memory"
+        )
+        return buffered_layer
 
-                self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_source_layer_params_buffer)
-                layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']   
-
-                alg_params_createspatialindex = {
-                    "INPUT": layer
-                }
-                processing.run('qgis:createspatialindex', alg_params_createspatialindex)
-                
-            except Exception as e:
-                # Fallback: manual buffer using QgsGeometry
-                logger.warning(f"QGIS buffer algorithm failed: {str(e)}, using manual buffer approach")
-                
-                # Check if layer has features
-                feature_count = layer.featureCount()
-                logger.debug(f"Layer has {feature_count} features before manual buffer")
-                
-                if feature_count == 0:
-                    raise Exception(f"Cannot buffer layer: source layer has no features. Original error: {str(e)}")
-                
-                # Determine buffer distance
-                if isinstance(param_buffer_distance, QgsProperty):
-                    # For expression-based buffer, use first feature to evaluate
-                    features = list(layer.getFeatures())
-                    if features:
-                        context = QgsExpressionContext()
-                        context.setFeature(features[0])
-                        buffer_dist = param_buffer_distance.value(context, 0)
-                    else:
-                        buffer_dist = 0
-                else:
-                    buffer_dist = param_buffer_distance
-                
-                logger.debug(f"Manual buffer distance: {buffer_dist}")
-                
-                # Create memory layer for buffered geometries
-                geom_type = "Polygon" if layer.geometryType() in [0, 1] else "MultiPolygon"
-                buffered_layer = QgsVectorLayer(
-                    f"{geom_type}?crs={layer.crs().authid()}",
-                    "buffered_temp",
-                    "memory"
-                )
-                
-                provider = buffered_layer.dataProvider()
-                
-                # Buffer each feature and collect geometries
-                geometries = []
-                valid_features = 0
-                invalid_features = 0
-                
-                for feature in layer.getFeatures():
-                    geom = feature.geometry()
-                    if geom and not geom.isEmpty():
-                        try:
-                            # Make valid before buffer
-                            if not geom.isGeosValid():
-                                geom = geom.makeValid()
-                            
-                            # Apply buffer
-                            buffered_geom = geom.buffer(float(buffer_dist), 5)
-                            
-                            if buffered_geom and not buffered_geom.isEmpty():
-                                geometries.append(buffered_geom)
-                                valid_features += 1
-                            else:
-                                invalid_features += 1
-                        except Exception as feat_error:
-                            logger.debug(f"Skipping invalid feature during manual buffer: {feat_error}")
-                            invalid_features += 1
-                            continue
+    def _buffer_all_features(self, layer, buffer_dist):
+        """
+        Buffer all features from layer.
+        
+        Args:
+            layer: Source layer
+            buffer_dist: Buffer distance
+            
+        Returns:
+            tuple: (list of geometries, valid_count, invalid_count)
+        """
+        geometries = []
+        valid_features = 0
+        invalid_features = 0
+        
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if geom and not geom.isEmpty():
+                try:
+                    # Make valid before buffer
+                    if not geom.isGeosValid():
+                        geom = geom.makeValid()
+                    
+                    # Apply buffer
+                    buffered_geom = geom.buffer(float(buffer_dist), 5)
+                    
+                    if buffered_geom and not buffered_geom.isEmpty():
+                        geometries.append(buffered_geom)
+                        valid_features += 1
                     else:
                         invalid_features += 1
-                
-                logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
-                
-                # Dissolve all geometries into one
-                if geometries:
-                    dissolved_geom = QgsGeometry.unaryUnion(geometries)
-                    
-                    # Create feature with dissolved geometry
-                    feat = QgsFeature()
-                    feat.setGeometry(dissolved_geom)
-                    provider.addFeatures([feat])
-                    
-                    buffered_layer.updateExtents()
-                    layer = buffered_layer
-                    
-                    # Create spatial index
-                    alg_params_createspatialindex = {
-                        "INPUT": layer
-                    }
-                    processing.run('qgis:createspatialindex', alg_params_createspatialindex)
-                else:
-                    error_msg = (f"No valid geometries could be buffered. "
-                                f"Total features: {feature_count}, "
-                                f"Valid after buffer: {valid_features}, "
-                                f"Invalid: {invalid_features}. "
-                                f"Original QGIS error: {str(e)}")
-                    raise Exception(error_msg)
+                except Exception as feat_error:
+                    logger.debug(f"Skipping invalid feature during manual buffer: {feat_error}")
+                    invalid_features += 1
+            else:
+                invalid_features += 1
+        
+        logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
+        return geometries, valid_features, invalid_features
+
+    def _dissolve_and_add_to_layer(self, geometries, buffered_layer):
+        """
+        Dissolve geometries and add to memory layer.
+        
+        Args:
+            geometries: List of buffered geometries
+            buffered_layer: Target memory layer
+            
+        Returns:
+            QgsVectorLayer: Layer with dissolved geometry added
+        """
+        # Dissolve all geometries into one
+        dissolved_geom = QgsGeometry.unaryUnion(geometries)
+        
+        # Create feature with dissolved geometry
+        feat = QgsFeature()
+        feat.setGeometry(dissolved_geom)
+        
+        provider = buffered_layer.dataProvider()
+        provider.addFeatures([feat])
+        buffered_layer.updateExtents()
+        
+        # Create spatial index
+        processing.run('qgis:createspatialindex', {"INPUT": buffered_layer})
+        
+        return buffered_layer
+
+    def _create_buffered_memory_layer(self, layer, buffer_distance):
+        """
+        Manually buffer layer features and create memory layer (fallback method).
+        
+        Args:
+            layer: Input layer
+            buffer_distance: QgsProperty or float
+            
+        Returns:
+            QgsVectorLayer: Memory layer with buffered geometries
+            
+        Raises:
+            Exception: If no valid geometries could be buffered
+        """
+        feature_count = layer.featureCount()
+        logger.debug(f"Layer has {feature_count} features before manual buffer")
+        
+        if feature_count == 0:
+            raise Exception("Cannot buffer layer: source layer has no features")
+        
+        # Evaluate buffer distance
+        buffer_dist = self._evaluate_buffer_distance(layer, buffer_distance)
+        logger.debug(f"Manual buffer distance: {buffer_dist}")
+        
+        # Create memory layer
+        buffered_layer = self._create_memory_layer_for_buffer(layer)
+        
+        # Buffer all features
+        geometries, valid_features, invalid_features = self._buffer_all_features(layer, buffer_dist)
+        
+        # Dissolve and add to layer if we have valid geometries
+        if geometries:
+            return self._dissolve_and_add_to_layer(geometries, buffered_layer)
+        else:
+            error_msg = (f"No valid geometries could be buffered. "
+                        f"Total features: {feature_count}, "
+                        f"Valid after buffer: {valid_features}, "
+                        f"Invalid: {invalid_features}")
+            raise Exception(error_msg)
 
 
+    def _apply_buffer_with_fallback(self, layer, buffer_distance):
+        """
+        Apply buffer to layer with automatic fallback to manual method.
+        
+        Args:
+            layer: Input layer
+            buffer_distance: QgsProperty or float
+            
+        Returns:
+            QgsVectorLayer: Buffered layer
+            
+        Raises:
+            Exception: If both QGIS and manual buffer methods fail
+        """
+        try:
+            # Try QGIS buffer algorithm first
+            return self._apply_qgis_buffer(layer, buffer_distance)
+        except Exception as e:
+            # Fallback to manual buffer
+            logger.warning(f"QGIS buffer algorithm failed: {str(e)}, using manual buffer approach")
+            try:
+                return self._create_buffered_memory_layer(layer, buffer_distance)
+            except Exception as manual_error:
+                raise Exception(f"Both buffer methods failed. QGIS: {str(e)}, Manual: {str(manual_error)}")
+
+
+    def prepare_ogr_source_geom(self):
+        """
+        Prepare OGR source geometry with optional reprojection and buffering.
+        
+        REFACTORED: Decomposed from 173 lines to ~35 lines using helper methods.
+        Main method now orchestrates geometry preparation workflow.
+        
+        Process:
+        1. Fix invalid geometries in source layer
+        2. Reproject if needed
+        3. Apply buffer if specified
+        4. Store result in self.ogr_source_geom
+        """
+        layer = self.source_layer
+        
+        # Step 1: Fix invalid geometries
+        layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_source')
+        
+        # Step 2: Reproject if needed
+        if self.has_to_reproject_source_layer:
+            layer = self._reproject_layer(layer, self.source_layer_crs_authid)
+        
+        # Step 3: Apply buffer if specified
+        buffer_distance = self._get_buffer_distance_parameter()
+        if buffer_distance is not None:
+            layer = self._apply_buffer_with_fallback(layer, buffer_distance)
+        
+        # Store result
         self.ogr_source_geom = layer
-
         logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
+
 
 
     def _verify_and_create_spatial_index(self, layer, layer_name=None):
@@ -1181,6 +1544,101 @@ class FilterEngineTask(QgsTask):
         
         return postgis_sub_expression_array, param_distant_geom_expression
 
+    def _get_source_reference(self, sub_expression):
+        """
+        Determine the source reference for spatial joins.
+        
+        Returns either materialized view reference or the sub_expression/table.
+        
+        Args:
+            sub_expression: Source layer subset expression or table reference
+            
+        Returns:
+            str: Source reference for JOIN clause
+        """
+        if self.current_materialized_view_name:
+            return f'"{self.current_materialized_view_schema}"."mv_{self.current_materialized_view_name}_dump"'
+        return sub_expression
+
+    def _build_spatial_join_query(self, layer_props, param_postgis_sub_expression, sub_expression):
+        """
+        Build SELECT query with spatial JOIN for filtering.
+        
+        Args:
+            layer_props: Layer properties dict
+            param_postgis_sub_expression: PostGIS spatial predicate
+            sub_expression: Source layer subset expression
+            
+        Returns:
+            str: SELECT query with INNER JOIN
+        """
+        param_distant_primary_key_name = layer_props["primary_key_name"]
+        param_distant_schema = layer_props["layer_schema"]
+        param_distant_table = layer_props["layer_name"]
+        
+        source_ref = self._get_source_reference(sub_expression)
+        
+        # Check if expression is a field or complex query
+        is_field = QgsExpression(self.expression).isField()
+        
+        # Build query based on combine operator and expression type
+        if self.has_combine_operator:
+            # With combine operator - no WHERE clause needed
+            query = (
+                f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
+            )
+        else:
+            # Without combine operator - add WHERE clause if not a field
+            if is_field:
+                # For field expressions, use simple JOIN
+                query = (
+                    f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                    f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                    f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
+                )
+            else:
+                # For complex expressions, add WHERE clause
+                if self.current_materialized_view_name:
+                    # Materialized view has WHERE embedded
+                    query = (
+                        f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                        f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                        f'INNER JOIN {source_ref} ON {param_postgis_sub_expression} '
+                        f'WHERE {sub_expression})'
+                    )
+                else:
+                    # Direct table JOIN with WHERE
+                    query = (
+                        f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '
+                        f'FROM "{param_distant_schema}"."{param_distant_table}" '
+                        f'INNER JOIN "{self.param_source_schema}"."{self.param_source_table}" '
+                        f'ON {param_postgis_sub_expression} WHERE {sub_expression})'
+                    )
+        
+        return query
+
+    def _apply_combine_operator(self, primary_key_name, param_expression, param_old_subset, param_combine_operator):
+        """
+        Apply SQL set operator to combine with existing subset.
+        
+        Args:
+            primary_key_name: Primary key field name
+            param_expression: The subquery expression
+            param_old_subset: Existing subset to combine with
+            param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT)
+            
+        Returns:
+            str: Complete IN expression with optional combine operator
+        """
+        if param_old_subset and param_combine_operator:
+            return (
+                f'"{primary_key_name}" IN ( {param_old_subset} '
+                f'{param_combine_operator} {param_expression} )'
+            )
+        else:
+            return f'"{primary_key_name}" IN {param_expression}'
 
     def _build_postgis_filter_expression(self, layer_props, param_postgis_sub_expression, sub_expression, param_old_subset, param_combine_operator):
         """
@@ -1194,103 +1652,24 @@ class FilterEngineTask(QgsTask):
             param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT)
             
         Returns:
-            str: Complete filter expression for setSubsetString()
+            tuple: (expression, param_expression) - Complete filter and subquery
         """
         param_distant_primary_key_name = layer_props["primary_key_name"]
-        param_distant_schema = layer_props["layer_schema"]
-        param_distant_table = layer_props["layer_name"]
         
-        # Build subquery based on whether expression is a field or complex query
-        if QgsExpression(self.expression).isField() is False:
-            if self.has_combine_operator is True:
-                if self.current_materialized_view_name is not None:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_subset_schema_name=self.current_materialized_view_schema,
-                        source_subset_table_name=self.current_materialized_view_name,
-                        postgis_sub_expression=param_postgis_sub_expression
-                    )
-                else:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        postgis_sub_expression=param_postgis_sub_expression,
-                        source_subset=sub_expression
-                    )
-            else:
-                if self.current_materialized_view_name is not None:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression} WHERE {source_subset})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_subset_schema_name=self.current_materialized_view_schema,
-                        source_subset_table_name=self.current_materialized_view_name,
-                        postgis_sub_expression=param_postgis_sub_expression
-                    )
-                else:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_schema}"."{source_table}" ON {postgis_sub_expression} WHERE {source_subset})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_schema=self.param_source_schema,
-                        source_table=self.param_source_table,
-                        postgis_sub_expression=param_postgis_sub_expression,
-                        source_subset=sub_expression
-                    )
-        else:  # Expression is a field
-            if self.has_combine_operator is True:
-                if self.current_materialized_view_name is not None:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_subset_schema_name=self.current_materialized_view_schema,
-                        source_subset_table_name=self.current_materialized_view_name,
-                        postgis_sub_expression=param_postgis_sub_expression
-                    )
-                else:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_subset=sub_expression,
-                        postgis_sub_expression=param_postgis_sub_expression
-                    )
-            else:
-                if self.current_materialized_view_name is not None:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN "{source_subset_schema_name}"."mv_{source_subset_table_name}_dump" ON {postgis_sub_expression})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_subset_schema_name=self.current_materialized_view_schema,
-                        source_subset_table_name=self.current_materialized_view_name,
-                        postgis_sub_expression=param_postgis_sub_expression
-                    )
-                else:
-                    param_expression = '(SELECT "{distant_table}"."{distant_primary_key_name}" FROM "{distant_schema}"."{distant_table}" INNER JOIN {source_subset} ON {postgis_sub_expression})'.format(
-                        distant_primary_key_name=param_distant_primary_key_name,
-                        distant_schema=param_distant_schema,
-                        distant_table=param_distant_table,
-                        source_subset=self.param_source_table,
-                        postgis_sub_expression=param_postgis_sub_expression
-                    )
+        # Build spatial join subquery
+        param_expression = self._build_spatial_join_query(
+            layer_props, 
+            param_postgis_sub_expression, 
+            sub_expression
+        )
         
-        # Apply combine operator if needed
-        if param_old_subset != '' and param_combine_operator != '':
-            expression = '"{distant_primary_key_name}" IN ( {param_old_subset} {param_combine_operator} {expression} )'.format(
-                distant_primary_key_name=param_distant_primary_key_name,
-                param_old_subset=param_old_subset,
-                param_combine_operator=param_combine_operator,
-                expression=param_expression
-            )
-        else:
-            expression = '"{distant_primary_key_name}" IN {expression}'.format(
-                distant_primary_key_name=param_distant_primary_key_name,
-                expression=param_expression
-            )
+        # Apply combine operator if specified
+        expression = self._apply_combine_operator(
+            param_distant_primary_key_name,
+            param_expression,
+            param_old_subset,
+            param_combine_operator
+        )
         
         return expression, param_expression
 
@@ -1508,6 +1887,74 @@ class FilterEngineTask(QgsTask):
         combined = f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {new_expression} )'
         return combined 
 
+    def _validate_layer_properties(self, layer_props, layer_name):
+        """
+        Validate required fields in layer properties.
+        
+        Args:
+            layer_props: Dict containing layer information
+            layer_name: Layer name for error messages
+            
+        Returns:
+            tuple: (layer_name, primary_key, geom_field, layer_schema) or (None, None, None, None) on error
+        """
+        layer_table = layer_props.get('layer_name')
+        primary_key = layer_props.get('primary_key_name')
+        geom_field = layer_props.get('layer_geometry_field')
+        layer_schema = layer_props.get('layer_schema')
+        
+        # Validate required fields
+        if not all([layer_table, primary_key, geom_field]):
+            logger.error(f"Missing required fields in layer_props for {layer_name}: "
+                       f"name={layer_table}, pk={primary_key}, geom={geom_field}")
+            return None, None, None, None
+        
+        return layer_table, primary_key, geom_field, layer_schema
+
+    def _build_backend_expression(self, backend, layer_props, source_geom):
+        """
+        Build filter expression using backend.
+        
+        Args:
+            backend: Backend instance
+            layer_props: Layer properties dict
+            source_geom: Prepared source geometry
+            
+        Returns:
+            str: Filter expression or None on error
+        """
+        expression = backend.build_expression(
+            layer_props=layer_props,
+            predicates=self.current_predicates,
+            source_geom=source_geom,
+            buffer_value=self.param_buffer_value if hasattr(self, 'param_buffer_value') else None,
+            buffer_expression=self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
+        )
+        
+        if not expression:
+            logger.warning(f"No expression generated by backend")
+            return None
+        
+        return expression
+
+    def _combine_with_old_filter(self, expression, layer):
+        """
+        Combine new expression with existing subset if needed.
+        
+        Args:
+            expression: New filter expression
+            layer: QGIS vector layer
+            
+        Returns:
+            str: Final combined expression
+        """
+        old_subset = layer.subsetString() if layer.subsetString() != '' else None
+        combine_operator = self._get_combine_operator()
+        
+        if old_subset and combine_operator:
+            return f"({old_subset}) {combine_operator} ({expression})"
+        
+        return expression
 
     def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
         """
@@ -1527,16 +1974,12 @@ class FilterEngineTask(QgsTask):
         try:
             logger.info(f"Executing geometric filtering for {layer.name()} ({layer_provider_type})")
             
-            # FIXED: layer_props IS the infos dict, access directly (not layer_props['infos'])
-            layer_name = layer_props.get('layer_name')
-            primary_key = layer_props.get('primary_key_name')
-            geom_field = layer_props.get('layer_geometry_field')  # FIXED: correct key name
-            layer_schema = layer_props.get('layer_schema')
-            
-            # Validate required fields
-            if not all([layer_name, primary_key, geom_field]):
-                logger.error(f"Missing required fields in layer_props for {layer.name()}: "
-                           f"name={layer_name}, pk={primary_key}, geom={geom_field}")
+            # Validate layer properties
+            layer_name, primary_key, geom_field, layer_schema = self._validate_layer_properties(
+                layer_props, 
+                layer.name()
+            )
+            if not layer_name:
                 return False
             
             # Verify spatial index exists before filtering - critical for performance
@@ -1545,10 +1988,6 @@ class FilterEngineTask(QgsTask):
             # Get appropriate backend for this layer
             backend = BackendFactory.get_backend(layer_provider_type, layer, self.task_parameters)
             
-            # Get current subset and combine operator
-            old_subset = layer.subsetString() if layer.subsetString() != '' else None
-            combine_operator = self._get_combine_operator()
-            
             # Prepare source geometry based on backend type
             source_geom = self._prepare_source_geometry(layer_provider_type)
             if not source_geom:
@@ -1556,24 +1995,13 @@ class FilterEngineTask(QgsTask):
                 return False
             
             # Build filter expression using backend
-            expression = backend.build_expression(
-                layer_props=layer_props,
-                predicates=self.current_predicates,
-                source_geom=source_geom,
-                buffer_value=self.param_buffer_value if hasattr(self, 'param_buffer_value') else None,
-                buffer_expression=self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
-            )
-            
+            expression = self._build_backend_expression(backend, layer_props, source_geom)
             if not expression:
                 logger.warning(f"No expression generated for {layer.name()}")
                 return False
             
             # Combine with old subset if needed
-            if old_subset and combine_operator:
-                final_expression = f"({old_subset}) {combine_operator} ({expression})"
-            else:
-                final_expression = expression
-            
+            final_expression = self._combine_with_old_filter(expression, layer)
             logger.debug(f"Final filter expression for {layer.name()}: {final_expression}")
             
             # Apply filter using thread-safe method
@@ -1742,242 +2170,470 @@ class FilterEngineTask(QgsTask):
 
 
 
-    def execute_exporting(self):
-        """Main function to export the selected layers to the right format with their associated styles"""
-        self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
-        layers_to_export = None
-        projection_to_export = None
-        styles_to_export = None
-        datatype_to_export = None
-        zip_to_export = None
-        result = None
-        zip_result = None
-
-        global ENV_VARS
-        output_folder_to_export = ENV_VARS["PATH_ABSOLUTE_PROJECT"]
-
-        if self.task_parameters["task"]['EXPORTING']["HAS_LAYERS_TO_EXPORT"] is True:
-            if self.task_parameters["task"]["layers"] != None and len(self.task_parameters["task"]["layers"]) > 0:
-                layers_to_export = self.task_parameters["task"]["layers"]
-            else:
-                return False
-        else:
-            return False
-
-        if self.task_parameters["task"]['EXPORTING']["HAS_PROJECTION_TO_EXPORT"] is True:
-            if self.task_parameters["task"]['EXPORTING']["PROJECTION_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["PROJECTION_TO_EXPORT"] != '':
-                self.coordinateReferenceSystem.createFromWkt(self.task_parameters["task"]['EXPORTING']["PROJECTION_TO_EXPORT"])
-                projection_to_export = self.coordinateReferenceSystem
-     
-        if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
-            if self.task_parameters["task"]['EXPORTING']["STYLES_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["STYLES_TO_EXPORT"] != '':
-                styles_to_export = self.task_parameters["task"]['EXPORTING']["STYLES_TO_EXPORT"].lower()
-
-        if self.task_parameters["task"]['EXPORTING']["HAS_DATATYPE_TO_EXPORT"] is True:
-            if self.task_parameters["task"]['EXPORTING']["DATATYPE_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["DATATYPE_TO_EXPORT"] != '':
-                datatype_to_export = self.task_parameters["task"]['EXPORTING']["DATATYPE_TO_EXPORT"]
-            else:
-                return False
-        else:
-            return False
-
-        if self.task_parameters["task"]['EXPORTING']["HAS_OUTPUT_FOLDER_TO_EXPORT"] is True:
-            if self.task_parameters["task"]['EXPORTING']["OUTPUT_FOLDER_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["OUTPUT_FOLDER_TO_EXPORT"] != '':
-                output_folder_to_export = self.task_parameters["task"]['EXPORTING']["OUTPUT_FOLDER_TO_EXPORT"]
-
-        if self.task_parameters["task"]['EXPORTING']["HAS_ZIP_TO_EXPORT"] is True:
-            if self.task_parameters["task"]['EXPORTING']["ZIP_TO_EXPORT"] != None and self.task_parameters["task"]['EXPORTING']["ZIP_TO_EXPORT"] != '':
-                zip_to_export = self.task_parameters["task"]['EXPORTING']["ZIP_TO_EXPORT"]
-
-        if layers_to_export != None:
-            if datatype_to_export == 'GPKG':
-                # CRITICAL FIX: Thread-safe GPKG export using processing
-                logger.info(f"Exporting {len(layers_to_export)} layer(s) to GPKG: {output_folder_to_export}")
-                
-                # Prepare layer objects
-                layer_objects = []
-                for layer_name in layers_to_export:
-                    layers_found = self.PROJECT.mapLayersByName(layer_name)
-                    if layers_found:
-                        layer_objects.append(layers_found[0])
-                    else:
-                        logger.warning(f"Layer '{layer_name}' not found in project")
-                
-                if not layer_objects:
-                    logger.error("No valid layers found for export")
-                    return False
-                
-                alg_parameters_export = {
-                    'LAYERS': layer_objects,
-                    'OVERWRITE': True,
-                    'SAVE_STYLES': self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"],
-                    'OUTPUT': output_folder_to_export
+    def _validate_export_parameters(self):
+        """
+        Validate and extract export parameters from task configuration.
+        
+        Returns:
+            dict: Export configuration or None if validation fails
+                {
+                    'layers': list of layer names,
+                    'projection': QgsCoordinateReferenceSystem or None,
+                    'styles': style format (e.g., 'qml', 'sld') or None,
+                    'datatype': export format (e.g., 'GPKG', 'ESRI Shapefile'),
+                    'output_folder': output directory path,
+                    'zip_path': zip file path or None
                 }
-                
-                try:
-                    # NOTE: processing.run() is thread-safe for file operations
-                    # but may have issues with UI feedback from worker thread
-                    output = processing.run("qgis:package", alg_parameters_export)
-                    
-                    if not output or 'OUTPUT' not in output:
-                        logger.error("GPKG export failed: no output returned")
-                        return False
-                    
-                    logger.info(f"GPKG export successful: {output['OUTPUT']}")
-                    result = (0, None)  # Success code compatible with writeAsVectorFormat
-                    
-                except Exception as e:
-                    logger.error(f"GPKG export failed with exception: {e}")
-                    return False
+        """
+        config = self.task_parameters["task"]['EXPORTING']
+        
+        # Validate layers
+        if not config.get("HAS_LAYERS_TO_EXPORT", False):
+            logger.error("No layers selected for export")
+            return None
+        
+        layers = self.task_parameters["task"].get("layers")
+        if not layers or len(layers) == 0:
+            logger.error("Empty layers list for export")
+            return None
+        
+        # Validate datatype
+        if not config.get("HAS_DATATYPE_TO_EXPORT", False):
+            logger.error("No export datatype specified")
+            return None
+        
+        datatype = config.get("DATATYPE_TO_EXPORT")
+        if not datatype:
+            logger.error("Export datatype is empty")
+            return None
+        
+        # Extract optional parameters
+        projection = None
+        if config.get("HAS_PROJECTION_TO_EXPORT", False):
+            proj_wkt = config.get("PROJECTION_TO_EXPORT")
+            if proj_wkt:
+                crs = QgsCoordinateReferenceSystem()
+                crs.createFromWkt(proj_wkt)
+                projection = crs
+        
+        styles = None
+        if config.get("HAS_STYLES_TO_EXPORT", False):
+            styles_raw = config.get("STYLES_TO_EXPORT")
+            if styles_raw:
+                styles = styles_raw.lower()
+        
+        output_folder = ENV_VARS["PATH_ABSOLUTE_PROJECT"]
+        if config.get("HAS_OUTPUT_FOLDER_TO_EXPORT", False):
+            folder = config.get("OUTPUT_FOLDER_TO_EXPORT")
+            if folder:
+                output_folder = folder
+        
+        zip_path = None
+        if config.get("HAS_ZIP_TO_EXPORT", False):
+            zip_path = config.get("ZIP_TO_EXPORT")
+        
+        return {
+            'layers': layers,
+            'projection': projection,
+            'styles': styles,
+            'datatype': datatype,
+            'output_folder': output_folder,
+            'zip_path': zip_path
+        }
 
-            else:
-                # Non-GPKG formats (Shapefile, GeoJSON, etc.)
-                logger.info(f"Exporting {len(layers_to_export)} layer(s) to {datatype_to_export}")
-                
-                if os.path.exists(output_folder_to_export):
-                    if os.path.isdir(output_folder_to_export) and len(layers_to_export) > 1:
-                        # Multiple layers to directory
-                        for layer_name in layers_to_export:
-                            layers_found = self.PROJECT.mapLayersByName(layer_name)
-                            if not layers_found:
-                                logger.warning(f"Layer '{layer_name}' not found, skipping")
-                                continue
-                                
-                            layer = layers_found[0]
-                            if projection_to_export == None:
-                                current_projection_to_export = layer.sourceCrs()
-                            else:
-                                current_projection_to_export = projection_to_export
-                            
-                            output_path = os.path.normcase(os.path.join(output_folder_to_export, layer_name))
-                            logger.debug(f"Exporting layer '{layer_name}' to {output_path}")
-                            
-                            try:
-                                # CRITICAL: QgsVectorFileWriter is generally thread-safe for file I/O
-                                result = QgsVectorFileWriter.writeAsVectorFormat(
-                                    layer, 
-                                    output_path, 
-                                    "UTF-8", 
-                                    current_projection_to_export, 
-                                    datatype_to_export
-                                )
-                                
-                                if result[0] != QgsVectorFileWriter.NoError:
-                                    logger.error(f"Export failed for layer '{layer_name}': {result[1]}")
-                                    return False
-                                
-                                # Save style if requested (and format supports it)
-                                if datatype_to_export != 'XLSX':
-                                    if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
-                                        style_path = os.path.normcase(
-                                            os.path.join(output_folder_to_export, f"{layer_name}.{styles_to_export}")
-                                        )
-                                        try:
-                                            layer.saveNamedStyle(style_path)
-                                            logger.debug(f"Style saved: {style_path}")
-                                        except Exception as e:
-                                            logger.warning(f"Could not save style for '{layer_name}': {e}")
-                                
-                                if self.isCanceled():
-                                    logger.info("Export cancelled by user")
-                                    return False
-                                    
-                            except Exception as e:
-                                logger.error(f"Export exception for layer '{layer_name}': {e}")
-                                return False
-                    
-                    else:
-                        # Single layer or single file output
-                        if len(layers_to_export) == 1:
-                            layer_name = layers_to_export[0]
-                            layers_found = self.PROJECT.mapLayersByName(layer_name)
-                            if not layers_found:
-                                logger.error(f"Layer '{layer_name}' not found")
-                                return False
-                                
-                            layer = layers_found[0]
-                            if projection_to_export == None:
-                                current_projection_to_export = layer.sourceCrs()
-                            else:
-                                current_projection_to_export = projection_to_export
-                            
-                            logger.debug(f"Exporting single layer '{layer_name}' to {output_folder_to_export}")
-                            
-                            try:
-                                result = QgsVectorFileWriter.writeAsVectorFormat(
-                                    layer, 
-                                    os.path.normcase(output_folder_to_export), 
-                                    "UTF-8", 
-                                    current_projection_to_export, 
-                                    datatype_to_export
-                                )
-                                
-                                if result[0] != QgsVectorFileWriter.NoError:
-                                    logger.error(f"Export failed: {result[1]}")
-                                    return False
-                                
-                                # Save style if requested
-                                if datatype_to_export != 'XLSX':
-                                    if self.task_parameters["task"]['EXPORTING']["HAS_STYLES_TO_EXPORT"] is True:
-                                        style_path = os.path.normcase(f"{output_folder_to_export}.{styles_to_export}")
-                                        try:
-                                            layer.saveNamedStyle(style_path)
-                                            logger.debug(f"Style saved: {style_path}")
-                                        except Exception as e:
-                                            logger.warning(f"Could not save style: {e}")
-                                            
-                            except Exception as e:
-                                logger.error(f"Export exception: {e}")
-                                return False
-                        else:
-                            logger.error(f"Invalid export configuration: {len(layers_to_export)} layers but output is not a directory")
-                            return False
-                else:
-                    logger.error(f"Output path does not exist: {output_folder_to_export}")
-                    return False
+
+    def _get_layer_by_name(self, layer_name):
+        """
+        Get layer object from project by name.
+        
+        Args:
+            layer_name: Layer name to search for
+            
+        Returns:
+            QgsVectorLayer or None if not found
+        """
+        layers_found = self.PROJECT.mapLayersByName(layer_name)
+        if layers_found:
+            return layers_found[0]
+        logger.warning(f"Layer '{layer_name}' not found in project")
+        return None
+
+
+    def _save_layer_style(self, layer, output_path, style_format, datatype):
+        """
+        Save layer style to file if format supports it.
+        
+        Args:
+            layer: QgsVectorLayer
+            output_path: Base path for export (without extension)
+            style_format: Style file format (e.g., 'qml', 'sld')
+            datatype: Export datatype (to check if styles are supported)
+        """
+        if datatype == 'XLSX' or not style_format:
+            return
+        
+        style_path = os.path.normcase(f"{output_path}.{style_format}")
+        try:
+            layer.saveNamedStyle(style_path)
+            logger.debug(f"Style saved: {style_path}")
+        except Exception as e:
+            logger.warning(f"Could not save style for '{layer.name()}': {e}")
+
+
+    def _export_single_layer(self, layer, output_path, projection, datatype, style_format, save_styles):
+        """
+        Export a single layer to file.
+        
+        Args:
+            layer: QgsVectorLayer to export
+            output_path: Output file path (without extension for some formats)
+            projection: Target CRS or None to use layer's CRS
+            datatype: Export format (e.g., 'ESRI Shapefile', 'GeoJSON')
+            style_format: Style file format or None
+            save_styles: Whether to save layer styles
+            
+        Returns:
+            bool: True if successful
+        """
+        current_projection = projection if projection else layer.sourceCrs()
+        
+        logger.debug(f"Exporting layer '{layer.name()}' to {output_path}")
+        
+        try:
+            result = QgsVectorFileWriter.writeAsVectorFormat(
+                layer,
+                os.path.normcase(output_path),
+                "UTF-8",
+                current_projection,
+                datatype
+            )
+            
+            if result[0] != QgsVectorFileWriter.NoError:
+                logger.error(f"Export failed for layer '{layer.name()}': {result[1]}")
+                return False
+            
+            # Save style if requested
+            if save_styles:
+                self._save_layer_style(layer, output_path, style_format, datatype)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Export exception for layer '{layer.name()}': {e}")
+            return False
+
+
+    def _export_to_gpkg(self, layer_names, output_path, save_styles):
+        """
+        Export layers to GeoPackage format using QGIS processing.
+        
+        Args:
+            layer_names: List of layer names to export
+            output_path: Output GPKG file path
+            save_styles: Whether to include layer styles
+            
+        Returns:
+            bool: True if successful
+        """
+        logger.info(f"Exporting {len(layer_names)} layer(s) to GPKG: {output_path}")
+        
+        # Collect layer objects
+        layer_objects = []
+        for layer_name in layer_names:
+            layer = self._get_layer_by_name(layer_name)
+            if layer:
+                layer_objects.append(layer)
+        
+        if not layer_objects:
+            logger.error("No valid layers found for GPKG export")
+            return False
+        
+        alg_parameters = {
+            'LAYERS': layer_objects,
+            'OVERWRITE': True,
+            'SAVE_STYLES': save_styles,
+            'OUTPUT': output_path
+        }
+        
+        try:
+            # processing.run() is thread-safe for file operations
+            output = processing.run("qgis:package", alg_parameters)
+            
+            if not output or 'OUTPUT' not in output:
+                logger.error("GPKG export failed: no output returned")
+                return False
+            
+            logger.info(f"GPKG export successful: {output['OUTPUT']}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"GPKG export failed with exception: {e}")
+            return False
+
+
+    def _export_multiple_layers_to_directory(self, layer_names, output_folder, projection, datatype, style_format, save_styles):
+        """
+        Export multiple layers to a directory (one file per layer).
+        
+        Updates task description to show export progress.
+        
+        Args:
+            layer_names: List of layer names to export
+            output_folder: Output directory path
+            projection: Target CRS or None
+            datatype: Export format
+            style_format: Style file format or None
+            save_styles: Whether to save layer styles
+            
+        Returns:
+            bool: True if all exports successful
+        """
+        logger.info(f"Exporting {len(layer_names)} layer(s) to {datatype} in directory {output_folder}")
+        
+        total_layers = len(layer_names)
+        for idx, layer_name in enumerate(layer_names, 1):
+            # Update task description with current progress
+            self.setDescription(f"Exporting layer {idx}/{total_layers}: {layer_name}")
+            self.setProgress(int((idx / total_layers) * 90))  # Reserve 90% for export, 10% for zip
+            
+            layer = self._get_layer_by_name(layer_name)
+            if not layer:
+                continue
+            
+            output_path = os.path.join(output_folder, layer_name)
+            success = self._export_single_layer(
+                layer, output_path, projection, datatype, style_format, save_styles
+            )
+            
+            if not success:
+                return False
             
             if self.isCanceled():
-                logger.info("Export cancelled by user before zip")
+                logger.info("Export cancelled by user")
                 return False
-
-            # Zip if requested
-            if zip_to_export != None:
-                directory, zipfile = os.path.split(output_folder_to_export)
-                if os.path.exists(directory) and os.path.isdir(directory):
-                    logger.info(f"Creating zip archive: {zip_to_export}")
-                    try:
-                        zip_result = self.zipfolder(zip_to_export, output_folder_to_export)
-                        if self.isCanceled() or zip_result is False:
-                            logger.warning("Zip creation failed or cancelled")
-                            return False
-                        logger.info("Zip archive created successfully")
-                    except Exception as e:
-                        logger.error(f"Zip creation failed: {e}")
-                        return False
-
-            # Build success message
-            if result and result[0] == 0:
-                self.message = 'Layer(s) has been exported to <a href="file:///{}">{}</a>'.format(
-                    output_folder_to_export, output_folder_to_export
-                )
-            elif datatype_to_export == 'GPKG':
-                # GPKG export succeeded earlier
-                self.message = 'Layer(s) has been exported to <a href="file:///{}">{}</a>'.format(
-                    output_folder_to_export, output_folder_to_export
-                )
-            else:
-                logger.error("Export completed but result status unclear")
-                return False
-                
-            if zip_result is True:
-                self.message = self.message + ' and ' + 'Zip file has been exported to <a href="file:///{}">{}</a>'.format(
-                    zip_to_export, zip_to_export
-                )
-            
-            logger.info("Export completed successfully")
-
+        
         return True
 
+
+    def _create_zip_archive(self, zip_path, folder_to_zip):
+        """
+        Create a zip archive of the exported folder.
+        
+        Updates task description to show compression progress.
+        
+        Args:
+            zip_path: Output zip file path
+            folder_to_zip: Folder to compress
+            
+        Returns:
+            bool: True if successful
+        """
+        directory, zipfile = os.path.split(folder_to_zip)
+        if not os.path.exists(directory) or not os.path.isdir(directory):
+            logger.error(f"Directory does not exist: {directory}")
+            return False
+        
+        self.setDescription(f"Creating zip archive...")
+        self.setProgress(95)
+        
+        logger.info(f"Creating zip archive: {zip_path}")
+        try:
+            result = self.zipfolder(zip_path, folder_to_zip)
+            if self.isCanceled() or result is False:
+                logger.warning("Zip creation failed or cancelled")
+                return False
+            
+            self.setProgress(100)
+            logger.info("Zip archive created successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Zip creation failed: {e}")
+            return False
+
+    def execute_exporting(self):
+        """
+        Export selected layers to specified format with optional styles.
+        
+        REFACTORED: Decomposed from 235 lines to ~65 lines using helper methods.
+        Main method now validates parameters and orchestrates export workflow.
+        
+        Returns:
+            bool: True if export successful
+        """
+        # Validate and extract export parameters
+        export_config = self._validate_export_parameters()
+        if not export_config:
+            return False
+        
+        layers = export_config['layers']
+        projection = export_config['projection']
+        datatype = export_config['datatype']
+        output_folder = export_config['output_folder']
+        style_format = export_config['styles']
+        zip_path = export_config['zip_path']
+        save_styles = self.task_parameters["task"]['EXPORTING'].get("HAS_STYLES_TO_EXPORT", False)
+        
+        # Execute export based on format
+        export_success = False
+        
+        if datatype == 'GPKG':
+            # GeoPackage export using processing
+            export_success = self._export_to_gpkg(layers, output_folder, save_styles)
+        else:
+            # Other formats (Shapefile, GeoJSON, etc.)
+            if not os.path.exists(output_folder):
+                logger.error(f"Output path does not exist: {output_folder}")
+                return False
+            
+            if os.path.isdir(output_folder) and len(layers) > 1:
+                # Multiple layers to directory
+                export_success = self._export_multiple_layers_to_directory(
+                    layers, output_folder, projection, datatype, style_format, save_styles
+                )
+            elif len(layers) == 1:
+                # Single layer export
+                layer = self._get_layer_by_name(layers[0])
+                if not layer:
+                    return False
+                
+                export_success = self._export_single_layer(
+                    layer, output_folder, projection, datatype, style_format, save_styles
+                )
+            else:
+                logger.error(f"Invalid export configuration: {len(layers)} layers but output is not a directory")
+                return False
+        
+        if not export_success:
+            return False
+        
+        if self.isCanceled():
+            logger.info("Export cancelled by user before zip")
+            return False
+        
+        # Create zip archive if requested
+        zip_created = False
+        if zip_path:
+            zip_created = self._create_zip_archive(zip_path, output_folder)
+            if not zip_created:
+                return False
+        
+        # Build success message
+        self.message = f'Layer(s) has been exported to <a href="file:///{output_folder}">{output_folder}</a>'
+        if zip_created:
+            self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
+        
+        logger.info("Export completed successfully")
+        return True
+
+    def _get_spatialite_datasource(self, layer):
+        """
+        Get Spatialite datasource information from layer.
+        
+        Falls back to filterMate database for non-Spatialite layers.
+        
+        Args:
+            layer: QGIS vector layer
+            
+        Returns:
+            tuple: (db_path, table_name, layer_srid, is_native_spatialite)
+        """
+        from .appUtils import get_spatialite_datasource_from_layer
+        
+        # Get Spatialite datasource
+        db_path, table_name = get_spatialite_datasource_from_layer(layer)
+        layer_srid = layer.crs().postgisSrid()
+        
+        # Check if native Spatialite or OGR/Shapefile
+        is_native_spatialite = db_path is not None
+        
+        if not is_native_spatialite:
+            # Use filterMate_db for temp storage
+            db_path = self.db_file_path
+            logger.info("Non-Spatialite layer detected, will use QGIS subset string")
+        
+        return db_path, table_name, layer_srid, is_native_spatialite
+
+    def _build_spatialite_query(self, sql_subset_string, table_name, geom_key_name, 
+                                primary_key_name, custom):
+        """
+        Build Spatialite query for simple or complex (buffered) subsets.
+        
+        Args:
+            sql_subset_string: SQL query for subset
+            table_name: Source table name
+            geom_key_name: Geometry field name
+            primary_key_name: Primary key field name
+            custom: Whether custom buffer expression is used
+            
+        Returns:
+            str: Spatialite SELECT query
+        """
+        if custom is False:
+            # Simple subset - use query as-is
+            return sql_subset_string
+        
+        # Complex subset with buffer (adapt from PostgreSQL logic)
+        buffer_expr = (
+            self.qgis_expression_to_spatialite(self.param_buffer_expression) 
+            if self.param_buffer_expression 
+            else str(self.param_buffer_value)
+        )
+        
+        # Build Spatialite SELECT (similar to PostgreSQL CREATE MATERIALIZED VIEW)
+        # Note: Spatialite uses same ST_Buffer syntax as PostGIS
+        query = f"""
+            SELECT 
+                ST_Buffer({geom_key_name}, {buffer_expr}) as {geom_key_name},
+                {primary_key_name},
+                {buffer_expr} as buffer_value
+            FROM {table_name}
+            WHERE {primary_key_name} IN ({sql_subset_string})
+        """
+        
+        return query
+
+    def _apply_spatialite_subset(self, layer, name, primary_key_name, sql_subset_string, 
+                                 cur, conn, current_seq_order):
+        """
+        Apply subset string to layer and update history.
+        
+        Args:
+            layer: QGIS vector layer
+            name: Temp table name
+            primary_key_name: Primary key field name
+            sql_subset_string: Original SQL subset string for history
+            cur: Spatialite cursor for history
+            conn: Spatialite connection for history
+            current_seq_order: Sequence order for history
+            
+        Returns:
+            bool: True if successful
+        """
+        # Apply subset string to layer (reference temp table)
+        layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{name})'
+        logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
+        
+        # CRITICAL FIX: Thread-safe subset string application
+        result = self._safe_set_subset_string(layer, layer_subsetString)
+        
+        if not result:
+            logger.error("Failed to apply Spatialite subset string")
+            return False
+        
+        # Update history
+        if cur and conn:
+            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+                id=uuid.uuid4(),
+                fk_project=self.project_uuid,
+                layer_id=layer.id(),
+                layer_source_id=self.source_layer.id(),
+                seq_order=current_seq_order,
+                subset_string=sql_subset_string.replace("\'","\'\'")
+            ))
+            conn.commit()
+        
+        return True
 
     def _manage_spatialite_subset(self, layer, sql_subset_string, primary_key_name, geom_key_name, 
                                    name, custom=False, cur=None, conn=None, current_seq_order=0):
@@ -2000,41 +2656,23 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        from .appUtils import create_temp_spatialite_table, get_spatialite_datasource_from_layer
+        from .appUtils import create_temp_spatialite_table
         
-        # Get Spatialite datasource
-        db_path, table_name = get_spatialite_datasource_from_layer(layer)
+        # Get datasource information
+        db_path, table_name, layer_srid, is_native_spatialite = self._get_spatialite_datasource(layer)
         
-        # If not a Spatialite layer (e.g., OGR/Shapefile), use filterMate_db for temp storage
-        if db_path is None:
-            db_path = self.db_file_path
-            # For OGR layers, we'll use QGIS subset string directly
-            logger.info("Non-Spatialite layer detected, using QGIS subset string")
-            # CRITICAL FIX: Thread-safe subset string application
+        # For non-Spatialite layers, use QGIS subset string directly
+        if not is_native_spatialite:
             return self._safe_set_subset_string(layer, sql_subset_string)
         
-        # Get layer SRID
-        layer_srid = layer.crs().postgisSrid()
-        
-        # Build Spatialite query
-        if custom is False:
-            # Simple subset - use query as-is
-            spatialite_query = sql_subset_string
-        else:
-            # Complex subset with buffer (adapt from PostgreSQL logic)
-            # Convert buffer expression if needed
-            buffer_expr = self.qgis_expression_to_spatialite(self.param_buffer_expression) if self.param_buffer_expression else str(self.param_buffer_value)
-            
-            # Build Spatialite SELECT (similar to PostgreSQL CREATE MATERIALIZED VIEW)
-            # Note: Spatialite uses same ST_Buffer syntax as PostGIS
-            spatialite_query = f"""
-                SELECT 
-                    ST_Buffer({geom_key_name}, {buffer_expr}) as {geom_key_name},
-                    {primary_key_name},
-                    {buffer_expr} as buffer_value
-                FROM {table_name}
-                WHERE {primary_key_name} IN ({sql_subset_string})
-            """
+        # Build Spatialite query (simple or buffered)
+        spatialite_query = self._build_spatialite_query(
+            sql_subset_string, 
+            table_name, 
+            geom_key_name, 
+            primary_key_name, 
+            custom
+        )
         
         # Create temporary table
         logger.info(f"Creating Spatialite temp table 'mv_{name}'")
@@ -2052,401 +2690,507 @@ class FilterEngineTask(QgsTask):
             # Error is logged and will be handled in finished() method
             return False
         
-        # Apply subset string to layer (reference temp table)
-        layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{name})'
-        logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
-        # CRITICAL FIX: Thread-safe subset string application
-        result = self._safe_set_subset_string(layer, layer_subsetString)
+        # Apply subset and update history
+        return self._apply_spatialite_subset(
+            layer, 
+            name, 
+            primary_key_name, 
+            sql_subset_string, 
+            cur, 
+            conn, 
+            current_seq_order
+        )
+
+
+    def _get_last_subset_info(self, cur, layer):
+        """
+        Get the last subset information for a layer from history.
         
-        if not result:
-            logger.error("Failed to apply Spatialite subset string")
-            return False
+        Args:
+            cur: Database cursor
+            layer: QgsVectorLayer
+            
+        Returns:
+            tuple: (last_subset_id, last_seq_order, layer_name, name)
+        """
+        layer_name = layer.name()
+        name = layer.id().replace(layer_name, '').replace('-', '_')
         
-        # Update history
-        if cur and conn:
-            cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
+        cur.execute(
+            """SELECT * FROM fm_subset_history 
+               WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' 
+               ORDER BY seq_order DESC LIMIT 1;""".format(
+                fk_project=self.project_uuid,
+                layer_id=layer.id()
+            )
+        )
+        
+        results = cur.fetchall()
+        if len(results) == 1:
+            result = results[0]
+            return result[0], result[5], layer_name, name
+        else:
+            return None, 0, layer_name, name
+
+
+    def _determine_backend(self, layer):
+        """
+        Determine which backend to use for layer operations.
+        
+        Args:
+            layer: QgsVectorLayer
+            
+        Returns:
+            tuple: (provider_type, use_postgresql, use_spatialite)
+        """
+        provider_type = detect_layer_provider_type(layer)
+        use_postgresql = (provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE)
+        use_spatialite = (provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR] or not use_postgresql)
+        
+        logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
+        return provider_type, use_postgresql, use_spatialite
+
+
+    def _log_performance_warning_if_needed(self, use_spatialite, layer):
+        """
+        Log performance warning for large Spatialite datasets.
+        
+        Note: Cannot call iface.messageBar() from worker thread - would cause crash.
+        
+        Args:
+            use_spatialite: Whether Spatialite backend is used
+            layer: QgsVectorLayer
+        """
+        if use_spatialite and layer.featureCount() > 50000:
+            logger.warning(
+                f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
+                f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL."
+            )
+
+
+    def _create_simple_materialized_view_sql(self, schema, name, sql_subset_string):
+        """
+        Create SQL for simple materialized view (non-custom buffer).
+        
+        Args:
+            schema: PostgreSQL schema name
+            name: Layer identifier
+            sql_subset_string: SQL SELECT statement
+            
+        Returns:
+            str: SQL CREATE MATERIALIZED VIEW statement
+        """
+        return 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+            schema=schema,
+            name=name,
+            sql_subset_string=sql_subset_string
+        )
+
+
+    def _create_custom_buffer_view_sql(self, schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string):
+        """
+        Create SQL for custom buffer materialized view.
+        
+        Args:
+            schema: PostgreSQL schema name
+            name: Layer identifier
+            geom_key_name: Geometry field name
+            where_clause_fields_arr: List of WHERE clause fields
+            last_subset_id: Previous subset ID (None if first)
+            sql_subset_string: SQL SELECT statement for source
+            
+        Returns:
+            str: SQL CREATE MATERIALIZED VIEW statement
+        """
+        # Common parts
+        postgresql_source_geom = self.postgresql_source_geom
+        if self.has_to_reproject_source_layer:
+            postgresql_source_geom = f'ST_Transform({postgresql_source_geom}, {self.source_layer_crs_authid.split(":")[1]})'
+        
+        template = '''CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS 
+            SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, 
+                   "{table_source}"."{primary_key_name}", 
+                   {where_clause_fields}, 
+                   {param_buffer_expression} as buffer_value 
+            FROM "{schema_source}"."{table_source}" 
+            WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub) 
+              AND {where_expression} 
+            WITH DATA;'''
+        
+        return template.format(
+            schema=schema,
+            name=name,
+            postgresql_source_geom=postgresql_source_geom,
+            geometry_field=geom_key_name,
+            schema_source=self.param_source_schema,
+            primary_key_name=self.primary_key_name,
+            table_source=self.param_source_table,
+            where_clause_fields=','.join(where_clause_fields_arr).replace('mv_', ''),
+            param_buffer_expression=self.param_buffer.replace('mv_', ''),
+            source_new_subset=sql_subset_string,
+            where_expression=' OR '.join(self._parse_where_clauses()).replace('mv_', '')
+        )
+
+
+    def _parse_where_clauses(self):
+        """
+        Parse CASE statement into WHERE clause array.
+        
+        Returns:
+            list: List of WHERE clause strings
+        """
+        where_clause = self.where_clause.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
+        where_clauses_in_arr = where_clause.split('WHEN')
+        
+        where_clause_out_arr = []
+        for where_then_clause in where_clauses_in_arr:
+            if len(where_then_clause.split('THEN')) >= 1:
+                clause = where_then_clause.split('THEN')[0].replace('WHEN', ' ').strip()
+                if clause:
+                    where_clause_out_arr.append(clause)
+        
+        return where_clause_out_arr
+
+
+    def _execute_postgresql_commands(self, connexion, commands):
+        """
+        Execute PostgreSQL commands with automatic reconnection on failure.
+        
+        Args:
+            connexion: psycopg2 connection
+            commands: List of SQL commands to execute
+            
+        Returns:
+            bool: True if all commands succeeded
+        """
+        # Test connection
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute("SELECT 1")
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
+            logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
+            connexion, _ = get_datasource_connexion_from_layer(self.source_layer)
+        
+        # Execute commands
+        with connexion.cursor() as cursor:
+            for command in commands:
+                cursor.execute(command)
+                connexion.commit()
+        
+        return True
+
+
+    def _insert_subset_history(self, cur, conn, layer, sql_subset_string, seq_order):
+        """
+        Insert subset history record into database.
+        
+        Args:
+            cur: Database cursor
+            conn: Database connection
+            layer: QgsVectorLayer
+            sql_subset_string: SQL subset string
+            seq_order: Sequence order number
+        """
+        cur.execute(
+            """INSERT INTO fm_subset_history 
+               VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
                 id=uuid.uuid4(),
                 fk_project=self.project_uuid,
                 layer_id=layer.id(),
                 layer_source_id=self.source_layer.id(),
-                seq_order=current_seq_order,
-                subset_string=sql_subset_string.replace("\'","\'\'")
-            ))
+                seq_order=seq_order,
+                subset_string=sql_subset_string.replace("'", "''")
+            )
+        )
+        conn.commit()
+
+
+    def _filter_action_postgresql(self, layer, sql_subset_string, primary_key_name, geom_key_name, name, custom, cur, conn, seq_order):
+        """
+        Execute filter action using PostgreSQL backend.
+        
+        Args:
+            layer: QgsVectorLayer to filter
+            sql_subset_string: SQL SELECT statement
+            primary_key_name: Primary key field name
+            geom_key_name: Geometry field name
+            name: Layer identifier
+            custom: Whether this is a custom buffer filter
+            cur: Database cursor
+            conn: Database connection
+            seq_order: Sequence order number
+            
+        Returns:
+            bool: True if successful
+        """
+        schema = self.current_materialized_view_schema
+        
+        # Build SQL commands
+        sql_drop = f'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
+        
+        if custom:
+            # Parse custom buffer expression
+            sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}_dump" CASCADE;'
+            
+            # Get previous subset if exists
+            cur.execute(
+                f"""SELECT * FROM fm_subset_history 
+                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}' 
+                    ORDER BY seq_order DESC LIMIT 1;"""
+            )
+            results = cur.fetchall()
+            last_subset_id = results[0][0] if len(results) == 1 else None
+            
+            # Parse WHERE clauses
+            self.where_clause = self.param_buffer_expression.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
+            where_clauses = self._parse_where_clauses()
+            where_clause_fields_arr = [clause.split(' ')[0] for clause in where_clauses]
+            
+            sql_create = self._create_custom_buffer_view_sql(schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string)
+        else:
+            sql_create = self._create_simple_materialized_view_sql(schema, name, sql_subset_string)
+        
+        sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geom_key_name});'
+        sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'
+        sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{name}";'
+        
+        sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
+        logger.debug(f"SQL drop request: {sql_drop}")
+        logger.debug(f"SQL create request: {sql_create}")
+        
+        # Execute PostgreSQL commands
+        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        commands = [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze]
+        
+        if custom:
+            sql_dump = f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}_dump" as SELECT ST_Union("{geom_key_name}") as {geom_key_name} from "{schema}"."mv_{name}";'
+            commands.append(sql_dump)
+        
+        self._execute_postgresql_commands(connexion, commands)
+        
+        # Insert history
+        self._insert_subset_history(cur, conn, layer, sql_subset_string, seq_order)
+        
+        # Set subset string on layer
+        layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
+        logger.debug(f"Layer subset string: {layer_subset_string}")
+        self._safe_set_subset_string(layer, layer_subset_string)
+        
+        return True
+
+
+    def _reset_action_postgresql(self, layer, name, cur, conn):
+        """
+        Execute reset action using PostgreSQL backend.
+        
+        Args:
+            layer: QgsVectorLayer to reset
+            name: Layer identifier
+            cur: Database cursor
+            conn: Database connection
+            
+        Returns:
+            bool: True if successful
+        """
+        # Delete history
+        cur.execute(
+            f"""DELETE FROM fm_subset_history 
+                WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
+        )
+        conn.commit()
+        
+        # Drop materialized view
+        schema = self.current_materialized_view_schema
+        sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
+        
+        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        self._execute_postgresql_commands(connexion, [sql_drop])
+        
+        # Clear subset string
+        self._safe_set_subset_string(layer, '')
+        return True
+
+
+    def _reset_action_spatialite(self, layer, name, cur, conn):
+        """
+        Execute reset action using Spatialite backend.
+        
+        Args:
+            layer: QgsVectorLayer to reset
+            name: Layer identifier
+            cur: Database cursor
+            conn: Database connection
+            
+        Returns:
+            bool: True if successful
+        """
+        logger.info("Reset - Spatialite backend - dropping temp table")
+        
+        # Delete history
+        cur.execute(
+            f"""DELETE FROM fm_subset_history 
+                WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
+        )
+        conn.commit()
+        
+        # Drop temp table from filterMate_db
+        import sqlite3
+        try:
+            temp_conn = sqlite3.connect(self.db_file_path)
+            temp_cur = temp_conn.cursor()
+            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{name}")
+            temp_conn.commit()
+            temp_cur.close()
+            temp_conn.close()
+        except Exception as e:
+            logger.error(f"Error dropping Spatialite temp table: {e}")
+        
+        # Clear subset string
+        self._safe_set_subset_string(layer, '')
+        return True
+
+
+    def _unfilter_action(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
+        """
+        Execute unfilter action (restore previous filter state).
+        
+        Args:
+            layer: QgsVectorLayer to unfilter
+            primary_key_name: Primary key field name
+            geom_key_name: Geometry field name
+            name: Layer identifier
+            custom: Whether this is a custom buffer filter
+            cur: Database cursor
+            conn: Database connection
+            last_subset_id: Last subset ID to remove
+            use_postgresql: Whether to use PostgreSQL backend
+            use_spatialite: Whether to use Spatialite backend
+            
+        Returns:
+            bool: True if successful
+        """
+        # Delete last subset from history
+        if last_subset_id:
+            cur.execute(
+                f"""DELETE FROM fm_subset_history 
+                    WHERE fk_project = '{self.project_uuid}' 
+                      AND layer_id = '{layer.id()}' 
+                      AND id = '{last_subset_id}';"""
+            )
             conn.commit()
+        
+        # Get previous subset
+        cur.execute(
+            f"""SELECT * FROM fm_subset_history 
+                WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}' 
+                ORDER BY seq_order DESC LIMIT 1;"""
+        )
+        
+        results = cur.fetchall()
+        if len(results) == 1:
+            sql_subset_string = results[0][-1]
+            
+            if use_spatialite:
+                logger.info("Unfilter - Spatialite backend - recreating previous subset")
+                success = self._manage_spatialite_subset(
+                    layer, sql_subset_string, primary_key_name, geom_key_name,
+                    name, custom=False, cur=None, conn=None, current_seq_order=0
+                )
+                if not success:
+                    self._safe_set_subset_string(layer, '')
+            
+            elif use_postgresql:
+                schema = self.current_materialized_view_schema
+                sql_drop = f'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
+                sql_create = self._create_simple_materialized_view_sql(schema, name, sql_subset_string)
+                sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geom_key_name});'
+                sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'
+                sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{name}";'
+                
+                sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
+                
+                connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+                self._execute_postgresql_commands(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
+                
+                layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
+                self._safe_set_subset_string(layer, layer_subset_string)
+        else:
+            self._safe_set_subset_string(layer, '')
         
         return True
 
 
     def manage_layer_subset_strings(self, layer, sql_subset_string=None, primary_key_name=None, geom_key_name=None, custom=False):
-
+        """
+        Manage layer subset strings using materialized views or temp tables.
+        
+        REFACTORED: Decomposed from 384 lines to ~60 lines using helper methods.
+        Main method now orchestrates the process, delegates to specialized methods.
+        
+        Args:
+            layer: QgsVectorLayer to manage
+            sql_subset_string: SQL SELECT statement for filtering
+            primary_key_name: Primary key field name
+            geom_key_name: Geometry field name
+            custom: Whether this is a custom buffer filter
+            
+        Returns:
+            bool: True if successful
+        """
         conn = None
         cur = None
         
         try:
+            # Initialize database connection
             conn = self._safe_spatialite_connect()
-            # Track connection for cleanup on cancellation
             self.active_connections.append(conn)
             cur = conn.cursor()
-
-            current_seq_order = 0
-            last_seq_order = 0
-            last_subset_id = None
-            layer_name = layer.name()
-            name = layer.id().replace(layer_name, '').replace('-', '_')
-
-            cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                                                    layer_id=layer.id()
-                                                                                                                                                                    )
-            )
-
-            results = cur.fetchall()
-
-            if len(results) == 1:
-                result = results[0]
-                last_subset_id = result[0]
-                last_seq_order = result[5]
-            else:
-                last_seq_order = 0
-
-            # Determine provider type for backend selection (Phase 2)
-            # Use detect_layer_provider_type for consistent detection
-            provider_type = detect_layer_provider_type(layer)
-            use_postgresql = (provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE)
-            use_spatialite = (provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR] or not use_postgresql)
-        
-            logger.debug(f"Provider={provider_type}, PostgreSQL={use_postgresql}, Spatialite={use_spatialite}")
-        
-            # Log performance warning for large Spatialite datasets (Phase 3)
-            # NOTE: Cannot call iface.messageBar() from worker thread - would cause crash
-            if use_spatialite and layer.featureCount() > 50000:
-                logger.warning(
-                    f"Large dataset ({layer.featureCount():,} features) using Spatialite backend. "
-                    f"Filtering may take longer. For optimal performance with large datasets, consider using PostgreSQL."
-                )
-
+            
+            # Get layer info and history
+            last_subset_id, last_seq_order, layer_name, name = self._get_last_subset_info(cur, layer)
+            
+            # Determine backend to use
+            provider_type, use_postgresql, use_spatialite = self._determine_backend(layer)
+            
+            # Log performance warning if needed
+            self._log_performance_warning_if_needed(use_spatialite, layer)
+            
+            # Execute appropriate action based on task_action
             if self.task_action == 'filter':
                 current_seq_order = last_seq_order + 1
-
-                # BRANCH: Use Spatialite backend (Phase 2)
+                
+                # Use Spatialite backend for local layers
                 if use_spatialite:
                     backend_name = "Spatialite" if provider_type == PROVIDER_SPATIALITE else "Local (OGR)"
                     logger.info(f"Using {backend_name} backend")
-                    # NOTE: Cannot call iface.messageBar() from worker thread
                     success = self._manage_spatialite_subset(
                         layer, sql_subset_string, primary_key_name, geom_key_name,
                         name, custom, cur, conn, current_seq_order
                     )
-                    cur.close()
-                    conn.close()
                     return success
-
-                # ORIGINAL: PostgreSQL backend (Phase 1)
-                if custom is False:
-
-                    sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                                        name=name
-                                                                                                                                                                        )
-
-                    sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
-                                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                                    name=name,
-                                                                                                                                                                    sql_subset_string=sql_subset_string
-                                                                                                                                                                    )
                 
-
-
-
-            
-                elif custom is True:
-
-                    cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                                            fk_project=self.project_uuid,
-                                                                                                                                                                            layer_id=layer.id()
-                                                                                                                                                                            )
-                    )
-
-                    results = cur.fetchall()
-                    if len(results) == 1:
-                        result = results[0]
-                        sql_subset_string = result[-1]
-                        last_subset_id = result[0]
-                    
-                    self.where_clause = self.param_buffer_expression.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
-                    where_clauses_in_arr = self.where_clause.split('WHEN')
-
-                    where_clause_out_arr = []
-                    where_clause_fields_arr = []
-                
-                    for where_then_clause in where_clauses_in_arr:
-                        if len(where_then_clause.split('THEN')) >= 1:
-                            where_clause = where_then_clause.split('THEN')[0]
-                            where_clause = where_clause.replace('WHEN', ' ')
-                            if where_clause.strip() != '':
-                                where_clause = where_clause.strip()
-                                where_clause_out_arr.append(where_clause)
-                                where_clause_fields_arr.append(where_clause.split(' ')[0])
-
-
-                    sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}_dump" CASCADE;'.format(
-                                                                                                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                        name=name
-                                                                                                                                                                                                                                        )
-                    if self.has_to_reproject_source_layer is True:
-                        self.postgresql_source_geom = 'ST_Transform({postgresql_source_geom}, {source_layer_srid})'.format(postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                                        source_layer_srid=self.source_layer_crs_authid.split(':')[1])
-
-                    if last_subset_id != None:
-                        sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                name=name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                geometry_field=geom_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema_source=self.param_source_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                table_source=self.param_source_table,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                param_buffer_expression=self.param_buffer.replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                source_new_subset=sql_subset_string,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            )
-                    else:
-                        sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, "{table_source}"."{primary_key_name}", {where_clause_fields}, {param_buffer_expression} as buffer_value FROM "{schema_source}"."{table_source}" WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub ) AND {where_expression} WITH DATA;'.format(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                name=name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                postgresql_source_geom=self.postgresql_source_geom,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                geometry_field=geom_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                schema_source=self.param_source_schema,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                primary_key_name=self.primary_key_name,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                table_source=self.param_source_table,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_clause_fields= ','.join(where_clause_fields_arr).replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                param_buffer_expression=self.param_buffer.replace('mv_',''),
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                source_new_subset=sql_subset_string,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                where_expression=' OR '.join(where_clause_out_arr).replace('mv_','')
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            )
-                
-                sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
-                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                        name=name,
-                                                                                                                                                        geometry_field=geom_key_name
-                                                                                                                                                        )
-
-                sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
-                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                            name=name
-                                                                                                                                            )
-                sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
-                                                                                        schema=self.current_materialized_view_schema,
-                                                                                        name=name
-                                                                                        )
-            
-                sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()                                                        
-                logger.debug(f"SQL drop request: {sql_drop_request}")
-                logger.debug(f"SQL create request: {sql_create_request}")
-
-                connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
-
-                try:
-                    with connexion.cursor() as cursor:
-                        cursor.execute("SELECT 1")
-                except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
-                    logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
-                    connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
-
-                with connexion.cursor() as cursor:
-                    cursor.execute(sql_drop_request)
-                    connexion.commit()
-                    cursor.execute(sql_create_request)
-                    connexion.commit()
-                    cursor.execute(sql_create_index)
-                    connexion.commit()
-                    cursor.execute(sql_cluster_request)
-                    connexion.commit()
-                    cursor.execute(sql_analyze_request)
-                    connexion.commit()
-
-                    if custom is True:
-                        sql_dump_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}_dump" as SELECT ST_Union("{geometry_field}") as {geometry_field} from "{schema}"."mv_{name}";'.format(
-                                                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                                                name=name,
-                                                                                                                                                                                                geometry_field=geom_key_name
-                                                                                                                                                                                                )
-
-                        cursor.execute(sql_dump_request)
-                        connexion.commit()
-
-                cur.execute("""INSERT INTO fm_subset_history VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
-                                                                                                                                                                                    id=uuid.uuid4(),
-                                                                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                                                                    layer_id=layer.id(),
-                                                                                                                                                                                    layer_source_id=self.source_layer.id(),
-                                                                                                                                                                                    seq_order=current_seq_order,
-                                                                                                                                                                                    subset_string=sql_subset_string.replace("\'","\'\'")
-                                                                                                                                                                                    )
+                # Use PostgreSQL backend for remote layers
+                return self._filter_action_postgresql(
+                    layer, sql_subset_string, primary_key_name, geom_key_name,
+                    name, custom, cur, conn, current_seq_order
                 )
-                conn.commit()
-
-                layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                            name=name,
-                                                                                                                                            primary_key_name=primary_key_name
-                                                                                                                                            )
-                logger.debug(f"Layer subset string: {layer_subsetString}")
-                # CRITICAL FIX: Thread-safe subset string application
-                self._safe_set_subset_string(layer, layer_subsetString)
-
-
+            
             elif self.task_action == 'reset':
-            
-                cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}';""".format(
-                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                    layer_id=layer.id()
-                                                                                                                                    )
-                )
-                conn.commit()
-
-                # BRANCH: Spatialite backend (Phase 2)
                 if use_spatialite:
-                    logger.info("Reset - Spatialite backend - dropping temp table")
-                    # For Spatialite, drop temp table from filterMate_db
-                    import sqlite3
-                    try:
-                        temp_conn = sqlite3.connect(self.db_file_path)
-                        temp_cur = temp_conn.cursor()
-                        temp_cur.execute(f"DROP TABLE IF EXISTS mv_{name}")
-                        temp_conn.commit()
-                        temp_cur.close()
-                        temp_conn.close()
-                    except Exception as e:
-                        logger.error(f"Error dropping Spatialite temp table: {e}")
-                
-                    # CRITICAL FIX: Thread-safe subset string application
-                    self._safe_set_subset_string(layer, '')
-
-                # ORIGINAL: PostgreSQL backend
+                    return self._reset_action_spatialite(layer, name, cur, conn)
                 elif use_postgresql:
-                    sql_drop_request = 'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                name=name
-                                                                                                                )
-                
-                    connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
-
-                    try:
-                        with connexion.cursor() as cursor:
-                            cursor.execute("SELECT 1")
-                    except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
-                        logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
-                        connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
-
-                    with connexion.cursor() as cursor:
-                        cursor.execute(sql_drop_request)
-                        connexion.commit()
-
-                    # CRITICAL FIX: Thread-safe subset string application
-                    self._safe_set_subset_string(layer, '')
-
+                    return self._reset_action_postgresql(layer, name, cur, conn)
+            
             elif self.task_action == 'unfilter':
-                if last_subset_id != None:
-                    cur.execute("""DELETE FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' AND id = '{last_subset_id}';""".format(
-                                                                                                                                                                    fk_project=self.project_uuid,
-                                                                                                                                                                    layer_id=layer.id(),
-                                                                                                                                                                    last_subset_id=last_subset_id
-                                                                                                                                                                    )
-                    )
-                    conn.commit()
-
-                cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                                        fk_project=self.project_uuid,
-                                                                                                                                                                        layer_id=layer.id()
-                                                                                                                                                                        )
+                return self._unfilter_action(
+                    layer, primary_key_name, geom_key_name, name, custom,
+                    cur, conn, last_subset_id, use_postgresql, use_spatialite
                 )
-
-                results = cur.fetchall()
-                if len(results) == 1:
-                    result = results[0]
-                    sql_subset_string = result[-1]
-                
-                    # BRANCH: Spatialite backend (Phase 2)
-                    if use_spatialite:
-                        logger.info("Unfilter - Spatialite backend - recreating previous subset")
-                        # Recreate previous subset using Spatialite
-                        success = self._manage_spatialite_subset(
-                            layer, sql_subset_string, primary_key_name, geom_key_name,
-                            name, custom=False, cur=None, conn=None, current_seq_order=0
-                        )
-                        if not success:
-                            layer.setSubsetString('')
-                
-                    # ORIGINAL: PostgreSQL backend
-                    elif use_postgresql:
-                        sql_drop_request = 'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'.format(
-                                                                                                                                                                        schema=self.current_materialized_view_schema,
-                                                                                                                                                                        name=name
-                                                                                                                                                                        )
-
-                        sql_create_request = 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
-                                                                                                                                                                            schema=self.current_materialized_view_schema,
-                                                                                                                                                                            name=name,
-                                                                                                                                                                            sql_subset_string=sql_subset_string
-                                                                                                                                                                            )
-                     
-                        sql_create_index = 'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geometry_field});'.format(
-                                                                                                                                                                schema=self.current_materialized_view_schema,
-                                                                                                                                                                name=name,
-                                                                                                                                                                geometry_field=geom_key_name
-                                                                                                                                                                )
-
-                        sql_cluster_request = 'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'.format(
-                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                    name=name
-                                                                                                                                                    )
-
-                        sql_analyze_request = 'ANALYZE VERBOSE "{schema}"."mv_{name}";'.format(
-                                                                                            schema=self.current_materialized_view_schema,
-                                                                                            name=name
-                                                                                            )
-                    
-                        sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()
-
-                        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
-
-                        try:
-                            with connexion.cursor() as cursor:
-                                cursor.execute("SELECT 1")
-                        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
-                            logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
-                            connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
-
-                        with connexion.cursor() as cursor:
-                            cursor.execute(sql_drop_request)
-                            connexion.commit()
-                            cursor.execute(sql_create_request)
-                            connexion.commit()
-                            cursor.execute(sql_create_index)
-                            connexion.commit()
-                            cursor.execute(sql_cluster_request)
-                            connexion.commit()
-                            cursor.execute(sql_analyze_request)
-                            connexion.commit()  
-
-                        layer_subsetString = '"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'.format(
-                                                                                                                                                    schema=self.current_materialized_view_schema,
-                                                                                                                                                    name=name,
-                                                                                                                                                    primary_key_name=primary_key_name
-                                                                                                                                                    )
-                        # CRITICAL FIX: Thread-safe subset string application
-                        self._safe_set_subset_string(layer, layer_subsetString)
-
-                else:
-                    # CRITICAL FIX: Thread-safe subset string application
-                    self._safe_set_subset_string(layer, '')
-
-                return True
+            
+            return True
             
         finally:
-            # Always cleanup connections, even if cancelled or exception occurs
+            # Always cleanup connections
             if cur:
                 try:
                     cur.close()
@@ -2457,9 +3201,9 @@ class FilterEngineTask(QgsTask):
                     conn.close()
                 except Exception as e:
                     logger.debug(f"Could not close database connection: {e}")
-                # Remove from active connections list
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
+
 
 
     def cancel(self):
@@ -2706,137 +3450,256 @@ class LayersManagementEngineTask(QgsTask):
 
         return True
     
+    def _load_existing_layer_properties(self, layer):
+        """
+        Load existing layer properties from Spatialite database.
+        
+        Args:
+            layer: QgsVectorLayer to load properties for
+            
+        Returns:
+            dict: Dictionary with 'infos', 'exploring', 'filtering' keys, or empty dict if not found
+        """
+        spatialite_results = self.select_properties_from_spatialite(layer.id())
+        expected_count = self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"]
+        
+        if not spatialite_results or len(spatialite_results) != expected_count:
+            return {}
+        
+        existing_layer_variables = {
+            "infos": {},
+            "exploring": {},
+            "filtering": {}
+        }
+        
+        for property in spatialite_results:
+            if property[0] in existing_layer_variables:
+                value_typped, type_returned = self.return_typped_value(
+                    property[2].replace("\'\'", "\'"), 
+                    'load'
+                )
+                existing_layer_variables[property[0]][property[1]] = value_typped
+                
+                # Set as QGIS layer variable
+                variable_key = f"filterMate_{property[0]}_{property[1]}"
+                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+        
+        return existing_layer_variables
+
+    def _migrate_legacy_geometry_field(self, layer_variables, layer):
+        """
+        Migrate old 'geometry_field' key to 'layer_geometry_field'.
+        
+        Args:
+            layer_variables: Dictionary with layer properties
+            layer: QgsVectorLayer being processed
+        """
+        infos = layer_variables.get("infos", {})
+        
+        if "geometry_field" in infos and "layer_geometry_field" not in infos:
+            # Perform migration
+            infos["layer_geometry_field"] = infos["geometry_field"]
+            del infos["geometry_field"]
+            logger.info(f"Migrated geometry_field to layer_geometry_field for layer {layer.id()}")
+            
+            # Update database with new key name
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                
+                cur.execute(
+                    """UPDATE fm_project_layers_properties 
+                       SET meta_key = 'layer_geometry_field'
+                       WHERE fk_project = ? AND layer_id = ? 
+                       AND meta_type = 'infos' AND meta_key = 'geometry_field'""",
+                    (str(self.project_uuid), layer.id())
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.debug(f"Updated database for layer {layer.id()}")
+            except Exception as e:
+                logger.warning(f"Could not update database for migration: {e}")
+
+    def _detect_layer_metadata(self, layer, layer_provider_type):
+        """
+        Detect layer-specific metadata (schema, geometry field) based on provider.
+        
+        Args:
+            layer: QgsVectorLayer to analyze
+            layer_provider_type: Provider type constant
+            
+        Returns:
+            tuple: (source_schema, geometry_field)
+        """
+        source_schema = 'NULL'
+        geometry_field = 'NULL'
+        
+        if layer_provider_type == PROVIDER_POSTGRES:
+            layer_source = layer.source()
+            
+            # Extract schema from connection string
+            regexp_match_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)', layer_source)
+            if regexp_match_schema:
+                source_schema = regexp_match_schema.group()
+            
+            # Extract geometry field from connection string
+            regexp_match_geom = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))', layer_source)
+            if regexp_match_geom:
+                geometry_field = regexp_match_geom.group()
+        
+        elif layer_provider_type == PROVIDER_SPATIALITE:
+            geometry_field = 'GEOMETRY'
+        
+        elif layer_provider_type == PROVIDER_OGR:
+            geometry_field = '_ogr_geometry_'
+        
+        return source_schema, geometry_field
+
+    def _build_new_layer_properties(self, layer, primary_key_result):
+        """
+        Build property dictionaries for a new layer (not yet in database).
+        
+        Args:
+            layer: QgsVectorLayer to build properties for
+            primary_key_result: Tuple from search_primary_key_from_layer
+            
+        Returns:
+            dict: Dictionary with 'infos', 'exploring', 'filtering' keys
+        """
+        primary_key_name, primary_key_idx, primary_key_type, primary_key_is_numeric = primary_key_result
+        
+        # Detect provider type and metadata
+        layer_provider_type = detect_layer_provider_type(layer)
+        source_schema, geometry_field = self._detect_layer_metadata(layer, layer_provider_type)
+        
+        # Convert geometry type using utility function
+        layer_geometry_type = geometry_type_to_string(layer)
+        
+        # Build properties from JSON templates
+        new_layer_variables = {}
+        new_layer_variables["infos"] = json.loads(
+            self.json_template_layer_infos % (
+                layer_geometry_type, 
+                layer.name(), 
+                layer.id(), 
+                source_schema, 
+                layer_provider_type, 
+                layer.sourceCrs().authid(), 
+                primary_key_name, 
+                primary_key_idx, 
+                primary_key_type, 
+                geometry_field, 
+                str(primary_key_is_numeric).lower()
+            )
+        )
+        new_layer_variables["exploring"] = json.loads(
+            self.json_template_layer_exploring % (
+                str(primary_key_name),
+                str(primary_key_name),
+                str(primary_key_name)
+            )
+        )
+        new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
+        
+        return new_layer_variables
+
+    def _set_layer_variables(self, layer, layer_variables):
+        """
+        Set QGIS layer variables from property dictionary.
+        
+        Args:
+            layer: QgsVectorLayer to set variables on
+            layer_variables: Dictionary with 'infos', 'exploring', 'filtering' keys
+        """
+        for key_group in ("infos", "exploring", "filtering"):
+            for key in layer_variables[key_group]:
+                variable_key = f"filterMate_{key_group}_{key}"
+                value_typped, type_returned = self.return_typped_value(
+                    layer_variables[key_group][key], 
+                    'save'
+                )
+                if type_returned in (list, dict):
+                    value_typped = json.dumps(value_typped)
+                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+
+    def _create_spatial_index(self, layer, layer_props):
+        """
+        Create spatial index for layer based on provider type.
+        
+        Args:
+            layer: QgsVectorLayer to index
+            layer_props: Layer properties dictionary
+        """
+        if layer_props["infos"]["layer_provider_type"] == PROVIDER_POSTGRES:
+            try:
+                self.create_spatial_index_for_postgresql_layer(layer, layer_props)
+            except (psycopg2.Error, AttributeError, KeyError) as e:
+                logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
+        else:
+            self.create_spatial_index_for_layer(layer)
 
     def add_project_layer(self, layer):
-
-        result = False
-        layer_variables = {}
-
-        if isinstance(layer, QgsVectorLayer) and layer.isSpatial():
-
-            spatialite_results = self.select_properties_from_spatialite(layer.id())
-            if len(spatialite_results) > 0 and len(spatialite_results) == self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"]:
-                existing_layer_variables = {}
-                for key in ("infos", "exploring", "filtering"):
-                    existing_layer_variables[key] = {}
-                for property in spatialite_results:
-
-                    if property[0] in existing_layer_variables:
-                        value_typped, type_returned = self.return_typped_value(property[2].replace("\'\'", "\'"), 'load')
-                        existing_layer_variables[property[0]][property[1]] = value_typped
-                        variable_key = "filterMate_{key_group}_{key}".format(key_group=property[0], key=property[1])
-                        QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-
-                # MIGRATION: Rename old 'geometry_field' key to 'layer_geometry_field'
-                if "geometry_field" in existing_layer_variables.get("infos", {}) and "layer_geometry_field" not in existing_layer_variables.get("infos", {}):
-                    existing_layer_variables["infos"]["layer_geometry_field"] = existing_layer_variables["infos"]["geometry_field"]
-                    del existing_layer_variables["infos"]["geometry_field"]
-                    logger.info(f"Migrated geometry_field to layer_geometry_field for layer {layer.id()}")
-                    
-                    # Update database with new key name
-                    try:
-                        conn = self._safe_spatialite_connect()
-                        cur = conn.cursor()
-                        
-                        # Update the database record
-                        cur.execute(
-                            """UPDATE fm_project_layers_properties 
-                               SET meta_key = 'layer_geometry_field'
-                               WHERE fk_project = ? AND layer_id = ? 
-                               AND meta_type = 'infos' AND meta_key = 'geometry_field'""",
-                            (str(self.project_uuid), layer.id())
-                        )
-                        conn.commit()
-                        cur.close()
-                        conn.close()
-                        logger.debug(f"Updated database for layer {layer.id()}")
-                    except Exception as e:
-                        logger.warning(f"Could not update database for migration: {e}")
-
-                layer_variables["infos"] = existing_layer_variables["infos"]
-                layer_variables["exploring"] = existing_layer_variables["exploring"]
-                layer_variables["filtering"] = existing_layer_variables["filtering"]
-
-            else:
-                new_layer_variables = {}
-                result = self.search_primary_key_from_layer(layer)
-                if self.isCanceled() or result is False:
-                    return False
-                
-                if isinstance(result, tuple) and len(list(result)) == 4:
-                    primary_key_name = result[0]
-                    primary_key_idx = result[1]
-                    primary_key_type = result[2]
-                    primary_key_is_numeric = result[3]
-                else:
-                    return False
-
-                source_schema = 'NULL'
-                geometry_field = 'NULL'
-
-                layer_variables = {}
-                layer_props = {}
-
-                # Use utility function to detect provider type
-                layer_provider_type = detect_layer_provider_type(layer)
-
-                if layer_provider_type == PROVIDER_POSTGRES:
-                    layer_source = layer.source()
-                    regexp_match_source_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)',layer_source)
-                    if regexp_match_source_schema != None:
-                        source_schema = regexp_match_source_schema.group()
-
-                    regexp_match_geometry_field = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))',layer_source)
-                    if regexp_match_geometry_field != None:
-                        geometry_field = regexp_match_geometry_field.group()
-
-                # Use utility function to convert geometry type
-                layer_geometry_type = geometry_type_to_string(layer)
-                
-                if layer_provider_type == PROVIDER_SPATIALITE:
-                    geometry_field = 'GEOMETRY'
-                elif layer_provider_type == PROVIDER_OGR:
-                    geometry_field = '_ogr_geometry_'
-
-                new_layer_variables["infos"] = json.loads(self.json_template_layer_infos % (layer_geometry_type, layer.name(), layer.id(), source_schema, layer_provider_type, layer.sourceCrs().authid(), primary_key_name, primary_key_idx, primary_key_type, geometry_field, str(primary_key_is_numeric).lower()))
-                new_layer_variables["exploring"] = json.loads(self.json_template_layer_exploring % (str(primary_key_name),str(primary_key_name),str(primary_key_name)))
-                new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
-    
-                
-                for key_group in ("infos", "exploring", "filtering"):
-                    for key in new_layer_variables[key_group]:
-                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
-                        value_typped, type_returned = self.return_typped_value(new_layer_variables[key_group][key], 'save')
-                        if type_returned in (list, dict):
-                            value_typped = json.dumps(value_typped)
-                        QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-
-                layer_variables["infos"] = new_layer_variables["infos"]
-                layer_variables["exploring"] = new_layer_variables["exploring"]
-                layer_variables["filtering"] = new_layer_variables["filtering"]  
-
+        """
+        Add a spatial layer to the project with all necessary metadata and indexes.
+        
+        Args:
+            layer: QgsVectorLayer to add
             
-            if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] == 0:
-                properties_count = len(layer_variables["infos"]) + len(layer_variables["exploring"]) + len(layer_variables["filtering"])
-                self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] = properties_count
-
-
-            layer_props = {"infos": layer_variables["infos"], "exploring": layer_variables["exploring"], "filtering": layer_variables["filtering"]}
-            layer_props["infos"]["layer_id"] = layer.id()
-
-            self.insert_properties_to_spatialite(layer.id(), layer_props)
-
-            if layer_props["infos"]["layer_provider_type"] == PROVIDER_POSTGRES:
-                try:
-                    self.create_spatial_index_for_postgresql_layer(layer, layer_props)
-                except (psycopg2.Error, AttributeError, KeyError) as e:
-                    logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
-                
-            else:
-                self.create_spatial_index_for_layer(layer)
-                
-            self.project_layers[layer.id()] = layer_props
-            return True
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not isinstance(layer, QgsVectorLayer) or not layer.isSpatial():
+            return False
+        
+        # Try to load existing properties from database
+        layer_variables = self._load_existing_layer_properties(layer)
+        
+        if layer_variables:
+            # Layer exists in database - apply migration if needed
+            self._migrate_legacy_geometry_field(layer_variables, layer)
+        else:
+            # New layer - search for primary key and build properties
+            result = self.search_primary_key_from_layer(layer)
+            if self.isCanceled() or result is False:
+                return False
+            
+            if not isinstance(result, tuple) or len(list(result)) != 4:
+                return False
+            
+            # Build properties for new layer
+            layer_variables = self._build_new_layer_properties(layer, result)
+            
+            # Set QGIS layer variables
+            self._set_layer_variables(layer, layer_variables)
+        
+        # Update properties count if first layer
+        if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] == 0:
+            properties_count = (
+                len(layer_variables["infos"]) + 
+                len(layer_variables["exploring"]) + 
+                len(layer_variables["filtering"])
+            )
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] = properties_count
+        
+        # Prepare layer properties dict
+        layer_props = {
+            "infos": layer_variables["infos"],
+            "exploring": layer_variables["exploring"],
+            "filtering": layer_variables["filtering"]
+        }
+        layer_props["infos"]["layer_id"] = layer.id()
+        
+        # Save to database
+        self.insert_properties_to_spatialite(layer.id(), layer_props)
+        
+        # Create spatial index
+        self._create_spatial_index(layer, layer_props)
+        
+        # Add to project layers dictionary
+        self.project_layers[layer.id()] = layer_props
+        
+        return True
 
 
     def remove_project_layer(self, layer_id):
