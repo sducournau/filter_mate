@@ -9,6 +9,10 @@ from qgis.utils import iface
 from qgis.PyQt.QtWidgets import QApplication, QVBoxLayout
 from functools import partial
 import json
+import logging
+
+# Get FilterMate logger
+logger = logging.getLogger('FilterMate')
 
 class PopulateListEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
@@ -50,7 +54,7 @@ class PopulateListEngineTask(QgsTask):
         
         except Exception as e:
             self.exception = e
-            print(self.exception)
+            logger.error(f'PopulateListEngineTask failed: {e}', exc_info=True)
             return False
 
     def get_task_action_and_layer(self):
@@ -234,16 +238,20 @@ class PopulateListEngineTask(QgsTask):
 
         else:
             filter_txt_splitted = [item.replace('é','e').replace('è','e').replace('â','a').replace('ô','o') for item in filter_txt_splitted]
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            widget_count = list_widget.count()
+            for index in range(widget_count):
+                item = list_widget.item(index)
                 string_value = item.text().lower().replace('é','e').replace('è','e').replace('â','a').replace('ô','o')
                 filter = all(x not in string_value for x in filter_txt_splitted)
-                self.parent.list_widgets[self.layer.id()].setRowHidden(it, filter)
+                list_widget.setRowHidden(index, filter)
                 self.setProgress((index/total_count)*100)
 
         visible_features_list = []
-        for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-            item = self.parent.list_widgets[self.layer.id()].item(it)
+        list_widget = self.parent.list_widgets[self.layer.id()]
+        widget_count = list_widget.count()
+        for index in range(widget_count):
+            item = list_widget.item(index)
             if not item.isHidden():
                 visible_features_list.append([item.data(0), item.data(3), bool(item.data(4))])
 
@@ -255,11 +263,12 @@ class PopulateListEngineTask(QgsTask):
 
         if self.sub_action == 'Select All':
 
-            total_count = self.parent.list_widgets[self.layer.id()].count()
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            total_count = list_widget.count()
             nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
 
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            for index in range(total_count):
+                item = list_widget.item(index)
                 if not item.isHidden():
                     item.setCheckState(Qt.Checked)
                     item.setData(6,self.parent.font_by_state['checked'][0])
@@ -270,12 +279,13 @@ class PopulateListEngineTask(QgsTask):
         
         elif self.sub_action == 'Select All (non subset)':
 
-            total_count = self.parent.list_widgets[self.layer.id()].count()
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            widget_count = list_widget.count()
             nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-            total_count = total_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            total_count = widget_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
 
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            for index in range(widget_count):
+                item = list_widget.item(index)
                 if not item.isHidden():
                     if item.data(3) not in nonSubset_features_list:
                         item.setCheckState(Qt.Checked)
@@ -289,9 +299,11 @@ class PopulateListEngineTask(QgsTask):
 
             nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
             total_count = len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            widget_count = list_widget.count()
 
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            for index in range(widget_count):
+                item = list_widget.item(index)
                 if not item.isHidden():
                     if item.data(3) in nonSubset_features_list:
                         item.setCheckState(Qt.Checked)
@@ -307,11 +319,12 @@ class PopulateListEngineTask(QgsTask):
 
         if self.sub_action == 'De-select All':
 
-            total_count = self.parent.list_widgets[self.layer.id()].count()
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            total_count = list_widget.count()
             nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
 
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            for index in range(total_count):
+                item = list_widget.item(index)
                 if not item.isHidden():
                     item.setCheckState(Qt.Unchecked)
                     item.setData(6,self.parent.font_by_state['unChecked'][0])
@@ -321,12 +334,13 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'De-select All (non subset)':
 
-            total_count = self.parent.list_widgets[self.layer.id()].count()
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            widget_count = list_widget.count()
             nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-            total_count = total_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            total_count = widget_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
 
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            for index in range(widget_count):
+                item = list_widget.item(index)
                 if not item.isHidden():
                     if item.data(3) not in nonSubset_features_list:
                         item.setCheckState(Qt.Unchecked)
@@ -340,9 +354,11 @@ class PopulateListEngineTask(QgsTask):
 
             nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
             total_count = len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            list_widget = self.parent.list_widgets[self.layer.id()]
+            widget_count = list_widget.count()
 
-            for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-                item = self.parent.list_widgets[self.layer.id()].item(it)
+            for index in range(widget_count):
+                item = list_widget.item(index)
                 if not item.isHidden():
                     if item.data(3) in nonSubset_features_list:
                         item.setCheckState(Qt.Unchecked)
@@ -358,9 +374,10 @@ class PopulateListEngineTask(QgsTask):
 
         selection_data = []
         visible_data = []
-        total_count = self.parent.list_widgets[self.layer.id()].count()
-        for index, it in enumerate(range(self.parent.list_widgets[self.layer.id()].count())):
-            item = self.parent.list_widgets[self.layer.id()].item(it)
+        list_widget = self.parent.list_widgets[self.layer.id()]
+        total_count = list_widget.count()
+        for index in range(total_count):
+            item = list_widget.item(index)
             if item.checkState() == Qt.Checked:
                 selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
             visible_data.append([item.data(0), item.data(3), bool(item.data(4))])
@@ -383,10 +400,10 @@ class PopulateListEngineTask(QgsTask):
         called from the main thread so it is safe to interact with the GUI etc here"""
         if result is False:
             if self.exception is None:
-                iface.messageBar().pushMessage('Task was cancelled')
+                iface.messageBar().pushMessage('FilterMate', 'Task was cancelled', level=Qgis.Warning)
             else:
-                iface.messageBar().pushMessage('Errors occured')
-                print(self.exception)
+                iface.messageBar().pushCritical('FilterMate', f'Error occurred: {str(self.exception)}')
+                logger.error(f'Task failed with exception: {self.exception}', exc_info=True)
 
 
 class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):

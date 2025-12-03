@@ -23,7 +23,8 @@
       "Always check POSTGRESQL_AVAILABLE flag before PostgreSQL operations.",
       "Use Serena symbolic tools for efficient code analysis - avoid reading entire large files.",
       "Follow patterns in .github/copilot-instructions.md for coding standards.",
-      "Consult .serena/optimization_rules.md for Serena tool usage best practices."
+      "Consult .serena/optimization_rules.md for Serena tool usage best practices.",
+      "Serena MCP server auto-starts on Windows when Chat opens (configured via MCP config with SERENA_PROJECT env var)."
     ],
     "codeGeneration": [
       "Follow PEP 8 with 4-space indentation and 120 char line limit.",

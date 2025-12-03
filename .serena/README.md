@@ -2,7 +2,24 @@
 
 This directory contains configuration and memory files for using Serena (symbolic code analysis tools) with the FilterMate project.
 
+## Quick Start (Windows)
+
+**Serena auto-starts** when you open GitHub Copilot Chat in VS Code!
+
+- ✅ No manual activation needed
+- ✅ Project automatically loaded via MCP server
+- ✅ All symbolic tools immediately available
+
+See [mcp_windows_setup.md](mcp_windows_setup.md) for detailed setup instructions.
+
 ## Files
+
+### mcp_windows_setup.md
+Complete guide for configuring Serena MCP server auto-start on Windows:
+- Installation steps
+- MCP configuration file location and format
+- Troubleshooting guide
+- Multiple projects setup
 
 ### project_memory.md
 Complete project memory containing:

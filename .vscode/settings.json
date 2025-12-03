@@ -19,9 +19,12 @@
     },
     {
       "text": "Use get_symbols_overview() before reading large files"
+    },
+    {
+      "text": "Serena MCP server auto-starts when Chat opens (Windows: configured via MCP with SERENA_PROJECT)"
     }
   ],
-  "github.copilot.chat.welcomeMessage": "FilterMate QGIS Plugin Assistant\n\n✅ Phase 1 Complete: PostgreSQL optional\n🔄 Phase 2 In Progress: Spatialite backend\n\nSerena symbolic tools available for efficient code analysis.\nReference: .serena/optimization_rules.md",
+  "github.copilot.chat.welcomeMessage": "FilterMate QGIS Plugin Assistant\n\n✅ Phase 1 Complete: PostgreSQL optional\n🔄 Phase 2 In Progress: Spatialite backend\n\n🔧 Serena MCP auto-starts on Windows (symbolic tools ready)\n📚 Reference: .serena/optimization_rules.md",
   "files.watcherExclude": {
     "**/.git/objects/**": true,
     "**/.git/subtree-cache/**": true,

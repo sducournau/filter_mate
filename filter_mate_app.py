@@ -14,6 +14,7 @@ import os.path
 from pathlib import Path
 from shutil import copyfile
 import re
+import logging
 from .config.config import *
 from functools import partial
 import json
@@ -22,6 +23,9 @@ from .modules.appTasks import *
 from .modules.appUtils import POSTGRESQL_AVAILABLE
 from .resources import *
 import uuid
+
+# Get FilterMate logger
+logger = logging.getLogger('FilterMate')
 
 
 # Import the code for the DockWidget
@@ -383,39 +387,44 @@ class FilterMateApp:
 
 
     def apply_subset_filter(self, task_name, layer):
+        conn = None
+        cur = None
+        try:
+            conn = spatialite_connect(self.db_file_path)
+            cur = conn.cursor()
 
-        conn = spatialite_connect(self.db_file_path)
-        cur = conn.cursor()
+            last_subset_string = ''
 
-        last_subset_string = ''
+            # Use parameterized query to prevent SQL injection
+            cur.execute(
+                """SELECT * FROM fm_subset_history 
+                   WHERE fk_project = ? AND layer_id = ? 
+                   ORDER BY seq_order DESC LIMIT 1""",
+                (str(self.project_uuid), layer.id())
+            )
 
-        cur.execute("""SELECT * FROM fm_subset_history WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}' ORDER BY seq_order DESC LIMIT 1;""".format(
-                                                                                                                                                        fk_project=self.project_uuid,
-                                                                                                                                                        layer_id=layer.id()
-                                                                                                                                                        )
-        )
+            results = cur.fetchall()
 
-        results = cur.fetchall()
+            if len(results) == 1:
+                result = results[0]
+                last_subset_string = result[6].replace("\'\'", "\'")
 
-        if len(results) == 1:
-            result = results[0]
-            last_subset_string = result[6].replace("\'\'", "\'")
+            if task_name in ('filter', 'unfilter'):
+                layer.setSubsetString(last_subset_string)
 
-        if task_name in ('filter', 'unfilter'):
+                if layer.subsetString() != '':
+                    self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+                else:
+                    self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
 
-            layer.setSubsetString(last_subset_string)
-
-            if layer.subsetString() != '':
-                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
-            else:
+            elif task_name == 'reset':
+                layer.setSubsetString('')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-
-        elif task_name == 'reset':
-            layer.setSubsetString('')
-            self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-
-        cur.close()
-        conn.close()
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
 
 
         # layer_props = self.PROJECT_LAYERS[layer.id()]
@@ -470,56 +479,52 @@ class FilterMateApp:
             layer_all_properties_flag = True
 
         if layer.id() in self.PROJECT_LAYERS.keys():
+            conn = None
+            cur = None
+            try:
+                conn = spatialite_connect(self.db_file_path)
+                cur = conn.cursor()
 
-            conn = spatialite_connect(self.db_file_path)
-            cur = conn.cursor()
-
-            if layer_all_properties_flag is True:
-                for key_group in ("infos", "exploring", "filtering"):
-                    for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
-                        value_typped, type_returned = self.return_typped_value(value, 'save')
-                        if type_returned in (list, dict):
-                            value_typped = json.dumps(value_typped)
-                        variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
-                        QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
-                        cur.execute("""INSERT INTO fm_project_layers_properties 
-                                        VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
-                                                                            id=uuid.uuid4(),
-                                                                            project_id=self.project_uuid,
-                                                                            layer_id=layer.id(),
-                                                                            meta_type=key_group,
-                                                                            meta_key=key,
-                                                                            meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
-                                                                            )
-                        )
-                        conn.commit()
-
-
-
-            else:
-                for layer_property in layer_properties:
-                    if layer_property[0] in ("infos", "exploring", "filtering"):
-                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                            value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
+                if layer_all_properties_flag is True:
+                    for key_group in ("infos", "exploring", "filtering"):
+                        for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
                             value_typped, type_returned = self.return_typped_value(value, 'save')
                             if type_returned in (list, dict):
                                 value_typped = json.dumps(value_typped)
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-                            cur.execute("""INSERT INTO fm_project_layers_properties 
-                                            VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
-                                                                                id=uuid.uuid4(),
-                                                                                project_id=self.project_uuid,
-                                                                                layer_id=layer.id(),
-                                                                                meta_type=layer_property[0],
-                                                                                meta_key=layer_property[1],
-                                                                                meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
-                                                                                )
+                            variable_key = "filterMate_{key_group}_{key}".format(key_group=key_group, key=key)
+                            QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' +  key, value_typped)
+                            # Use parameterized query
+                            cur.execute(
+                                """INSERT INTO fm_project_layers_properties 
+                                   VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                                (str(uuid.uuid4()), str(self.project_uuid), layer.id(), 
+                                 key_group, key, str(value_typped))
                             )
                             conn.commit()
 
-            cur.close()
-            conn.close()
+                else:
+                    for layer_property in layer_properties:
+                        if layer_property[0] in ("infos", "exploring", "filtering"):
+                            if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                                value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
+                                value_typped, type_returned = self.return_typped_value(value, 'save')
+                                if type_returned in (list, dict):
+                                    value_typped = json.dumps(value_typped)
+                                variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                                # Use parameterized query
+                                cur.execute(
+                                    """INSERT INTO fm_project_layers_properties 
+                                       VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                                    (str(uuid.uuid4()), str(self.project_uuid), layer.id(),
+                                     layer_property[0], layer_property[1], str(value_typped))
+                                )
+                                conn.commit()
+            finally:
+                if cur:
+                    cur.close()
+                if conn:
+                    conn.close()
 
     def remove_variables_from_layer(self, layer, layer_properties=[]):
         
@@ -531,38 +536,42 @@ class FilterMateApp:
             layer_all_properties_flag = True
 
         if layer.id() in self.PROJECT_LAYERS.keys():
+            conn = None
+            cur = None
+            try:
+                conn = spatialite_connect(self.db_file_path)
+                cur = conn.cursor()
 
-            conn = spatialite_connect(self.db_file_path)
-            cur = conn.cursor()
+                if layer_all_properties_flag is True:
+                    # Use parameterized query
+                    cur.execute(
+                        """DELETE FROM fm_project_layers_properties 
+                           WHERE fk_project = ? and layer_id = ?""",
+                        (str(self.project_uuid), layer.id())
+                    )
+                    conn.commit()
+                    QgsExpressionContextUtils.setLayerVariables(layer, {})
 
-            if layer_all_properties_flag is True:
-                cur.execute("""DELETE FROM fm_project_layers_properties 
-                                WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
-                                                                                                    project_id=self.project_uuid,
-                                                                                                    layer_id=layer.id()
-                                                                                                    )
-                )
-                conn.commit()
-                QgsExpressionContextUtils.setLayerVariables(layer, {})
-
-            else:
-                for layer_property in layer_properties:
-                    if layer_property[0] in ("infos", "exploring", "filtering"):
-                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                            cur.execute("""DELETE FROM fm_project_layers_properties  
-                                            WHERE fk_project = '{project_id}' and layer_id = '{layer_id}' and meta_type = '{meta_type}' and meta_key = '{meta_key}');""".format(
-                                                                                                                                                                            project_id=self.project_uuid,
-                                                                                                                                                                            layer_id=layer.id(),
-                                                                                                                                                                            meta_type=layer_property[0],
-                                                                                                                                                                            meta_key=layer_property[1]                           
-                                                                                                                                                                            )
-                            )
-                            conn.commit()
-                            variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
-                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
-
-            cur.close()
-            conn.close()
+                else:
+                    for layer_property in layer_properties:
+                        if layer_property[0] in ("infos", "exploring", "filtering"):
+                            if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                                # Use parameterized query
+                                cur.execute(
+                                    """DELETE FROM fm_project_layers_properties  
+                                       WHERE fk_project = ? and layer_id = ? 
+                                       and meta_type = ? and meta_key = ?""",
+                                    (str(self.project_uuid), layer.id(), 
+                                     layer_property[0], layer_property[1])
+                                )
+                                conn.commit()
+                                variable_key = "filterMate_{key_group}_{key}".format(key_group=layer_property[0], key=layer_property[1])
+                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
+            finally:
+                if cur:
+                    cur.close()
+                if conn:
+                    conn.close()
 
       
 
@@ -582,7 +591,7 @@ class FilterMateApp:
             self.project_file_path = self.PROJECT.absolutePath()
             
 
-            print(self.db_file_path)
+            logger.debug(f"Database file path: {self.db_file_path}")
 
             if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True:
                 try: 
@@ -591,10 +600,10 @@ class FilterMateApp:
                     with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
-                    print(error)
+                    logger.error(f"Failed to remove database file: {error}")
             
             project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]
-            print(project_settings)
+            logger.debug(f"Project settings: {project_settings}")
 
             if not os.path.exists(self.db_file_path):
                 memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
@@ -722,7 +731,7 @@ class FilterMateApp:
 
         sql_statement = 'CREATE SCHEMA IF NOT EXISTS {app_temp_schema} AUTHORIZATION postgres;'.format(app_temp_schema=self.app_postgresql_temp_schema)
 
-        print(sql_statement)
+        logger.debug(f\"SQL statement: {sql_statement}\")
 
 
         with connexion.cursor() as cursor:
@@ -736,32 +745,36 @@ class FilterMateApp:
         global ENV_VARS
 
         if self.dockwidget != None:
-
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
-            conn = spatialite_connect(self.db_file_path)
-            cur = conn.cursor()
+            conn = None
+            cur = None
+            try:
+                conn = spatialite_connect(self.db_file_path)
+                cur = conn.cursor()
 
-            if name != None:
-                self.project_file_name = name
-                self.project_file_path = self.PROJECT.absolutePath()    
+                if name != None:
+                    self.project_file_name = name
+                    self.project_file_path = self.PROJECT.absolutePath()    
 
-            project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]    
+                project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]    
 
-            cur.execute("""UPDATE fm_projects SET 
-                        _updated_at = datetime(),
-                        project_name = '{project_name}',
-                        project_path = '{project_path}',
-                        project_settings = '{project_settings}'
-                        WHERE project_id = '{project_id}';""".format(
-                                                                    project_name=self.project_file_name,
-                                                                    project_path=self.project_file_path,
-                                                                    project_settings=json.dumps(project_settings).replace("\'","\'\'"),
-                                                                    project_id=self.project_uuid
-                                                                    )
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
+                # Use parameterized query
+                cur.execute(
+                    """UPDATE fm_projects SET 
+                       _updated_at = datetime(),
+                       project_name = ?,
+                       project_path = ?,
+                       project_settings = ?
+                       WHERE project_id = ?""",
+                    (self.project_file_name, self.project_file_path, 
+                     json.dumps(project_settings), str(self.project_uuid))
+                )
+                conn.commit()
+            finally:
+                if cur:
+                    cur.close()
+                if conn:
+                    conn.close()
 
             with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
@@ -881,7 +894,7 @@ class FilterMateApp:
 
             self.MapLayerStore = self.PROJECT.layerStore()
             self.update_datasource()
-            print(self.project_datasources)
+            logger.debug(f"Project datasources: {self.project_datasources}")
             cur.close()
             conn.close()
             
@@ -889,7 +902,7 @@ class FilterMateApp:
         # POSTGRESQL_AVAILABLE est maintenant importé au niveau du module
         ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
         ogr_driver_list.sort()
-        print(ogr_driver_list)
+        logger.debug(f"OGR drivers available: {ogr_driver_list}")
 
         # Vérifier si PostgreSQL est disponible et s'il y a des connexions PostgreSQL
         if 'postgresql' in self.project_datasources and POSTGRESQL_AVAILABLE:

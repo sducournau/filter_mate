@@ -181,7 +181,7 @@ class FilterEngineTask(QgsTask):
     
         except Exception as e:
             self.exception = e
-            print(self.exception)
+            logger.error(f'FilterEngineTask run() failed: {e}', exc_info=True)
             return False
 
 
@@ -207,7 +207,7 @@ class FilterEngineTask(QgsTask):
 
                 
 
-        print(self.task_parameters["task"]["expression"])
+        logger.debug(f"Task expression: {self.task_parameters['task']['expression']}")
         if self.task_parameters["task"]["expression"] != None:
             
             self.expression = self.task_parameters["task"]["expression"]
@@ -363,9 +363,9 @@ class FilterEngineTask(QgsTask):
             for layer, layer_props in self.layers[layer_provider_type]:
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
                 if result == True:
-                    print(layer.name(), 'has been filtered')
+                    logger.info(f"{layer.name()} has been filtered")
                 else:
-                    print(layer.name(), 'errors occured')
+                    logger.error(f"{layer.name()} - errors occurred during filtering")
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
@@ -377,7 +377,7 @@ class FilterEngineTask(QgsTask):
 
         if expression.find('if') >= 0:
             expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', expression)
-            print(expression)
+            logger.debug(f"Expression: {expression}")
 
 
         expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
@@ -502,7 +502,7 @@ class FilterEngineTask(QgsTask):
 
         
 
-        print("prepare_postgresql_source_geom", self.postgresql_source_geom)     
+        logger.debug(f"prepare_postgresql_source_geom: {self.postgresql_source_geom}")     
 
 
 
@@ -527,7 +527,7 @@ class FilterEngineTask(QgsTask):
         collected_geometry = QgsGeometry().collectGeometry(geometries)
         self.spatialite_source_geom = collected_geometry.asWkt().strip()
 
-        print("prepare_spatialite_source_geom", self.spatialite_source_geom) 
+        logger.debug(f"prepare_spatialite_source_geom: {self.spatialite_source_geom}") 
 
 
     def prepare_ogr_source_geom(self):
@@ -1239,7 +1239,7 @@ class FilterEngineTask(QgsTask):
 
             param_expression = param_expression.replace(' " ', ' ')
             expression = expression.replace(' " ', ' ')
-            print(param_expression)
+            logger.debug(f"Parameter expression: {param_expression}")
 
             global ENV_VARS
             with open(ENV_VARS["PATH_ABSOLUTE_PROJECT"] + os.sep + 'logs.txt', 'a') as f:
@@ -1265,8 +1265,8 @@ class FilterEngineTask(QgsTask):
                                                                                                                                     distant_primary_key_name=param_distant_primary_key_name,
                                                                                                                                     param_distant_geom_expression=param_distant_geom_expression
                                                                                                                                     )
-                print(string_to_replace)
-                print(string_replacement)
+                logger.debug(f"String to replace: {string_to_replace}")
+                logger.debug(f"String replacement: {string_replacement}")
                 
                 param_expression = param_expression.replace(string_to_replace, string_replacement)
 
@@ -1871,8 +1871,8 @@ class FilterEngineTask(QgsTask):
                                                                                     )
             
             sql_create_request = sql_create_request.replace('\n','').replace('\t','').replace('  ', ' ').strip()                                                        
-            print("sql_drop_request", sql_drop_request)
-            print("sql_create_request", sql_create_request)
+            logger.debug(f"SQL drop request: {sql_drop_request}")
+            logger.debug(f"SQL create request: {sql_create_request}")
 
             connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
 
@@ -1920,7 +1920,7 @@ class FilterEngineTask(QgsTask):
                                                                                                                                         name=name,
                                                                                                                                         primary_key_name=primary_key_name
                                                                                                                                         )
-            print("layer_subsetString", layer_subsetString)
+            logger.debug(f"Layer subset string: {layer_subsetString}")
             layer.setSubsetString(layer_subsetString)
 
 
@@ -2205,7 +2205,7 @@ class LayersManagementEngineTask(QgsTask):
     
         except Exception as e:
             self.exception = e
-            print(self.exception)
+            logger.error(f'LayerManagementEngineTask run() failed: {e}', exc_info=True)
             return False
 
 
@@ -2233,6 +2233,7 @@ class LayersManagementEngineTask(QgsTask):
             if self.isCanceled() or result is False:
                 return False
 
+        # Sort layers once after all operations (performance optimization)
         self.project_layers = dict(OrderedDict(sorted(self.project_layers.items(), key = lambda layer: (getitem(layer[1]['infos'], 'layer_geometry_type'), getitem(layer[1]['infos'], 'layer_name')))))
 
         return True
@@ -2308,7 +2309,21 @@ class LayersManagementEngineTask(QgsTask):
                     else:
                         layer_provider_type = 'ogr'
 
-                layer_geometry_type = layer.geometryType()
+                # Convert QGIS geometry type enum to string format expected by icon_per_geometry_type()
+                geometry_type = layer.geometryType()
+                if geometry_type == QgsWkbTypes.PointGeometry:
+                    layer_geometry_type = 'GeometryType.Point'
+                elif geometry_type == QgsWkbTypes.LineGeometry:
+                    layer_geometry_type = 'GeometryType.Line'
+                elif geometry_type == QgsWkbTypes.PolygonGeometry:
+                    layer_geometry_type = 'GeometryType.Polygon'
+                elif geometry_type == QgsWkbTypes.UnknownGeometry:
+                    layer_geometry_type = 'GeometryType.UnknownGeometry'
+                elif geometry_type == QgsWkbTypes.NullGeometry:
+                    layer_geometry_type = 'GeometryType.UnknownGeometry'
+                else:
+                    layer_geometry_type = 'GeometryType.UnknownGeometry'
+                
                 if layer_provider_type == 'spatialite':
                     geometry_field = 'GEOMETRY'
                 elif layer_provider_type == 'ogr':
@@ -2565,14 +2580,14 @@ class LayersManagementEngineTask(QgsTask):
         if layer_id in self.project_layers.keys():
 
             layers = [layer for layer in self.PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
-            print("save_projectCustomProperties_from_layer_id", layers)
+            logger.debug(f"save_style_from_layer_id - layers found: {layers}")
             if len(layers) > 0:
                 layer = layers[0]
 
                 try:
                     layer.deleteStyleFromDatabase(name="FilterMate_style_{}".format(layer.name()))
                     result = layer.saveStyleToDatabase(name="FilterMate_style_{}".format(layer.name()),description="FilterMate style for {}".format(layer.name()), useAsDefault=True, uiFileContent="") 
-                    print("save_projectCustomProperties_from_layer_id", result)
+                    logger.debug(f"save_style_from_layer_id - style saved: {result}")
                 except:
                     layer_path = layer.source().split('|')[0]
                     layer.saveNamedStyle(os.path.normcase(os.path.join(os.path.split(layer_path)[0], 'FilterMate_style_{}.qml'.format(layer.name()))))

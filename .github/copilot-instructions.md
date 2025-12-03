@@ -451,6 +451,49 @@ if POSTGRESQL_AVAILABLE and layer.providerType() == 'postgres':
 
 ---
 
+## Serena Configuration (Windows)
+
+### Auto-Start Serena on Chat Activation
+
+When working on Windows, Serena MCP server must be started before using symbolic tools. The configuration ensures automatic startup:
+
+**Prerequisites:**
+- Serena installed via: `uv tool install serena`
+- MCP configuration in `%APPDATA%/Code/User/globalStorage/github.copilot.chat.mcp/config.json`
+
+**Configuration:**
+```json
+{
+  "mcpServers": {
+    "serena": {
+      "command": "uvx",
+      "args": ["serena"],
+      "env": {
+        "SERENA_PROJECT": "C:/Users/Simon/OneDrive/Documents/GitHub/filter_mate"
+      }
+    }
+  }
+}
+```
+
+**Automatic Activation:**
+- Serena activates automatically when Copilot Chat is opened in VS Code
+- Project path is set via `SERENA_PROJECT` environment variable
+- No manual activation needed - tools are immediately available
+
+**Verify Activation:**
+```python
+# First command in new chat should confirm Serena is active
+get_current_config()  # Shows active project and available tools
+```
+
+**Troubleshooting:**
+- If tools unavailable: Check MCP server logs in VS Code Output panel
+- Verify `uvx serena` works from PowerShell/CMD
+- Ensure path uses forward slashes or escaped backslashes in JSON
+
+---
+
 **Remember**: Always prioritize multi-backend support. PostgreSQL for performance, Spatialite for simplicity, OGR for compatibility.
 
 When in doubt, check existing patterns in the codebase or consult `.serena/project_memory.md`.
