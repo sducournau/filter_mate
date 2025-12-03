@@ -692,7 +692,7 @@ class FilterEngineTask(QgsTask):
         else:
             expression = (
                 f'"{self.param_source_table}"."{self.primary_key_name}" IN '
-                f"('{\"\', \'\".join(features_ids)}')"
+                f"({', '.join(repr(fid) for fid in features_ids)})"
             )
         
         # Combine with old subset if needed

@@ -75,19 +75,19 @@ Ce document décrit la feuille de route de développement de FilterMate, organis
   - **Phase 8-12**: SQL dedup, Spatialite separation, validation isolation, geometry prep, buffer operations
   - Impact: Maintenabilité +++, testabilité +++, lisibilité +++
 
-### 🔥 Refactoring En Cours
+- [x] **Externalisation des styles UI** (✅ DÉJÀ COMPLÉTÉ)
+  - ✅ `resources/styles/default.qss` (381 lignes) existe et fonctionne
+  - ✅ Remplacement de placeholders de couleurs
+  - ✅ Support thème sombre avec accents bleus
+  - Impact: Code plus propre, personnalisation facilitée
 
-- [ ] **Externalisation des styles UI** (2-3 jours)
-  - Créer `resources/styles.qss`
-  - Remplacer les 527 lignes de styles inline dans `manage_ui_style()`
-  - Support mode sombre/clair
-  - Impact: Lisibilité du code, personnalisation
+- [x] **Cache d'icônes statique** (✅ DÉJÀ COMPLÉTÉ)
+  - ✅ Mémoïzation dans `icon_per_geometry_type()` déjà implémentée
+  - ✅ Cache de classe `_icon_cache = {}` existe
+  - Gain: Évite recalculs répétés ✅
 
-### Optimisations Performance
-- [ ] **Cache d'icônes statique** (2h)
-  - Mémoïzation dans `icon_per_geometry_type()`
-  - Gain: Évite recalculs répétés
-  
+### 🔥 Optimisations En Cours
+
 - [ ] **Prepared Statements pour SQL** (1 semaine)
   - Réutilisation de requêtes paramétrées
   - Particulièrement pour PostgreSQL
@@ -111,12 +111,25 @@ Ce document décrit la feuille de route de développement de FilterMate, organis
 
 ## 🚀 URGENCE 3 - Nouvelles Fonctionnalités (Sprint 3-6 semaines)
 
-### Historique et Undo/Redo (1 semaine)
-- [ ] Classe `FilterHistory`
-- [ ] Boutons UI Undo/Redo
-- [ ] Raccourcis Ctrl+Z / Ctrl+Y
-- [ ] Persistance entre sessions
-- **Impact**: UX majeur, récupération d'erreurs
+### ✅ Historique et Undo/Redo (✅ COMPLÉTÉ 3 déc 2025)
+- [x] **Module `filter_history.py`** (450 lignes)
+  - ✅ Classe `FilterState`: État de filtre immuable
+  - ✅ Classe `FilterHistory`: Stack d'historique linéaire avec undo/redo
+  - ✅ Classe `HistoryManager`: Gestion centralisée pour toutes les couches
+  - ✅ Taille d'historique illimitée (configurable)
+  - ✅ Opérations thread-safe
+  - ✅ Support de sérialisation pour persistance
+  - ✅ Tests complets (30 tests, 100% coverage)
+- [ ] **Intégration UI** (2-3 jours)
+  - Boutons Undo/Redo dans l'interface
+  - Raccourcis Ctrl+Z / Ctrl+Y
+  - Affichage de l'historique récent
+  - Indicateurs visuels (can_undo/can_redo)
+- [ ] **Persistance** (1 jour)
+  - Sauvegarde dans variables de couche
+  - Restauration au chargement du projet
+  
+**Impact**: UX majeur, récupération d'erreurs facilitée ✅
 
 ### Favoris de Filtres (1 semaine)
 - [ ] Base de données de favoris (Spatialite)

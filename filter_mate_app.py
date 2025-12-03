@@ -205,7 +205,7 @@ class FilterMateApp:
         self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
         self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
-        self.PROJECT.fileNameChanged.connect(lambda name: self.save_project_variables(name))
+        self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
         
 
     def get_spatialite_connection(self):

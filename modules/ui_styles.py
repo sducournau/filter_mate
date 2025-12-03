@@ -22,40 +22,45 @@ class StyleLoader:
     _current_theme = 'default'
     _styles_cache: Dict[str, str] = {}
     
-    # Default color schemes
+    # Default color schemes (matching config.json COLORS structure)
     COLOR_SCHEMES = {
         'default': {
-            'color_1': '#31363b',  # Dark background
-            'color_2': '#232629',  # Secondary background
-            'color_3': '#eff0f1'   # Light text/accent
+            'color_bg_0': 'white',      # BACKGROUND[0] - Frame background
+            'color_1': '#CCCCCC',       # BACKGROUND[1] - Widget background
+            'color_2': '#F0F0F0',       # BACKGROUND[2] - Selected items
+            'color_bg_3': '#757575',    # BACKGROUND[3] - Splitter hover
+            'color_3': 'black'          # FONT[1] - Text color
         },
         'dark': {
-            'color_1': '#1e1e1e',  # Darker background
-            'color_2': '#2d2d30',  # Secondary
-            'color_3': '#3daee9'   # Blue accent
+            'color_bg_0': '#1e1e1e',    # Darker frame background
+            'color_1': '#2d2d30',       # Widget background
+            'color_2': '#3e3e42',       # Selected items
+            'color_bg_3': '#007acc',    # Splitter hover
+            'color_3': '#eff0f1'        # Light text
         },
         'light': {
-            'color_1': '#ffffff',  # Light background
-            'color_2': '#f0f0f0',  # Secondary
-            'color_3': '#2196f3'   # Blue accent
+            'color_bg_0': '#ffffff',    # Light frame background
+            'color_1': '#f0f0f0',       # Widget background
+            'color_2': '#e0e0e0',       # Selected items
+            'color_bg_3': '#2196f3',    # Splitter hover
+            'color_3': '#000000'        # Dark text
         }
     }
     
     @classmethod
-    def load_stylesheet(cls, theme: str = 'default') -> str:
+    def _load_raw_stylesheet(cls, theme: str = 'default') -> str:
         """
-        Load QSS stylesheet from file.
+        Load raw QSS stylesheet from file without applying any colors.
+        
+        This is a private method used internally to get the stylesheet template
+        before color replacement.
         
         Args:
             theme: Theme name ('default', 'dark', 'light')
         
         Returns:
-            str: Stylesheet content with colors applied, or empty string on error
+            str: Raw stylesheet content with placeholders intact, or empty string on error
         """
-        # Check cache first
-        if theme in cls._styles_cache:
-            return cls._styles_cache[theme]
-        
         # Determine file path
         plugin_dir = os.path.dirname(os.path.dirname(__file__))
         style_file = os.path.join(plugin_dir, 'resources', 'styles', f'{theme}.qss')
@@ -69,29 +74,110 @@ class StyleLoader:
             return ""
         
         try:
-            # Read stylesheet file
-            qfile = QFile(style_file)
-            if qfile.open(QIODevice.ReadOnly | QIODevice.Text):
-                stream = QTextStream(qfile)
-                stylesheet = stream.readAll()
-                qfile.close()
-                
-                # Apply color scheme
-                colors = cls.COLOR_SCHEMES.get(theme, cls.COLOR_SCHEMES['default'])
-                for color_key, color_value in colors.items():
-                    stylesheet = stylesheet.replace(f'{{{color_key}}}', color_value)
-                
-                # Cache the result
-                cls._styles_cache[theme] = stylesheet
-                
-                return stylesheet
-            else:
-                print(f"FilterMate: Could not open stylesheet: {style_file}")
-                return ""
+            # Read stylesheet file using standard Python open()
+            # (more reliable than QFile, especially in test environment)
+            with open(style_file, 'r', encoding='utf-8') as f:
+                stylesheet = f.read()
+            return stylesheet
                 
         except Exception as e:
             print(f"FilterMate: Error loading stylesheet: {e}")
             return ""
+    
+    @classmethod
+    def load_stylesheet(cls, theme: str = 'default') -> str:
+        """
+        Load QSS stylesheet from file with COLOR_SCHEMES colors applied.
+        
+        Args:
+            theme: Theme name ('default', 'dark', 'light')
+        
+        Returns:
+            str: Stylesheet content with COLOR_SCHEMES colors applied, or empty string on error
+        """
+        # Check cache first
+        if theme in cls._styles_cache:
+            return cls._styles_cache[theme]
+        
+        # Get raw stylesheet
+        stylesheet = cls._load_raw_stylesheet(theme)
+        
+        if not stylesheet:
+            return ""
+        
+        try:
+            # Apply color scheme from COLOR_SCHEMES
+            colors = cls.COLOR_SCHEMES.get(theme, cls.COLOR_SCHEMES['default'])
+            for color_key, color_value in colors.items():
+                stylesheet = stylesheet.replace(f'{{{color_key}}}', color_value)
+            
+            # Cache the result
+            cls._styles_cache[theme] = stylesheet
+            
+            return stylesheet
+                
+        except Exception as e:
+            print(f"FilterMate: Error applying color scheme: {e}")
+            return ""
+    
+    @classmethod
+    def load_stylesheet_from_config(cls, config_data: dict, theme: str = 'default') -> str:
+        """
+        Load stylesheet with colors from config.json.
+        
+        Args:
+            config_data: Configuration dictionary from config.json
+            theme: Theme name (currently only uses config colors)
+        
+        Returns:
+            str: Stylesheet with config colors applied
+        """
+        # Get raw stylesheet template (without color replacements)
+        stylesheet = cls._load_raw_stylesheet(theme)
+        
+        if not stylesheet:
+            return ""
+        
+        # Extract colors from config
+        try:
+            colors = config_data["APP"]["DOCKWIDGET"]["COLORS"]
+            bg = colors["BACKGROUND"]
+            font = colors["FONT"]
+            
+            # Map config colors to stylesheet placeholders
+            color_map = {
+                '{color_bg_0}': bg[0],      # Frame background
+                '{color_1}': bg[1],         # Widget background
+                '{color_2}': bg[2],         # Selected items
+                '{color_bg_3}': bg[3],      # Splitter hover
+                '{color_3}': font[1]        # Text color
+            }
+            
+            # Apply color replacements
+            for placeholder, color_value in color_map.items():
+                stylesheet = stylesheet.replace(placeholder, color_value)
+            
+            return stylesheet
+            
+        except (KeyError, IndexError) as e:
+            print(f"FilterMate: Error reading config colors: {e}")
+            # Fallback to default theme colors using load_stylesheet
+            return cls.load_stylesheet(theme)
+    
+    @classmethod
+    def set_theme_from_config(cls, widget, config_data: dict, theme: str = 'default'):
+        """
+        Apply theme to widget using config.json colors.
+        
+        Args:
+            widget: Qt widget to apply stylesheet to
+            config_data: Configuration dictionary
+            theme: Theme name
+        """
+        stylesheet = cls.load_stylesheet_from_config(config_data, theme)
+        if stylesheet:
+            widget.setStyleSheet(stylesheet)
+            cls._current_theme = theme
     
     @classmethod
     def set_theme(cls, widget, theme: str = 'default'):

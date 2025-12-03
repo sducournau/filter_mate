@@ -1,14 +1,18 @@
 /* FilterMate Default Stylesheet
  * Modern, clean styling for FilterMate plugin widgets
- * Color scheme: Dark theme with blue accents
+ * Color scheme: Light theme with neutral colors
  */
 
-/* Variables (will be replaced dynamically):
- * {color_1} - Primary background (widgets)
- * {color_2} - Secondary background (selected items)
- * {color_3} - Accent/text color (light blue)
- * {color_bg_0} - Frame background (darker)
- * {color_bg_3} - Splitter hover color
+/* Variables (will be replaced dynamically from config.json):
+ * {color_bg_0} - Frame background (BACKGROUND[0])
+ * {color_1} - Primary widget background (BACKGROUND[1])
+ * {color_bg_1} - Secondary widget background (BACKGROUND[1], alias for color_1)
+ * {color_2} - Selection background (BACKGROUND[2])
+ * {color_bg_2} - Tertiary background (BACKGROUND[2], alias for color_2)
+ * {color_bg_3} - Splitter hover color (BACKGROUND[3])
+ * {color_3} - Text/accent color (FONT[1])
+ * {color_font_0} - Primary font color (FONT[0])
+ * {color_font_1} - Secondary font color (FONT[1], alias for color_3)
  */
 
 /* QGIS Widgets - Common Styling */
@@ -35,7 +39,7 @@ QgsFieldExpressionWidget:hover,
 QgsCheckableComboBox:hover,
 QComboBox:hover,
 QgsCheckableComboBoxLayer:hover {
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 QgsFeaturePickerWidget QAbstractItemView,
@@ -49,7 +53,7 @@ QgsCheckableComboBoxLayer QAbstractItemView {
     background: {color_1};
     selection-background-color: {color_2};
     color: {color_3};
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 /* ToolBox TabWidget */
@@ -63,7 +67,7 @@ QWidget > QToolBox {
 
 QWidget > QToolBox::tab {
     background: {color_1};
-    border-radius: 5px;
+    border-radius: 3px;
     color: {color_3};
 }
 
@@ -76,9 +80,9 @@ QDockWidget {
 QFrame {
     background-color: {color_bg_0};
     border-color: rgb(0, 0, 0);
-    border-radius: 6px;
-    padding: 5px 5px 5px 5px;
-    margin: 5px 5px 5px 5px;
+    border-radius: 4px;
+    padding: 3px;
+    margin: 2px;
     color: {color_3};
 }
 
@@ -86,8 +90,8 @@ QFrame {
 QgsExpressionBuilderWidget {
     background-color: {color_bg_0};
     border-color: rgb(0, 0, 0);
-    border-radius: 6px;
-    padding: 10px 10px 10px 10px;
+    border-radius: 4px;
+    padding: 5px;
     color: {color_3};
 }
 
@@ -101,8 +105,8 @@ QScrollArea {
 QgsCollapsibleGroupBox {
     background-color: {color_bg_0};
     border-color: rgb(0, 0, 0);
-    border-radius: 6px;
-    padding: 10px 10px 10px 10px;
+    border-radius: 4px;
+    padding: 5px;
     color: {color_3};
 }
 
@@ -120,73 +124,82 @@ QgsPropertyOverrideButton {
     background-color: {color_1};
     color: {color_3};
     border-radius: 3px;
-    padding: 3px 3px 3px 3px;
+    padding: 2px;
 }
 
 QgsPropertyOverrideButton:hover {
-    border: 2px solid black;
+    border: 1px solid {color_bg_3};
 }
 
 /* ScrollBar - Vertical */
 QScrollBar:vertical {
     border: none;
-    background: transparent;
-    width: 5px;
+    background: {color_2};
+    width: 10px;
+    margin: 0px;
 }
 
 QScrollBar::handle:vertical {
-    border: none;
     background: {color_1};
-    width: 3px;
+    min-height: 20px;
+    border-radius: 3px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: {color_bg_3};
 }
 
 QScrollBar::add-line:vertical {
-    background: transparent;
-    height: 3px;
-    subcontrol-position: bottom;
-    subcontrol-origin: margin;
+    height: 0px;
 }
 
 QScrollBar::sub-line:vertical {
-    background: transparent;
-    height: 3px;
-    subcontrol-position: top;
-    subcontrol-origin: margin;
+    height: 0px;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
 }
 
 /* ScrollBar - Horizontal */
 QScrollBar:horizontal {
     border: none;
-    background: transparent;
-    height: 5px;
+    background: {color_2};
+    height: 10px;
+    margin: 0px;
 }
 
 QScrollBar::handle:horizontal {
-    border: none;
     background: {color_1};
-    height: 3px;
+    min-width: 20px;
+    border-radius: 3px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: {color_bg_3};
 }
 
 QScrollBar::add-line:horizontal {
-    background: transparent;
-    width: 3px;
-    subcontrol-position: right;
-    subcontrol-origin: margin;
+    width: 0px;
 }
 
 QScrollBar::sub-line:horizontal {
-    background: transparent;
-    width: 3px;
-    subcontrol-position: left;
-    subcontrol-origin: margin;
+    width: 0px;
+}
+
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
 }
 
 /* GroupBox Styling */
 QGroupBox {
     background-color: transparent;
-    border: 2px solid {color_3};
-    border-radius: 5px;
-    margin-top: 1ex;
+    border: 1px solid {color_1};
+    border-radius: 3px;
+    margin-top: 0.5ex;
+    padding: 5px;
     font-weight: bold;
     color: {color_3};
 }
@@ -194,13 +207,13 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 0 5px;
+    padding: 0 3px;
     color: {color_3};
 }
 
 /* Exploring Tab */
 QGroupBox#groupBoxExploring {
-    border-color: #3daee9;
+    border: none;
 }
 
 QGroupBox#groupBoxExploring::title {
@@ -225,30 +238,60 @@ QGroupBox#groupBoxExporting::title {
     color: #f39c12;
 }
 
-/* Buttons */
-QPushButton {
-    background-color: {color_2};
-    border: 1px solid {color_3};
+/* Buttons - Non-checkable */
+QPushButton:!checkable {
+    background-color: transparent;
+    border: none;
     border-radius: 3px;
-    padding: 5px 10px;
+    padding: 3px 6px;
     color: {color_3};
 }
 
-QPushButton:hover {
-    background-color: {color_3};
-    color: {color_1};
-    border: 1px solid {color_3};
+QPushButton:!checkable:hover {
+    background-color: {color_2};
+    color: {color_3};
 }
 
-QPushButton:pressed {
+QPushButton:!checkable:pressed {
     background-color: {color_1};
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 QPushButton:disabled {
-    background-color: {color_1};
-    color: #666;
-    border: 1px solid #666;
+    background-color: transparent;
+    color: #999;
+}
+
+/* Checkable Buttons (behave like checkboxes) */
+QPushButton:checkable {
+    background-color: transparent;
+    border: 1px solid {color_1};
+    border-radius: 3px;
+    padding: 3px 6px;
+    color: {color_3};
+}
+
+QPushButton:checkable:hover:!checked {
+    background-color: {color_2};
+    border-color: {color_bg_3};
+}
+
+QPushButton:checkable:checked {
+    background-color: {color_bg_3};
+    border: 1px solid {color_3};
+    color: white;
+}
+
+QPushButton:checkable:checked:hover {
+    background-color: {color_bg_3};
+    border: 1px solid {color_3};
+    color: white;
+}
+
+QPushButton:checkable:checked:pressed {
+    background-color: {color_bg_3};
+    border: 1px solid {color_3};
+    color: white;
 }
 
 /* SpinBox & DoubleSpinBox */
@@ -265,7 +308,7 @@ QgsDoubleSpinBox {
 QSpinBox:hover,
 QDoubleSpinBox:hover,
 QgsDoubleSpinBox:hover {
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 /* LineEdit */
@@ -278,11 +321,11 @@ QLineEdit {
 }
 
 QLineEdit:hover {
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 QLineEdit:focus {
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 /* CheckBox */
@@ -294,17 +337,18 @@ QCheckBox {
 QCheckBox::indicator {
     width: 18px;
     height: 18px;
-    border: 1px solid {color_3};
+    border: 1px solid {color_1};
     border-radius: 3px;
-    background-color: {color_1};
+    background-color: transparent;
 }
 
 QCheckBox::indicator:checked {
-    background-color: {color_3};
+    background-color: {color_bg_3};
+    border: 1px solid {color_3};
 }
 
 QCheckBox::indicator:hover {
-    border: 2px solid {color_3};
+    border: 1px solid {color_bg_3};
 }
 
 /* RadioButton */
@@ -316,13 +360,18 @@ QRadioButton {
 QRadioButton::indicator {
     width: 18px;
     height: 18px;
-    border: 1px solid {color_3};
+    border: 1px solid {color_1};
     border-radius: 9px;
-    background-color: {color_1};
+    background-color: transparent;
 }
 
 QRadioButton::indicator:checked {
-    background-color: {color_3};
+    background-color: {color_bg_3};
+    border: 1px solid {color_3};
+}
+
+QRadioButton::indicator:hover {
+    border: 1px solid {color_bg_3};
 }
 
 /* TabWidget */
@@ -334,22 +383,24 @@ QTabWidget::pane {
 
 QTabBar::tab {
     background-color: {color_2};
-    border: 1px solid {color_3};
+    border: 1px solid {color_1};
     border-bottom: none;
     border-top-left-radius: 3px;
     border-top-right-radius: 3px;
-    padding: 5px 10px;
+    padding: 3px 6px;
     color: {color_3};
     margin-right: 2px;
 }
 
 QTabBar::tab:selected {
-    background-color: {color_3};
-    color: {color_1};
+    background-color: {color_bg_3};
+    color: white;
+    border: 1px solid {color_3};
+    border-bottom: none;
 }
 
 QTabBar::tab:hover:!selected {
-    background-color: {color_2};
+    background-color: {color_1};
 }
 
 /* Label */

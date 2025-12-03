@@ -48,6 +48,7 @@ from .modules.qt_json_view.view import JsonView
 from .modules.customExceptions import *
 from .modules.appUtils import *
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+from .modules.ui_styles import StyleLoader
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'filter_mate_dockwidget_base.ui'))
@@ -665,64 +666,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def manage_ui_style(self):
         """
-        Load and apply plugin stylesheet from QSS file.
+        Load and apply plugin stylesheet using StyleLoader.
         
         This method:
-        1. Loads the stylesheet from resources/styles/default.qss
-        2. Replaces color placeholders with values from config
-        3. Applies styles to dock widget and all child widgets
-        4. Sets widget-specific properties (sizes, fonts, icons)
+        1. Uses StyleLoader to load stylesheet from resources/styles/default.qss
+        2. Applies config.json colors dynamically via StyleLoader
+        3. Sets widget-specific properties (sizes, fonts, icons, cursors)
         
-        The QSS file uses placeholder variables:
-        - {color_1}, {color_2}, {color_3} for UI colors
-        - {color_bg_0}, {color_bg_1}, etc. for backgrounds
+        The StyleLoader handles:
+        - Loading QSS file with error handling
+        - Replacing color placeholders with config values
+        - Caching for performance
+        - Theme management
         
-        Benefits of QSS file approach:
-        - Easier theme customization
-        - Cleaner code (no 500+ line strings)
-        - Can be edited by designers
-        - Supports multiple themes
+        Benefits:
+        - Centralized style management
+        - Proper error handling and fallbacks
+        - Easy theme customization
+        - Testable and maintainable
         """
-        import os
+        # Apply stylesheet using StyleLoader with config colors
+        StyleLoader.set_theme_from_config(
+            self.dockWidgetContents, 
+            self.CONFIG_DATA, 
+            'default'
+        )
         
-        # Load QSS file from resources
-        qss_file = os.path.join(self.plugin_dir, 'resources', 'styles', 'default.qss')
-        
-        try:
-            with open(qss_file, 'r', encoding='utf-8') as f:
-                stylesheet = f.read()
-        except FileNotFoundError:
-            logger.error(f"Stylesheet file not found: {qss_file}")
-            return
-        except Exception as e:
-            logger.error(f"Error loading stylesheet: {e}")
-            return
-        
-        # Replace color placeholders with config values
+        # Get color values for widget-specific inline styles
         colors_bg = self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["BACKGROUND"]
         colors_font = self.CONFIG_DATA["APP"]["DOCKWIDGET"]['COLORS']["FONT"]
         
-        # Map placeholders to actual colors
-        color_replacements = {
-            '{color_1}': colors_bg[1],      # Primary widget background
-            '{color_2}': colors_bg[2],      # Selection background
-            '{color_3}': colors_font[1],    # Text/accent color
-            '{color_bg_0}': colors_bg[0],   # Frame background (darker)
-            '{color_bg_1}': colors_bg[1],   # Secondary background
-            '{color_bg_2}': colors_bg[2],   # Tertiary background
-            '{color_bg_3}': colors_bg[3],   # Splitter hover
-            '{color_font_0}': colors_font[0],  # Primary font
-            '{color_font_1}': colors_font[1],  # Secondary font
-        }
-        
-        # Apply all color replacements
-        for placeholder, color_value in color_replacements.items():
-            stylesheet = stylesheet.replace(placeholder, color_value)
-        
-        # Apply stylesheet to main widgets
-        self.dockWidgetContents.setStyleSheet(stylesheet)
-        
-        # Apply specific styles to key widgets
+        # Apply specific inline style to TOOLS widget (needs to override QSS)
         self.widgets["DOCK"]["TOOLS"]["WIDGET"].setStyleSheet(
             f"""background-color: {colors_bg[0]};
                 border-color: rgb(0, 0, 0);
