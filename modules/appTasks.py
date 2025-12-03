@@ -208,7 +208,28 @@ class FilterEngineTask(QgsTask):
         self.current_predicates = {}
         self.outputs = {}
         self.message = None
-        self.predicates = {"Intersect":"ST_Intersects","Contain":"ST_Contains","Disjoint":"ST_Disjoint","Equal":"ST_Equals","Touch":"ST_Touches","Overlap":"ST_Overlaps","Are within":"ST_Within","Cross":"ST_Crosses"}
+        # Initialize with standard spatial predicates mapping user-friendly names to SQL functions
+        # FIXED: Updated to include standard predicate names used in UI
+        self.predicates = {
+            "Intersect": "ST_Intersects",
+            "intersects": "ST_Intersects",
+            "Contain": "ST_Contains",
+            "contains": "ST_Contains",
+            "Disjoint": "ST_Disjoint",
+            "disjoint": "ST_Disjoint",
+            "Equal": "ST_Equals",
+            "equals": "ST_Equals",
+            "Touch": "ST_Touches",
+            "touches": "ST_Touches",
+            "Overlap": "ST_Overlaps",
+            "overlaps": "ST_Overlaps",
+            "Are within": "ST_Within",
+            "within": "ST_Within",
+            "Cross": "ST_Crosses",
+            "crosses": "ST_Crosses",
+            "covers": "ST_Covers",
+            "coveredby": "ST_CoveredBy"
+        }
         global ENV_VARS
         self.PROJECT = ENV_VARS["PROJECT"]
         self.current_materialized_view_schema = 'filter_mate_temp'
@@ -610,19 +631,37 @@ class FilterEngineTask(QgsTask):
             logger.info("Preparing PostgreSQL source geometry...")
             self.prepare_postgresql_source_geom()
         
-        # Prepare Spatialite source geometry (WKT string)
+        # Prepare Spatialite source geometry (WKT string) with fallback to OGR
         if 'spatialite' in provider_list:
             logger.info("Preparing Spatialite source geometry...")
+            spatialite_success = False
             try:
                 self.prepare_spatialite_source_geom()
-                if not hasattr(self, 'spatialite_source_geom') or self.spatialite_source_geom is None:
-                    logger.error("Failed to prepare Spatialite source geometry - no geometry generated")
-                    return False
+                if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom is not None:
+                    spatialite_success = True
+                    logger.info("✓ Spatialite source geometry prepared successfully")
+                else:
+                    logger.warning("Spatialite geometry preparation returned None")
             except Exception as e:
-                logger.error(f"Error preparing Spatialite source geometry: {e}")
+                logger.warning(f"Spatialite geometry preparation failed: {e}")
                 import traceback
                 logger.debug(f"Traceback: {traceback.format_exc()}")
-                return False
+            
+            # Fallback to OGR if Spatialite failed
+            if not spatialite_success:
+                logger.info("Falling back to OGR geometry preparation...")
+                try:
+                    self.prepare_ogr_source_geom()
+                    if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom is not None:
+                        # Use OGR geometry as Spatialite geometry
+                        self.spatialite_source_geom = self.ogr_source_geom
+                        logger.info("✓ Successfully used OGR geometry as fallback")
+                    else:
+                        logger.error("OGR fallback also failed - no geometry available")
+                        return False
+                except Exception as e2:
+                    logger.error(f"OGR fallback failed: {e2}")
+                    return False
 
         if 'ogr' in provider_list or self.param_buffer_expression != '':
             logger.info("Preparing OGR/Spatialite source geometry...")
@@ -1440,13 +1479,13 @@ class FilterEngineTask(QgsTask):
         """
         Execute geometric filtering on layer using spatial predicates.
         
-        REFACTORED: Now uses backend pattern for cleaner, maintainable code.
-        Delegates to specialized backends (PostgreSQL, Spatialite, OGR) based on provider type.
+        FIXED: Corrected layer_props access pattern - layer_props IS the infos dict,
+        not a wrapper containing it. Uses correct key names and proper validation.
         
         Args:
-            layer_provider_type: Provider type ('postgresql', 'spatialite', 'ogr', etc.)
+            layer_provider_type: Provider type ('postgresql', 'spatialite', 'ogr')
             layer: QgsVectorLayer to filter
-            layer_props: Dict containing layer schema, table, geometry field, etc.
+            layer_props: Dict containing layer info (IS the infos dict directly)
             
         Returns:
             bool: True if filtering succeeded, False otherwise
@@ -1454,8 +1493,20 @@ class FilterEngineTask(QgsTask):
         try:
             logger.info(f"Executing geometric filtering for {layer.name()} ({layer_provider_type})")
             
+            # FIXED: layer_props IS the infos dict, access directly (not layer_props['infos'])
+            layer_name = layer_props.get('layer_name')
+            primary_key = layer_props.get('primary_key_name')
+            geom_field = layer_props.get('layer_geometry_field')  # FIXED: correct key name
+            layer_schema = layer_props.get('layer_schema')
+            
+            # Validate required fields
+            if not all([layer_name, primary_key, geom_field]):
+                logger.error(f"Missing required fields in layer_props for {layer.name()}: "
+                           f"name={layer_name}, pk={primary_key}, geom={geom_field}")
+                return False
+            
             # Verify spatial index exists before filtering - critical for performance
-            self._verify_and_create_spatial_index(layer, layer_props.get('infos', {}).get('layer_name'))
+            self._verify_and_create_spatial_index(layer, layer_name)
             
             # Get appropriate backend for this layer
             backend = BackendFactory.get_backend(layer_provider_type, layer, self.task_parameters)
@@ -1466,6 +1517,9 @@ class FilterEngineTask(QgsTask):
             
             # Prepare source geometry based on backend type
             source_geom = self._prepare_source_geometry(layer_provider_type)
+            if not source_geom:
+                logger.error(f"Failed to prepare source geometry for {layer.name()}")
+                return False
             
             # Build filter expression using backend
             expression = backend.build_expression(
@@ -1480,26 +1534,30 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"No expression generated for {layer.name()}")
                 return False
             
-            # Apply filter using backend
-            result = backend.apply_filter(
-                layer=layer,
-                expression=expression,
-                old_subset=old_subset,
-                combine_operator=combine_operator
-            )
+            # Combine with old subset if needed
+            if old_subset and combine_operator:
+                final_expression = f"({old_subset}) {combine_operator} ({expression})"
+            else:
+                final_expression = expression
+            
+            logger.debug(f"Final filter expression for {layer.name()}: {final_expression}")
+            
+            # Apply filter using thread-safe method
+            result = self._safe_set_subset_string(layer, final_expression)
             
             if result:
                 # Store subset string for history/undo functionality
                 self.manage_layer_subset_strings(
                     layer,
-                    expression,
-                    layer_props.get("primary_key_name"),
-                    layer_props.get("geometry_field"),
+                    final_expression,
+                    primary_key,
+                    geom_field,
                     False
                 )
-                logger.info(f"✓ Successfully filtered {layer.name()}: {layer.featureCount()} features match")
+                feature_count = layer.featureCount()
+                logger.info(f"✓ Successfully filtered {layer.name()}: {feature_count:,} features match")
             else:
-                logger.error(f"✗ Failed to filter {layer.name()}")
+                logger.error(f"✗ Failed to apply filter to {layer.name()}")
             
             return result
             

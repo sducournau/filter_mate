@@ -429,7 +429,32 @@ class FilterMateApp:
                 layers_to_filter = []
                 for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
                     if key in self.PROJECT_LAYERS:
-                        layers_to_filter.append(self.PROJECT_LAYERS[key]["infos"])
+                        layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+                        
+                        # Validate required keys exist for geometric filtering
+                        required_keys = [
+                            'layer_name', 'layer_id', 'layer_provider_type',
+                            'primary_key_name', 'layer_geometry_field', 'layer_schema'
+                        ]
+                        
+                        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                        if missing_keys:
+                            logger.warning(f"Layer {key} missing required keys: {missing_keys}")
+                            # Try to fill in missing keys if possible
+                            layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
+                            if layer_obj:
+                                layer = layer_obj[0]
+                                if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
+                                    layer_info['layer_name'] = layer.name()
+                                if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
+                                    layer_info['layer_id'] = layer.id()
+                                # Log what couldn't be filled
+                                still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                                if still_missing:
+                                    logger.error(f"Cannot filter layer {key}: still missing {still_missing}")
+                                    continue
+                        
+                        layers_to_filter.append(layer_info)
 
 
                 if task_name == 'filter':
