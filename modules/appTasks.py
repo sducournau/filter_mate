@@ -1570,9 +1570,74 @@ class FilterEngineTask(QgsTask):
             raise Exception(error_msg)
 
 
+    def _repair_invalid_geometries(self, layer):
+        """
+        Validate and repair invalid geometries in a layer.
+        Creates a new memory layer with repaired geometries if needed.
+        
+        Args:
+            layer: Input layer to check and repair
+            
+        Returns:
+            QgsVectorLayer: Original layer if all valid, or new layer with repaired geometries
+        """
+        total_features = layer.featureCount()
+        invalid_count = 0
+        repaired_count = 0
+        
+        # First pass: check for invalid geometries
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if geom and not geom.isNull():
+                if not geom.isGeosValid():
+                    invalid_count += 1
+        
+        if invalid_count == 0:
+            logger.debug(f"✓ All {total_features} geometries are valid")
+            return layer
+        
+        logger.warning(f"⚠️ Found {invalid_count}/{total_features} invalid geometries, attempting repair...")
+        
+        # Create memory layer for repaired geometries
+        geom_type = QgsWkbTypes.displayString(layer.wkbType())
+        crs = layer.crs().authid()
+        repaired_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", "repaired_geometries", "memory")
+        
+        # Copy fields
+        repaired_layer.dataProvider().addAttributes(layer.fields())
+        repaired_layer.updateFields()
+        
+        # Repair and copy features
+        features_to_add = []
+        for feature in layer.getFeatures():
+            new_feature = QgsFeature(feature)
+            geom = feature.geometry()
+            
+            if geom and not geom.isNull():
+                if not geom.isGeosValid():
+                    # Try to repair using makeValid()
+                    repaired_geom = geom.makeValid()
+                    if repaired_geom and not repaired_geom.isNull() and repaired_geom.isGeosValid():
+                        new_feature.setGeometry(repaired_geom)
+                        repaired_count += 1
+                        logger.debug(f"  ✓ Repaired geometry for feature {feature.id()}")
+                    else:
+                        logger.warning(f"  ✗ Could not repair geometry for feature {feature.id()}")
+                        continue
+            
+            features_to_add.append(new_feature)
+        
+        # Add repaired features
+        repaired_layer.dataProvider().addFeatures(features_to_add)
+        repaired_layer.updateExtents()
+        
+        logger.info(f"✓ Geometry repair complete: {repaired_count}/{invalid_count} successfully repaired, {len(features_to_add)}/{total_features} features kept")
+        return repaired_layer
+
     def _apply_buffer_with_fallback(self, layer, buffer_distance):
         """
         Apply buffer to layer with automatic fallback to manual method.
+        Validates and repairs geometries before buffering.
         
         Args:
             layer: Input layer
@@ -1584,6 +1649,9 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If both QGIS and manual buffer methods fail
         """
+        # CRITICAL: Validate and repair geometries before buffer
+        layer = self._repair_invalid_geometries(layer)
+        
         try:
             # Try QGIS buffer algorithm first
             return self._apply_qgis_buffer(layer, buffer_distance)

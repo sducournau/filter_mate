@@ -2,7 +2,24 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [Unreleased] - 2025-12-04
+## [Unreleased] - 2024-12-04
+
+### 🐛 Bug Fixes
+
+#### Invalid Geometry Repair
+- **Problem**: Geometric filtering with buffer crashed on OGR layers (GeoPackage, Shapefile) when geometries were invalid
+  - Error: "Both buffer methods failed... No valid geometries could be buffered. Valid after buffer: 0"
+- **Solution**: Added automatic geometry validation and repair before buffer operations
+  - New function `_repair_invalid_geometries()` in `modules/appTasks.py`
+  - Uses `geom.makeValid()` to repair invalid geometries automatically
+  - Transparent to user - repairs happen automatically
+  - Detailed logging of repair operations
+- **Impact**: 
+  - ✅ Fixes crash on OGR layers with invalid geometries
+  - ✅ No performance impact if all geometries valid
+  - ✅ Robust error handling with detailed diagnostics
+- **Tests**: New unit tests in `tests/test_geometry_repair.py`
+- **Documentation**: See `docs/GEOMETRY_REPAIR_FIX.md`
 
 ### 🎯 Performance - Final Optimization (Predicate Ordering)
 
