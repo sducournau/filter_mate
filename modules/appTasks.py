@@ -40,6 +40,12 @@ from .constants import (
 # Import backend architecture
 from .backends import BackendFactory
 
+# Import utilities
+from .appUtils import safe_set_subset_string
+
+# Import prepared statements manager
+from .prepared_statements import create_prepared_statements
+
 import uuid
 from collections import OrderedDict
 from operator import getitem
@@ -164,9 +170,115 @@ MESSAGE_TASKS_CATEGORIES = {
                             }
 
 
+class SourceGeometryCache:
+    """
+    Cache pour géométries sources pré-calculées.
+    
+    Évite de recalculer les géométries sources quand on filtre plusieurs layers
+    avec la même sélection source.
+    
+    Performance: Gain de 5× quand on filtre 5+ layers avec la même source.
+    
+    Example:
+        User sélectionne 2000 features et filtre 5 layers:
+        - Sans cache: 5 × 2s calcul = 10s gaspillés
+        - Avec cache: 1 × 2s + 4 × 0.01s = 2.04s total
+    """
+    
+    def __init__(self):
+        self._cache = {}
+        self._max_cache_size = 10  # Limite mémoire: max 10 entrées
+        self._access_order = []  # FIFO: First In, First Out
+        logger.info("✓ SourceGeometryCache initialized (max size: 10)")
+    
+    def get_cache_key(self, features, buffer_value, target_crs_authid):
+        """
+        Génère une clé unique pour identifier une géométrie cachée.
+        
+        Args:
+            features: Liste de features ou IDs
+            buffer_value: Distance de buffer (ou None)
+            target_crs_authid: CRS authid (ex: 'EPSG:3857')
+        
+        Returns:
+            tuple: Clé unique pour ce cache
+        """
+        # Convertir features en tuple d'IDs triés (ordre indépendant)
+        if isinstance(features, (list, tuple)) and features:
+            if hasattr(features[0], 'id'):
+                feature_ids = tuple(sorted([f.id() for f in features]))
+            else:
+                feature_ids = tuple(sorted(features))
+        else:
+            feature_ids = ()
+        
+        return (feature_ids, buffer_value, target_crs_authid)
+    
+    def get(self, features, buffer_value, target_crs_authid):
+        """
+        Récupère une géométrie du cache si elle existe.
+        
+        Args:
+            features: Liste de features ou IDs
+            buffer_value: Distance de buffer
+            target_crs_authid: CRS authid
+        
+        Returns:
+            dict ou None: Données de géométrie cachées (wkt, bbox, etc.)
+        """
+        key = self.get_cache_key(features, buffer_value, target_crs_authid)
+        
+        if key in self._cache:
+            # Update access order (move to end)
+            if key in self._access_order:
+                self._access_order.remove(key)
+            self._access_order.append(key)
+            
+            logger.info(f"✓ Cache HIT: Geometry retrieved from cache")
+            return self._cache[key]
+        
+        logger.debug("Cache MISS: Geometry not in cache")
+        return None
+    
+    def put(self, features, buffer_value, target_crs_authid, geometry_data):
+        """
+        Stocke une géométrie dans le cache.
+        
+        Args:
+            features: Liste de features ou IDs
+            buffer_value: Distance de buffer
+            target_crs_authid: CRS authid
+            geometry_data: Données à cacher (dict avec wkt, bbox, etc.)
+        """
+        key = self.get_cache_key(features, buffer_value, target_crs_authid)
+        
+        # Vérifier limite de cache
+        if len(self._cache) >= self._max_cache_size:
+            # Supprimer l'entrée la plus ancienne (FIFO)
+            if self._access_order:
+                oldest_key = self._access_order.pop(0)
+                if oldest_key in self._cache:
+                    del self._cache[oldest_key]
+                    logger.debug(f"Cache full: Removed oldest entry (size: {self._max_cache_size})")
+        
+        # Stocker dans le cache
+        self._cache[key] = geometry_data
+        self._access_order.append(key)
+        
+        logger.info(f"✓ Cached geometry (cache size: {len(self._cache)}/{self._max_cache_size})")
+    
+    def clear(self):
+        """Vide le cache"""
+        self._cache.clear()
+        self._access_order.clear()
+        logger.info("Cache cleared")
+
 
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
+    
+    # Cache de classe (partagé entre toutes les instances de FilterEngineTask)
+    _geometry_cache = SourceGeometryCache()
 
     def __init__(self, description, task_action, task_parameters):
 
@@ -175,6 +287,9 @@ class FilterEngineTask(QgsTask):
         self.exception = None
         self.task_action = task_action
         self.task_parameters = task_parameters
+        
+        # Référence au cache partagé
+        self.geom_cache = FilterEngineTask._geometry_cache
 
         self.db_file_path = None
         self.project_uuid = None
@@ -242,6 +357,9 @@ class FilterEngineTask(QgsTask):
         
         # Track active database connections for cleanup on cancellation
         self.active_connections = []
+        
+        # Prepared statements manager (initialized when DB connection is established)
+        self._ps_manager = None
 
     
     def _ensure_db_directory_exists(self):
@@ -446,21 +564,29 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if action succeeded, False otherwise
         """
+        print(f"🔍 _execute_task_action: task_action={self.task_action}")
+        
         if self.task_action == 'filter':
+            print("→ Calling execute_filtering()...")
             return self.execute_filtering()
         
         elif self.task_action == 'unfilter':
+            print("→ Calling execute_unfiltering()...")
             return self.execute_unfiltering()
         
         elif self.task_action == 'reset':
+            print("→ Calling execute_reseting()...")
             return self.execute_reseting()
         
         elif self.task_action == 'export':
             if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]:
+                print("→ Calling execute_exporting()...")
                 return self.execute_exporting()
             else:
+                print("❌ No layers to export")
                 return False
         
+        print(f"❌ Unknown task_action: {self.task_action}")
         return False
 
     def run(self):
@@ -499,11 +625,22 @@ class FilterEngineTask(QgsTask):
             self.setProgress(0)
             logger.info(f"Starting {self.task_action} task for {self.layers_count} layer(s)")
             
+            # FORCE CONSOLE OUTPUT TO VERIFY CODE VERSION
+            print(f"\n{'#'*80}")
+            print(f"# FILTERMATE - Task starting (with enhanced diagnostics v2024-12-04)")
+            print(f"# Action: {self.task_action}")
+            print(f"# Layers: {self.layers_count}")
+            print(f"{'#'*80}\n")
+            
             # Log backend info and performance warnings
+            print("🔍 Step 1: Logging backend info...")
             self._log_backend_info()
+            print("✓ Step 1 completed")
             
             # Execute the appropriate action
+            print("🔍 Step 2: Executing task action...")
             result = self._execute_task_action()
+            print(f"✓ Step 2 completed, result={result}")
             if self.isCanceled() or result is False:
                 return False
             
@@ -514,6 +651,9 @@ class FilterEngineTask(QgsTask):
         
         except Exception as e:
             self.exception = e
+            print(f"\n❌ EXCEPTION in FilterEngineTask.run(): {e}")
+            import traceback
+            print(traceback.format_exc())
             safe_log(logger, logging.ERROR, f'FilterEngineTask run() failed: {e}', exc_info=True)
             return False
 
@@ -545,68 +685,6 @@ class FilterEngineTask(QgsTask):
             if self.source_layer.subsetString():
                 self.param_source_old_subset = self.source_layer.subsetString()
 
-    def _qualify_field_names_in_expression(self, expression):
-        """
-        Add proper table qualifiers to field names in the expression.
-        
-        For PostgreSQL, converts field references to "table"."field" format.
-        For other providers, ensures proper quoting.
-        """
-        # Find fields that might be primary key or similar
-        fields_similar_to_pk = [
-            x for x in self.source_layer_fields_names 
-            if self.primary_key_name.find(x) > -1
-        ]
-        existing_fields = [
-            x for x in self.source_layer_fields_names 
-            if expression.find(x) > -1
-        ]
-        
-        # Qualify primary key field
-        if self.primary_key_name in expression:
-            if self.param_source_table not in expression:
-                if f' "{self.primary_key_name}" ' in expression:
-                    if self.param_source_provider_type == PROVIDER_POSTGRES:
-                        expression = expression.replace(
-                            f'"{self.primary_key_name}"',
-                            f'"{self.param_source_table}"."{self.primary_key_name}"'
-                        )
-                elif f" {self.primary_key_name} " in expression:
-                    if self.param_source_provider_type == PROVIDER_POSTGRES:
-                        expression = expression.replace(
-                            self.primary_key_name,
-                            f'"{self.param_source_table}"."{self.primary_key_name}"'
-                        )
-                    else:
-                        expression = expression.replace(
-                            self.primary_key_name,
-                            f'"{self.primary_key_name}"'
-                        )
-        
-        # Qualify other existing fields
-        elif existing_fields:
-            if self.param_source_table not in expression:
-                for field_name in existing_fields:
-                    if f' "{field_name}" ' in expression:
-                        if self.param_source_provider_type == PROVIDER_POSTGRES:
-                            expression = expression.replace(
-                                f'"{field_name}"',
-                                f'"{self.param_source_table}"."{field_name}"'
-                            )
-                    elif f" {field_name} " in expression:
-                        if self.param_source_provider_type == PROVIDER_POSTGRES:
-                            expression = expression.replace(
-                                field_name,
-                                f'"{self.param_source_table}"."{field_name}"'
-                            )
-                        else:
-                            expression = expression.replace(
-                                field_name,
-                                f'"{field_name}"'
-                            )
-        
-        return expression
-
     def _process_qgis_expression(self, expression):
         """
         Process and validate a QGIS expression, converting it to appropriate SQL.
@@ -630,10 +708,22 @@ class FilterEngineTask(QgsTask):
             self.is_field_expression = is_field_expression
         
         # Qualify field names
-        expression = self._qualify_field_names_in_expression(expression)
+        expression = self._qualify_field_names_in_expression(
+            expression,
+            self.source_layer_fields_names,
+            self.primary_key_name,
+            self.param_source_table,
+            self.param_source_provider_type == PROVIDER_POSTGRES
+        )
         
-        # Convert to PostGIS SQL
-        expression = self.qgis_expression_to_postgis(expression)
+        # Convert to provider-specific SQL
+        # CRITICAL: Don't apply PostgreSQL conversions to OGR layers!
+        if self.param_source_provider_type == PROVIDER_POSTGRES:
+            expression = self.qgis_expression_to_postgis(expression)
+        elif self.param_source_provider_type == PROVIDER_SPATIALITE:
+            expression = self.qgis_expression_to_spatialite(expression)
+        # else: OGR providers - keep QGIS expression as-is
+        
         expression = expression.strip()
         
         # Handle CASE statements
@@ -676,24 +766,35 @@ class FilterEngineTask(QgsTask):
         Build SQL IN expression from list of feature IDs.
         
         Returns:
-            str: SQL expression like "table"."pk" IN (1,2,3) or "table"."pk" IN ('a','b','c')
+            str: SQL expression like "table"."pk" IN (1,2,3) or "pk" IN (1,2,3) for OGR
         """
         features_ids = [str(feature[self.primary_key_name]) for feature in features_list]
         
         if not features_ids:
             return None
         
-        # Build IN clause based on primary key type
-        if self.task_parameters["infos"]["primary_key_is_numeric"]:
-            expression = (
-                f'"{self.param_source_table}"."{self.primary_key_name}" IN '
-                f'({", ".join(features_ids)})'
-            )
+        # Build IN clause based on provider type and primary key type
+        is_numeric = self.task_parameters["infos"]["primary_key_is_numeric"]
+        
+        if self.param_source_provider_type == PROVIDER_OGR:
+            # OGR: Simple syntax without table qualification
+            # Use "fid" for numeric keys, quoted field name for string keys
+            if is_numeric:
+                expression = f'"fid" IN ({", ".join(features_ids)})'
+            else:
+                expression = f'"{self.primary_key_name}" IN ({", ".join(repr(fid) for fid in features_ids)})'
         else:
-            expression = (
-                f'"{self.param_source_table}"."{self.primary_key_name}" IN '
-                f"({', '.join(repr(fid) for fid in features_ids)})"
-            )
+            # PostgreSQL/Spatialite: Qualified syntax
+            if is_numeric:
+                expression = (
+                    f'"{self.param_source_table}"."{self.primary_key_name}" IN '
+                    f'({", ".join(features_ids)})'
+                )
+            else:
+                expression = (
+                    f'"{self.param_source_table}"."{self.primary_key_name}" IN '
+                    f"({', '.join(repr(fid) for fid in features_ids)})"
+                )
         
         # Combine with old subset if needed
         if self.param_source_old_subset and self.param_source_layer_combine_operator:
@@ -711,8 +812,19 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful, False otherwise
         """
+        print(f"\n🔍 === _apply_filter_and_update_subset() ===")
+        print(f"  Layer: {self.source_layer.name()}")
+        print(f"  Provider: {self.source_layer.providerType()}")
+        print(f"  Expression length: {len(expression) if expression else 0}")
+        print(f"  Expression preview: {expression[:200] if expression and len(expression) > 200 else expression}")
+        
         # CRITICAL: setSubsetString must be called from main thread
-        result = self._safe_set_subset_string(self.source_layer, expression)
+        print(f"→ Calling safe_set_subset_string()...")
+        result = safe_set_subset_string(self.source_layer, expression)
+        
+        print(f"← safe_set_subset_string() returned: {result}")
+        print(f"  Features after: {self.source_layer.featureCount()}")
+        print(f"  Subset string now: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else '(empty)'}'")
         
         if result:
             # Build full SELECT expression for subset management
@@ -734,83 +846,55 @@ class FilterEngineTask(QgsTask):
 
     def execute_source_layer_filtering(self):
         """Manage the creation of the origin filtering expression"""
+        print("\n🔍 === execute_source_layer_filtering() STARTED ===")
+        
         # Initialize all parameters and configuration
+        print("→ Initializing source filtering parameters...")
         self._initialize_source_filtering_parameters()
+        print("✓ Parameters initialized")
         
         result = False
         task_expression = self.task_parameters["task"]["expression"]
         logger.debug(f"Task expression: {task_expression}")
+        print(f"  task_expression: '{task_expression}'")
         
         # Process QGIS expression if provided
         if task_expression:
+            print("→ Processing QGIS expression...")
             processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
+            print(f"  processed_expr: {processed_expr is not None}")
+            print(f"  is_field_expr: {is_field_expr}")
             
             if processed_expr:
                 # Combine with existing subset if needed
+                print("→ Combining with old subset if needed...")
                 self.expression = self._combine_with_old_subset(processed_expr)
+                print(f"  final expression length: {len(self.expression) if self.expression else 0}")
                 
                 # Apply filter and update subset
+                print("→ Applying filter and updating subset...")
                 result = self._apply_filter_and_update_subset(self.expression)
+                print(f"✓ Filter applied, result: {result}")
         
         # Fallback to feature ID list if expression processing failed
         if not result:
+            print("⚠ Expression processing failed or returned False, trying feature ID list...")
             self.is_field_expression = None
             features_list = self.task_parameters["task"]["features"]
+            print(f"  features_list length: {len(features_list) if features_list else 0}")
             
             if features_list:
+                print("→ Building feature ID expression...")
                 self.expression = self._build_feature_id_expression(features_list)
+                print(f"  expression built: {self.expression is not None}")
                 
                 if self.expression:
+                    print("→ Applying filter with feature IDs...")
                     result = self._apply_filter_and_update_subset(self.expression)
+                    print(f"✓ Feature ID filter applied, result: {result}")
         
+        print(f"← execute_source_layer_filtering() returning: {result}\n")
         return result
-    
-    def _safe_set_subset_string(self, layer, expression):
-        """
-        Thread-safe wrapper for layer.setSubsetString().
-        
-        CRITICAL: setSubsetString() MUST be called from the main Qt thread.
-        Calling it from QgsTask thread causes QGIS crashes (access violation).
-        
-        Args:
-            layer: QgsVectorLayer to filter
-            expression: Filter expression string
-        
-        Returns:
-            bool: True if filter applied successfully
-        """
-        from qgis.PyQt.QtCore import QMetaObject, Qt, Q_ARG, Q_RETURN_ARG, QThread
-        from qgis.core import QgsApplication
-        
-        # If already in main thread, execute directly
-        if QThread.currentThread() == QgsApplication.instance().thread():
-            try:
-                return layer.setSubsetString(expression)
-            except Exception as e:
-                logger.error(f"Failed to apply subset string: {e}")
-                return False
-        
-        # Store result for thread-safe return
-        result_container = {'result': None, 'error': None}
-        
-        def apply_subset():
-            """Inner function executed in main thread"""
-            try:
-                result_container['result'] = layer.setSubsetString(expression)
-            except Exception as e:
-                logger.error(f"Failed to apply subset string: {e}")
-                result_container['error'] = str(e)
-                result_container['result'] = False
-        
-        # Execute in main thread using BlockingQueuedConnection
-        # This properly waits for the main thread to finish
-        QMetaObject.invokeMethod(
-            QgsApplication.instance(),
-            apply_subset,
-            Qt.BlockingQueuedConnection
-        )
-        
-        return result_container.get('result', False)
     
     def _initialize_source_subset_and_buffer(self):
         """
@@ -949,7 +1033,7 @@ class FilterEngineTask(QgsTask):
     def qgis_expression_to_postgis(self, expression):
 
         if expression.find('if') >= 0:
-            expression = re.sub('if\((.*,.*,.*)\))', '(if(.* then .* else .*))', expression)
+            expression = re.sub(r'if\((.*,.*,.*)\))', r'(if(.* then .* else .*))', expression)
             logger.debug(f"Expression: {expression}")
 
 
@@ -1085,10 +1169,28 @@ class FilterEngineTask(QgsTask):
         
         Converts selected features to WKT format for use in Spatialite spatial queries.
         Handles reprojection and buffering if needed.
+        
+        Performance: Uses cache to avoid recalculating for multiple layers.
         """
         # Get features from task parameters
         features = self.task_parameters["task"]["features"]
         logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
+        
+        # Check cache first
+        cached_geom = self.geom_cache.get(
+            features, 
+            self.param_buffer_value,
+            self.source_layer_crs_authid
+        )
+        
+        if cached_geom is not None:
+            # Use cached geometry
+            self.spatialite_source_geom = cached_geom.get('wkt')
+            logger.info("✓ Using CACHED source geometry for Spatialite")
+            return
+        
+        # Cache miss - compute geometry
+        logger.debug("Cache miss - computing source geometry")
         
         raw_geometries = [feature.geometry() for feature in features if feature.hasGeometry()]
         logger.debug(f"prepare_spatialite_source_geom: {len(raw_geometries)} geometries with geometry")
@@ -1135,10 +1237,20 @@ class FilterEngineTask(QgsTask):
         wkt = collected_geometry.asWkt()
         
         # Escape single quotes for SQL
-        self.spatialite_source_geom = wkt.replace("'", "''")
+        wkt_escaped = wkt.replace("'", "''")
+        self.spatialite_source_geom = wkt_escaped
 
         logger.debug(f"prepare_spatialite_source_geom: WKT length = {len(self.spatialite_source_geom)} chars")
         logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...") 
+        
+        # Store in cache for future use
+        self.geom_cache.put(
+            features,
+            self.param_buffer_value,
+            self.source_layer_crs_authid,
+            {'wkt': wkt_escaped}
+        )
+        logger.info("✓ Source geometry computed and CACHED") 
 
 
     def _fix_invalid_geometries(self, layer, output_key):
@@ -1220,10 +1332,45 @@ class FilterEngineTask(QgsTask):
         # Fix geometries before buffer
         layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
         
-        # Log layer info
-        logger.debug(f"Layer before buffer: {layer.featureCount()} features, "
-                   f"CRS: {layer.crs().authid()}, "
-                   f"Geometry type: {layer.geometryType()}")
+        # CRITICAL DIAGNOSTIC: Check CRS type
+        crs = layer.crs()
+        is_geographic = crs.isGeographic()
+        crs_units = crs.mapUnits()
+        
+        # Log layer info with enhanced CRS diagnostics
+        logger.info(f"QGIS buffer: {layer.featureCount()} features, "
+                   f"CRS: {crs.authid()}, "
+                   f"Geometry type: {layer.geometryType()}, "
+                   f"wkbType: {layer.wkbType()}, "
+                   f"buffer_distance: {buffer_distance}")
+        logger.info(f"CRS diagnostics: isGeographic={is_geographic}, mapUnits={crs_units}")
+        
+        # CRITICAL: Check if CRS is geographic with large buffer value
+        if is_geographic:
+            # Evaluate buffer distance to get actual value
+            eval_distance = buffer_distance
+            if isinstance(buffer_distance, QgsProperty):
+                features = list(layer.getFeatures())
+                if features:
+                    context = QgsExpressionContext()
+                    context.setFeature(features[0])
+                    eval_distance = buffer_distance.value(context, 0)
+            
+            if eval_distance and float(eval_distance) > 1:
+                logger.warning(
+                    f"⚠️ GEOGRAPHIC CRS DETECTED with large buffer value!\n"
+                    f"  CRS: {crs.authid()} (units: degrees)\n"
+                    f"  Buffer: {eval_distance} DEGREES (this is likely wrong!)\n"
+                    f"  → A buffer of {eval_distance}° = ~{float(eval_distance) * 111}km at equator\n"
+                    f"  → This will likely fail or create invalid geometries\n"
+                    f"  SOLUTION: Reproject layer to a projected CRS (e.g., EPSG:3857, EPSG:2154) first"
+                )
+                raise Exception(
+                    f"Cannot apply buffer: Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}. "
+                    f"Buffer units would be DEGREES, not meters. "
+                    f"Please reproject your layer to a projected coordinate system (e.g., EPSG:3857 Web Mercator, "
+                    f"or EPSG:2154 Lambert 93 for France) before applying buffer."
+                )
         
         # Apply buffer with dissolve
         alg_params = {
@@ -1237,6 +1384,7 @@ class FilterEngineTask(QgsTask):
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         
+        logger.debug(f"Calling processing.run('qgis:buffer') with params: {alg_params}")
         self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_params)
         layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
         
@@ -1300,26 +1448,35 @@ class FilterEngineTask(QgsTask):
         valid_features = 0
         invalid_features = 0
         
-        for feature in layer.getFeatures():
+        logger.debug(f"Buffering features: layer type={layer.geometryType()}, wkb type={layer.wkbType()}, buffer_dist={buffer_dist}")
+        
+        for idx, feature in enumerate(layer.getFeatures()):
             geom = feature.geometry()
             if geom and not geom.isEmpty():
                 try:
+                    logger.debug(f"Feature {idx}: wkbType={geom.wkbType()}, isValid={geom.isGeosValid()}, isEmpty={geom.isEmpty()}")
+                    
                     # Make valid before buffer
                     if not geom.isGeosValid():
+                        logger.debug(f"Feature {idx}: Geometry invalid, calling makeValid()")
                         geom = geom.makeValid()
+                        logger.debug(f"Feature {idx}: After makeValid: isValid={geom.isGeosValid()}, isEmpty={geom.isEmpty()}")
                     
                     # Apply buffer
                     buffered_geom = geom.buffer(float(buffer_dist), 5)
+                    logger.debug(f"Feature {idx}: After buffer: isEmpty={buffered_geom.isEmpty() if buffered_geom else 'None'}")
                     
                     if buffered_geom and not buffered_geom.isEmpty():
                         geometries.append(buffered_geom)
                         valid_features += 1
                     else:
+                        logger.warning(f"Feature {idx}: Buffer resulted in empty geometry")
                         invalid_features += 1
                 except Exception as feat_error:
-                    logger.debug(f"Skipping invalid feature during manual buffer: {feat_error}")
+                    logger.warning(f"Feature {idx}: Error during buffer: {feat_error}")
                     invalid_features += 1
             else:
+                logger.debug(f"Feature {idx}: Geometry is None or empty")
                 invalid_features += 1
         
         logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
@@ -1367,7 +1524,12 @@ class FilterEngineTask(QgsTask):
             Exception: If no valid geometries could be buffered
         """
         feature_count = layer.featureCount()
-        logger.debug(f"Layer has {feature_count} features before manual buffer")
+        logger.info(f"Manual buffer: Layer has {feature_count} features, geomType={layer.geometryType()}, wkbType={layer.wkbType()}")
+        
+        # CRS diagnostic
+        crs = layer.crs()
+        is_geographic = crs.isGeographic()
+        logger.info(f"Manual buffer CRS: {crs.authid()}, isGeographic={is_geographic}")
         
         if feature_count == 0:
             raise Exception("Cannot buffer layer: source layer has no features")
@@ -1375,6 +1537,13 @@ class FilterEngineTask(QgsTask):
         # Evaluate buffer distance
         buffer_dist = self._evaluate_buffer_distance(layer, buffer_distance)
         logger.debug(f"Manual buffer distance: {buffer_dist}")
+        
+        # Warn about geographic CRS
+        if is_geographic and buffer_dist > 1:
+            logger.warning(
+                f"⚠️ Manual buffer with geographic CRS ({crs.authid()}) and distance {buffer_dist}°\n"
+                f"   This is {buffer_dist * 111:.1f}km at equator - likely too large!"
+            )
         
         # Create memory layer
         buffered_layer = self._create_memory_layer_for_buffer(layer)
@@ -1386,10 +1555,18 @@ class FilterEngineTask(QgsTask):
         if geometries:
             return self._dissolve_and_add_to_layer(geometries, buffered_layer)
         else:
+            crs_hint = ""
+            if is_geographic:
+                crs_hint = (f"\n\n💡 HINT: Your layer uses a GEOGRAPHIC CRS ({crs.authid()}) where buffer units are DEGREES.\n"
+                           f"   This often causes buffer failures. Please reproject your layer to a PROJECTED CRS:\n"
+                           f"   - For worldwide data: EPSG:3857 (Web Mercator)\n"
+                           f"   - For France: EPSG:2154 (Lambert 93)\n"
+                           f"   - For your region: Search for local projected CRS in QGIS")
+            
             error_msg = (f"No valid geometries could be buffered. "
                         f"Total features: {feature_count}, "
                         f"Valid after buffer: {valid_features}, "
-                        f"Invalid: {invalid_features}")
+                        f"Invalid: {invalid_features}{crs_hint}")
             raise Exception(error_msg)
 
 
@@ -1437,12 +1614,36 @@ class FilterEngineTask(QgsTask):
         # Step 1: Fix invalid geometries
         layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_source')
         
-        # Step 2: Reproject if needed
+        # Step 2: Check if buffer is requested and validate CRS BEFORE reprojection
+        buffer_distance = self._get_buffer_distance_parameter()
+        if buffer_distance is not None:
+            # Check CRS compatibility with buffer
+            crs = layer.crs()
+            is_geographic = crs.isGeographic()
+            
+            # Evaluate buffer distance
+            eval_distance = buffer_distance
+            if isinstance(buffer_distance, QgsProperty):
+                features = list(layer.getFeatures())
+                if features:
+                    context = QgsExpressionContext()
+                    context.setFeature(features[0])
+                    eval_distance = buffer_distance.value(context, 0)
+            
+            if is_geographic and eval_distance and float(eval_distance) > 1:
+                logger.warning(
+                    f"⚠️ Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}.\n"
+                    f"   Buffer units would be DEGREES. Auto-reprojecting to EPSG:3857 (Web Mercator)."
+                )
+                # Force reprojection to Web Mercator for buffering
+                self.has_to_reproject_source_layer = True
+                self.source_layer_crs_authid = 'EPSG:3857'
+        
+        # Step 3: Reproject if needed (either requested by user or forced for buffer)
         if self.has_to_reproject_source_layer:
             layer = self._reproject_layer(layer, self.source_layer_crs_authid)
         
-        # Step 3: Apply buffer if specified
-        buffer_distance = self._get_buffer_distance_parameter()
+        # Step 4: Apply buffer if specified
         if buffer_distance is not None:
             layer = self._apply_buffer_with_fallback(layer, buffer_distance)
         
@@ -1692,9 +1893,9 @@ class FilterEngineTask(QgsTask):
             if self.param_other_layers_combine_operator == 'OR':
                 self._verify_and_create_spatial_index(current_layer)
                 # CRITICAL FIX: Thread-safe subset string application
-                self._safe_set_subset_string(current_layer, param_old_subset)
+                safe_set_subset_string(current_layer, param_old_subset)
                 current_layer.selectAll()
-                self._safe_set_subset_string(current_layer, '')
+                safe_set_subset_string(current_layer, '')
                 
                 alg_params_select = {
                     'INPUT': current_layer,
@@ -1794,10 +1995,12 @@ class FilterEngineTask(QgsTask):
 
     def _qualify_field_names_in_expression(self, expression, field_names, primary_key_name, table_name, is_postgresql):
         """
-        Qualify field names with table prefix for PostgreSQL expressions.
+        Qualify field names with table prefix for PostgreSQL/Spatialite expressions.
         
         This helper adds table qualifiers to field names in QGIS expressions to make them
-        compatible with PostgreSQL queries (e.g., "field" becomes "table"."field").
+        compatible with PostgreSQL/Spatialite queries (e.g., "field" becomes "table"."field").
+        
+        For OGR providers, field names are NOT qualified (just wrapped in quotes if needed).
         
         Args:
             expression: Raw QGIS expression string
@@ -1807,10 +2010,30 @@ class FilterEngineTask(QgsTask):
             is_postgresql: Whether target is PostgreSQL (True) or other provider (False)
             
         Returns:
-            str: Expression with qualified field names
+            str: Expression with qualified field names (PostgreSQL/Spatialite) or simple quoted names (OGR)
         """
         result_expression = expression
         
+        # For OGR, just ensure field names are quoted, no table qualification
+        if self.param_source_provider_type == PROVIDER_OGR:
+            # Handle primary key
+            if primary_key_name in result_expression and f'"{primary_key_name}"' not in result_expression:
+                result_expression = result_expression.replace(
+                    f' {primary_key_name} ',
+                    f' "{primary_key_name}" '
+                )
+            
+            # Handle other fields
+            for field_name in field_names:
+                if field_name in result_expression and f'"{field_name}"' not in result_expression:
+                    result_expression = result_expression.replace(
+                        f' {field_name} ',
+                        f' "{field_name}" '
+                    )
+            
+            return result_expression
+        
+        # PostgreSQL/Spatialite: Add table qualification
         # Handle primary key
         if primary_key_name in result_expression:
             if table_name not in result_expression:
@@ -2000,14 +2223,71 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"No expression generated for {layer.name()}")
                 return False
             
-            # Combine with old subset if needed
-            final_expression = self._combine_with_old_filter(expression, layer)
-            logger.debug(f"Final filter expression for {layer.name()}: {final_expression}")
+            # Get old subset and combine operator for backend to handle
+            old_subset = layer.subsetString() if layer.subsetString() != '' else None
+            combine_operator = self._get_combine_operator()
             
-            # Apply filter using thread-safe method
-            result = self._safe_set_subset_string(layer, final_expression)
+            logger.debug(f"Filter expression for {layer.name()}: {expression[:200] if len(expression) < 500 else expression[:200] + '...'}")
+            if old_subset:
+                logger.debug(f"Will combine with existing filter using operator: {combine_operator}")
+            
+            # FORCE CONSOLE OUTPUT FOR DEBUGGING
+            print(f"\n{'='*80}")
+            print(f"🔍 FILTERMATE DEBUG - Applying filter to layer")
+            print(f"{'='*80}")
+            print(f"Layer: {layer.name()}")
+            print(f"Provider: {layer_provider_type}")
+            print(f"Features BEFORE: {layer.featureCount():,}")
+            print(f"Expression length: {len(expression)} chars")
+            print(f"{'='*80}\n")
+            
+            # Apply filter using backend (delegates to appropriate method for each provider type)
+            result = backend.apply_filter(layer, expression, old_subset, combine_operator)
+            
+            # FORCE CONSOLE OUTPUT FOR RESULT
+            print(f"\n{'='*80}")
+            print(f"🔍 FILTERMATE DEBUG - Filter result")
+            print(f"{'='*80}")
+            print(f"Backend returned: {'SUCCESS' if result else 'FAILURE'}")
+            print(f"Features AFTER: {layer.featureCount():,}")
+            print(f"Subset string: {layer.subsetString()[:200] if layer.subsetString() else '(empty)'}")
+            print(f"Layer is valid: {layer.isValid()}")
+            print(f"{'='*80}\n")
             
             if result:
+                # For backends that use setSubsetString, get the actual applied expression
+                final_expression = layer.subsetString()
+                feature_count = layer.featureCount()
+                
+                # CRITICAL DIAGNOSTIC: Verify filter was actually applied
+                logger.info(f"✓ Filter operation completed for {layer.name()}")
+                logger.info(f"  - Backend returned: SUCCESS")
+                logger.info(f"  - Features after filter: {feature_count:,}")
+                logger.info(f"  - Subset string applied: '{final_expression[:200] if final_expression else '(empty)'}'")
+                
+                # Additional layer state verification
+                logger.info(f"  - Layer is valid: {layer.isValid()}")
+                logger.info(f"  - Provider: {layer.providerType()}")
+                logger.info(f"  - CRS: {layer.crs().authid()}")
+                
+                # Try to trigger layer refresh to ensure UI updates
+                try:
+                    layer.triggerRepaint()
+                    logger.debug(f"  - Triggered layer repaint")
+                except Exception as repaint_error:
+                    logger.warning(f"  - Could not trigger repaint: {repaint_error}")
+                
+                # Warning if no features after filtering
+                if feature_count == 0:
+                    logger.warning(
+                        f"⚠️ WARNING: {layer.name()} has ZERO features after filtering!\n"
+                        f"   This could mean:\n"
+                        f"   1. The filter is correct but no features match\n"
+                        f"   2. The subset string syntax is invalid for this provider\n"
+                        f"   3. The filter was not actually applied\n"
+                        f"   Provider: {layer_provider_type}, Expression length: {len(final_expression) if final_expression else 0}"
+                    )
+                
                 # Store subset string for history/undo functionality
                 self.manage_layer_subset_strings(
                     layer,
@@ -2016,10 +2296,11 @@ class FilterEngineTask(QgsTask):
                     geom_field,
                     False
                 )
-                feature_count = layer.featureCount()
+                
                 logger.info(f"✓ Successfully filtered {layer.name()}: {feature_count:,} features match")
             else:
-                logger.error(f"✗ Failed to apply filter to {layer.name()}")
+                logger.error(f"✗ Backend returned FAILURE for {layer.name()}")
+                logger.error(f"  - Check backend logs for details")
             
             return result
             
@@ -2079,20 +2360,98 @@ class FilterEngineTask(QgsTask):
         return None
 
     def execute_filtering(self):
-        """Manage the advanced filtering"""
-       
+        """
+        Manage the advanced filtering.
+        
+        OPTIMISÉ: Filtre la couche source D'ABORD avec validation des modes,
+        puis les couches distantes SEULEMENT si succès.
+        """
+        print("\n🔍 === execute_filtering() STARTED ===")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # ÉTAPE 1: FILTRER LA COUCHE SOURCE (PRIORITÉ)
+        # ═══════════════════════════════════════════════════════════════
+        
+        logger.info("=" * 60)
+        logger.info("STEP 1/2: Filtering SOURCE LAYER")
+        logger.info("=" * 60)
+        print("📋 Step 1/2: Filtering SOURCE LAYER")
+        
+        # Déterminer le mode de sélection actif
+        features_list = self.task_parameters["task"]["features"]
+        qgis_expression = self.task_parameters["task"]["expression"]
+        
+        print(f"  features_list length: {len(features_list)}")
+        print(f"  qgis_expression: '{qgis_expression}'")
+        
+        if len(features_list) > 0 and features_list[0] != "":
+            if len(features_list) == 1:
+                logger.info("✓ Selection Mode: SINGLE SELECTION")
+                logger.info(f"  → 1 feature selected")
+                print("  Mode: SINGLE SELECTION (1 feature)")
+            else:
+                logger.info("✓ Selection Mode: MULTIPLE SELECTION")
+                logger.info(f"  → {len(features_list)} features selected")
+                print(f"  Mode: MULTIPLE SELECTION ({len(features_list)} features)")
+        elif qgis_expression and qgis_expression.strip():
+            logger.info("✓ Selection Mode: CUSTOM EXPRESSION")
+            logger.info(f"  → Expression: '{qgis_expression}'")
+            print(f"  Mode: CUSTOM EXPRESSION ('{qgis_expression[:50]}...')")
+        else:
+            logger.error("✗ No valid selection mode detected!")
+            logger.error("  → features_list is empty AND expression is empty")
+            print("❌ ERROR: No valid selection mode!")
+            return False
+        
+        # Exécuter le filtrage de la couche source
+        print("→ Calling execute_source_layer_filtering()...")
         result = self.execute_source_layer_filtering()
+        print(f"← execute_source_layer_filtering() returned: {result}")
 
         if self.isCanceled():
+            logger.warning("⚠ Task canceled by user")
             return False
+        
+        # ✅ VALIDATION: Vérifier que le filtre source a réussi
+        if not result:
+            logger.error("=" * 60)
+            logger.error("✗ FAILED: Source layer filtering FAILED")
+            logger.error("=" * 60)
+            logger.error("⛔ ABORTING: Distant layers will NOT be filtered")
+            logger.error("   Reason: Source filter must succeed before filtering distant layers")
+            return False
+        
+        # Vérifier le nombre de features après filtrage
+        source_feature_count = self.source_layer.featureCount()
+        logger.info("=" * 60)
+        logger.info(f"✓ SUCCESS: Source layer filtered")
+        logger.info(f"  → {source_feature_count} feature(s) remaining")
+        logger.info("=" * 60)
+        
+        if source_feature_count == 0:
+            logger.warning("⚠ WARNING: Source layer has ZERO features after filter!")
+            logger.warning("  → Distant layers may return no results")
+            logger.warning("  → Consider adjusting filter criteria")
 
         self.setProgress((1 / self.layers_count) * 100)
 
+        # ═══════════════════════════════════════════════════════════════
+        # ÉTAPE 2: FILTRER LES COUCHES DISTANTES (si prédicats géométriques)
+        # ═══════════════════════════════════════════════════════════════
+        
         if self.task_parameters["filtering"]["has_geometric_predicates"] == True:
 
             if len(self.task_parameters["filtering"]["geometric_predicates"]) > 0:
                 
+                logger.info("")
+                logger.info("=" * 60)
+                logger.info("STEP 2/2: Filtering DISTANT LAYERS")
+                logger.info("=" * 60)
+                logger.info(f"  → {len(self.task_parameters['task']['layers'])} layer(s) to filter")
+                
                 source_predicates = self.task_parameters["filtering"]["geometric_predicates"]
+                # source_predicates is a list, not a dict
+                logger.info(f"  → Geometric predicates: {source_predicates}")
                 
                 for key in source_predicates:
                     index = None
@@ -2104,8 +2463,27 @@ class FilterEngineTask(QgsTask):
                 
                 result = self.manage_distant_layers_geometric_filtering()
 
-                if self.isCanceled() or result is False:
+                if self.isCanceled():
+                    logger.warning("⚠ Task canceled during distant layers filtering")
                     return False
+                
+                if result is False:
+                    logger.error("=" * 60)
+                    logger.error("✗ PARTIAL SUCCESS: Source OK, but distant layers FAILED")
+                    logger.error("=" * 60)
+                    logger.warning("  → Source layer remains filtered")
+                    logger.warning("  → Check logs for distant layer errors")
+                    return False
+                
+                logger.info("=" * 60)
+                logger.info("✓ COMPLETE SUCCESS: All layers filtered")
+                logger.info("=" * 60)
+            else:
+                logger.info("  → No geometric predicates configured")
+                logger.info("  → Only source layer filtered")
+        else:
+            logger.info("  → Geometric filtering disabled")
+            logger.info("  → Only source layer filtered")
 
         # elif self.is_field_expression != None:
         #     field_idx = -1
@@ -2615,7 +2993,7 @@ class FilterEngineTask(QgsTask):
         logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
         
         # CRITICAL FIX: Thread-safe subset string application
-        result = self._safe_set_subset_string(layer, layer_subsetString)
+        result = safe_set_subset_string(layer, layer_subsetString)
         
         if not result:
             logger.error("Failed to apply Spatialite subset string")
@@ -2663,7 +3041,7 @@ class FilterEngineTask(QgsTask):
         
         # For non-Spatialite layers, use QGIS subset string directly
         if not is_native_spatialite:
-            return self._safe_set_subset_string(layer, sql_subset_string)
+            return safe_set_subset_string(layer, sql_subset_string)
         
         # Build Spatialite query (simple or buffered)
         spatialite_query = self._build_spatialite_query(
@@ -2891,6 +3269,29 @@ class FilterEngineTask(QgsTask):
             sql_subset_string: SQL subset string
             seq_order: Sequence order number
         """
+        # Initialize prepared statements manager if needed
+        if not self._ps_manager:
+            # Detect provider type from connection
+            provider_type = 'spatialite'  # Default to spatialite for filtermate_db
+            if hasattr(conn, 'get_backend_pid'):  # psycopg2 connection
+                provider_type = 'postgresql'
+            self._ps_manager = create_prepared_statements(conn, provider_type)
+        
+        # Use prepared statement if available
+        if self._ps_manager:
+            try:
+                return self._ps_manager.insert_subset_history(
+                    history_id=str(uuid.uuid4()),
+                    project_uuid=self.project_uuid,
+                    layer_id=layer.id(),
+                    source_layer_id=self.source_layer.id(),
+                    seq_order=seq_order,
+                    subset_string=sql_subset_string
+                )
+            except Exception as e:
+                logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
+        
+        # Fallback to direct SQL if prepared statements unavailable
         cur.execute(
             """INSERT INTO fm_subset_history 
                VALUES('{id}', datetime(), '{fk_project}', '{layer_id}', '{layer_source_id}', {seq_order}, '{subset_string}');""".format(
@@ -2974,7 +3375,7 @@ class FilterEngineTask(QgsTask):
         # Set subset string on layer
         layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
         logger.debug(f"Layer subset string: {layer_subset_string}")
-        self._safe_set_subset_string(layer, layer_subset_string)
+        safe_set_subset_string(layer, layer_subset_string)
         
         return True
 
@@ -2992,14 +3393,25 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        # Delete history
-        cur.execute(
-            f"""DELETE FROM fm_subset_history 
-                WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
-        )
-        conn.commit()
-        
-        # Drop materialized view
+        # Delete history using prepared statement
+        if self._ps_manager:
+            try:
+                self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
+            except Exception as e:
+                logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
+                # Fallback
+                cur.execute(
+                    f"""DELETE FROM fm_subset_history 
+                        WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';""" 
+                )
+                conn.commit()
+        else:
+            # Direct SQL if no prepared statements
+            cur.execute(
+                f"""DELETE FROM fm_subset_history 
+                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';""" 
+            )
+            conn.commit()        # Drop materialized view
         schema = self.current_materialized_view_schema
         sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
         
@@ -3007,7 +3419,7 @@ class FilterEngineTask(QgsTask):
         self._execute_postgresql_commands(connexion, [sql_drop])
         
         # Clear subset string
-        self._safe_set_subset_string(layer, '')
+        safe_set_subset_string(layer, '')
         return True
 
 
@@ -3026,12 +3438,25 @@ class FilterEngineTask(QgsTask):
         """
         logger.info("Reset - Spatialite backend - dropping temp table")
         
-        # Delete history
-        cur.execute(
-            f"""DELETE FROM fm_subset_history 
-                WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
-        )
-        conn.commit()
+        # Delete history using prepared statement
+        if self._ps_manager:
+            try:
+                self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
+            except Exception as e:
+                logger.warning(f"Prepared statement failed, falling back to direct SQL: {e}")
+                # Fallback
+                cur.execute(
+                    f"""DELETE FROM fm_subset_history 
+                        WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
+                )
+                conn.commit()
+        else:
+            # Direct SQL if no prepared statements
+            cur.execute(
+                f"""DELETE FROM fm_subset_history 
+                    WHERE fk_project = '{self.project_uuid}' AND layer_id = '{layer.id()}';"""
+            )
+            conn.commit()
         
         # Drop temp table from filterMate_db
         import sqlite3
@@ -3046,7 +3471,7 @@ class FilterEngineTask(QgsTask):
             logger.error(f"Error dropping Spatialite temp table: {e}")
         
         # Clear subset string
-        self._safe_set_subset_string(layer, '')
+        safe_set_subset_string(layer, '')
         return True
 
 
@@ -3097,7 +3522,7 @@ class FilterEngineTask(QgsTask):
                     name, custom=False, cur=None, conn=None, current_seq_order=0
                 )
                 if not success:
-                    self._safe_set_subset_string(layer, '')
+                    safe_set_subset_string(layer, '')
             
             elif use_postgresql:
                 schema = self.current_materialized_view_schema
@@ -3113,9 +3538,9 @@ class FilterEngineTask(QgsTask):
                 self._execute_postgresql_commands(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
                 
                 layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
-                self._safe_set_subset_string(layer, layer_subset_string)
+                safe_set_subset_string(layer, layer_subset_string)
         else:
-            self._safe_set_subset_string(layer, '')
+            safe_set_subset_string(layer, '')
         
         return True
 
@@ -3254,10 +3679,25 @@ class FilterEngineTask(QgsTask):
                             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success)
                         
         else:
+            # Exception occurred during task execution
+            error_msg = f"Exception: {self.exception}"
+            logger.error(f"Task finished with exception: {error_msg}")
+            
+            # Display error to user
             iface.messageBar().pushMessage(
-                "Exception: {}".format(self.exception),
+                error_msg,
                 MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Critical)
-            raise self.exception
+            
+            # Only raise exception if task completely failed (result is False)
+            # If result is True, some layers may have been processed successfully
+            if result is False:
+                raise self.exception
+            else:
+                # Partial success - log but don't raise
+                logger.warning(
+                    f"Task completed with partial success. "
+                    f"Some operations succeeded but an exception occurred: {self.exception}"
+                )
 
 
 

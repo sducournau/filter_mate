@@ -140,7 +140,7 @@ def show_success_with_backend(iface, provider_type, operation='filter', layer_co
     
     message = f"{backend_name}: {operation_text}"
     
-    iface.messageBar().pushSuccess("FilterMate", message, duration)
+    iface.messageBar().pushSuccess("FilterMate", message)
 
 
 def show_performance_warning(iface, provider_type, feature_count, duration=10):
@@ -167,7 +167,7 @@ def show_performance_warning(iface, provider_type, feature_count, duration=10):
             f"Large dataset ({feature_count:,} features) using {backend_name}. "
             "Performance may be reduced. Consider using PostgreSQL for optimal performance."
         )
-        iface.messageBar().pushWarning("FilterMate - Performance", message, duration)
+        iface.messageBar().pushWarning("FilterMate - Performance", message)
     elif feature_count > 50000:
         message = (
             f"Medium-large dataset ({feature_count:,} features) using {backend_name}. "
@@ -206,7 +206,7 @@ def show_error_with_context(iface, error_message, provider_type=None, operation=
     else:
         message = error_message
     
-    iface.messageBar().pushCritical("FilterMate", message, duration)
+    iface.messageBar().pushCritical("FilterMate", message)
 
 
 def format_backend_summary(provider_counts):

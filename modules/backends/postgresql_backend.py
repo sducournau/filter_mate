@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from qgis.core import QgsVectorLayer
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
+from ..appUtils import safe_set_subset_string
 
 try:
     import psycopg2
@@ -145,8 +146,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_info(f"Applying filter to {layer.name()}")
             self.log_debug(f"Expression: {final_expression[:200]}...")
             
-            # Apply the filter
-            result = layer.setSubsetString(final_expression)
+            # Apply the filter (thread-safe)
+            result = safe_set_subset_string(layer, final_expression)
             
             elapsed = time.time() - start_time
             

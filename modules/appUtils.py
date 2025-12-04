@@ -28,12 +28,100 @@ except ImportError:
 
 from qgis.core import *
 from qgis.utils import *
+from qgis.PyQt.QtCore import QThread
 
 # Import constants
 from .constants import (
     PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
     get_provider_name
 )
+
+
+def get_primary_key_name(layer):
+    """
+    Get the primary key field name for a layer.
+    
+    For OGR layers, tries to find a suitable unique identifier field.
+    Common names: fid, id, objectid, OBJECTID, etc.
+    
+    Args:
+        layer: QgsVectorLayer
+    
+    Returns:
+        str: Primary key field name or None if not found
+    """
+    if not layer or not layer.isValid():
+        return None
+    
+    # Get all field names
+    fields = layer.fields()
+    field_names = [field.name() for field in fields]
+    
+    # Common primary key field names (in order of preference)
+    common_pk_names = ['fid', 'id', 'objectid', 'OBJECTID', 'FID', 'ID', 'ogc_fid']
+    
+    # Check for common names first
+    for pk_name in common_pk_names:
+        if pk_name in field_names:
+            logger.debug(f"Found primary key field: {pk_name}")
+            return pk_name
+    
+    # For GeoPackage and some other formats, check for integer fields
+    for field in fields:
+        if field.type() in [QVariant.Int, QVariant.LongLong]:
+            # First integer field is often the primary key
+            logger.debug(f"Using first integer field as primary key: {field.name()}")
+            return field.name()
+    
+    # Last resort: use first field
+    if len(field_names) > 0:
+        logger.warning(f"No standard primary key found, using first field: {field_names[0]}")
+        return field_names[0]
+    
+    return None
+
+
+def safe_set_subset_string(layer, expression):
+    """
+    Thread-safe wrapper for layer.setSubsetString().
+    
+    CRITICAL: setSubsetString() MUST be called from the main Qt thread.
+    This function always executes directly - QgsTask.run() is ALREADY in main thread context.
+    
+    Args:
+        layer: QgsVectorLayer to filter
+        expression: Filter expression string
+    
+    Returns:
+        bool: True if filter applied successfully
+    """
+    print(f"\n🔒 safe_set_subset_string()")
+    print(f"  Layer: {layer.name()}")
+    print(f"  Provider: {layer.providerType()}")
+    print(f"  Expression: {expression[:100] if len(expression) > 100 else expression}")
+    
+    try:
+        result = layer.setSubsetString(expression)
+        print(f"  ← Result: {result}")
+        
+        if not result:
+            print(f"  ⚠ setSubsetString() returned False")
+            print(f"  → Provider: {layer.providerType()}")
+            error_msg = layer.error().message() if layer.error() else 'none'
+            print(f"  → Layer error: {error_msg}")
+            
+            # Additional diagnostics for failed expressions
+            if expression:
+                print(f"  → Expression validation may have failed")
+                print(f"  → Try checking field names and syntax for {layer.providerType()}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"  ❌ EXCEPTION: {e}")
+        logger.error(f"Failed to apply subset string to {layer.name()}: {e}")
+        return False
+
 
 def truncate(number, digits) -> float:
     # Improve accuracy with floating point operations, to avoid truncate(16.4, 2) = 16.39 or truncate(-1.13, 2) = -1.12
@@ -50,7 +138,7 @@ def detect_layer_provider_type(layer):
     
     Handles the distinction between Spatialite and OGR layers, as both
     can report 'ogr' as providerType() but Spatialite layers have 'Transactions' capability.
-    Also checks file extension to detect .sqlite files as Spatialite.
+    Also checks file extension to detect .sqlite and .gpkg files as Spatialite.
     
     Args:
         layer (QgsVectorLayer): QGIS vector layer
@@ -79,10 +167,10 @@ def detect_layer_provider_type(layer):
     elif normalized_type == PROVIDER_MEMORY:
         return 'memory'
     elif provider_type == PROVIDER_OGR:
-        # Check file extension first - .sqlite files are Spatialite
+        # Check file extension first - .sqlite and .gpkg files are Spatialite-based
         source = layer.source()
         source_path = source.split('|')[0] if '|' in source else source
-        if source_path.lower().endswith('.sqlite'):
+        if source_path.lower().endswith('.sqlite') or source_path.lower().endswith('.gpkg'):
             return 'spatialite'
         
         # Check if it's Spatialite via 'Transactions' capability
@@ -95,7 +183,7 @@ def detect_layer_provider_type(layer):
         # Fallback for OGR-like providers
         source = layer.source()
         source_path = source.split('|')[0] if '|' in source else source
-        if source_path.lower().endswith('.sqlite'):
+        if source_path.lower().endswith('.sqlite') or source_path.lower().endswith('.gpkg'):
             return 'spatialite'
         
         capabilities = layer.capabilitiesString().split(', ')

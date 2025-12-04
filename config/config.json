@@ -76,7 +76,7 @@
             "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
             "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
             "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
-            "APP_SQLITE_PATH": "C:\\Users\\Simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\imagodata\\FilterMate",
+            "APP_SQLITE_PATH": "C:\\Users\\SimonDucorneau\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\FilterMate",
             "FRESH_RELOAD_FLAG": false
         }
     },
@@ -122,7 +122,7 @@
                 "ZONE_D_HABITATION_c81499a0_84da_4deb_9b77_82549ba31538"
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:31370",
+            "PROJECTION_TO_EXPORT": "EPSG:3857",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,
@@ -145,7 +145,7 @@
             "IS_ACTIVE_POSTGRESQL": false
         },
         "EXPORT": {
-            "HAS_LAYERS_TO_EXPORT": false,
+            "HAS_LAYERS_TO_EXPORT": true,
             "LAYERS_TO_EXPORT": [
                 "COURS_D_EAU_9b6039fc_6089_4cc2_a083_3eacceea1752",
                 "HAIE_4ea2cd51_54b3_43f9_a032_b6c7d3462142",
@@ -184,14 +184,14 @@
                 "ZONE_D_ACTIVITE_OU_D_INTERET_e9e846ed_4658_4afc_9946_a1958d924c6d",
                 "ZONE_D_HABITATION_c81499a0_84da_4deb_9b77_82549ba31538"
             ],
-            "HAS_PROJECTION_TO_EXPORT": true,
-            "PROJECTION_TO_EXPORT": "EPSG:31370",
-            "HAS_STYLES_TO_EXPORT": false,
+            "HAS_PROJECTION_TO_EXPORT": false,
+            "PROJECTION_TO_EXPORT": "EPSG:3857",
+            "HAS_STYLES_TO_EXPORT": true,
             "STYLES_TO_EXPORT": "QML",
-            "HAS_DATATYPE_TO_EXPORT": false,
+            "HAS_DATATYPE_TO_EXPORT": true,
             "DATATYPE_TO_EXPORT": "GPKG",
-            "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
-            "OUTPUT_FOLDER_TO_EXPORT": "",
+            "HAS_OUTPUT_FOLDER_TO_EXPORT": true,
+            "OUTPUT_FOLDER_TO_EXPORT": "c:\\users\\simonducorneau\\documents\\export_.gpkg",
             "HAS_ZIP_TO_EXPORT": false,
             "ZIP_TO_EXPORT": ""
         }
