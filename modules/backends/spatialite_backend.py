@@ -318,7 +318,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Building Spatialite expression for {layer_props.get('layer_name', 'unknown')}")
         
         # Extract layer properties
-        table = layer_props.get("layer_name")
+        # Use layer_table_name (actual source table) if available, fallback to layer_name (display name)
+        table = layer_props.get("layer_table_name") or layer_props.get("layer_name")
         geom_field = layer_props.get("layer_geometry_field", "geom")
         primary_key = layer_props.get("primary_key_name")
         layer = layer_props.get("layer")  # QgsVectorLayer instance

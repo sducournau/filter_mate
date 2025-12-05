@@ -501,3 +501,85 @@ def get_spatialite_datasource_from_layer(layer):
     table_name = source_uri.table()
     
     return db_path, table_name
+
+
+def get_source_table_name(layer):
+    """
+    Extract the actual source table name from a layer's data source.
+    
+    This function retrieves the real table name in the database/file, which may
+    differ from the layer's display name in QGIS (layer.name()).
+    
+    For example, a GeoPackage layer might be displayed as "Distribution Cluster"
+    in QGIS but the actual table name is "mro_woluwe_03_pop_033".
+    
+    Args:
+        layer (QgsVectorLayer): QGIS vector layer
+    
+    Returns:
+        str: The source table name, or layer.name() as fallback if extraction fails
+    
+    Examples:
+        >>> layer = QgsVectorLayer("postgres://...")
+        >>> get_source_table_name(layer)
+        'my_table'
+        
+        >>> layer = QgsVectorLayer("/path/to/file.gpkg|layername=actual_table")
+        >>> get_source_table_name(layer)
+        'actual_table'
+    """
+    if layer is None:
+        return None
+    
+    provider_type = layer.providerType()
+    source = layer.source()
+    
+    try:
+        # For PostgreSQL layers
+        if provider_type == 'postgres':
+            source_uri = QgsDataSourceUri(source)
+            table_name = source_uri.table()
+            if table_name:
+                return table_name
+            
+            # Fallback: regex extraction from connection string
+            # Format: table="schema"."table_name" or table="table_name"
+            import re
+            match = re.search(r'table="(?:[^"]+"\.")?([^"]+)"', source)
+            if match:
+                return match.group(1)
+        
+        # For Spatialite layers
+        elif provider_type == 'spatialite':
+            source_uri = QgsDataSourceUri(source)
+            table_name = source_uri.table()
+            if table_name:
+                return table_name
+        
+        # For OGR layers (including GeoPackage)
+        elif provider_type == 'ogr':
+            # OGR source format: /path/to/file.gpkg|layername=table_name
+            # or just /path/to/file.shp
+            if '|layername=' in source:
+                # Extract layername parameter
+                parts = source.split('|layername=')
+                if len(parts) > 1:
+                    table_name = parts[1].split('|')[0]  # Handle additional parameters
+                    return table_name
+            
+            # Try QgsDataSourceUri
+            source_uri = QgsDataSourceUri(source)
+            table_name = source_uri.table()
+            if table_name:
+                return table_name
+            
+            # For shapefile, use filename without extension
+            if source.lower().endswith('.shp'):
+                import os
+                return os.path.splitext(os.path.basename(source))[0]
+    
+    except Exception as e:
+        logger.debug(f"Could not extract source table name from layer {layer.id()}: {e}")
+    
+    # Fallback: use layer display name
+    return layer.name()

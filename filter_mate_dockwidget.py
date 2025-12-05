@@ -269,6 +269,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Filter comboBox_filtering_current_layer to show only vector layers
         self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
+        # Configure QgsFieldExpressionWidget to allow all field types (except geometry)
+        # QgsFieldProxyModel.AllTypes includes all field types
+        # We exclude only geometry fields using ~SkipGeometry filter
+        field_filters = QgsFieldProxyModel.AllTypes
+        self.mFieldExpressionWidget_exploring_single_selection.setFilters(field_filters)
+        self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
+        self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
+        
         # Initialize QgsFieldExpressionWidget with init layer if available
         if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             # Synchronize comboBox_filtering_current_layer with init_layer
@@ -361,7 +369,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         self.widgets["ACTION"] = {
                                 "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(state, x))], "ICON":None},
-                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
+                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_undo_filter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
                                 "RESET":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_reset, "SIGNALS":[("clicked", lambda state, x='reset': self.launchTaskEvent(state, x))], "ICON":None},
                                 "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None},
                                 "ABOUT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_about, "SIGNALS":[("clicked", self.open_project_page)], "ICON":None}

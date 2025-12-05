@@ -82,7 +82,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         # Extract layer properties
         schema = layer_props.get("layer_schema", "public")
-        table = layer_props.get("layer_name")
+        # Use layer_table_name (actual source table) if available, fallback to layer_name (display name)
+        table = layer_props.get("layer_table_name") or layer_props.get("layer_name")
         geom_field = layer_props.get("layer_geometry_field", "geom")
         layer = layer_props.get("layer")  # QgsVectorLayer instance
         

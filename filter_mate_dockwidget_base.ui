@@ -454,25 +454,19 @@
                 </property>
                 <property name="maximumSize">
                  <size>
-                  <width>80</width>
+                  <width>110</width>
                   <height>16777215</height>
                  </size>
                 </property>
                 <property name="baseSize">
                  <size>
-                  <width>80</width>
+                  <width>110</width>
                   <height>0</height>
                  </size>
                 </property>
                 <layout class="QVBoxLayout" name="verticalLayout_9">
-                 <property name="alignment">
-                  <set>Qt::AlignHCenter</set>
-                 </property>
                  <item>
                   <layout class="QVBoxLayout" name="verticalLayout_7">
-                   <property name="alignment">
-                    <set>Qt::AlignHCenter</set>
-                   </property>
                    <item>
                     <widget class="QPushButton" name="pushButton_exploring_identify">
                      <property name="sizePolicy">
@@ -1530,25 +1524,19 @@
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>80</width>
+                    <width>110</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>80</width>
+                    <width>110</width>
                     <height>0</height>
                    </size>
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_12">
-                   <property name="alignment">
-                    <set>Qt::AlignHCenter</set>
-                   </property>
                    <item>
                     <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
-                     <property name="alignment">
-                      <set>Qt::AlignHCenter</set>
-                     </property>
                      <item>
                       <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
                        <property name="sizePolicy">
@@ -2816,7 +2804,7 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>858</width>
+               <width>458</width>
                <height>354</height>
               </rect>
              </property>
@@ -2846,25 +2834,19 @@
                   </property>
                   <property name="maximumSize">
                    <size>
-                    <width>80</width>
+                    <width>110</width>
                     <height>16777215</height>
                    </size>
                   </property>
                   <property name="baseSize">
                    <size>
-                    <width>80</width>
+                    <width>90</width>
                     <height>0</height>
                    </size>
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_14">
-                   <property name="alignment">
-                    <set>Qt::AlignHCenter</set>
-                   </property>
                    <item>
                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
-                     <property name="alignment">
-                      <set>Qt::AlignHCenter</set>
-                     </property>
                      <item>
                       <widget class="QPushButton" name="pushButton_checkable_exporting_layers">
                        <property name="sizePolicy">
@@ -3720,7 +3702,7 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>858</width>
+               <width>458</width>
                <height>354</height>
               </rect>
              </property>
@@ -3870,7 +3852,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="pushButton_action_unfilter">
+        <widget class="QPushButton" name="pushButton_action_undo_filter">
          <property name="minimumSize">
           <size>
            <width>35</width>
