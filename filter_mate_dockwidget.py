@@ -26,6 +26,7 @@ from .config.config import *
 import os
 import json
 import re
+import sip
 from functools import partial
 from osgeo import ogr
 
@@ -650,7 +651,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             except Exception as e:
                 self.exception = e
-                self.resetLayerVariableOnErrorEvent(layer, self.exception)
+                # Check if layer is still valid (not deleted)
+                try:
+                    if layer is not None and not sip.isdeleted(layer):
+                        self.resetLayerVariableOnErrorEvent(layer, self.exception)
+                    else:
+                        # Layer has been deleted, log the error but don't try to emit signal
+                        print(f"FilterMate: Cannot reset layer variable - layer has been deleted: {e}")
+                except RuntimeError:
+                    # Layer C++ object is deleted
+                    print(f"FilterMate: Cannot reset layer variable - layer C++ object deleted: {e}")
 
     def exporting_populate_combobox(self):
 
@@ -2636,8 +2646,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True:
             if layer == None:
                 layer = self.current_layer
-           
-            self.resettingLayerVariableOnError.emit(layer, properties)
+            
+            # Double-check layer is valid before emitting signal
+            try:
+                if layer is not None and not sip.isdeleted(layer):
+                    self.resettingLayerVariableOnError.emit(layer, properties)
+                else:
+                    print(f"FilterMate: Cannot emit resettingLayerVariableOnError - layer is None or deleted")
+            except RuntimeError as e:
+                # Layer C++ object is deleted
+                print(f"FilterMate: Cannot emit resettingLayerVariableOnError - layer object deleted: {e}")
 
 
     def resetLayerVariableEvent(self, layer=None, properties=[]):
