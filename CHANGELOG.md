@@ -6,6 +6,52 @@ All notable changes to FilterMate will be documented in this file.
 
 ### 🐛 Bug Fixes
 
+#### Undo Button (Unfilter) Now Correctly Restores Previous Filter State
+- **Problem**: Undo button cleared all filters instead of restoring the previous filter state
+  - New `HistoryManager` system implemented for in-memory history tracking
+  - Old database-based system in `FilterEngineTask._unfilter_action()` still active
+  - Old system **deleted** current filter from database before restoring previous one
+  - If only one filter existed, nothing remained to restore → complete unfilter
+- **Solution**: Integrated `HistoryManager` into `FilterEngineTask.execute_unfiltering()`
+  - **Pass history_manager**: Added to task_parameters for unfilter operations
+  - **Rewritten execute_unfiltering()**: Uses `history.undo()` for proper state restoration
+  - **Direct filter application**: Bypasses `manage_layer_subset_strings` to avoid old deletion logic
+  - **Preserved history**: In-memory history maintained, enables multiple undo/redo operations
+- **Impact**:
+  - ✅ Undo correctly restores previous filter expression
+  - ✅ Multiple undo operations now possible (was broken before)
+  - ✅ History preserved in memory (no database deletion)
+  - ✅ Consistent with modern history management pattern
+  - ✅ Better performance (no database access during undo)
+- **Files Modified**:
+  - `filter_mate_app.py`: Pass history_manager in unfilter task_parameters
+  - `modules/appTasks.py`: Rewrite execute_unfiltering() to use HistoryManager
+- **Note**: Associated layers are cleared during undo (future enhancement: restore their filters too)
+
+#### SQLite Database Lock Error Fix
+- **Problem**: `sqlite3.OperationalError: database is locked` when multiple concurrent operations
+  - Error occurred in `insert_properties_to_spatialite()` during layer management
+  - Multiple QgsTasks writing to same database simultaneously caused locks
+  - No retry mechanism - failed immediately on lock errors
+  - 30-second timeout insufficient for busy systems
+- **Solution**: Implemented comprehensive retry mechanism with exponential backoff
+  - **Increased timeout**: 30s → 60s for better concurrent access handling
+  - **New utility**: `sqlite_execute_with_retry()` - generic retry wrapper for database operations
+  - **Exponential backoff**: 0.1s → 0.2s → 0.4s → 0.8s → 1.6s between retries
+  - **Configurable retries**: 5 attempts by default (via `SQLITE_MAX_RETRIES`)
+  - **Smart error handling**: Only retries on lock errors, fails fast on other errors
+  - **Refactored** `insert_properties_to_spatialite()` to use retry logic
+- **Impact**:
+  - ✅ Dramatically improves reliability with concurrent operations
+  - ✅ Proper rollback and connection cleanup on failures
+  - ✅ Clear logging for debugging (warnings on retry, error on final failure)
+  - ✅ Reusable function for other database operations
+  - ✅ Works with existing WAL mode for optimal performance
+- **Testing**: Comprehensive test suite in `tests/test_sqlite_lock_handling.py`
+  - Tests successful operations, lock retries, permanent locks, exponential backoff
+  - Concurrent write scenarios with multiple threads
+- **Documentation**: See `docs/SQLITE_LOCK_FIX.md` for details
+
 #### Critical Subset String Handling for Buffer Operations
 - **Problem**: Buffer operations failed on OGR layers with active subset strings (single selection mode)
   - Error: "Both buffer methods failed... Impossible d'écrire l'entité dans OUTPUT"

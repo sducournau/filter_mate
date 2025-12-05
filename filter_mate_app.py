@@ -25,6 +25,7 @@ from .modules.feedback_utils import (
     show_backend_info, show_progress_message, show_success_with_backend,
     show_performance_warning, show_error_with_context
 )
+from .modules.filter_history import HistoryManager
 from .resources import *
 import uuid
 
@@ -133,6 +134,11 @@ class FilterMateApp:
                                     'new_project':'New project',
                                     'project_read':'Existing project loaded'
                                     }
+        
+        # Initialize filter history manager for undo/redo functionality
+        self.history_manager = HistoryManager(max_size=100)
+        logger.info("FilterMate: HistoryManager initialized for undo/redo functionality")
+        
         init_env_vars()
         
         global ENV_VARS
@@ -492,13 +498,29 @@ class FilterMateApp:
                     task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
                                                 "layers": layers_to_filter,
                                                 "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                    
+                    # Initialize history with current state if this is the first filter
+                    history = self.history_manager.get_or_create_history(current_layer.id())
+                    if len(history._states) == 0:
+                        # Push initial unfiltered state
+                        current_filter = current_layer.subsetString()
+                        current_count = current_layer.featureCount()
+                        history.push_state(
+                            expression=current_filter,
+                            feature_count=current_count,
+                            description="Initial state (before first filter)",
+                            metadata={"operation": "initial", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
+                        )
+                        logger.info(f"FilterMate: Initialized history with current state for layer {current_layer.id()}")
+                    
                     return task_parameters
 
                 elif task_name == 'unfilter':
 
                     task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
                                                 "layers": layers_to_filter,
-                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid,
+                                                "history_manager": self.history_manager }  # Pass history manager for undo
                     return task_parameters
                 
                 elif task_name == 'reset':
@@ -632,7 +654,19 @@ class FilterMateApp:
             provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
             layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
             
+            # Push filter state to history for undo/redo (except for unfilter which uses history.undo())
             if task_name == 'filter':
+                history = self.history_manager.get_or_create_history(source_layer.id())
+                filter_expression = source_layer.subsetString()
+                description = f"Filter: {filter_expression[:60]}..." if len(filter_expression) > 60 else f"Filter: {filter_expression}"
+                history.push_state(
+                    expression=filter_expression,
+                    feature_count=feature_count,
+                    description=description,
+                    metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
+                )
+                logger.info(f"FilterMate: Pushed filter state to history (position {history._current_index + 1}/{len(history._states)})")
+                
                 show_success_with_backend(iface, provider_type, 'filter', layer_count)
                 iface.messageBar().pushInfo(
                     "FilterMate",
@@ -642,9 +676,15 @@ class FilterMateApp:
                 show_success_with_backend(iface, provider_type, 'unfilter', layer_count)
                 iface.messageBar().pushInfo(
                     "FilterMate",
-                    f"{feature_count:,} features visible in main layer"
+                    f"{feature_count:,} features visible in main layer (restored from history)"
                 )
             elif task_name == 'reset':
+                # Clear history on reset
+                history = self.history_manager.get_history(source_layer.id())
+                if history:
+                    history.clear()
+                    logger.info(f"FilterMate: Cleared filter history for layer {source_layer.id()}")
+                
                 show_success_with_backend(iface, provider_type, 'reset', layer_count)
                 iface.messageBar().pushInfo(
                     "FilterMate",
@@ -661,19 +701,41 @@ class FilterMateApp:
         """
         Apply or remove subset filter expression on a layer.
         
-        Retrieves filter expression from layer variables and applies it using
-        QgsVectorLayer.setSubsetString(). Handles both applying and removing filters.
+        Uses FilterHistory module for proper undo/redo functionality.
         
         Args:
             task_name (str): Type of operation ('filter', 'unfilter', 'reset')
             layer (QgsVectorLayer): Layer to apply filter to
             
         Notes:
-            - For 'unfilter'/'reset': Clears subset string (shows all features)
-            - For 'filter': Applies expression from layer variables
-            - Expression is read from filterMate_filtering_layer_filter_expression variable
+            - For 'unfilter': Uses history.undo() to return to previous state
+            - For 'reset': Clears subset string and history
+            - For 'filter': Applies expression from Spatialite database
             - Changes trigger layer refresh automatically
         """
+        if task_name == 'unfilter':
+            # Use history manager for proper undo
+            history = self.history_manager.get_history(layer.id())
+            
+            if history and history.can_undo():
+                previous_state = history.undo()
+                if previous_state:
+                    layer.setSubsetString(previous_state.expression)
+                    logger.info(f"FilterMate: Undo applied - restored filter: {previous_state.description}")
+                    
+                    if layer.subsetString() != '':
+                        self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
+                    else:
+                        self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+                    return
+            else:
+                # No history available - clear filter
+                logger.info(f"FilterMate: No undo history available, clearing filter")
+                layer.setSubsetString('')
+                self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
+                return
+        
+        # For 'filter' and 'reset' operations, use database history
         conn = self.get_spatialite_connection()
         if conn is None:
             return
@@ -697,7 +759,7 @@ class FilterMateApp:
                 result = results[0]
                 last_subset_string = result[6].replace("\'\'", "\'")
 
-            if task_name in ('filter', 'unfilter'):
+            if task_name == 'filter':
                 layer.setSubsetString(last_subset_string)
 
                 if layer.subsetString() != '':

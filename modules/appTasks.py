@@ -41,7 +41,7 @@ from .constants import (
 from .backends import BackendFactory
 
 # Import utilities
-from .appUtils import safe_set_subset_string
+from .appUtils import safe_set_subset_string, get_source_table_name
 
 # Import prepared statements manager
 from .prepared_statements import create_prepared_statements
@@ -56,9 +56,141 @@ from pathlib import Path
 import re
 from functools import partial
 import json
+import sqlite3
 from ..config.config import *
 from .appUtils import *
 from qgis.utils import iface
+import time
+
+# SQLite connection timeout in seconds (60 seconds to handle concurrent access)
+SQLITE_TIMEOUT = 60.0
+
+# Maximum number of retries for database operations when locked
+SQLITE_MAX_RETRIES = 5
+
+# Initial delay between retries (will increase exponentially)
+SQLITE_RETRY_DELAY = 0.1
+
+def spatialite_connect(db_path, timeout=SQLITE_TIMEOUT):
+    """
+    Connect to a Spatialite database with proper timeout to avoid locking issues.
+    
+    Enables WAL (Write-Ahead Logging) mode for better concurrent access.
+    WAL mode allows multiple readers and one writer simultaneously.
+    
+    Args:
+        db_path: Path to the SQLite/Spatialite database file
+        timeout: Timeout in seconds for database lock (default 60 seconds)
+    
+    Returns:
+        sqlite3.Connection: Database connection with Spatialite extension loaded
+    
+    Raises:
+        sqlite3.OperationalError: If connection fails or Spatialite extension unavailable
+    """
+    try:
+        # Connect with timeout to handle concurrent access
+        conn = sqlite3.connect(db_path, timeout=timeout)
+        
+        # Enable WAL mode for better concurrency
+        # WAL allows multiple readers and one writer without blocking
+        try:
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA synchronous=NORMAL')  # Balance between safety and performance
+        except sqlite3.OperationalError as e:
+            logger.warning(f"Could not enable WAL mode for {db_path}: {e}")
+        
+        conn.enable_load_extension(True)
+        
+        # Try to load Spatialite extension (multiple paths for compatibility)
+        try:
+            conn.load_extension('mod_spatialite')
+        except (OSError, sqlite3.OperationalError):
+            try:
+                conn.load_extension('mod_spatialite.dll')  # Windows
+            except (OSError, sqlite3.OperationalError):
+                try:
+                    conn.load_extension('libspatialite')  # Linux/Mac
+                except (OSError, sqlite3.OperationalError) as e:
+                    logger.warning(
+                        f"Spatialite extension not available for {db_path}. "
+                        f"Spatial operations may be limited. Error: {e}"
+                    )
+        
+        return conn
+    except Exception as e:
+        logger.error(f"Failed to connect to database {db_path}: {e}")
+        raise
+
+
+def sqlite_execute_with_retry(operation_func, operation_name="database operation", 
+                               max_retries=SQLITE_MAX_RETRIES, initial_delay=SQLITE_RETRY_DELAY):
+    """
+    Execute a SQLite operation with retry logic for handling database locks.
+    
+    Implements exponential backoff for "database is locked" errors.
+    
+    Args:
+        operation_func: Callable that performs the database operation. 
+                       Should return True on success, raise exception on error.
+        operation_name: Description of the operation for logging
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay between retries (will increase exponentially)
+    
+    Returns:
+        Result from operation_func
+        
+    Raises:
+        sqlite3.OperationalError: If operation fails after all retries
+        Exception: Any other exception from operation_func
+        
+    Example:
+        def my_insert():
+            conn = spatialite_connect(db_path)
+            try:
+                cur = conn.cursor()
+                cur.execute("INSERT INTO ...")
+                conn.commit()
+                return True
+            finally:
+                conn.close()
+                
+        sqlite_execute_with_retry(my_insert, "insert properties")
+    """
+    retry_delay = initial_delay
+    last_exception = None
+    
+    for attempt in range(max_retries):
+        try:
+            return operation_func()
+            
+        except sqlite3.OperationalError as e:
+            last_exception = e
+            
+            if "database is locked" in str(e).lower() and attempt < max_retries - 1:
+                # Database locked - retry with exponential backoff
+                logger.warning(
+                    f"Database locked during {operation_name}. "
+                    f"Retry {attempt + 1}/{max_retries} after {retry_delay:.2f}s"
+                )
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                # Final attempt failed or different error
+                logger.error(
+                    f"Database operation '{operation_name}' failed after {attempt + 1} attempts: {e}"
+                )
+                raise
+                
+        except Exception as e:
+            # Non-recoverable error
+            logger.error(f"Error during {operation_name}: {e}")
+            raise
+    
+    # Should not reach here, but just in case
+    if last_exception:
+        raise last_exception
 
 def get_best_metric_crs(project, source_crs):
     """
@@ -2821,20 +2953,78 @@ class FilterEngineTask(QgsTask):
      
 
     def execute_unfiltering(self):
-
-        i = 1
-
-        self.manage_layer_subset_strings(self.source_layer, None, self.primary_key_name, self.param_source_geom, False)
-        self.setProgress((i/self.layers_count)*100)
-
-        for layer_provider_type in self.layers:
-            for layer, layer_props in self.layers[layer_provider_type]:
-                self.manage_layer_subset_strings(layer, None, layer_props["primary_key_name"], layer_props["layer_geometry_field"], False)
-                i += 1
-                self.setProgress((i/self.layers_count)*100)
-                if self.isCanceled():
-                    return False
-
+        """
+        Execute undo operation using the new HistoryManager system.
+        
+        This method now uses the in-memory history manager to restore the previous
+        filter state instead of manipulating the database history table directly.
+        
+        IMPORTANT: This bypasses manage_layer_subset_strings to avoid triggering
+        the old _unfilter_action that would delete database history entries.
+        """
+        # Get history manager from task parameters (passed from filter_mate_app)
+        history_manager = self.task_parameters["task"].get("history_manager")
+        
+        if not history_manager:
+            logger.error("FilterMate: No history_manager in task parameters, cannot undo")
+            return False
+        
+        # Get history for source layer
+        history = history_manager.get_history(self.source_layer.id())
+        
+        if not history or not history.can_undo():
+            logger.info("FilterMate: No undo history available, clearing filters")
+            # No history available - clear filters as fallback
+            safe_set_subset_string(self.source_layer, '')
+            
+            # Clear filters on associated layers too
+            i = 1
+            self.setProgress((i/self.layers_count)*100)
+            
+            for layer_provider_type in self.layers:
+                for layer, layer_props in self.layers[layer_provider_type]:
+                    safe_set_subset_string(layer, '')
+                    i += 1
+                    self.setProgress((i/self.layers_count)*100)
+                    if self.isCanceled():
+                        return False
+            return True
+        
+        # Use history manager to get previous state
+        previous_state = history.undo()
+        
+        if previous_state:
+            logger.info(f"FilterMate: Restoring previous filter: {previous_state.description}")
+            # Apply previous filter expression to source layer directly
+            safe_set_subset_string(self.source_layer, previous_state.expression)
+            
+            # For associated layers, simply clear them for now
+            # TODO: Future enhancement - store and restore associated layer filters too
+            i = 1
+            self.setProgress((i/self.layers_count)*100)
+            
+            for layer_provider_type in self.layers:
+                for layer, layer_props in self.layers[layer_provider_type]:
+                    # For undo, we simply clear associated layers
+                    # The user can re-filter if they want to restore geometric relationships
+                    safe_set_subset_string(layer, '')
+                    i += 1
+                    self.setProgress((i/self.layers_count)*100)
+                    if self.isCanceled():
+                        return False
+        else:
+            logger.warning("FilterMate: History undo returned None, clearing filters")
+            safe_set_subset_string(self.source_layer, '')
+            
+            i = 1
+            for layer_provider_type in self.layers:
+                for layer, layer_props in self.layers[layer_provider_type]:
+                    safe_set_subset_string(layer, '')
+                    i += 1
+                    self.setProgress((i/self.layers_count)*100)
+                    if self.isCanceled():
+                        return False
+        
         return True
     
     def execute_reseting(self):
@@ -4046,7 +4236,7 @@ class LayersManagementEngineTask(QgsTask):
         self.outputs = {}
         self.message = None
 
-        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
+        self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_table_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"current_exploring_groupbox":"single_selection","single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round" }'
         
@@ -4221,7 +4411,9 @@ class LayersManagementEngineTask(QgsTask):
         spatialite_results = self.select_properties_from_spatialite(layer.id())
         expected_count = self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"]
         
-        if not spatialite_results or len(spatialite_results) != expected_count:
+        # Allow for property count mismatch due to migrations (e.g., adding layer_table_name)
+        # If we have at least some properties, proceed with loading
+        if not spatialite_results:
             return {}
         
         existing_layer_variables = {
@@ -4242,11 +4434,21 @@ class LayersManagementEngineTask(QgsTask):
                 variable_key = f"filterMate_{property[0]}_{property[1]}"
                 QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
         
+        # If property count has changed, update it
+        actual_count = (
+            len(existing_layer_variables.get("infos", {})) +
+            len(existing_layer_variables.get("exploring", {})) +
+            len(existing_layer_variables.get("filtering", {}))
+        )
+        if actual_count > 0 and actual_count != expected_count:
+            logger.debug(f"Property count changed from {expected_count} to {actual_count} for layer {layer.id()}")
+            self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["LAYERS"]["LAYER_PROPERTIES_COUNT"] = actual_count
+        
         return existing_layer_variables
 
     def _migrate_legacy_geometry_field(self, layer_variables, layer):
         """
-        Migrate old 'geometry_field' key to 'layer_geometry_field'.
+        Migrate old 'geometry_field' key to 'layer_geometry_field' and add layer_table_name if missing.
         
         Args:
             layer_variables: Dictionary with layer properties
@@ -4254,6 +4456,7 @@ class LayersManagementEngineTask(QgsTask):
         """
         infos = layer_variables.get("infos", {})
         
+        # Migrate geometry_field to layer_geometry_field
         if "geometry_field" in infos and "layer_geometry_field" not in infos:
             # Perform migration
             infos["layer_geometry_field"] = infos["geometry_field"]
@@ -4278,6 +4481,33 @@ class LayersManagementEngineTask(QgsTask):
                 logger.debug(f"Updated database for layer {layer.id()}")
             except Exception as e:
                 logger.warning(f"Could not update database for migration: {e}")
+        
+        # Add layer_table_name if missing (for layers created before this feature)
+        if "layer_table_name" not in infos:
+            source_table_name = get_source_table_name(layer)
+            infos["layer_table_name"] = source_table_name
+            logger.info(f"Added layer_table_name='{source_table_name}' for layer {layer.id()}")
+            
+            # Add to database
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_table_name', ?)""",
+                    (str(self.project_uuid), layer.id(), source_table_name)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.debug(f"Added layer_table_name to database for layer {layer.id()}")
+            except Exception as e:
+                logger.warning(f"Could not add layer_table_name to database: {e}")
+            
+            # Set as QGIS layer variable
+            QgsExpressionContextUtils.setLayerVariable(layer, "filterMate_infos_layer_table_name", source_table_name)
 
     def _detect_layer_metadata(self, layer, layer_provider_type):
         """
@@ -4342,12 +4572,16 @@ class LayersManagementEngineTask(QgsTask):
         # Convert geometry type using utility function
         layer_geometry_type = geometry_type_to_string(layer)
         
+        # Get actual source table name (may differ from display name)
+        source_table_name = get_source_table_name(layer)
+        
         # Build properties from JSON templates
         new_layer_variables = {}
         new_layer_variables["infos"] = json.loads(
             self.json_template_layer_infos % (
                 layer_geometry_type, 
-                layer.name(), 
+                layer.name(),  # Display name for UI
+                source_table_name,  # Source table name for database queries
                 layer.id(), 
                 source_schema, 
                 layer_provider_type, 
@@ -4809,31 +5043,60 @@ class LayersManagementEngineTask(QgsTask):
     
 
     def insert_properties_to_spatialite(self, layer_id, layer_props):
-
-        conn = self._safe_spatialite_connect()
-        cur = conn.cursor()
-
-        for key_group in layer_props:
-            for key in layer_props[key_group]:
-
-                value_typped, type_returned = self.return_typped_value(layer_props[key_group][key], 'save')
-                if type_returned in (list, dict):
-                    value_typped = json.dumps(value_typped)
+        """
+        Insert layer properties into Spatialite database.
+        Uses batch commit to avoid database locking issues.
         
-                cur.execute("""INSERT INTO fm_project_layers_properties 
-                                VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
-                                                                                                                                        id=uuid.uuid4(),
-                                                                                                                                        project_id=self.project_uuid,
-                                                                                                                                        layer_id=layer_id,
-                                                                                                                                        meta_type=key_group,
-                                                                                                                                        meta_key=key,
-                                                                                                                                        meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
-                                                                                                                                        )
-                )
+        Args:
+            layer_id: Layer ID
+            layer_props: Dictionary of layer properties to insert
+        """
+        conn = None
+        # Use retry logic wrapper for database operations
+        def do_insert():
+            conn = self._safe_spatialite_connect()
+            try:
+                cur = conn.cursor()
+
+                # Collect all inserts before committing (batch operation)
+                for key_group in layer_props:
+                    for key in layer_props[key_group]:
+
+                        value_typped, type_returned = self.return_typped_value(layer_props[key_group][key], 'save')
+                        if type_returned in (list, dict):
+                            value_typped = json.dumps(value_typped)
+                
+                        cur.execute("""INSERT INTO fm_project_layers_properties 
+                                        VALUES('{id}', datetime(), '{project_id}', '{layer_id}', '{meta_type}', '{meta_key}', '{meta_value}');""".format(
+                                                                                                                                                id=uuid.uuid4(),
+                                                                                                                                                project_id=self.project_uuid,
+                                                                                                                                                layer_id=layer_id,
+                                                                                                                                                meta_type=key_group,
+                                                                                                                                                meta_key=key,
+                                                                                                                                                meta_value=value_typped.replace("\'","\'\'") if type_returned in (str, dict, list) else value_typped
+                                                                                                                                                )
+                        )
+                
+                # Commit all inserts in a single transaction (much faster, avoids locks)
                 conn.commit()
-  
-        cur.close()
-        conn.close()
+                cur.close()
+                return True
+            except Exception as e:
+                if conn:
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                raise
+            finally:
+                if conn:
+                    conn.close()
+        
+        # Execute with automatic retry on database lock
+        sqlite_execute_with_retry(
+            do_insert, 
+            operation_name=f"insert properties for layer {layer_id}"
+        )
 
 
 
