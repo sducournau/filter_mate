@@ -2998,16 +2998,30 @@ class FilterEngineTask(QgsTask):
             # Apply previous filter expression to source layer directly
             safe_set_subset_string(self.source_layer, previous_state.expression)
             
-            # For associated layers, simply clear them for now
-            # TODO: Future enhancement - store and restore associated layer filters too
+            # Restore associated layers filters from their history
             i = 1
             self.setProgress((i/self.layers_count)*100)
             
             for layer_provider_type in self.layers:
                 for layer, layer_props in self.layers[layer_provider_type]:
-                    # For undo, we simply clear associated layers
-                    # The user can re-filter if they want to restore geometric relationships
-                    safe_set_subset_string(layer, '')
+                    # Get history for this associated layer
+                    layer_history = history_manager.get_history(layer.id())
+                    
+                    if layer_history and layer_history.can_undo():
+                        # Restore previous filter for this layer
+                        layer_previous_state = layer_history.undo()
+                        if layer_previous_state:
+                            safe_set_subset_string(layer, layer_previous_state.expression)
+                            logger.info(f"FilterMate: Restored filter for layer {layer.name()}: {layer_previous_state.description}")
+                        else:
+                            # No previous state available, clear the filter
+                            safe_set_subset_string(layer, '')
+                            logger.debug(f"FilterMate: No previous state for layer {layer.name()}, clearing filter")
+                    else:
+                        # No history available for this layer, clear the filter
+                        safe_set_subset_string(layer, '')
+                        logger.debug(f"FilterMate: No history for layer {layer.name()}, clearing filter")
+                    
                     i += 1
                     self.setProgress((i/self.layers_count)*100)
                     if self.isCanceled():

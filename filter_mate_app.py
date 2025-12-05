@@ -502,7 +502,7 @@ class FilterMateApp:
                     # Initialize history with current state if this is the first filter
                     history = self.history_manager.get_or_create_history(current_layer.id())
                     if len(history._states) == 0:
-                        # Push initial unfiltered state
+                        # Push initial unfiltered state for source layer
                         current_filter = current_layer.subsetString()
                         current_count = current_layer.featureCount()
                         history.push_state(
@@ -511,7 +511,27 @@ class FilterMateApp:
                             description="Initial state (before first filter)",
                             metadata={"operation": "initial", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
                         )
-                        logger.info(f"FilterMate: Initialized history with current state for layer {current_layer.id()}")
+                        logger.info(f"FilterMate: Initialized history with current state for source layer {current_layer.id()}")
+                    
+                    # Initialize history for associated layers if this is their first filter
+                    for layer_info in layers_to_filter:
+                        layer_id = layer_info.get("layer_id")
+                        if layer_id and layer_id in self.PROJECT_LAYERS:
+                            assoc_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
+                            if len(assoc_layers) == 1:
+                                assoc_layer = assoc_layers[0]
+                                assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
+                                if len(assoc_history._states) == 0:
+                                    # Push initial unfiltered state for associated layer
+                                    assoc_filter = assoc_layer.subsetString()
+                                    assoc_count = assoc_layer.featureCount()
+                                    assoc_history.push_state(
+                                        expression=assoc_filter,
+                                        feature_count=assoc_count,
+                                        description="Initial state (before first filter)",
+                                        metadata={"operation": "initial", "backend": layer_info.get("layer_provider_type", "unknown")}
+                                    )
+                                    logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
                     
                     return task_parameters
 
@@ -656,6 +676,7 @@ class FilterMateApp:
             
             # Push filter state to history for undo/redo (except for unfilter which uses history.undo())
             if task_name == 'filter':
+                # Save source layer state to history
                 history = self.history_manager.get_or_create_history(source_layer.id())
                 filter_expression = source_layer.subsetString()
                 description = f"Filter: {filter_expression[:60]}..." if len(filter_expression) > 60 else f"Filter: {filter_expression}"
@@ -665,7 +686,26 @@ class FilterMateApp:
                     description=description,
                     metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
                 )
-                logger.info(f"FilterMate: Pushed filter state to history (position {history._current_index + 1}/{len(history._states)})")
+                logger.info(f"FilterMate: Pushed filter state to history for source layer (position {history._current_index + 1}/{len(history._states)})")
+                
+                # Save associated layers state to history
+                for layer_props in task_parameters.get("task", {}).get("layers", []):
+                    if layer_props["layer_id"] in self.PROJECT_LAYERS:
+                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
+                                 if layer.id() == layer_props["layer_id"]]
+                        if len(layers) == 1:
+                            assoc_layer = layers[0]
+                            assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
+                            assoc_filter = assoc_layer.subsetString()
+                            assoc_count = assoc_layer.featureCount()
+                            assoc_desc = f"Filter: {assoc_filter[:60]}..." if len(assoc_filter) > 60 else f"Filter: {assoc_filter}"
+                            assoc_history.push_state(
+                                expression=assoc_filter,
+                                feature_count=assoc_count,
+                                description=assoc_desc,
+                                metadata={"backend": layer_props.get("layer_provider_type", "unknown"), "operation": "filter"}
+                            )
+                            logger.info(f"FilterMate: Pushed filter state to history for layer {assoc_layer.name()}")
                 
                 show_success_with_backend(iface, provider_type, 'filter', layer_count)
                 iface.messageBar().pushInfo(
@@ -679,11 +719,23 @@ class FilterMateApp:
                     f"{feature_count:,} features visible in main layer (restored from history)"
                 )
             elif task_name == 'reset':
-                # Clear history on reset
+                # Clear history on reset for source layer
                 history = self.history_manager.get_history(source_layer.id())
                 if history:
                     history.clear()
-                    logger.info(f"FilterMate: Cleared filter history for layer {source_layer.id()}")
+                    logger.info(f"FilterMate: Cleared filter history for source layer {source_layer.id()}")
+                
+                # Clear history for associated layers
+                for layer_props in task_parameters.get("task", {}).get("layers", []):
+                    if layer_props["layer_id"] in self.PROJECT_LAYERS:
+                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
+                                 if layer.id() == layer_props["layer_id"]]
+                        if len(layers) == 1:
+                            assoc_layer = layers[0]
+                            assoc_history = self.history_manager.get_history(assoc_layer.id())
+                            if assoc_history:
+                                assoc_history.clear()
+                                logger.info(f"FilterMate: Cleared filter history for layer {assoc_layer.name()}")
                 
                 show_success_with_backend(iface, provider_type, 'reset', layer_count)
                 iface.messageBar().pushInfo(
