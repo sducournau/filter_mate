@@ -85,6 +85,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._updating_layers = False
         self._updating_current_layer = False
         self._signals_connected = False
+        
+        # Initialize layer state
+        self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
         """
@@ -108,7 +111,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return None
             
         return self.PROJECT_LAYERS[layer_id]
-        
+    
+    def _initialize_layer_state(self):
+        """Initialize layer-related state during __init__."""
         # Check for vector layers in the project, not just PROJECT_LAYERS
         # PROJECT_LAYERS may be empty on initialization even if vector layers exist
         if self.PROJECT:

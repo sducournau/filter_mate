@@ -165,7 +165,7 @@
                 "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:4326",
+            "PROJECTION_TO_EXPORT": "EPSG:31370",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,
