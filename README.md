@@ -1,18 +1,25 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**FilterMate is a Qgis plugin, a daily companion that allows you to easily explore, filter and export vector data**
+**Version 1.9.1** | December 2025
 
-*FilterMate will change your daily life with QGIS, it allows you to:*
-- *a more intuitive search for entities in a layer.*
-- *make selections simplier.*
-- *be able to review each entity.*
-- *filter your vector layers by expressions and by geometric predicates, using a buffer if necessary.*
-- *it allows you to configure the differents widgets and save them independently for each layer.*
-- *export your layers more intuitively.*
-<br>
-It adapts to your data, takes advantage of PostGIS when possible, manages differents CRS by reprojecting on the fly.
-<br>
-The layers keep an history of each subset, making it easy to return to the previous state.
+**FilterMate is a QGIS plugin that provides advanced filtering and export capabilities for vector data - now works with ANY data source!**
+
+### 🎉 What's New in v1.9
+- ✅ **Works WITHOUT PostgreSQL** - No database server required!
+- ✅ **Multi-backend architecture** - Automatic backend selection (PostgreSQL/Spatialite/OGR)
+- ✅ **Universal compatibility** - Shapefile, GeoPackage, Spatialite, PostgreSQL
+- ✅ **Performance optimizations** - 2-45× faster with intelligent caching and indexing
+- ✅ **Robust error handling** - Automatic geometry repair and retry mechanisms
+- ✅ **Filter history** - Full undo/redo support with in-memory management
+
+### Key Features
+- 🔍 **Intuitive search** for entities in any layer
+- 📐 **Geometric filtering** with spatial predicates and buffer support
+- 🎨 **Layer-specific widgets** - Configure and save settings per layer
+- 📤 **Smart export** with customizable options
+- 🌍 **Automatic CRS reprojection** on the fly
+- 📝 **Filter history** - Easy undo/redo for all operations
+- 🚀 **Performance warnings** - Intelligent recommendations for large datasets
 <br>
 <br>
 Github page : https://sducournau.github.io/filter_mate
@@ -29,11 +36,33 @@ https://www.youtube.com/watch?v=2gOEPrdl2Bo
 
 ---
 
-# 2. Backend Selection
+# 2. Architecture Overview
+
+FilterMate v1.9+ uses a **factory pattern** for backend selection, automatically choosing the optimal backend for your data source.
+
+## Multi-Backend System
+
+```
+modules/backends/
+  ├── base_backend.py        # Abstract interface
+  ├── postgresql_backend.py  # PostgreSQL/PostGIS backend
+  ├── spatialite_backend.py  # Spatialite backend
+  ├── ogr_backend.py         # Universal OGR backend
+  └── factory.py             # Automatic backend selection
+```
+
+**Automatic Selection Logic:**
+1. Detects layer provider type (`postgres`, `spatialite`, `ogr`)
+2. Checks PostgreSQL availability (psycopg2 installed?)
+3. Selects optimal backend with performance warnings when needed
+
+---
+
+# 3. Backend Selection
 
 FilterMate automatically selects the best backend for your data source to provide optimal performance.
 
-## 2.1 PostgreSQL Backend (Optimal Performance)
+## 3.1 PostgreSQL Backend (Optimal Performance)
 
 **When used:**
 - Layer source is PostgreSQL/PostGIS
@@ -60,7 +89,7 @@ py3_env
 pip install psycopg2-binary
 ```
 
-## 2.2 Spatialite Backend (Good Performance)
+## 3.2 Spatialite Backend (Good Performance)
 
 **When used:**
 - Layer source is Spatialite
@@ -75,7 +104,7 @@ pip install psycopg2-binary
 
 **Note:** FilterMate will display an info message when filtering large Spatialite datasets, suggesting PostgreSQL for better performance.
 
-## 2.3 OGR Backend (Universal Compatibility)
+## 3.3 OGR Backend (Universal Compatibility)
 
 **When used:**
 - Layer source is Shapefile, GeoPackage, or other OGR formats
@@ -88,7 +117,7 @@ pip install psycopg2-binary
 - ✅ Full compatibility with all formats
 - ⚠️ Slower on large datasets
 
-## 2.4 Performance Comparison
+## 3.4 Performance Comparison
 
 | Backend      | 10k Features | 100k Features | 1M Features | Concurrent Ops |
 |--------------|--------------|---------------|-------------|----------------|
@@ -98,7 +127,26 @@ pip install psycopg2-binary
 
 *Times are approximate and depend on geometry complexity and system resources*
 
-## 2.5 Checking Your Current Backend
+## 3.5 Performance Optimizations (v1.9+)
+
+FilterMate includes several automatic optimizations:
+
+### Spatialite Backend
+- **Temporary tables with R-tree indexes**: 44.6× faster filtering
+- **Predicate ordering**: 2.3× faster with optimal predicate evaluation
+- **Automatic spatial index detection**: Uses existing indexes when available
+
+### OGR Backend
+- **Automatic spatial index creation**: 19.5× faster on large datasets
+- **Large dataset optimization**: 3× improvement for >50k features
+- **Memory-efficient processing**: Reduces memory footprint
+
+### All Backends
+- **Geometry caching**: 5× faster for multi-layer operations
+- **Retry mechanisms**: Handles SQLite locks automatically
+- **Geometry repair**: Multi-strategy approach for invalid geometries
+
+## 3.6 Checking Your Current Backend
 
 ### Via QGIS Python Console:
 ```python
@@ -112,7 +160,7 @@ FilterMate will display info messages indicating which backend is being used:
 - "Using Spatialite backend" → Spatialite mode
 - No message → PostgreSQL or OGR (check layer type)
 
-## 2.6 Backend Selection Logic
+## 3.7 Backend Selection Logic
 
 FilterMate automatically selects the backend based on:
 
@@ -128,7 +176,7 @@ FilterMate automatically selects the backend based on:
 3. **Feature Count Warnings**:
    - >50,000 features on Spatialite → Info message suggests PostgreSQL
 
-## 2.7 Troubleshooting
+## 3.8 Troubleshooting
 
 ### PostgreSQL Not Being Used?
 
@@ -172,5 +220,5 @@ SELECT * FROM sqlite_master WHERE type = 'index' AND name LIKE '%idx%';
 
 ---
 
-# 3. Advanced Features
+# 4. Advanced Features
 
