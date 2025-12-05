@@ -709,7 +709,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 margin: 3px;
                 color: {colors_font[2]};
                 font-weight: normal;
-                min-height: 20px;
+                min-height: 70px;
+                max-height: 70px;
             }}
             QToolBox::tab:selected {{
                 background-color: {colors_bg[1]};
@@ -719,6 +720,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             QToolBox::tab:hover {{
                 background-color: {colors_bg[1]};
                 color: {colors_font[1]};
+            }}
+            QToolBox QToolButton {{
+                padding: 22px 15px;
+                min-height: 70px;
+                max-height: 70px;
             }}"""
         )
         
@@ -755,10 +761,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
                     
                     widget_obj.setIconSize(QtCore.QSize(icon_size, icon_size))
-                    widget_obj.setMinimumHeight(icon_size * 2)
-                    widget_obj.setMaximumHeight(icon_size * 2)
-                    widget_obj.setMinimumWidth(icon_size * 2)
-                    widget_obj.setMaximumWidth(icon_size * 2)
+                    
+                    # Set button size based on group - increased for better touch targets
+                    if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
+                        # Sidebar buttons - 38px minimum for better usability
+                        widget_obj.setMinimumHeight(38)
+                        widget_obj.setMaximumHeight(38)
+                        widget_obj.setMinimumWidth(38)
+                        widget_obj.setMaximumWidth(38)
+                    else:
+                        # Action buttons keep original size
+                        widget_obj.setMinimumHeight(icon_size * 2)
+                        widget_obj.setMaximumHeight(icon_size * 2)
+                        widget_obj.setMinimumWidth(icon_size * 2)
+                        widget_obj.setMaximumWidth(icon_size * 2)
+                    
                     widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
                     widget_obj.setFont(font)
                 
@@ -777,11 +794,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     widget_obj.setFont(font)
         
-        # Set sizes for key widgets
+        # Set sizes for key widgets - increased from icon_size * 3 to accommodate 38px buttons with padding
         icon_size = icons_sizes["OTHERS"]
         for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
-            widget.setMinimumWidth(icon_size * 3)
-            widget.setMaximumWidth(icon_size * 3)
+            widget.setMinimumWidth(55)  # Allow smaller collapse
+            widget.setMaximumWidth(110)  # Accommodate 38px buttons + padding + borders
             widget.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         
         # Set frame actions size

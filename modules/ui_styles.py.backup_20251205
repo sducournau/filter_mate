@@ -26,14 +26,14 @@ class StyleLoader:
     # Default color schemes (matching config.json COLORS structure)
     COLOR_SCHEMES = {
         'default': {
-            'color_bg_0': '#EFEFEF',      # BACKGROUND[0] - Frame background (darker for better contrast)
+            'color_bg_0': '#F5F5F5',      # BACKGROUND[0] - Frame background
             'color_1': '#FFFFFF',         # BACKGROUND[1] - Widget background
-            'color_2': '#D0D0D0',         # BACKGROUND[2] - Selected items (darker: was #DADADA)
+            'color_2': '#DADADA',         # BACKGROUND[2] - Selected items (darker: was #E0E0E0)
             'color_bg_3': '#2196F3',      # BACKGROUND[3] - Accent color
             'color_3': '#4A4A4A',         # FONT[1] - Text color (more contrast: was #616161)
             'color_font_0': '#1A1A1A',    # FONT[0] - Primary text (darker for WCAG AA: was #212121)
             'color_font_1': '#4A4A4A',    # FONT[1] - Secondary text (more contrast: was #616161)
-            'color_font_2': '#888888',    # FONT[2] - Disabled text (darker: was #9E9E9E)
+            'color_font_2': '#9E9E9E',    # FONT[2] - Disabled text (unchanged)
             'color_accent': '#1565C0',    # Accent primary (darker for better contrast: was #1976D2)
             'color_accent_hover': '#1E88E5',     # Accent hover (adjusted)
             'color_accent_pressed': '#0D47A1',   # Accent pressed (very dark blue)
