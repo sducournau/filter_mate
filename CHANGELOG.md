@@ -6,6 +6,22 @@ All notable changes to FilterMate will be documented in this file.
 
 ### 🐛 Bug Fixes
 
+#### Field Selection in Exploring GroupBoxes Now Includes All Fields (e.g., "id")
+- **Problem**: Some fields (like "id") were not selectable in exploring groupboxes
+  - Field filters were applied during initialization with `QgsFieldProxyModel.AllTypes`
+  - However, filters were NOT reapplied when switching layers in `current_layer_changed()`
+  - This caused previously applied restrictive filters to persist, hiding certain fields
+- **Solution**: Ensure field filters are reapplied when layer changes
+  - **Added `setFilters()` call**: Now called before `setExpression()` for all `QgsFieldExpressionWidget`
+  - **Consistent behavior**: All field types (except geometry) are always available
+  - **Applied to**: single_selection, multiple_selection, and custom_selection expression widgets
+- **Impact**:
+  - ✅ All non-geometry fields now visible in exploring field dropdowns
+  - ✅ Fields like "id", "fid", etc. are now selectable
+  - ✅ Consistent field availability across layer switches
+- **Files Modified**:
+  - `filter_mate_dockwidget.py`: Added `setFilters(QgsFieldProxyModel.AllTypes)` in `current_layer_changed()`
+
 #### Undo Button (Unfilter) Now Correctly Restores Previous Filter State
 - **Problem**: Undo button cleared all filters instead of restoring the previous filter state
   - New `HistoryManager` system implemented for in-memory history tracking

@@ -1741,6 +1741,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             elif widget_type == 'QgsFieldExpressionWidget':
                                 # Always ensure the widget is linked to the current layer
                                 self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setLayer(self.current_layer)
+                                # CRITICAL: Reapply field filters to ensure all field types are available
+                                # This prevents fields from being hidden due to previous restrictive filters
+                                self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setFilters(QgsFieldProxyModel.AllTypes)
                                 # Then set the expression
                                 self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpression(layer_props[property_tuple[0]][property_tuple[1]])
                             elif widget_type == 'QgsDoubleSpinBox':
