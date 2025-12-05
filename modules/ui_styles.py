@@ -9,6 +9,7 @@ Supports multiple themes and dynamic color replacement.
 import os
 from typing import Dict, Optional
 from PyQt5.QtCore import QFile, QTextStream, QIODevice
+from qgis.core import QgsApplication
 
 
 class StyleLoader:
@@ -25,25 +26,49 @@ class StyleLoader:
     # Default color schemes (matching config.json COLORS structure)
     COLOR_SCHEMES = {
         'default': {
-            'color_bg_0': 'white',      # BACKGROUND[0] - Frame background
-            'color_1': '#CCCCCC',       # BACKGROUND[1] - Widget background
-            'color_2': '#F0F0F0',       # BACKGROUND[2] - Selected items
-            'color_bg_3': '#757575',    # BACKGROUND[3] - Splitter hover
-            'color_3': 'black'          # FONT[1] - Text color
+            'color_bg_0': '#F5F5F5',      # BACKGROUND[0] - Frame background
+            'color_1': '#FFFFFF',         # BACKGROUND[1] - Widget background
+            'color_2': '#E0E0E0',         # BACKGROUND[2] - Selected items
+            'color_bg_3': '#2196F3',      # BACKGROUND[3] - Accent color
+            'color_3': '#616161',         # FONT[1] - Text color
+            'color_font_0': '#212121',    # FONT[0] - Primary text (darker for better contrast)
+            'color_font_1': '#616161',    # FONT[1] - Secondary text
+            'color_font_2': '#BDBDBD',    # FONT[2] - Disabled text
+            'color_accent': '#1976D2',    # Accent primary (darker blue)
+            'color_accent_hover': '#2196F3',     # Accent hover (medium blue)
+            'color_accent_pressed': '#0D47A1',   # Accent pressed (very dark blue)
+            'color_accent_light_bg': '#E3F2FD', # Accent light background
+            'color_accent_dark': '#01579B'      # Accent dark border
         },
         'dark': {
-            'color_bg_0': '#1e1e1e',    # Darker frame background
-            'color_1': '#2d2d30',       # Widget background
-            'color_2': '#3e3e42',       # Selected items
-            'color_bg_3': '#007acc',    # Splitter hover
-            'color_3': '#eff0f1'        # Light text
+            'color_bg_0': '#1E1E1E',    # Dark frame background
+            'color_1': '#2D2D30',       # Widget background
+            'color_2': '#3E3E42',       # Selected items
+            'color_bg_3': '#007ACC',    # Splitter hover
+            'color_3': '#D0D0D0',       # Light text
+            'color_font_0': '#EFF0F1',  # Primary text (very light)
+            'color_font_1': '#D0D0D0',  # Secondary text
+            'color_font_2': '#808080',  # Disabled text
+            'color_accent': '#007ACC',
+            'color_accent_hover': '#1E90FF',
+            'color_accent_pressed': '#005A9E',
+            'color_accent_light_bg': '#1E3A5F',
+            'color_accent_dark': '#003D66'
         },
         'light': {
-            'color_bg_0': '#ffffff',    # Light frame background
-            'color_1': '#f0f0f0',       # Widget background
-            'color_2': '#e0e0e0',       # Selected items
-            'color_bg_3': '#2196f3',    # Splitter hover
-            'color_3': '#000000'        # Dark text
+            'color_bg_0': '#FFFFFF',    # Very light frame background
+            'color_1': '#F5F5F5',       # Widget background
+            'color_2': '#E0E0E0',       # Selected items
+            'color_bg_3': '#2196F3',    # Splitter hover
+            'color_3': '#424242',       # Dark text
+            'color_font_0': '#000000',  # Primary text (pure black)
+            'color_font_1': '#424242',  # Secondary text
+            'color_font_2': '#9E9E9E',  # Disabled text
+            'color_accent': '#2196F3',
+            'color_accent_hover': '#64B5F6',
+            'color_accent_pressed': '#1976D2',
+            'color_accent_light_bg': '#E3F2FD',
+            'color_accent_dark': '#0D47A1'
         }
     }
     
@@ -121,36 +146,56 @@ class StyleLoader:
             return ""
     
     @classmethod
-    def load_stylesheet_from_config(cls, config_data: dict, theme: str = 'default') -> str:
+    def load_stylesheet_from_config(cls, config_data: dict, theme: str = None) -> str:
         """
         Load stylesheet with colors from config.json.
         
         Args:
             config_data: Configuration dictionary from config.json
-            theme: Theme name (currently only uses config colors)
+            theme: Theme name (None = use ACTIVE_THEME from config)
         
         Returns:
             str: Stylesheet with config colors applied
         """
         # Get raw stylesheet template (without color replacements)
-        stylesheet = cls._load_raw_stylesheet(theme)
+        stylesheet = cls._load_raw_stylesheet('default')  # Always use default.qss file
         
         if not stylesheet:
             return ""
         
         # Extract colors from config
         try:
-            colors = config_data["APP"]["DOCKWIDGET"]["COLORS"]
-            bg = colors["BACKGROUND"]
-            font = colors["FONT"]
+            colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
+            
+            # Check if new THEMES structure exists
+            if "THEMES" in colors_config and "ACTIVE_THEME" in colors_config:
+                # Use new theme system
+                active_theme = theme if theme else colors_config["ACTIVE_THEME"]
+                theme_colors = colors_config["THEMES"].get(active_theme, colors_config["THEMES"]["default"])
+                bg = theme_colors["BACKGROUND"]
+                font = theme_colors["FONT"]
+                accent = theme_colors.get("ACCENT", {})
+            else:
+                # Fallback to old structure (backward compatibility)
+                bg = colors_config["BACKGROUND"]
+                font = colors_config["FONT"]
+                accent = colors_config.get("ACCENT", {})
             
             # Map config colors to stylesheet placeholders
             color_map = {
                 '{color_bg_0}': bg[0],      # Frame background
                 '{color_1}': bg[1],         # Widget background
                 '{color_2}': bg[2],         # Selected items
-                '{color_bg_3}': bg[3],      # Splitter hover
-                '{color_3}': font[1]        # Text color
+                '{color_bg_3}': bg[3],      # Accent/hover color
+                '{color_3}': font[1],       # Secondary text color
+                '{color_font_0}': font[0],  # Primary text color
+                '{color_font_1}': font[1],  # Secondary text color
+                '{color_font_2}': font[2],  # Disabled text color
+                '{color_accent}': accent.get('PRIMARY', bg[3]),
+                '{color_accent_hover}': accent.get('HOVER', bg[3]),
+                '{color_accent_pressed}': accent.get('PRESSED', bg[3]),
+                '{color_accent_light_bg}': accent.get('LIGHT_BG', bg[2]),
+                '{color_accent_dark}': accent.get('DARK', bg[3])
             }
             
             # Apply color replacements
@@ -162,22 +207,31 @@ class StyleLoader:
         except (KeyError, IndexError) as e:
             print(f"FilterMate: Error reading config colors: {e}")
             # Fallback to default theme colors using load_stylesheet
-            return cls.load_stylesheet(theme)
+            return cls.load_stylesheet('default')
     
     @classmethod
-    def set_theme_from_config(cls, widget, config_data: dict, theme: str = 'default'):
+    def set_theme_from_config(cls, widget, config_data: dict, theme: str = None):
         """
         Apply theme to widget using config.json colors.
+        
+        Supports automatic QGIS theme synchronization when ACTIVE_THEME='auto'.
         
         Args:
             widget: Qt widget to apply stylesheet to
             config_data: Configuration dictionary
-            theme: Theme name
+            theme: Theme name (None = use ACTIVE_THEME from config, 'auto' = detect from QGIS)
         """
+        # Auto-detect theme from config if not specified
+        if theme is None:
+            theme = cls.get_active_theme_from_config(config_data)
+        elif theme == 'auto':
+            theme = cls.detect_qgis_theme()
+        
         stylesheet = cls.load_stylesheet_from_config(config_data, theme)
         if stylesheet:
             widget.setStyleSheet(stylesheet)
             cls._current_theme = theme
+            print(f"FilterMate: Applied theme '{theme}' from config")
     
     @classmethod
     def set_theme(cls, widget, theme: str = 'default'):
@@ -197,6 +251,84 @@ class StyleLoader:
     def get_current_theme(cls) -> str:
         """Get current theme name"""
         return cls._current_theme
+    
+    @classmethod
+    def get_available_themes(cls, config_data: dict = None) -> list:
+        """
+        Get list of available themes.
+        
+        Args:
+            config_data: Configuration dictionary (None = use COLOR_SCHEMES)
+        
+        Returns:
+            list: List of available theme names
+        """
+        if config_data:
+            try:
+                colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
+                if "THEMES" in colors_config:
+                    return list(colors_config["THEMES"].keys())
+            except (KeyError, TypeError):
+                pass
+        
+        # Fallback to built-in themes
+        return list(cls.COLOR_SCHEMES.keys())
+    
+    @classmethod
+    def detect_qgis_theme(cls) -> str:
+        """
+        Detect current QGIS theme and return appropriate plugin theme.
+        
+        Analyzes QGIS palette to determine if dark or light theme is active.
+        
+        Returns:
+            str: 'dark' if QGIS uses dark theme, 'default' for light theme
+        """
+        try:
+            palette = QgsApplication.instance().palette()
+            # Check background color brightness
+            bg_color = palette.color(palette.Window)
+            # Calculate luminance (perceived brightness)
+            # Formula: (0.299*R + 0.587*G + 0.114*B)
+            luminance = (0.299 * bg_color.red() + 
+                        0.587 * bg_color.green() + 
+                        0.114 * bg_color.blue())
+            
+            # If luminance < 128, it's a dark theme
+            if luminance < 128:
+                print(f"FilterMate: Detected QGIS dark theme (luminance: {luminance:.0f})")
+                return 'dark'
+            else:
+                print(f"FilterMate: Detected QGIS light theme (luminance: {luminance:.0f})")
+                return 'default'
+        except Exception as e:
+            print(f"FilterMate: Could not detect QGIS theme: {e}. Using default.")
+            return 'default'
+    
+    @classmethod
+    def get_active_theme_from_config(cls, config_data: dict) -> str:
+        """
+        Get active theme name from config.json.
+        
+        Supports special value 'auto' to sync with QGIS theme automatically.
+        
+        Args:
+            config_data: Configuration dictionary
+        
+        Returns:
+            str: Active theme name or 'default'
+        """
+        try:
+            colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
+            active_theme = colors_config.get("ACTIVE_THEME", "default")
+            
+            # Auto-detect from QGIS if set to 'auto'
+            if active_theme == "auto":
+                return cls.detect_qgis_theme()
+            
+            return active_theme
+        except (KeyError, TypeError):
+            return "default"
     
     @classmethod
     def clear_cache(cls):

@@ -268,8 +268,6 @@ class FilterMateApp:
 
         assert task_name in list(self.tasks_descriptions.keys())
 
-        print(task_name)
-
         if self.dockwidget != None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
@@ -368,7 +366,7 @@ class FilterMateApp:
             if task_manager and task_manager.count() > 0:
                 task_manager.cancelAll()
         except Exception as e:
-            print(f"FilterMate: Warning - Could not cancel tasks: {e}")
+            logger.warning(f"Could not cancel tasks: {e}")
 
     def on_remove_layer_task_begun(self):
         self.dockwidget.disconnect_widgets_signals()
@@ -1413,8 +1411,6 @@ class FilterMateApp:
 
 
 def zoom_to_features(layer, t0):
-    end = time.time() - t0
-    print("DONE" + " IN " + str(end) + " s.")
     canvas = iface.mapCanvas()
     canvas.setExtent(layer.extent())
     canvas.refresh()

@@ -42,7 +42,10 @@ def get_primary_key_name(layer):
     Get the primary key field name for a layer.
     
     For OGR layers, tries to find a suitable unique identifier field.
-    Common names: fid, id, objectid, OBJECTID, etc.
+    Uses multiple detection strategies:
+    1. Exact match with common ID field names
+    2. Pattern matching for fields ending with _ID, _id, etc.
+    3. First integer/string field as fallback
     
     Args:
         layer: QgsVectorLayer
@@ -57,28 +60,45 @@ def get_primary_key_name(layer):
     fields = layer.fields()
     field_names = [field.name() for field in fields]
     
-    # Common primary key field names (in order of preference)
-    common_pk_names = ['fid', 'id', 'objectid', 'OBJECTID', 'FID', 'ID', 'ogc_fid']
+    if not field_names:
+        return None
     
-    # Check for common names first
-    for pk_name in common_pk_names:
-        if pk_name in field_names:
-            logger.debug(f"Found primary key field: {pk_name}")
-            return pk_name
+    # Strategy 1: Exact match with common primary key names (case-insensitive)
+    common_pk_names = ['fid', 'id', 'objectid', 'ogc_fid', 'gid', 'uid']
     
-    # For GeoPackage and some other formats, check for integer fields
+    for field_name in field_names:
+        if field_name.lower() in common_pk_names:
+            logger.debug(f"Found primary key field (exact match): {field_name}")
+            return field_name
+    
+    # Strategy 2: Pattern matching for fields ending with ID/id
+    # Matches: AGG_ID, agg_id, node_id, FEATURE_ID, etc.
+    import re
+    id_pattern = re.compile(r'.*[_-]?id$', re.IGNORECASE)
+    
+    for field_name in field_names:
+        if id_pattern.match(field_name):
+            logger.debug(f"Found primary key field (pattern match): {field_name}")
+            return field_name
+    
+    # Strategy 3: First integer field (often the primary key)
     for field in fields:
         if field.type() in [QVariant.Int, QVariant.LongLong]:
-            # First integer field is often the primary key
             logger.debug(f"Using first integer field as primary key: {field.name()}")
             return field.name()
     
-    # Last resort: use first field
-    if len(field_names) > 0:
-        logger.warning(f"No standard primary key found, using first field: {field_names[0]}")
-        return field_names[0]
+    # Strategy 4: First string field that might be an ID
+    for field in fields:
+        if field.type() == QVariant.String:
+            # Check if field name suggests it's an ID
+            field_lower = field.name().lower()
+            if any(keyword in field_lower for keyword in ['id', 'key', 'code', 'num']):
+                logger.debug(f"Using string field as primary key: {field.name()}")
+                return field.name()
     
-    return None
+    # Last resort: use first field
+    logger.warning(f"No standard primary key found, using first field: {field_names[0]}")
+    return field_names[0]
 
 
 def safe_set_subset_string(layer, expression):
@@ -95,31 +115,91 @@ def safe_set_subset_string(layer, expression):
     Returns:
         bool: True if filter applied successfully
     """
-    print(f"\n🔒 safe_set_subset_string()")
-    print(f"  Layer: {layer.name()}")
-    print(f"  Provider: {layer.providerType()}")
-    print(f"  Expression: {expression[:100] if len(expression) > 100 else expression}")
-    
     try:
         result = layer.setSubsetString(expression)
-        print(f"  ← Result: {result}")
         
         if not result:
-            print(f"  ⚠ setSubsetString() returned False")
-            print(f"  → Provider: {layer.providerType()}")
             error_msg = layer.error().message() if layer.error() else 'none'
-            print(f"  → Layer error: {error_msg}")
-            
-            # Additional diagnostics for failed expressions
-            if expression:
-                print(f"  → Expression validation may have failed")
-                print(f"  → Try checking field names and syntax for {layer.providerType()}")
+            logger.warning(f"setSubsetString() returned False for {layer.name()}: {error_msg}")
         
         return result
         
     except Exception as e:
-        print(f"  ❌ EXCEPTION: {e}")
         logger.error(f"Failed to apply subset string to {layer.name()}: {e}")
+        return False
+
+
+def is_valid_geopackage(file_path: str) -> bool:
+    """
+    Validate that a file is a valid GeoPackage according to GDAL/OGR specifications.
+    
+    According to GeoPackage standard, a valid GPKG must:
+    - Be a SQLite database file
+    - Contain required metadata tables:
+      * gpkg_contents (mandatory)
+      * gpkg_spatial_ref_sys (mandatory)
+      * gpkg_geometry_columns (mandatory for vector layers)
+    
+    Args:
+        file_path: Path to the file to validate
+    
+    Returns:
+        True if file is a valid GeoPackage, False otherwise
+    
+    Note:
+        This function only checks for required metadata tables.
+        It does NOT validate the full OGC GeoPackage specification.
+    """
+    import sqlite3
+    import os
+    
+    # Check file exists and has .gpkg extension
+    if not os.path.isfile(file_path):
+        return False
+    
+    if not file_path.lower().endswith('.gpkg'):
+        return False
+    
+    # Check file permissions (GDAL requires read/write access)
+    if not os.access(file_path, os.R_OK):
+        logger.warning(f"GeoPackage file not readable: {file_path}")
+        return False
+    
+    try:
+        # Try to connect as SQLite database
+        conn = sqlite3.connect(file_path)
+        cursor = conn.cursor()
+        
+        # Get list of all tables
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        )
+        tables = {row[0] for row in cursor.fetchall()}
+        
+        # Check for required GeoPackage metadata tables
+        required_tables = {
+            'gpkg_contents',
+            'gpkg_spatial_ref_sys',
+            'gpkg_geometry_columns'
+        }
+        
+        has_required_tables = required_tables.issubset(tables)
+        
+        conn.close()
+        
+        if has_required_tables:
+            logger.debug(f"✓ Valid GeoPackage detected: {file_path}")
+        else:
+            missing = required_tables - tables
+            logger.debug(f"✗ Not a valid GeoPackage (missing tables: {missing}): {file_path}")
+        
+        return has_required_tables
+        
+    except sqlite3.Error as e:
+        logger.debug(f"SQLite error checking GeoPackage: {e}")
+        return False
+    except Exception as e:
+        logger.debug(f"Error validating GeoPackage: {e}")
         return False
 
 
@@ -170,7 +250,18 @@ def detect_layer_provider_type(layer):
         # Check file extension first - .sqlite and .gpkg files are Spatialite-based
         source = layer.source()
         source_path = source.split('|')[0] if '|' in source else source
-        if source_path.lower().endswith('.sqlite') or source_path.lower().endswith('.gpkg'):
+        
+        # For .gpkg files, validate it's a real GeoPackage
+        if source_path.lower().endswith('.gpkg'):
+            if is_valid_geopackage(source_path):
+                logger.debug(f"Detected valid GeoPackage: {source_path}")
+                return 'spatialite'
+            else:
+                logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
+                return 'ogr'
+        
+        # For .sqlite files, assume Spatialite
+        if source_path.lower().endswith('.sqlite'):
             return 'spatialite'
         
         # Check if it's Spatialite via 'Transactions' capability
@@ -183,7 +274,18 @@ def detect_layer_provider_type(layer):
         # Fallback for OGR-like providers
         source = layer.source()
         source_path = source.split('|')[0] if '|' in source else source
-        if source_path.lower().endswith('.sqlite') or source_path.lower().endswith('.gpkg'):
+        
+        # For .gpkg files, validate it's a real GeoPackage
+        if source_path.lower().endswith('.gpkg'):
+            if is_valid_geopackage(source_path):
+                logger.debug(f"Detected valid GeoPackage: {source_path}")
+                return 'spatialite'
+            else:
+                logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
+                return 'ogr'
+        
+        # For .sqlite files, assume Spatialite
+        if source_path.lower().endswith('.sqlite'):
             return 'spatialite'
         
         capabilities = layer.capabilitiesString().split(', ')

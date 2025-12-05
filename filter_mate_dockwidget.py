@@ -32,7 +32,7 @@ from osgeo import ogr
 # Import logging for error handling
 from .modules.logging_config import get_app_logger
 logger = get_app_logger()
-from qgis.PyQt import QtGui, QtWidgets, QtCore, uic
+from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import *
 from qgis.PyQt.QtGui import *
 from qgis.PyQt.QtWidgets import *
@@ -49,11 +49,9 @@ from .modules.customExceptions import *
 from .modules.appUtils import *
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 from .modules.ui_styles import StyleLoader
+from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
-FORM_CLASS, _ = uic.loadUiType(os.path.join(
-    os.path.dirname(__file__), 'filter_mate_dockwidget_base.ui'))
-
-class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
+class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
@@ -285,6 +283,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         
         self.manage_configuration_model()
         self.dockwidget_widgets_configuration()
+        
+        # Setup anti-truncation tooltips for widgets with potentially long text
+        self._setup_truncation_tooltips()
 
         layout = self.verticalLayout_filtering_values
         layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
@@ -402,7 +403,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         if self.widgets_initialized is True:
 
-            print('data_changed_configuration_model', input_data)
             index = input_data.index()
             item = input_data
 
@@ -441,8 +441,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             self.CONFIG_DATA = self.config_model.serialize()
             json_object = json.dumps(self.CONFIG_DATA, indent=4)
-
-            print('save_configuration_model')
 
             with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
                 outfile.write(json_object)
@@ -616,7 +614,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             
             except Exception as e:
                 self.exception = e
-                print(self.exception)
                 self.resetLayerVariableOnErrorEvent(layer, self.exception)
 
     def exporting_populate_combobox(self):
@@ -671,25 +668,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         This method:
         1. Uses StyleLoader to load stylesheet from resources/styles/default.qss
         2. Applies config.json colors dynamically via StyleLoader
-        3. Sets widget-specific properties (sizes, fonts, icons, cursors)
+        3. Uses ACTIVE_THEME from config.json automatically
+        4. Sets widget-specific properties (sizes, fonts, icons, cursors)
         
         The StyleLoader handles:
         - Loading QSS file with error handling
         - Replacing color placeholders with config values
         - Caching for performance
-        - Theme management
+        - Theme management (auto-detects from config)
         
         Benefits:
         - Centralized style management
         - Proper error handling and fallbacks
-        - Easy theme customization
+        - Easy theme customization via config.json
         - Testable and maintainable
         """
         # Apply stylesheet using StyleLoader with config colors
+        # Theme is automatically detected from config.json ACTIVE_THEME
         StyleLoader.set_theme_from_config(
             self.dockWidgetContents, 
-            self.CONFIG_DATA, 
-            'default'
+            self.CONFIG_DATA
         )
         
         # Get color values for widget-specific inline styles
@@ -698,11 +696,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         
         # Apply specific inline style to TOOLS widget (needs to override QSS)
         self.widgets["DOCK"]["TOOLS"]["WIDGET"].setStyleSheet(
-            f"""background-color: {colors_bg[0]};
-                border-color: rgb(0, 0, 0);
-                border-radius: 6px;
-                padding: 10px 10px 10px 10px;
-                color: {colors_font[0]};"""
+            f"""QToolBox {{
+                background-color: {colors_bg[0]};
+                border: none;
+                padding: 4px;
+            }}
+            QToolBox::tab {{
+                background-color: {colors_bg[2]};
+                border: 1px solid {colors_bg[1]};
+                border-radius: 4px;
+                padding: 10px 15px;
+                margin: 3px;
+                color: {colors_font[2]};
+                font-weight: normal;
+                min-height: 20px;
+            }}
+            QToolBox::tab:selected {{
+                background-color: {colors_bg[1]};
+                color: {colors_font[0]};
+                font-weight: 500;
+            }}
+            QToolBox::tab:hover {{
+                background-color: {colors_bg[1]};
+                color: {colors_font[1]};
+            }}"""
         )
         
         # Configure push buttons, comboboxes, and other widgets
@@ -1909,8 +1926,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                             break
                     break
 
-            print(property_path, input_data)            
-
 
             if properties_group_key == 'is':
 
@@ -1984,7 +1999,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                                 custom_functions["ON_FALSE"](0)
 
                     else:
-                        print(input_data)
                         self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                         flag_value_changed = True
                         if "ON_TRUE" in custom_functions:
@@ -1995,7 +2009,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
 
-                print('setLayerVariableEvent', input_data)
                 self.setLayerVariableEvent(self.current_layer, [property_path])
 
             for widget_path in widgets_to_stop:
@@ -2171,14 +2184,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             else:
                 property = QgsProperty()
 
-            print(property, property.propertyType(), self.current_layer)
-            
             # if self.buffer_property_has_been_init is False:
                 
             self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, property, property_definition, self.current_layer)
 
             if property.propertyType() == 0:
-                print(property.propertyType())
+                # Register widgets with property button
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], True)
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerVisibleWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], True)
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"], False)
@@ -2186,15 +2197,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerExpressionWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"])
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setText('')
                 
-                # Ensure buffer value widget is visible when not using property override
+                # CRITICAL: Force visibility explicitly AFTER registration
                 self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setVisible(True)
+                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(True)
                 self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setVisible(False)
-                
-                #self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setActive(False)
-                #self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["SIGNALS"][0][1](False)
+                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setEnabled(False)
 
             else:
-                print(property.propertyType())
+                # Register widgets with property button
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], False)
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerVisibleWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], False)
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"], True)
@@ -2202,9 +2212,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
                 self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setClearButtonEnabled(True)
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerExpressionWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"])
                 
-                # Ensure expression widget is visible when using property override
+                # CRITICAL: Force visibility explicitly AFTER registration
                 self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setVisible(False)
+                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(False)
                 self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setVisible(True)
+                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setEnabled(True)
                 
                 #self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["SIGNALS"][0][1](True)
 
@@ -2235,8 +2247,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             if self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].text().strip() in ('', 'NULL') or len(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].text().strip()) == 0:
 
-                print("filtering_buffer_expression_edited", layer_props["filtering"]["buffer_value_expression"].strip())
-
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setActive(False)
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["SIGNALS"][0][1](False)
@@ -2260,9 +2270,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             
-            print(layer_props["filtering"]["buffer_value_expression"].strip())
-            print(layer_props["filtering"]["buffer_value_property"])
-
             if layer_props["filtering"]["buffer_value_property"] is True:
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty().asExpression()
                 self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setClearButtonEnabled(True)
@@ -2629,5 +2636,117 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
             self.launchingTask.emit(task_name)
     
+    def _setup_truncation_tooltips(self):
+        """
+        Setup tooltips for widgets that may display truncated text.
+        
+        Adds tooltips to show full text content when text is potentially truncated
+        in combo boxes, expression widgets, and other text-displaying widgets.
+        """
+        # Widgets to monitor for text truncation
+        widgets_to_monitor = [
+            # Layer selection combos
+            (self.comboBox_filtering_current_layer, 'currentTextChanged', lambda: self._update_combo_tooltip(self.comboBox_filtering_current_layer)),
+            (self.checkableComboBoxLayer_filtering_layers_to_filter, 'checkedItemsChanged', lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_filtering_layers_to_filter)),
+            (self.checkableComboBoxLayer_exporting_layers, 'checkedItemsChanged', lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers)),
+            
+            # Expression widgets
+            (self.mFieldExpressionWidget_exploring_single_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_single_selection)),
+            (self.mFieldExpressionWidget_exploring_multiple_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_multiple_selection)),
+            (self.mFieldExpressionWidget_exploring_custom_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_custom_selection)),
+            
+            # Feature picker
+            (self.mFeaturePickerWidget_exploring_single_selection, 'featureChanged', lambda: self._update_feature_picker_tooltip(self.mFeaturePickerWidget_exploring_single_selection)),
+        ]
+        
+        # Connect signals for dynamic tooltip updates
+        for widget, signal_name, slot in widgets_to_monitor:
+            if widget and hasattr(widget, signal_name):
+                try:
+                    signal = getattr(widget, signal_name)
+                    signal.connect(slot)
+                    # Initial tooltip setup
+                    slot()
+                except Exception as e:
+                    logger.debug(f"FilterMate: Could not connect truncation tooltip for {widget.objectName()}: {e}")
+    
+    def _update_combo_tooltip(self, combo_widget):
+        """Update tooltip for a QComboBox-like widget."""
+        if not combo_widget:
+            return
+        
+        try:
+            if hasattr(combo_widget, 'currentText'):
+                text = combo_widget.currentText()
+                # Set tooltip if text is longer than typical display width (30 chars threshold)
+                if text and len(text) > 30:
+                    combo_widget.setToolTip(text)
+                elif text:
+                    # Short text - use descriptive tooltip instead
+                    combo_widget.setToolTip(f"Current layer: {text}")
+                else:
+                    combo_widget.setToolTip("No layer selected")
+        except Exception as e:
+            logger.debug(f"FilterMate: Error updating combo tooltip: {e}")
+    
+    def _update_checkable_combo_tooltip(self, combo_widget):
+        """Update tooltip for a checkable combo box showing selected items."""
+        if not combo_widget:
+            return
+        
+        try:
+            if hasattr(combo_widget, 'checkedItems'):
+                items = combo_widget.checkedItems()
+                if items:
+                    # Join item names with line breaks for readability
+                    text = "\n".join([item.text() for item in items if hasattr(item, 'text')])
+                    if text:
+                        combo_widget.setToolTip(f"Selected layers:\n{text}")
+                    else:
+                        combo_widget.setToolTip("Multiple layers selected")
+                else:
+                    combo_widget.setToolTip("No layers selected")
+        except Exception as e:
+            logger.debug(f"FilterMate: Error updating checkable combo tooltip: {e}")
+    
+    def _update_expression_tooltip(self, expression_widget):
+        """Update tooltip for a QgsFieldExpressionWidget."""
+        if not expression_widget:
+            return
+        
+        try:
+            if hasattr(expression_widget, 'expression'):
+                expr = expression_widget.expression()
+                if expr and len(expr) > 40:
+                    # For long expressions, format with line breaks at logical points
+                    formatted_expr = expr.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
+                    expression_widget.setToolTip(f"Expression:\n{formatted_expr}")
+                elif expr:
+                    expression_widget.setToolTip(f"Expression: {expr}")
+                else:
+                    expression_widget.setToolTip("No expression defined")
+        except Exception as e:
+            logger.debug(f"FilterMate: Error updating expression tooltip: {e}")
+    
+    def _update_feature_picker_tooltip(self, picker_widget):
+        """Update tooltip for a QgsFeaturePickerWidget."""
+        if not picker_widget:
+            return
+        
+        try:
+            if hasattr(picker_widget, 'displayExpression'):
+                display_expr = picker_widget.displayExpression()
+                if display_expr and len(display_expr) > 30:
+                    picker_widget.setToolTip(f"Display expression: {display_expr}")
+                elif hasattr(picker_widget, 'feature'):
+                    feature = picker_widget.feature()
+                    if feature and feature.isValid():
+                        # Show feature ID and first attribute
+                        attrs = feature.attributes()
+                        if attrs:
+                            picker_widget.setToolTip(f"Feature ID: {feature.id()}\nFirst attribute: {attrs[0]}")
+        except Exception as e:
+            logger.debug(f"FilterMate: Error updating feature picker tooltip: {e}")
+
 
 

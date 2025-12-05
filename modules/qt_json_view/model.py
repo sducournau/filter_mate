@@ -71,8 +71,6 @@ class JsonModel(QtGui.QStandardItemModel):
         return data
 
     def addData(self, item, direction='insert', widgets=False):
-        print(item.data(0))
-
         self.input = InputWindow()
 
         if self.input.exec_() == QtWidgets.QDialog.Accepted:
@@ -98,10 +96,6 @@ class JsonModel(QtGui.QStandardItemModel):
                 parent.insertRow(item.row(), [key_item, value_item])
             elif direction == 'down':
                 parent.insertRow(item.row() + 1, [key_item, value_item])
-
-
-
-                print(key_item, value_item)
 
     def removeData(self, item, widgets=False):
 

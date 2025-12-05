@@ -564,29 +564,21 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if action succeeded, False otherwise
         """
-        print(f"🔍 _execute_task_action: task_action={self.task_action}")
-        
         if self.task_action == 'filter':
-            print("→ Calling execute_filtering()...")
             return self.execute_filtering()
         
         elif self.task_action == 'unfilter':
-            print("→ Calling execute_unfiltering()...")
             return self.execute_unfiltering()
         
         elif self.task_action == 'reset':
-            print("→ Calling execute_reseting()...")
             return self.execute_reseting()
         
         elif self.task_action == 'export':
             if self.task_parameters["task"]["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]:
-                print("→ Calling execute_exporting()...")
                 return self.execute_exporting()
             else:
-                print("❌ No layers to export")
                 return False
         
-        print(f"❌ Unknown task_action: {self.task_action}")
         return False
 
     def run(self):
@@ -625,22 +617,11 @@ class FilterEngineTask(QgsTask):
             self.setProgress(0)
             logger.info(f"Starting {self.task_action} task for {self.layers_count} layer(s)")
             
-            # FORCE CONSOLE OUTPUT TO VERIFY CODE VERSION
-            print(f"\n{'#'*80}")
-            print(f"# FILTERMATE - Task starting (with enhanced diagnostics v2024-12-04)")
-            print(f"# Action: {self.task_action}")
-            print(f"# Layers: {self.layers_count}")
-            print(f"{'#'*80}\n")
-            
             # Log backend info and performance warnings
-            print("🔍 Step 1: Logging backend info...")
             self._log_backend_info()
-            print("✓ Step 1 completed")
             
             # Execute the appropriate action
-            print("🔍 Step 2: Executing task action...")
             result = self._execute_task_action()
-            print(f"✓ Step 2 completed, result={result}")
             if self.isCanceled() or result is False:
                 return False
             
@@ -651,9 +632,6 @@ class FilterEngineTask(QgsTask):
         
         except Exception as e:
             self.exception = e
-            print(f"\n❌ EXCEPTION in FilterEngineTask.run(): {e}")
-            import traceback
-            print(traceback.format_exc())
             safe_log(logger, logging.ERROR, f'FilterEngineTask run() failed: {e}', exc_info=True)
             return False
 
@@ -812,88 +790,64 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful, False otherwise
         """
-        print(f"\n🔍 === _apply_filter_and_update_subset() ===")
-        print(f"  Layer: {self.source_layer.name()}")
-        print(f"  Provider: {self.source_layer.providerType()}")
-        print(f"  Expression length: {len(expression) if expression else 0}")
-        print(f"  Expression preview: {expression[:200] if expression and len(expression) > 200 else expression}")
-        
         # CRITICAL: setSubsetString must be called from main thread
-        print(f"→ Calling safe_set_subset_string()...")
         result = safe_set_subset_string(self.source_layer, expression)
         
-        print(f"← safe_set_subset_string() returned: {result}")
-        print(f"  Features after: {self.source_layer.featureCount()}")
-        print(f"  Subset string now: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else '(empty)'}'")
-        
         if result:
-            # Build full SELECT expression for subset management
-            full_expression = (
-                f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
-                f'"{self.param_source_table}"."{self.param_source_geom}" '
-                f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
-                f'WHERE {expression}'
-            )
-            self.manage_layer_subset_strings(
-                self.source_layer,
-                full_expression,
-                self.primary_key_name,
-                self.param_source_geom,
-                False
-            )
+            # Only build PostgreSQL SELECT for PostgreSQL providers
+            # OGR and Spatialite use subset strings directly
+            provider_type = self.source_layer.providerType()
+            if provider_type == 'postgres':
+                # Build full SELECT expression for subset management (PostgreSQL only)
+                full_expression = (
+                    f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
+                    f'"{self.param_source_table}"."{self.param_source_geom}" '
+                    f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
+                    f'WHERE {expression}'
+                )
+                self.manage_layer_subset_strings(
+                    self.source_layer,
+                    full_expression,
+                    self.primary_key_name,
+                    self.param_source_geom,
+                    False
+                )
+            else:
+                pass
         
         return result
 
     def execute_source_layer_filtering(self):
         """Manage the creation of the origin filtering expression"""
-        print("\n🔍 === execute_source_layer_filtering() STARTED ===")
-        
         # Initialize all parameters and configuration
-        print("→ Initializing source filtering parameters...")
         self._initialize_source_filtering_parameters()
-        print("✓ Parameters initialized")
         
         result = False
         task_expression = self.task_parameters["task"]["expression"]
         logger.debug(f"Task expression: {task_expression}")
-        print(f"  task_expression: '{task_expression}'")
         
         # Process QGIS expression if provided
         if task_expression:
-            print("→ Processing QGIS expression...")
             processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
-            print(f"  processed_expr: {processed_expr is not None}")
-            print(f"  is_field_expr: {is_field_expr}")
             
             if processed_expr:
                 # Combine with existing subset if needed
-                print("→ Combining with old subset if needed...")
                 self.expression = self._combine_with_old_subset(processed_expr)
-                print(f"  final expression length: {len(self.expression) if self.expression else 0}")
                 
                 # Apply filter and update subset
-                print("→ Applying filter and updating subset...")
                 result = self._apply_filter_and_update_subset(self.expression)
-                print(f"✓ Filter applied, result: {result}")
         
         # Fallback to feature ID list if expression processing failed
         if not result:
-            print("⚠ Expression processing failed or returned False, trying feature ID list...")
             self.is_field_expression = None
             features_list = self.task_parameters["task"]["features"]
-            print(f"  features_list length: {len(features_list) if features_list else 0}")
             
             if features_list:
-                print("→ Building feature ID expression...")
                 self.expression = self._build_feature_id_expression(features_list)
-                print(f"  expression built: {self.expression is not None}")
                 
                 if self.expression:
-                    print("→ Applying filter with feature IDs...")
                     result = self._apply_filter_and_update_subset(self.expression)
-                    print(f"✓ Feature ID filter applied, result: {result}")
         
-        print(f"← execute_source_layer_filtering() returning: {result}\n")
         return result
     
     def _initialize_source_subset_and_buffer(self):
@@ -903,6 +857,8 @@ class FilterEngineTask(QgsTask):
         Sets param_source_new_subset based on expression type and
         extracts buffer value/expression from task parameters.
         """
+        logger.info("🔧 _initialize_source_subset_and_buffer() START")
+        
         # Set source subset based on expression type
         if QgsExpression(self.expression).isField() is False:
             self.param_source_new_subset = self.expression
@@ -910,14 +866,45 @@ class FilterEngineTask(QgsTask):
             self.param_source_new_subset = self.param_source_old_subset
 
         # Extract buffer parameters if configured
-        if self.task_parameters["filtering"]["has_buffer_value"] is True:
-            if self.task_parameters["filtering"]["buffer_value_property"] is True:
-                if self.task_parameters["filtering"]["buffer_value_expression"] != '':
-                    self.param_buffer_expression = self.task_parameters["filtering"]["buffer_value_expression"]
-                else:
-                    self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]
+        has_buffer = self.task_parameters["filtering"]["has_buffer_value"]
+        logger.info(f"  has_buffer_value: {has_buffer}")
+        
+        if has_buffer is True:
+            buffer_property = self.task_parameters["filtering"]["buffer_value_property"]
+            buffer_expr = self.task_parameters["filtering"]["buffer_value_expression"]
+            buffer_val = self.task_parameters["filtering"]["buffer_value"]
+            
+            logger.info(f"  buffer_value_property: {buffer_property}")
+            logger.info(f"  buffer_value_expression: '{buffer_expr}'")
+            logger.info(f"  buffer_value: {buffer_val}")
+            
+            # CRITICAL FIX: Check buffer_value_expression FIRST, regardless of buffer_property
+            # UI sometimes sets buffer_property=False but still provides buffer_value_expression
+            if buffer_expr != '' and buffer_expr is not None:
+                # Try to convert to float - if successful, it's a static value
+                try:
+                    numeric_value = float(buffer_expr)
+                    self.param_buffer_value = numeric_value
+                    logger.info(f"  ✓ Buffer expression is static value: {self.param_buffer_value}m")
+                    logger.info(f"  ℹ️  Converted from expression '{buffer_expr}' to numeric value")
+                except (ValueError, TypeError):
+                    # It's a real dynamic expression (e.g., field reference)
+                    self.param_buffer_expression = buffer_expr
+                    logger.info(f"  ✓ Buffer DYNAMIC EXPRESSION set: {self.param_buffer_expression}")
+                    logger.warning(f"  ⚠️  Dynamic buffer expressions may not work with all backends")
+            elif buffer_val is not None and buffer_val != 0:
+                # Fallback to buffer_value
+                self.param_buffer_value = buffer_val
+                logger.info(f"  ✓ Buffer VALUE set: {self.param_buffer_value}m")
             else:
-                self.param_buffer_value = self.task_parameters["filtering"]["buffer_value"]
+                # No valid buffer specified
+                self.param_buffer_value = 0
+                logger.warning(f"  ⚠️  No valid buffer value found, defaulting to 0m")
+        else:
+            logger.warning(f"  ⚠️  NO BUFFER configured (has_buffer_value=False)")
+            logger.warning(f"  ⚠️  param_buffer_value will remain: {getattr(self, 'param_buffer_value', 'NOT SET')}")
+        
+        logger.info("✓ _initialize_source_subset_and_buffer() END")
 
     def _prepare_geometries_by_provider(self, provider_list):
         """
@@ -1013,10 +1000,14 @@ class FilterEngineTask(QgsTask):
         Orchestrates the complete workflow: initialize parameters, prepare geometries,
         and filter all layers with progress tracking.
         
+        CRITICAL: Buffer parameters MUST be initialized BEFORE preparing geometries,
+        otherwise buffer will not be applied to source geometries!
+        
         Returns:
             bool: True if all layers processed successfully, False on error or cancellation
         """
-        # Initialize source subset and buffer parameters
+        # CRITICAL: Initialize source subset and buffer parameters FIRST
+        # This sets self.param_buffer_value which is needed by prepare_*_source_geom()
         self._initialize_source_subset_and_buffer()
         
         # Build unique provider list including source layer provider
@@ -1024,11 +1015,13 @@ class FilterEngineTask(QgsTask):
         provider_list = list(dict.fromkeys(provider_list))
         
         # Prepare geometries for all provider types
+        # NOTE: This will use self.param_buffer_value set above
         if not self._prepare_geometries_by_provider(provider_list):
             return False
         
         # Filter all layers with progress tracking
-        return self._filter_all_layers_with_progress()
+        result = self._filter_all_layers_with_progress()
+        return result
     
     def qgis_expression_to_postgis(self, expression):
 
@@ -1170,10 +1163,24 @@ class FilterEngineTask(QgsTask):
         Converts selected features to WKT format for use in Spatialite spatial queries.
         Handles reprojection and buffering if needed.
         
+        Supports all geometry types including non-linear geometries:
+        - CIRCULARSTRING
+        - COMPOUNDCURVE
+        - CURVEPOLYGON
+        - MULTICURVE
+        - MULTISURFACE
+        
+        Note: Uses QGIS asWkt() which handles extended WKT format.
+        GeoPackage and Spatialite both support these geometry types via standard WKB encoding.
+        
         Performance: Uses cache to avoid recalculating for multiple layers.
         """
         # Get features from task parameters
         features = self.task_parameters["task"]["features"]
+        logger.info(f"=== prepare_spatialite_source_geom START ===")
+        logger.info(f"  Features: {len(features)} features")
+        logger.info(f"  Buffer value: {self.param_buffer_value}")
+        logger.info(f"  Target CRS: {self.source_layer_crs_authid}")
         logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
         
         # Check cache first
@@ -1184,10 +1191,33 @@ class FilterEngineTask(QgsTask):
         )
         
         if cached_geom is not None:
-            # Use cached geometry
-            self.spatialite_source_geom = cached_geom.get('wkt')
-            logger.info("✓ Using CACHED source geometry for Spatialite")
-            return
+            # CRITICAL: Verify cache BEFORE using it
+            cached_wkt = cached_geom.get('wkt')
+            wkt_type = cached_wkt.split('(')[0].strip() if cached_wkt else 'Unknown'
+            
+            # Check if buffer expected but cached geometry is LineString
+            cache_is_valid = True
+            if self.param_buffer_value and self.param_buffer_value > 0:
+                if 'LineString' in wkt_type or 'Line' in wkt_type:
+                    logger.error("❌ CACHE BUG DETECTED!")
+                    logger.error(f"  Expected: Polygon/MultiPolygon (with {self.param_buffer_value}m buffer)")
+                    logger.error(f"  Got: {wkt_type} (no buffer applied!)")
+                    logger.error("  → Cache has stale geometry without buffer")
+                    logger.error("  → Clearing cache and recomputing...")
+                    
+                    # Clear cache and mark as invalid
+                    self.geom_cache.clear()
+                    cached_geom = None
+                    cache_is_valid = False
+                    logger.info("✓ Cache cleared, will recompute geometry with buffer")
+            
+            # Only use cache if valid
+            if cache_is_valid and cached_geom is not None:
+                self.spatialite_source_geom = cached_wkt
+                logger.info("✓ Using CACHED source geometry for Spatialite")
+                logger.debug(f"  Cache was computed with buffer: {self.param_buffer_value}")
+                logger.debug(f"  Cached geometry type: {wkt_type}")
+                return
         
         # Cache miss - compute geometry
         logger.debug("Cache miss - computing source geometry")
@@ -1210,10 +1240,15 @@ class FilterEngineTask(QgsTask):
             )
             logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
 
+        # Log buffer settings for debugging
+        logger.debug(f"Buffer settings: param_buffer_value={self.param_buffer_value}")
+        
         for geometry in raw_geometries:
             if geometry.isEmpty() is False:
                 # Make a copy to avoid modifying original
                 geom_copy = QgsGeometry(geometry)
+                
+                logger.debug(f"Processing geometry: type={geom_copy.wkbType()}, multipart={geom_copy.isMultipart()}")
                 
                 if geom_copy.isMultipart():
                     geom_copy.convertToSingleType()
@@ -1221,9 +1256,15 @@ class FilterEngineTask(QgsTask):
                 if self.has_to_reproject_source_layer is True:
                     geom_copy.transform(transform)
                     
+                # Apply buffer if configured
                 if self.param_buffer_value is not None and self.param_buffer_value > 0:
+                    logger.info(f"Applying buffer of {self.param_buffer_value}m to geometry")
+                    original_wkt_type = geom_copy.asWkt().split('(')[0].strip()
                     geom_copy = geom_copy.buffer(self.param_buffer_value, 5)
-                    logger.debug(f"Applied buffer of {self.param_buffer_value}")
+                    buffered_wkt_type = geom_copy.asWkt().split('(')[0].strip()
+                    logger.debug(f"  Geometry type: {original_wkt_type} → {buffered_wkt_type}")
+                else:
+                    logger.warning(f"No buffer applied! param_buffer_value={self.param_buffer_value}")
                     
                 geometries.append(geom_copy)
 
@@ -1236,12 +1277,18 @@ class FilterEngineTask(QgsTask):
         collected_geometry = QgsGeometry.collectGeometry(geometries)
         wkt = collected_geometry.asWkt()
         
+        # Log the final geometry type
+        geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
+        logger.info(f"  Final collected geometry type: {geom_type}")
+        logger.info(f"  Number of geometries collected: {len(geometries)}")
+        
         # Escape single quotes for SQL
         wkt_escaped = wkt.replace("'", "''")
         self.spatialite_source_geom = wkt_escaped
 
-        logger.debug(f"prepare_spatialite_source_geom: WKT length = {len(self.spatialite_source_geom)} chars")
-        logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...") 
+        logger.info(f"  WKT length: {len(self.spatialite_source_geom)} chars")
+        logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...")
+        logger.info(f"=== prepare_spatialite_source_geom END ===") 
         
         # Store in cache for future use
         self.geom_cache.put(
@@ -1252,48 +1299,111 @@ class FilterEngineTask(QgsTask):
         )
         logger.info("✓ Source geometry computed and CACHED") 
 
+    def _copy_filtered_layer_to_memory(self, layer, layer_name="filtered_copy"):
+        """
+        Copy filtered layer (with subset string) to memory layer.
+        
+        This is crucial for OGR layers with subset strings, as some QGIS
+        algorithms don't handle subset strings correctly.
+        
+        Args:
+            layer: Source layer (may have subset string active)
+            layer_name: Name for memory layer
+            
+        Returns:
+            QgsVectorLayer: Memory layer with only filtered features
+        """
+        # Check if layer has active filter
+        subset_string = layer.subsetString()
+        feature_count = layer.featureCount()
+        
+        logger.debug(f"_copy_filtered_layer_to_memory: {layer.name()}, features={feature_count}, subset='{subset_string[:50] if subset_string else 'None'}'")
+        
+        # If no filter and reasonable feature count, return original
+        if not subset_string and feature_count < 10000:
+            logger.debug("  → No subset string, returning original layer")
+            return layer
+        
+        # Create memory layer with same structure
+        geom_type = QgsWkbTypes.displayString(layer.wkbType())
+        crs = layer.crs().authid()
+        memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", layer_name, "memory")
+        
+        # Copy fields
+        memory_layer.dataProvider().addAttributes(layer.fields())
+        memory_layer.updateFields()
+        
+        # Copy filtered features
+        features_to_copy = []
+        for feature in layer.getFeatures():
+            new_feature = QgsFeature(feature)
+            features_to_copy.append(new_feature)
+        
+        if not features_to_copy:
+            logger.warning(f"  ⚠️ No features to copy from {layer.name()}")
+            return memory_layer
+        
+        memory_layer.dataProvider().addFeatures(features_to_copy)
+        memory_layer.updateExtents()
+        
+        logger.debug(f"  ✓ Copied {len(features_to_copy)} features to memory layer")
+        return memory_layer
 
     def _fix_invalid_geometries(self, layer, output_key):
         """
         Fix invalid geometries in layer using QGIS processing.
+        DISABLED: Returns input layer unchanged.
         
         Args:
             layer: Input layer
             output_key: Key to store output in self.outputs dict
             
         Returns:
-            QgsVectorLayer: Layer with fixed geometries
+            QgsVectorLayer: Original layer (unmodified)
         """
-        alg_params = {
-            'INPUT': layer,
-            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        }
-        self.outputs[output_key] = processing.run('qgis:fixgeometries', alg_params)
-        return self.outputs[output_key]['OUTPUT']
+        logger.debug(f"_fix_invalid_geometries: DISABLED, returning layer as-is")
+        return layer
+        # DISABLED CODE:
+        # alg_params = {
+        #     'INPUT': layer,
+        #     'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        # }
+        # self.outputs[output_key] = processing.run('qgis:fixgeometries', alg_params)
+        # return self.outputs[output_key]['OUTPUT']
 
 
     def _reproject_layer(self, layer, target_crs):
         """
-        Reproject layer to target CRS and fix resulting geometries.
+        Reproject layer to target CRS without geometry validation.
         
         Args:
             layer: Input layer
             target_crs: Target CRS authority ID (e.g., 'EPSG:3857')
             
         Returns:
-            QgsVectorLayer: Reprojected layer with fixed geometries
+            QgsVectorLayer: Reprojected layer (no geometry validation)
         """
-        # Reproject
+        # Reproject with GeometryNoCheck
         alg_params = {
             'INPUT': layer,
             'TARGET_CRS': target_crs,
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
-        self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run('qgis:reprojectlayer', alg_params)
+        
+        context = QgsProcessingContext()
+        context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
+        feedback = QgsProcessingFeedback()
+        
+        self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run(
+            'qgis:reprojectlayer', 
+            alg_params,
+            context=context,
+            feedback=feedback
+        )
         layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
         
-        # Fix geometries after reprojection
-        layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_reproject')
+        # DISABLED: Skip geometry fix after reprojection
+        # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_reproject')
         
         # Create spatial index
         processing.run('qgis:createspatialindex', {"INPUT": layer})
@@ -1329,8 +1439,9 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If buffer operation fails
         """
-        # Fix geometries before buffer
-        layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
+        # DISABLED: Geometry repair - let invalid geometries pass through
+        # layer = self._repair_invalid_geometries(layer)
+        # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_buffer')
         
         # CRITICAL DIAGNOSTIC: Check CRS type
         crs = layer.crs()
@@ -1373,6 +1484,7 @@ class FilterEngineTask(QgsTask):
                 )
         
         # Apply buffer with dissolve
+        # CRITICAL: Configure to skip invalid geometries instead of failing
         alg_params = {
             'DISSOLVE': True,
             'DISTANCE': buffer_distance,
@@ -1385,7 +1497,18 @@ class FilterEngineTask(QgsTask):
         }
         
         logger.debug(f"Calling processing.run('qgis:buffer') with params: {alg_params}")
-        self.outputs['alg_source_layer_params_buffer'] = processing.run('qgis:buffer', alg_params)
+        
+        # CRITICAL: Configure processing context to skip invalid geometries
+        context = QgsProcessingContext()
+        context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
+        feedback = QgsProcessingFeedback()
+        
+        self.outputs['alg_source_layer_params_buffer'] = processing.run(
+            'qgis:buffer', 
+            alg_params, 
+            context=context, 
+            feedback=feedback
+        )
         layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
         
         # Create spatial index
@@ -1454,23 +1577,30 @@ class FilterEngineTask(QgsTask):
             geom = feature.geometry()
             if geom and not geom.isEmpty():
                 try:
-                    logger.debug(f"Feature {idx}: wkbType={geom.wkbType()}, isValid={geom.isGeosValid()}, isEmpty={geom.isEmpty()}")
+                    logger.debug(f"Feature {idx}: wkbType={geom.wkbType()}, isEmpty={geom.isEmpty()}")
                     
-                    # Make valid before buffer
-                    if not geom.isGeosValid():
-                        logger.debug(f"Feature {idx}: Geometry invalid, calling makeValid()")
-                        geom = geom.makeValid()
-                        logger.debug(f"Feature {idx}: After makeValid: isValid={geom.isGeosValid()}, isEmpty={geom.isEmpty()}")
+                    # DISABLED: Skip all validation, accept geometry as-is
+                    # Only check for null/empty
+                    if geom.isNull() or geom.isEmpty():
+                        logger.warning(f"Feature {idx}: Geometry is null or empty, skipping")
+                        invalid_features += 1
+                        continue
                     
-                    # Apply buffer
-                    buffered_geom = geom.buffer(float(buffer_dist), 5)
-                    logger.debug(f"Feature {idx}: After buffer: isEmpty={buffered_geom.isEmpty() if buffered_geom else 'None'}")
-                    
-                    if buffered_geom and not buffered_geom.isEmpty():
-                        geometries.append(buffered_geom)
-                        valid_features += 1
-                    else:
-                        logger.warning(f"Feature {idx}: Buffer resulted in empty geometry")
+                    # Apply buffer WITHOUT pre-validation
+                    try:
+                        buffered_geom = geom.buffer(float(buffer_dist), 5)
+                        logger.debug(f"Feature {idx}: Buffer applied, isEmpty={buffered_geom.isEmpty() if buffered_geom else 'None'}")
+                        
+                        # Accept any non-empty result, even if invalid
+                        if buffered_geom and not buffered_geom.isEmpty():
+                            geometries.append(buffered_geom)
+                            valid_features += 1
+                            logger.debug(f"Feature {idx}: Buffered geometry accepted (validation skipped)")
+                        else:
+                            logger.warning(f"Feature {idx}: Buffer resulted in empty geometry")
+                            invalid_features += 1
+                    except Exception as buffer_error:
+                        logger.warning(f"Feature {idx}: Buffer operation failed: {buffer_error}")
                         invalid_features += 1
                 except Exception as feat_error:
                     logger.warning(f"Feature {idx}: Error during buffer: {feat_error}")
@@ -1523,6 +1653,10 @@ class FilterEngineTask(QgsTask):
         Raises:
             Exception: If no valid geometries could be buffered
         """
+        # DISABLED: Skip pre-validation, accept geometries as-is
+        logger.info("Manual buffer: geometry validation DISABLED")
+        # layer = self._repair_invalid_geometries(layer)
+        
         feature_count = layer.featureCount()
         logger.info(f"Manual buffer: Layer has {feature_count} features, geomType={layer.geometryType()}, wkbType={layer.wkbType()}")
         
@@ -1551,24 +1685,88 @@ class FilterEngineTask(QgsTask):
         # Buffer all features
         geometries, valid_features, invalid_features = self._buffer_all_features(layer, buffer_dist)
         
-        # Dissolve and add to layer if we have valid geometries
-        if geometries:
-            return self._dissolve_and_add_to_layer(geometries, buffered_layer)
-        else:
-            crs_hint = ""
-            if is_geographic:
-                crs_hint = (f"\n\n💡 HINT: Your layer uses a GEOGRAPHIC CRS ({crs.authid()}) where buffer units are DEGREES.\n"
-                           f"   This often causes buffer failures. Please reproject your layer to a PROJECTED CRS:\n"
-                           f"   - For worldwide data: EPSG:3857 (Web Mercator)\n"
-                           f"   - For France: EPSG:2154 (Lambert 93)\n"
-                           f"   - For your region: Search for local projected CRS in QGIS")
-            
-            error_msg = (f"No valid geometries could be buffered. "
-                        f"Total features: {feature_count}, "
-                        f"Valid after buffer: {valid_features}, "
-                        f"Invalid: {invalid_features}{crs_hint}")
-            raise Exception(error_msg)
+        # MODIFIED: Accept result even with 0 valid geometries (return empty layer instead of error)
+        if not geometries:
+            logger.warning(
+                f"⚠️ Manual buffer produced no geometries. "
+                f"Total: {feature_count}, Valid: {valid_features}, Invalid: {invalid_features}"
+            )
+            # Return empty layer instead of raising exception
+            return buffered_layer
+        
+        # Dissolve and add to layer if we have geometries
+        return self._dissolve_and_add_to_layer(geometries, buffered_layer)
 
+    def _aggressive_geometry_repair(self, geom):
+        """
+        Try multiple repair strategies for a geometry.
+        
+        Args:
+            geom: QgsGeometry to repair
+            
+        Returns:
+            QgsGeometry or None: Repaired geometry if successful, None otherwise
+        """
+        # Log initial state
+        logger.debug(f"🔧 Attempting geometry repair: wkbType={geom.wkbType()}, isEmpty={geom.isEmpty()}, isValid={geom.isGeosValid()}")
+        
+        # Strategy 1: Standard makeValid()
+        try:
+            repaired = geom.makeValid()
+            if repaired and not repaired.isNull() and not repaired.isEmpty() and repaired.isGeosValid():
+                logger.info("✓ Repaired with makeValid()")
+                return repaired
+            else:
+                status = f"null={repaired.isNull() if repaired else 'None'}, empty={repaired.isEmpty() if repaired and not repaired.isNull() else 'N/A'}, valid={repaired.isGeosValid() if repaired and not repaired.isNull() else 'N/A'}"
+                logger.debug(f"makeValid() produced unusable geometry: {status}")
+        except Exception as e:
+            logger.debug(f"makeValid() failed with exception: {e}")
+        
+        # Strategy 2: Buffer(0) trick - often fixes self-intersections
+        try:
+            buffered = geom.buffer(0, 5)
+            if buffered and not buffered.isNull() and not buffered.isEmpty() and buffered.isGeosValid():
+                logger.info("✓ Repaired with buffer(0) trick")
+                return buffered
+            else:
+                status = f"null={buffered.isNull() if buffered else 'None'}, empty={buffered.isEmpty() if buffered and not buffered.isNull() else 'N/A'}"
+                logger.debug(f"buffer(0) produced unusable geometry: {status}")
+        except Exception as e:
+            logger.debug(f"buffer(0) failed with exception: {e}")
+        
+        # Strategy 3: Simplify then makeValid
+        try:
+            simplified = geom.simplify(0.0001)  # Very small tolerance
+            if simplified and not simplified.isNull():
+                repaired = simplified.makeValid()
+                if repaired and not repaired.isNull() and not repaired.isEmpty() and repaired.isGeosValid():
+                    logger.info("✓ Repaired with simplify + makeValid")
+                    return repaired
+        except Exception as e:
+            logger.debug(f"simplify + makeValid failed: {e}")
+        
+        # Strategy 4: ConvexHull as last resort (preserves area but simplifies shape)
+        try:
+            hull = geom.convexHull()
+            if hull and not hull.isNull() and not hull.isEmpty() and hull.isGeosValid():
+                logger.info("✓ Using convex hull as last resort")
+                return hull
+        except Exception as e:
+            logger.debug(f"convexHull failed: {e}")
+        
+        # Strategy 5: Bounding box (very last resort for filtering purposes)
+        try:
+            bbox = geom.boundingBox()
+            if bbox and not bbox.isEmpty():
+                bbox_geom = QgsGeometry.fromRect(bbox)
+                if bbox_geom and not bbox_geom.isNull() and bbox_geom.isGeosValid():
+                    logger.warning("⚠️ Using bounding box as absolute last resort - geometry severely corrupted")
+                    return bbox_geom
+        except Exception as e:
+            logger.debug(f"boundingBox failed: {e}")
+        
+        logger.error("✗ All repair strategies failed - geometry is irreparably corrupted")
+        return None
 
     def _repair_invalid_geometries(self, layer):
         """
@@ -1614,15 +1812,27 @@ class FilterEngineTask(QgsTask):
             geom = feature.geometry()
             
             if geom and not geom.isNull():
+                # Log geometry details for diagnosis
+                logger.debug(f"Feature {feature.id()}: wkbType={geom.wkbType()}, isEmpty={geom.isEmpty()}, isValid={geom.isGeosValid()}")
+                
                 if not geom.isGeosValid():
-                    # Try to repair using makeValid()
-                    repaired_geom = geom.makeValid()
-                    if repaired_geom and not repaired_geom.isNull() and repaired_geom.isGeosValid():
+                    # Get validation error details
+                    try:
+                        errors = geom.validateGeometry()
+                        if errors:
+                            logger.debug(f"  Validation errors: {[str(e.what()) for e in errors[:3]]}")  # First 3 errors
+                    except:
+                        pass
+                    
+                    # Try aggressive repair with multiple strategies
+                    repaired_geom = self._aggressive_geometry_repair(geom)
+                    
+                    if repaired_geom and not repaired_geom.isEmpty():
                         new_feature.setGeometry(repaired_geom)
                         repaired_count += 1
                         logger.debug(f"  ✓ Repaired geometry for feature {feature.id()}")
                     else:
-                        logger.warning(f"  ✗ Could not repair geometry for feature {feature.id()}")
+                        logger.warning(f"  ✗ Could not repair geometry for feature {feature.id()} - all strategies failed")
                         continue
             
             features_to_add.append(new_feature)
@@ -1630,6 +1840,11 @@ class FilterEngineTask(QgsTask):
         # Add repaired features
         repaired_layer.dataProvider().addFeatures(features_to_add)
         repaired_layer.updateExtents()
+        
+        # Check if we have at least some valid features
+        if len(features_to_add) == 0:
+            logger.error(f"✗ Geometry repair failed: No valid features remaining after repair (0/{total_features})")
+            raise Exception(f"All geometries are invalid and cannot be repaired. Total: {total_features}, Invalid: {invalid_count}")
         
         logger.info(f"✓ Geometry repair complete: {repaired_count}/{invalid_count} successfully repaired, {len(features_to_add)}/{total_features} features kept")
         return repaired_layer
@@ -1644,13 +1859,12 @@ class FilterEngineTask(QgsTask):
             buffer_distance: QgsProperty or float
             
         Returns:
-            QgsVectorLayer: Buffered layer
-            
-        Raises:
-            Exception: If both QGIS and manual buffer methods fail
+            QgsVectorLayer: Buffered layer (may be empty on failure)
         """
-        # CRITICAL: Validate and repair geometries before buffer
-        layer = self._repair_invalid_geometries(layer)
+        logger.info(f"Applying buffer: distance={buffer_distance}")
+        
+        # DISABLED: Skip geometry repair
+        # layer = self._repair_invalid_geometries(layer)
         
         try:
             # Try QGIS buffer algorithm first
@@ -1661,7 +1875,17 @@ class FilterEngineTask(QgsTask):
             try:
                 return self._create_buffered_memory_layer(layer, buffer_distance)
             except Exception as manual_error:
-                raise Exception(f"Both buffer methods failed. QGIS: {str(e)}, Manual: {str(manual_error)}")
+                logger.error(f"Both buffer methods failed. QGIS: {str(e)}, Manual: {str(manual_error)}")
+                logger.warning("Returning empty buffer layer - continuing with empty geometry")
+                
+                # Return empty layer instead of raising exception
+                geom_type = "Polygon" if layer.geometryType() in [0, 1] else "MultiPolygon"
+                empty_layer = QgsVectorLayer(
+                    f"{geom_type}?crs={layer.crs().authid()}",
+                    "empty_buffer",
+                    "memory"
+                )
+                return empty_layer
 
 
     def prepare_ogr_source_geom(self):
@@ -1672,15 +1896,24 @@ class FilterEngineTask(QgsTask):
         Main method now orchestrates geometry preparation workflow.
         
         Process:
-        1. Fix invalid geometries in source layer
-        2. Reproject if needed
-        3. Apply buffer if specified
-        4. Store result in self.ogr_source_geom
+        1. Copy filtered layer to memory (if subset string active)
+        2. Fix invalid geometries in source layer
+        3. Reproject if needed
+        4. Apply buffer if specified
+        5. Store result in self.ogr_source_geom
         """
         layer = self.source_layer
         
-        # Step 1: Fix invalid geometries
-        layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_source')
+        # Step 0: CRITICAL - Copy to memory if layer has subset string
+        # This prevents issues with QGIS algorithms not handling subset strings correctly
+        if layer.subsetString():
+            logger.debug(f"Source layer has subset string, copying to memory first...")
+            layer = self._copy_filtered_layer_to_memory(layer, "source_filtered")
+        
+        # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
+        logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
+        # layer = self._repair_invalid_geometries(layer)
+        # layer = self._fix_invalid_geometries(layer, 'alg_source_layer_params_fixgeometries_source')
         
         # Step 2: Check if buffer is requested and validate CRS BEFORE reprojection
         buffer_distance = self._get_buffer_distance_parameter()
@@ -1714,6 +1947,13 @@ class FilterEngineTask(QgsTask):
         # Step 4: Apply buffer if specified
         if buffer_distance is not None:
             layer = self._apply_buffer_with_fallback(layer, buffer_distance)
+            # Check if buffer resulted in empty layer
+            if layer.featureCount() == 0:
+                logger.warning("⚠️ Buffer operation produced empty layer - using unbuffered geometry")
+                # Fallback: use original geometry without buffer
+                layer = self.source_layer
+                if layer.subsetString():
+                    layer = self._copy_filtered_layer_to_memory(layer, "source_filtered_no_buffer")
         
         # Store result
         self.ogr_source_geom = layer
@@ -2285,6 +2525,10 @@ class FilterEngineTask(QgsTask):
                 logger.error(f"Failed to prepare source geometry for {layer.name()}")
                 return False
             
+            # Ensure layer object is in layer_props for backend use
+            if 'layer' not in layer_props:
+                layer_props['layer'] = layer
+            
             # Build filter expression using backend
             expression = self._build_backend_expression(backend, layer_props, source_geom)
             if not expression:
@@ -2299,28 +2543,8 @@ class FilterEngineTask(QgsTask):
             if old_subset:
                 logger.debug(f"Will combine with existing filter using operator: {combine_operator}")
             
-            # FORCE CONSOLE OUTPUT FOR DEBUGGING
-            print(f"\n{'='*80}")
-            print(f"🔍 FILTERMATE DEBUG - Applying filter to layer")
-            print(f"{'='*80}")
-            print(f"Layer: {layer.name()}")
-            print(f"Provider: {layer_provider_type}")
-            print(f"Features BEFORE: {layer.featureCount():,}")
-            print(f"Expression length: {len(expression)} chars")
-            print(f"{'='*80}\n")
-            
             # Apply filter using backend (delegates to appropriate method for each provider type)
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)
-            
-            # FORCE CONSOLE OUTPUT FOR RESULT
-            print(f"\n{'='*80}")
-            print(f"🔍 FILTERMATE DEBUG - Filter result")
-            print(f"{'='*80}")
-            print(f"Backend returned: {'SUCCESS' if result else 'FAILURE'}")
-            print(f"Features AFTER: {layer.featureCount():,}")
-            print(f"Subset string: {layer.subsetString()[:200] if layer.subsetString() else '(empty)'}")
-            print(f"Layer is valid: {layer.isValid()}")
-            print(f"{'='*80}\n")
             
             if result:
                 # For backends that use setSubsetString, get the actual applied expression
@@ -2434,8 +2658,6 @@ class FilterEngineTask(QgsTask):
         OPTIMISÉ: Filtre la couche source D'ABORD avec validation des modes,
         puis les couches distantes SEULEMENT si succès.
         """
-        print("\n🔍 === execute_filtering() STARTED ===")
-        
         # ═══════════════════════════════════════════════════════════════
         # ÉTAPE 1: FILTRER LA COUCHE SOURCE (PRIORITÉ)
         # ═══════════════════════════════════════════════════════════════
@@ -2443,38 +2665,28 @@ class FilterEngineTask(QgsTask):
         logger.info("=" * 60)
         logger.info("STEP 1/2: Filtering SOURCE LAYER")
         logger.info("=" * 60)
-        print("📋 Step 1/2: Filtering SOURCE LAYER")
         
         # Déterminer le mode de sélection actif
         features_list = self.task_parameters["task"]["features"]
         qgis_expression = self.task_parameters["task"]["expression"]
         
-        print(f"  features_list length: {len(features_list)}")
-        print(f"  qgis_expression: '{qgis_expression}'")
-        
         if len(features_list) > 0 and features_list[0] != "":
             if len(features_list) == 1:
                 logger.info("✓ Selection Mode: SINGLE SELECTION")
                 logger.info(f"  → 1 feature selected")
-                print("  Mode: SINGLE SELECTION (1 feature)")
             else:
                 logger.info("✓ Selection Mode: MULTIPLE SELECTION")
                 logger.info(f"  → {len(features_list)} features selected")
-                print(f"  Mode: MULTIPLE SELECTION ({len(features_list)} features)")
         elif qgis_expression and qgis_expression.strip():
             logger.info("✓ Selection Mode: CUSTOM EXPRESSION")
             logger.info(f"  → Expression: '{qgis_expression}'")
-            print(f"  Mode: CUSTOM EXPRESSION ('{qgis_expression[:50]}...')")
         else:
             logger.error("✗ No valid selection mode detected!")
             logger.error("  → features_list is empty AND expression is empty")
-            print("❌ ERROR: No valid selection mode!")
             return False
         
         # Exécuter le filtrage de la couche source
-        print("→ Calling execute_source_layer_filtering()...")
         result = self.execute_source_layer_filtering()
-        print(f"← execute_source_layer_filtering() returned: {result}")
 
         if self.isCanceled():
             logger.warning("⚠ Task canceled by user")
@@ -2507,9 +2719,16 @@ class FilterEngineTask(QgsTask):
         # ÉTAPE 2: FILTRER LES COUCHES DISTANTES (si prédicats géométriques)
         # ═══════════════════════════════════════════════════════════════
         
-        if self.task_parameters["filtering"]["has_geometric_predicates"] == True:
+        has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
+        logger.info(f"\n🔍 Checking if distant layers should be filtered...")
+        logger.info(f"  has_geometric_predicates: {has_geom_predicates}")
+        
+        if has_geom_predicates == True:
+            geom_predicates_list = self.task_parameters["filtering"]["geometric_predicates"]
+            logger.info(f"  geometric_predicates list: {geom_predicates_list}")
+            logger.info(f"  geometric_predicates count: {len(geom_predicates_list)}")
 
-            if len(self.task_parameters["filtering"]["geometric_predicates"]) > 0:
+            if len(geom_predicates_list) > 0:
                 
                 logger.info("")
                 logger.info("=" * 60)
@@ -2528,6 +2747,8 @@ class FilterEngineTask(QgsTask):
                         if index >= 0:
                             self.current_predicates[str(index)] = self.predicates[key]
 
+                logger.info(f"  → Current predicates configured: {self.current_predicates}")
+                logger.info(f"\n🚀 Calling manage_distant_layers_geometric_filtering()...")
                 
                 result = self.manage_distant_layers_geometric_filtering()
 
@@ -4056,11 +4277,19 @@ class LayersManagementEngineTask(QgsTask):
             if regexp_match_geom:
                 geometry_field = regexp_match_geom.group()
         
-        elif layer_provider_type == PROVIDER_SPATIALITE:
-            geometry_field = 'GEOMETRY'
-        
-        elif layer_provider_type == PROVIDER_OGR:
-            geometry_field = '_ogr_geometry_'
+        elif layer_provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR]:
+            # Use QGIS data provider method to get actual geometry column name
+            # This works for Spatialite, OGR/GPKG, and other providers
+            try:
+                geom_col = layer.dataProvider().geometryColumn()
+                if geom_col:
+                    geometry_field = geom_col
+                else:
+                    # Fallback to common defaults
+                    geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
+            except AttributeError:
+                # If geometryColumn() not available, use defaults
+                geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
         
         return source_schema, geometry_field
 

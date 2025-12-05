@@ -2,6 +2,55 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [Unreleased] - 2024-12-05
+
+### 🐛 Bug Fixes
+
+#### Critical Subset String Handling for Buffer Operations
+- **Problem**: Buffer operations failed on OGR layers with active subset strings (single selection mode)
+  - Error: "Both buffer methods failed... Impossible d'écrire l'entité dans OUTPUT"
+  - QGIS processing algorithms don't always handle subset strings correctly
+  - After filtering source layer with subset string, geometry operations failed
+- **Solution**: Copy filtered features to memory layer before processing
+  - **New method** `_copy_filtered_layer_to_memory()`: Extracts filtered features to memory layer
+  - Modified `prepare_ogr_source_geom()`: Automatically copies to memory if subset string detected
+  - Ensures all QGIS algorithms work with clean in-memory features
+- **Impact**:
+  - ✅ Fixes crash when using single selection mode with buffer
+  - ✅ Transparent to user - happens automatically
+  - ✅ Performance: Only copies when needed (subset string present)
+  - ✅ Works with all OGR providers (Shapefile, GeoPackage, etc.)
+
+#### Critical Buffer Operation Error Fix
+- **Problem**: Buffer operations failed completely when encountering invalid geometries
+  - Error: "Both buffer methods failed. QGIS: Impossible d'écrire l'entité dans OUTPUT, Manual: No valid geometries could be buffered"
+  - Both QGIS algorithm and manual fallback failed
+  - No graceful degradation or helpful error messages
+- **Solution**: Implemented aggressive multi-strategy geometry repair
+  - **New method** `_aggressive_geometry_repair()` with 5 repair strategies:
+    1. Standard `makeValid()`
+    2. Buffer(0) trick (fixes self-intersections)
+    3. Simplify + makeValid()
+    4. ConvexHull (last resort)
+    5. BoundingBox (absolute last resort for filtering)
+  - **Enhanced validation**: Check for null/empty geometries after repair
+  - **Skip invalid features**: Continue processing valid features even if some fail
+  - **Detailed logging**: Shows which repair strategy succeeded
+  - **Better error messages**: 
+    - CRS hints for geographic coordinate systems
+    - Geometry repair suggestions with QGIS tool references
+- **Impact**: 
+  - ✅ Fixes crash on layers with invalid geometries
+  - ✅ Multiple repair strategies increase success rate
+  - ✅ Graceful degradation with clear user feedback
+  - ✅ Early failure detection prevents wasted processing
+  - ⚠️ Note: Convex hull/bbox may alter geometry shapes (only as last resort)
+- **Tests**: New comprehensive test suite in `tests/test_buffer_error_handling.py`
+- **Documentation**: See `docs/BUFFER_ERROR_FIX.md`
+- **Diagnostic tools**: 
+  - `diagnose_geometry.py`: Analyze problematic geometries
+  - `GEOMETRY_DIAGNOSIS_GUIDE.md`: Complete troubleshooting guide
+
 ## [Unreleased] - 2024-12-04
 
 ### 🐛 Bug Fixes

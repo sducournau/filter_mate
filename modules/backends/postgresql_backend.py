@@ -83,7 +83,31 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Extract layer properties
         schema = layer_props.get("layer_schema", "public")
         table = layer_props.get("layer_name")
-        geom_field = layer_props.get("geometry_field", "geometry")
+        geom_field = layer_props.get("layer_geometry_field", "geom")
+        layer = layer_props.get("layer")  # QgsVectorLayer instance
+        
+        # CRITICAL FIX: Get actual geometry column name using QGIS API
+        if layer:
+            try:
+                from qgis.core import QgsDataSourceUri
+                
+                provider = layer.dataProvider()
+                uri_string = provider.dataSourceUri()
+                
+                # Parse the URI to get geometry column
+                uri_obj = QgsDataSourceUri(uri_string)
+                geom_col_from_uri = uri_obj.geometryColumn()
+                
+                if geom_col_from_uri:
+                    geom_field = geom_col_from_uri
+                    self.log_debug(f"Found geometry column from QgsDataSourceUri: '{geom_field}'")
+                else:
+                    self.log_debug(f"QgsDataSourceUri.geometryColumn() returned empty, using fallback")
+                    
+            except Exception as e:
+                self.log_warning(f"Error detecting PostgreSQL geometry column: {e}")
+        
+        self.log_debug(f"Using geometry field: '{geom_field}'")
         
         # Build geometry expression
         geom_expr = f'"{table}"."{geom_field}"'

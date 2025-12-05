@@ -5,6 +5,7 @@ import os
 from shutil import copyfile
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets
+from . import themes
 
 
 TypeRole = QtCore.Qt.UserRole + 1
@@ -13,6 +14,11 @@ PLUGIN_DIR = ''
 class DataType(object):
     """Base class for data types."""
     COLOR = QtCore.Qt.black
+    THEME_COLOR_KEY = 'string'  # Default theme color key
+
+    def get_color(self):
+        """Get the color for this data type from the current theme."""
+        return themes.get_current_theme().get_color(self.THEME_COLOR_KEY)
 
     def matches(self, data):
         """Logic to define whether the given data matches this type."""
@@ -56,7 +62,7 @@ class DataType(object):
         key_item.setData(datatype, TypeRole)
         key_item.setData(datatype.__class__.__name__, QtCore.Qt.ToolTipRole)
         key_item.setData(
-            QtGui.QBrush(self.COLOR), QtCore.Qt.ForegroundRole)
+            QtGui.QBrush(self.get_color()), QtCore.Qt.ForegroundRole)
         key_item.setFlags(
             QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
         if editable and model.editable_keys:
@@ -70,7 +76,7 @@ class DataType(object):
         item.setData(display_value, QtCore.Qt.DisplayRole)
         item.setData(value, QtCore.Qt.UserRole)
         item.setData(self, TypeRole)
-        item.setData(QtGui.QBrush(self.COLOR), QtCore.Qt.ForegroundRole)
+        item.setData(QtGui.QBrush(self.get_color()), QtCore.Qt.ForegroundRole)
         item.setFlags(
             QtCore.Qt.ItemIsSelectable |
             QtCore.Qt.ItemIsEnabled)
@@ -86,6 +92,7 @@ class DataType(object):
 
 class NoneType(DataType):
     """None"""
+    THEME_COLOR_KEY = 'none'
 
     def matches(self, data):
         return data is None
@@ -116,6 +123,7 @@ class StrType(DataType):
 
 class IntType(DataType):
     """Integers"""
+    THEME_COLOR_KEY = 'integer'
 
     def matches(self, data):
         return isinstance(data, int) and not isinstance(data, bool)
@@ -123,6 +131,7 @@ class IntType(DataType):
 
 class FloatType(DataType):
     """Floats"""
+    THEME_COLOR_KEY = 'float'
 
     def matches(self, data):
         return isinstance(data, float)
@@ -130,6 +139,7 @@ class FloatType(DataType):
 
 class BoolType(DataType):
     """Bools are displayed as checkable items with a check box."""
+    THEME_COLOR_KEY = 'boolean'
 
     def matches(self, data):
         return isinstance(data, bool)
@@ -157,6 +167,7 @@ class BoolType(DataType):
 
 class ListType(DataType):
     """Lists"""
+    THEME_COLOR_KEY = 'list'
 
     def matches(self, data):
         return isinstance(data, list)
@@ -195,6 +206,7 @@ class ListType(DataType):
 
 class DictType(DataType):
     """Dictionaries"""
+    THEME_COLOR_KEY = 'dict'
 
     def matches(self, data):
         return isinstance(data, dict)
@@ -240,7 +252,7 @@ class RangeType(DataType):
     A range is defined as a dict with start, end and step keys.
     It supports both floats and ints.
     """
-
+    THEME_COLOR_KEY = 'range'
     KEYS = ['start', 'end', 'step']
 
     def matches(self, data):
@@ -345,8 +357,8 @@ class RangeType(DataType):
 
 class UrlType(DataType):
     """Provide a link to urls."""
-
-    REGEX = re.compile(r'(?:https?):\/\/|(?:file):\/\/')
+    THEME_COLOR_KEY = 'url'
+    REGEX = re.compile(r'(?:https?):\/\/|(?:file):\/\\/')
 
     def matches(self, data):
         if isinstance(data, str) or isinstance(data, unicode):
@@ -363,7 +375,7 @@ class UrlType(DataType):
 
 class FilepathType(DataType):
     """Files and paths can be opened."""
-
+    THEME_COLOR_KEY = 'filepath'
     POSITIVE_REGEX = re.compile(r'(\/.*)|([A-Za-z]:\\.*)')
     NEGATIVE_REGEX = re.compile(r'(\.png)|(\.jpg)|(\.jpeg)|(\.gif)$')
 
@@ -417,7 +429,7 @@ class FilepathType(DataType):
 
 class FilepathTypeImages(DataType):
     """Files and paths can be opened."""
-
+    THEME_COLOR_KEY = 'filepath'
     REGEX = re.compile(r'(\.png)|(\.jpg)|(\.jpeg)|(\.gif)$')
 
     def matches(self, data):
@@ -465,7 +477,7 @@ class ChoicesType(DataType):
         "choices": ["A", "B", "C"]
     }
     """
-
+    THEME_COLOR_KEY = 'choices'
     KEYS = ['value', 'choices']
 
     def matches(self, data):

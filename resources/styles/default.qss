@@ -25,10 +25,11 @@ QgsCheckableComboBox,
 QComboBox,
 QgsCheckableComboBoxLayer {
     background-color: {color_1};
-    border: 1px solid {color_1};
+    border: 1px solid {color_2};
     border-radius: 3px;
-    padding: 3px 3px 3px 3px;
-    color: {color_3};
+    padding: 7px 5px;
+    color: {color_font_0};
+    min-height: 30px;
 }
 
 QgsFeaturePickerWidget:hover,
@@ -39,7 +40,23 @@ QgsFieldExpressionWidget:hover,
 QgsCheckableComboBox:hover,
 QComboBox:hover,
 QgsCheckableComboBoxLayer:hover {
-    border: 1px solid {color_bg_3};
+    border: 2px solid {color_accent};
+    padding: 6px 4px;
+}
+
+QgsFeaturePickerWidget:focus,
+QgsProjectionSelectionWidget:focus,
+QgsMapLayerComboBox:focus,
+QgsFieldComboBox:focus,
+QgsFieldExpressionWidget:focus,
+QgsCheckableComboBox:focus,
+QComboBox:focus,
+QgsCheckableComboBoxLayer:focus {
+    border: 4px solid {color_accent};
+    background-color: {color_accent_light_bg};
+    padding: 3px;
+    outline: none;
+    /* Enhanced focus ring: 4px border for maximum accessibility and keyboard navigation visibility */
 }
 
 QgsFeaturePickerWidget QAbstractItemView,
@@ -50,10 +67,25 @@ QgsFieldExpressionWidget QAbstractItemView,
 QgsCheckableComboBox QAbstractItemView,
 QComboBox QAbstractItemView,
 QgsCheckableComboBoxLayer QAbstractItemView {
-    background: {color_1};
-    selection-background-color: {color_2};
-    color: {color_3};
-    border: 1px solid {color_bg_3};
+    background-color: {color_bg_0};
+    selection-background-color: {color_accent};
+    selection-color: white;
+    color: {color_font_0};
+    border: 1px solid {color_2};
+}
+
+/* QgsCheckableComboBox Indicator */
+QgsCheckableComboBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 2px solid {color_2};
+    border-radius: 3px;
+    background-color: transparent;
+}
+
+QgsCheckableComboBox::indicator:checked {
+    background-color: {color_accent};
+    border: 2px solid {color_accent_dark};
 }
 
 /* ToolBox TabWidget */
@@ -61,53 +93,142 @@ QWidget {
     background-color: {color_bg_0};
 }
 
-QWidget > QToolBox {
-    background-color: {color_bg_0};
+QToolBox {
+    background-color: transparent;
+    border: none;
+    padding: 4px;
 }
 
-QWidget > QToolBox::tab {
-    background: {color_1};
-    border-radius: 3px;
-    color: {color_3};
+/* Style pour les onglets du QToolBox */
+QToolBox::tab {
+    background-color: {color_1};
+    border: 1px solid {color_1};
+    border-radius: 4px;
+    padding: 0px;
+    margin: 3px;
+    color: {color_font_0};
+    font-weight: normal;
+    min-height: 70px;
+    max-height: 70px;
+}
+
+/* Style pour les boutons à l'intérieur des onglets - C'EST ICI QU'IL FAUT DÉFINIR LA HAUTEUR */
+QToolBox QToolButton {
+    background-color: transparent;
+    border: none;
+    padding: 22px 15px 22px 40px;
+    min-height: 70px;
+    max-height: 70px;
+    height: 70px;
+    color: {color_font_0};
+    font-weight: normal;
+    text-align: left;
+}
+
+QToolBox::tab:selected {
+    background-color: {color_2};
+    color: {color_font_0};
+    font-weight: 500;
+    border: 1px solid {color_bg_3};
+}
+
+QToolBox QToolButton:checked {
+    background-color: transparent;
+    font-weight: 500;
+}
+
+QToolBox::tab:hover {
+    background-color: {color_2};
+    color: {color_font_1};
+}
+
+QToolBox QToolButton:hover {
+    background-color: transparent;
 }
 
 /* DockWidget */
 QDockWidget {
+    background: {color_bg_0};
+    border: 1px solid {color_font_0};
+}
+
+QDockWidget::title {
+    text-align: left;
+    padding-bottom: 2px;
+    padding-top: 2px;
+    padding-left: 10px;
     background: {color_1};
+    color: {color_font_0};
+}
+
+QDockWidget::close-button, QDockWidget::float-button {
+    border: 1px solid transparent;
+    background: {color_2};
+    padding: 0px;
+    border-radius: 2px;
+}
+
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {
+    background: {color_bg_3};
+}
+
+QDockWidget::close-button:pressed, QDockWidget::float-button:pressed {
+    padding: 1px -1px -1px 1px;
+    background: {color_accent};
 }
 
 /* Frames */
 QFrame {
     background-color: {color_bg_0};
-    border-color: rgb(0, 0, 0);
+    border: none;
     border-radius: 4px;
-    padding: 3px;
-    margin: 2px;
+    padding: 8px;
+    margin: 4px;
     color: {color_3};
+}
+
+/* Frame ToolSet - Integration améliorée */
+QFrame#frame_toolset {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
 }
 
 /* Expression Builder */
 QgsExpressionBuilderWidget {
     background-color: {color_bg_0};
-    border-color: rgb(0, 0, 0);
+    border: none;
     border-radius: 4px;
-    padding: 5px;
-    color: {color_3};
+    padding: 8px;
+    color: {color_font_0};
 }
 
 /* Scroll Area */
 QScrollArea {
     background-color: {color_bg_0};
-    color: {color_3};
+    color: {color_font_0};
 }
 
 /* Collapsible Group Box */
 QgsCollapsibleGroupBox {
     background-color: {color_bg_0};
-    border-color: rgb(0, 0, 0);
+    border: none;
     border-radius: 4px;
-    padding: 5px;
-    color: {color_3};
+    padding: 10px 8px;
+    padding-top: 32px;
+    color: {color_font_0};
+    min-height: 50px;
+}
+
+QgsCollapsibleGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 4px 8px;
+    margin-left: 20px;
+    margin-top: 4px;
+    left: 0px;
+    top: 6px;
 }
 
 /* Splitter */
@@ -116,46 +237,73 @@ QSplitter::handle {
 }
 
 QSplitter::handle:hover {
-    background: {color_bg_3};
+    background: {color_accent};
 }
 
 /* Property Override Button */
 QgsPropertyOverrideButton {
     background-color: {color_1};
-    color: {color_3};
+    color: {color_font_0};
     border-radius: 3px;
-    padding: 2px;
+    border: 1px solid {color_2};
+    padding: 6px;
+    min-height: 24px;
+    max-height: 28px;
 }
 
 QgsPropertyOverrideButton:hover {
-    border: 1px solid {color_bg_3};
+    border: 2px solid {color_accent};
+    padding: 4px;
+}
+
+QgsPropertyOverrideButton:pressed {
+    background-color: {color_accent_light_bg};
+    border: 2px solid {color_accent_dark};
+    padding: 4px;
+}
+
+/* Specific height adjustment for buffer value property button */
+QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property {
+    min-height: 28px;
+    max-height: 28px;
+    padding: 5px;
 }
 
 /* ScrollBar - Vertical */
 QScrollBar:vertical {
     border: none;
-    background: {color_2};
+    background: transparent;
     width: 10px;
-    margin: 0px;
 }
 
 QScrollBar::handle:vertical {
-    background: {color_1};
-    min-height: 20px;
-    border-radius: 3px;
-    margin: 2px;
+    border: none;
+    background: #bdc3c7;
+    width: 5px;
+    border-radius: 2px;
+    min-height: 30px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: {color_bg_3};
+    background: #95a5a6;
+}
+
+QScrollBar::handle:vertical:pressed {
+    background: #7f8c8d;
 }
 
 QScrollBar::add-line:vertical {
-    height: 0px;
+    background: transparent;
+    height: 5px;
+    subcontrol-position: bottom;
+    subcontrol-origin: margin;
 }
 
 QScrollBar::sub-line:vertical {
-    height: 0px;
+    background: transparent;
+    height: 5px;
+    subcontrol-position: top;
+    subcontrol-origin: margin;
 }
 
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
@@ -165,20 +313,24 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
 /* ScrollBar - Horizontal */
 QScrollBar:horizontal {
     border: none;
-    background: {color_2};
-    height: 10px;
+    background: transparent;
+    height: 12px;
     margin: 0px;
 }
 
 QScrollBar::handle:horizontal {
-    background: {color_1};
-    min-width: 20px;
-    border-radius: 3px;
+    background: #bdc3c7;
+    min-width: 30px;
+    border-radius: 6px;
     margin: 2px;
 }
 
 QScrollBar::handle:horizontal:hover {
-    background: {color_bg_3};
+    background: #95a5a6;
+}
+
+QScrollBar::handle:horizontal:pressed {
+    background: #7f8c8d;
 }
 
 QScrollBar::add-line:horizontal {
@@ -198,17 +350,17 @@ QGroupBox {
     background-color: transparent;
     border: 1px solid {color_1};
     border-radius: 3px;
-    margin-top: 0.5ex;
-    padding: 5px;
+    margin-top: 1ex;
+    padding: 10px;
     font-weight: bold;
-    color: {color_3};
+    color: {color_font_0};
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 0 3px;
-    color: {color_3};
+    padding: 0 5px;
+    color: {color_font_0};
 }
 
 /* Exploring Tab */
@@ -238,174 +390,266 @@ QGroupBox#groupBoxExporting::title {
     color: #f39c12;
 }
 
-/* Buttons - Non-checkable */
+/* Buttons - Non-checkable - Enhanced visibility */
 QPushButton:!checkable {
-    background-color: transparent;
-    border: none;
-    border-radius: 3px;
-    padding: 3px 6px;
-    color: {color_3};
+    background-color: {color_1};
+    border: 2px solid {color_2};
+    border-radius: 5px;
+    padding: 10px 16px;
+    color: {color_font_0};
+    font-weight: 500;
+    min-height: 32px;
 }
 
 QPushButton:!checkable:hover {
-    background-color: {color_2};
-    color: {color_3};
+    background-color: {color_accent_light_bg};
+    border: 3px solid {color_accent};
+    color: {color_accent_dark};
+    padding: 9px 15px;
+    /* Padding compensation for border increase */
 }
 
 QPushButton:!checkable:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    color: white;
+    padding: 9px 15px;
+    /* Visual feedback: darker background, maintains padding */
+}
+
+QPushButton:!checkable:disabled {
     background-color: {color_1};
-    border: 1px solid {color_bg_3};
+    border: 2px solid {color_2};
+    color: {color_font_2};
+    opacity: 0.4;
 }
 
-QPushButton:disabled {
-    background-color: transparent;
-    color: #999;
-}
-
-/* Checkable Buttons (behave like checkboxes) */
+/* Checkable Buttons (behave like checkboxes) - Enhanced visibility */
 QPushButton:checkable {
-    background-color: transparent;
-    border: 1px solid {color_1};
-    border-radius: 3px;
-    padding: 3px 6px;
-    color: {color_3};
+    background-color: {color_1};
+    border: 2px solid {color_2};
+    border-radius: 5px;
+    padding: 10px 16px;
+    color: {color_font_0};
+    font-weight: 500;
+    min-height: 32px;
 }
 
 QPushButton:checkable:hover:!checked {
-    background-color: {color_2};
-    border-color: {color_bg_3};
+    background-color: {color_accent_light_bg};
+    border: 3px solid {color_accent};
+    color: {color_accent_dark};
+    padding: 9px 15px;
+    /* Padding adjustment compensates for border increase */
 }
 
+/* État checked - TRÈS VISIBLE avec fond bleu foncé, bordure épaisse, texte gras blanc */
 QPushButton:checkable:checked {
-    background-color: {color_bg_3};
-    border: 1px solid {color_3};
+    background-color: {color_accent};
+    border: 4px solid {color_accent_dark};
     color: white;
+    font-weight: 700;
+    padding: 6px 12px;
+    /* 4px border for maximum visibility, bold text, reduced padding to fit max-height */
 }
 
+/* État checked + hover - fond bleu plus clair, maintient l'épaisseur de bordure */
 QPushButton:checkable:checked:hover {
-    background-color: {color_bg_3};
-    border: 1px solid {color_3};
+    background-color: {color_accent_hover};
+    border: 4px solid {color_accent_dark};
     color: white;
+    font-weight: 700;
+    padding: 6px 12px;
+    /* Maintains thick border and bold text on hover, reduced padding */
 }
 
+/* État pressed non-checked - feedback tactile immédiat */
+QPushButton:checkable:pressed:!checked {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    color: white;
+    padding: 9px 15px;
+    /* Slightly inset to simulate button press */
+}
+
+/* État checked + pressed - feedback tactile sur bouton déjà checké */
 QPushButton:checkable:checked:pressed {
-    background-color: {color_bg_3};
-    border: 1px solid {color_3};
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
     color: white;
+    font-weight: 700;
+    padding: 9px 15px;
+    /* Reduces border slightly to simulate press depth */
 }
 
-/* SpinBox & DoubleSpinBox */
+QPushButton:checkable:disabled {
+    background-color: {color_1};
+    border: 2px solid {color_2};
+    color: {color_font_2};
+    opacity: 0.4;
+    font-weight: 500;
+}
+
+/* Icon-only buttons in sidebars - uniform square size */
+QPushButton[objectName^="pushButton_exploring_"],
+QPushButton[objectName^="pushButton_checkable_exploring_"],
+QPushButton[objectName^="pushButton_filtering_"],
+QPushButton[objectName^="pushButton_checkable_filtering_"],
+QPushButton[objectName^="pushButton_exporting_"],
+QPushButton[objectName^="pushButton_checkable_exporting_"] {
+    min-width: 40px;
+    max-width: 60px;
+    min-height: 40px;
+    max-height: 48px;
+    padding: 8px;
+}
+
+/* SpinBox & DoubleSpinBox - Enhanced focus visibility */
 QSpinBox,
 QDoubleSpinBox,
 QgsDoubleSpinBox {
     background-color: {color_1};
-    border: 1px solid {color_1};
-    border-radius: 3px;
-    padding: 3px;
-    color: {color_3};
+    border: 2px solid {color_2};
+    border-radius: 4px;
+    padding: 8px;
+    color: {color_font_0};
+    min-height: 28px;
 }
 
 QSpinBox:hover,
 QDoubleSpinBox:hover,
 QgsDoubleSpinBox:hover {
-    border: 1px solid {color_bg_3};
+    border: 3px solid {color_accent};
+    padding: 7px;
+    /* Border compensation */
 }
 
-/* LineEdit */
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QgsDoubleSpinBox:focus {
+    border: 4px solid {color_accent};
+    background-color: {color_accent_light_bg};
+    padding: 6px;
+    outline: none;
+    /* STRONG focus indicator: 4px border + light background for maximum visibility */
+}
+
+/* LineEdit - Enhanced focus visibility */
 QLineEdit {
     background-color: {color_1};
-    border: 1px solid {color_1};
-    border-radius: 3px;
-    padding: 3px;
-    color: {color_3};
+    border: 2px solid {color_2};
+    border-radius: 4px;
+    padding: 8px;
+    color: {color_font_0};
+    min-height: 28px;
 }
 
 QLineEdit:hover {
-    border: 1px solid {color_bg_3};
+    border: 3px solid {color_accent};
+    padding: 7px;
+    /* Border compensation */
 }
 
 QLineEdit:focus {
-    border: 1px solid {color_bg_3};
+    border: 4px solid {color_accent};
+    background-color: {color_accent_light_bg};
+    padding: 6px;
+    outline: none;
+    /* STRONG focus indicator: 4px border + tinted background */
 }
 
 /* CheckBox */
 QCheckBox {
-    color: {color_3};
+    border: none;
+    border-radius: 3px;
+    background-color: transparent;
+    padding: 3px;
+    color: {color_font_0};
     spacing: 5px;
+}
+
+QCheckBox:hover {
+    background-color: {color_accent_light_bg};
 }
 
 QCheckBox::indicator {
     width: 18px;
     height: 18px;
-    border: 1px solid {color_1};
+    border: 2px solid {color_2};
     border-radius: 3px;
     background-color: transparent;
 }
 
-QCheckBox::indicator:checked {
-    background-color: {color_bg_3};
-    border: 1px solid {color_3};
+QCheckBox::indicator:hover {
+    border: 2px solid {color_accent};
 }
 
-QCheckBox::indicator:hover {
-    border: 1px solid {color_bg_3};
+QCheckBox::indicator:checked {
+    background-color: {color_accent};
+    border: 2px solid {color_accent_dark};
+}
+
+QCheckBox::indicator:checked:hover {
+    background-color: {color_accent_hover};
 }
 
 /* RadioButton */
 QRadioButton {
-    color: {color_3};
+    color: {color_font_0};
     spacing: 5px;
 }
 
 QRadioButton::indicator {
     width: 18px;
     height: 18px;
-    border: 1px solid {color_1};
+    border: 2px solid {color_2};
     border-radius: 9px;
     background-color: transparent;
 }
 
 QRadioButton::indicator:checked {
-    background-color: {color_bg_3};
-    border: 1px solid {color_3};
+    background-color: {color_accent};
+    border: 2px solid {color_accent_dark};
 }
 
 QRadioButton::indicator:hover {
-    border: 1px solid {color_bg_3};
+    border: 2px solid {color_accent};
 }
 
 /* TabWidget */
 QTabWidget::pane {
-    border: 1px solid {color_3};
+    border: 1px solid {color_2};
     border-radius: 3px;
     background-color: {color_1};
 }
 
 QTabBar::tab {
     background-color: {color_2};
-    border: 1px solid {color_1};
+    border: 1px solid {color_2};
     border-bottom: none;
     border-top-left-radius: 3px;
     border-top-right-radius: 3px;
-    padding: 3px 6px;
-    color: {color_3};
+    padding: 6px 12px;
+    color: {color_font_1};
     margin-right: 2px;
 }
 
 QTabBar::tab:selected {
-    background-color: {color_bg_3};
+    background-color: {color_accent};
     color: white;
-    border: 1px solid {color_3};
+    border: 1px solid {color_accent_dark};
     border-bottom: none;
+    font-weight: 600;
 }
 
 QTabBar::tab:hover:!selected {
     background-color: {color_1};
+    color: {color_font_0};
 }
 
 /* Label */
 QLabel {
-    color: {color_3};
+    color: {color_font_0};
     background-color: transparent;
 }
 
@@ -418,14 +662,231 @@ QLabel#label_backend_indicator {
 
 /* Progress Bar */
 QProgressBar {
-    border: 1px solid {color_3};
-    border-radius: 3px;
+    border: 2px solid {color_2};
+    border-radius: 4px;
     background-color: {color_1};
     text-align: center;
-    color: {color_3};
+    color: {color_font_0};
+    height: 20px;
 }
 
 QProgressBar::chunk {
-    background-color: {color_3};
+    background-color: {color_accent};
     border-radius: 2px;
+}
+
+/* Widget Keys Panels - Sidebar buttons */
+QWidget#widget_exploring_keys,
+QWidget#widget_filtering_keys,
+QWidget#widget_exporting_keys {
+    background-color: {color_2};
+    border-radius: 6px;
+    padding: 6px;
+    margin: 2px;
+}
+
+/* Buttons inside widget_exploring_keys - Non-checkable */
+QWidget#widget_exploring_keys QPushButton:!checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 10px;
+    min-width: 36px;
+    min-height: 36px;
+}
+
+QWidget#widget_exploring_keys QPushButton:!checkable:hover {
+    background-color: {color_accent_light_bg};
+    border: 2px solid {color_accent};
+    padding: 8px;
+}
+
+QWidget#widget_exploring_keys QPushButton:!checkable:pressed {
+    background-color: {color_accent_pressed};
+    border: 2px solid {color_accent_dark};
+    padding: 8px;
+    transform: scale(0.95);
+}
+
+/* Buttons inside widget_exploring_keys - Checkable - Enhanced visibility */
+QWidget#widget_exploring_keys QPushButton:checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 10px;
+    min-width: 38px;
+    min-height: 38px;
+}
+
+QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked {
+    background-color: {color_accent_light_bg};
+    border: 3px solid {color_accent};
+    padding: 7px;
+}
+
+QWidget#widget_exploring_keys QPushButton:checkable:checked {
+    background-color: {color_accent};
+    border: 4px solid {color_accent_dark};
+    padding: 6px;
+    /* Thicker 4px border + solid accent background for maximum checked state visibility */
+}
+
+QWidget#widget_exploring_keys QPushButton:checkable:checked:hover {
+    background-color: {color_accent_hover};
+    border: 4px solid {color_accent_dark};
+    padding: 6px;
+    /* Maintains thick border on hover */
+}
+
+QWidget#widget_exploring_keys QPushButton:checkable:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    padding: 7px;
+}
+
+QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    padding: 7px;
+}
+
+/* Buttons inside widget_filtering_keys - Checkable only - Enhanced visibility */
+QWidget#widget_filtering_keys QPushButton:checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 10px;
+    min-width: 38px;
+    min-height: 38px;
+}
+
+QWidget#widget_filtering_keys QPushButton:checkable:hover:!checked {
+    background-color: {color_accent_light_bg};
+    border: 3px solid {color_accent};
+    padding: 9px;
+}
+
+QWidget#widget_filtering_keys QPushButton:checkable:checked {
+    background-color: {color_accent};
+    border: 4px solid {color_accent_dark};
+    padding: 8px;
+    /* 4px border for maximum checked state visibility */
+}
+
+QWidget#widget_filtering_keys QPushButton:checkable:checked:hover {
+    background-color: {color_accent_hover};
+    border: 4px solid {color_accent_dark};
+    padding: 8px;
+}
+
+QWidget#widget_filtering_keys QPushButton:checkable:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    padding: 9px;
+}
+
+QWidget#widget_filtering_keys QPushButton:checkable:checked:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    padding: 7px;
+}
+
+/* Buttons inside widget_exporting_keys - Checkable only - Enhanced visibility */
+QWidget#widget_exporting_keys QPushButton:checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 10px;
+    min-width: 38px;
+    min-height: 38px;
+}
+
+QWidget#widget_exporting_keys QPushButton:checkable:hover:!checked {
+    background-color: {color_accent_light_bg};
+    border: 3px solid {color_accent};
+    padding: 9px;
+}
+
+QWidget#widget_exporting_keys QPushButton:checkable:checked {
+    background-color: {color_accent};
+    border: 4px solid {color_accent_dark};
+    padding: 8px;
+    /* 4px border for maximum checked state visibility */
+}
+
+QWidget#widget_exporting_keys QPushButton:checkable:checked:hover {
+    background-color: {color_accent_hover};
+    border: 4px solid {color_accent_dark};
+    padding: 8px;
+}
+
+QWidget#widget_exporting_keys QPushButton:checkable:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    padding: 9px;
+}
+
+QWidget#widget_exporting_keys QPushButton:checkable:checked:pressed {
+    background-color: {color_accent_pressed};
+    border: 3px solid {color_accent_dark};
+    padding: 9px;
+}
+
+/* Frame Actions - Bottom action buttons */
+QFrame#frame_actions {
+    background-color: {color_2};
+    border-radius: 6px;
+    padding: 6px;
+    margin: 2px;
+}
+
+QFrame#frame_actions QPushButton:!checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 8px;
+    min-width: 40px;
+    min-height: 40px;
+}
+
+QFrame#frame_actions QPushButton:!checkable:hover {
+    background-color: {color_accent_light_bg};
+    border: 2px solid {color_accent};
+    padding: 8px;
+}
+
+QFrame#frame_actions QPushButton:!checkable:pressed {
+    background-color: {color_accent_pressed};
+    border: 2px solid {color_accent_dark};
+    padding: 8px;
+    transform: scale(0.95);
+}
+
+QFrame#frame_actions QPushButton:!checkable:disabled {
+    background-color: transparent;
+    border: 2px solid transparent;
+    color: {color_font_2};
+    opacity: 0.4;
+}
+
+/* TreeView */
+QTreeView {
+    background-color: {color_bg_0};
+    border: 1px solid {color_2};
+    color: {color_font_0};
+    padding: 0px;
+}
+
+QTreeView::item {
+    min-height: 24px;
+    padding: 4px 2px;
+}
+
+QTreeView::item:hover {
+    background-color: {color_accent_light_bg};
+}
+
+QTreeView::item:selected {
+    background-color: {color_accent};
+    color: white;
 }

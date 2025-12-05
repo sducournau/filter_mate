@@ -48,27 +48,51 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         Supports:
         - Native Spatialite layers (providerType == 'spatialite')
-        - GeoPackage layers (.gpkg files via OGR provider)
+        - Valid GeoPackage layers (.gpkg files via OGR provider)
         - SQLite databases (.sqlite files via OGR provider)
+        
+        According to GDAL/OGR GeoPackage specification:
+        - GeoPackage uses SQLite database file as container
+        - Must have metadata tables (gpkg_contents, gpkg_spatial_ref_sys, gpkg_geometry_columns)
+        - Supports standard WKB geometry encoding
+        - Supports non-linear geometries (CIRCULARSTRING, COMPOUNDCURVE, etc.)
         
         Args:
             layer: QGIS vector layer to check
         
         Returns:
-            True if layer is from Spatialite provider or is a GeoPackage/SQLite file
+            True if layer is from Spatialite provider or is a valid GeoPackage/SQLite file
         """
+        from ..appUtils import is_valid_geopackage
+        
         provider_type = layer.providerType()
         
         # Native Spatialite
         if provider_type == PROVIDER_SPATIALITE:
+            self.log_debug(f"✓ Native Spatialite layer: {layer.name()}")
             return True
         
         # OGR provider - check if it's actually GeoPackage or SQLite
         if provider_type == 'ogr':
             source = layer.source()
             source_path = source.split('|')[0] if '|' in source else source
-            if source_path.lower().endswith('.gpkg') or source_path.lower().endswith('.sqlite'):
-                self.log_debug(f"Detected GeoPackage/SQLite file via OGR: {source_path}")
+            
+            # For .gpkg files, validate it's a real GeoPackage
+            if source_path.lower().endswith('.gpkg'):
+                if is_valid_geopackage(source_path):
+                    self.log_info(f"✓ Valid GeoPackage detected via OGR: {layer.name()}")
+                    self.log_debug(f"  File: {source_path}")
+                    return True
+                else:
+                    self.log_warning(
+                        f"File has .gpkg extension but is not a valid GeoPackage: {source_path}. "
+                        f"Using OGR fallback backend instead."
+                    )
+                    return False
+            
+            # For .sqlite files, assume Spatialite/SQLite
+            if source_path.lower().endswith('.sqlite'):
+                self.log_debug(f"✓ SQLite file detected via OGR: {source_path}")
                 return True
         
         return False
@@ -81,12 +105,16 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         - Native Spatialite databases (.sqlite)
         - GeoPackage files (.gpkg) - which use SQLite internally
         
+        Note: GDAL GeoPackage driver requires read/write access to the file.
+        
         Args:
             layer: Spatialite/GeoPackage vector layer
         
         Returns:
-            Database file path or None if not found
+            Database file path or None if not found or not accessible
         """
+        import os
+        
         try:
             source = layer.source()
             self.log_debug(f"Layer source: {source}")
@@ -97,6 +125,28 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             if db_path and db_path.strip():
                 self.log_debug(f"Database path from URI: {db_path}")
+                
+                # Verify file exists
+                if not os.path.isfile(db_path):
+                    self.log_error(f"Database file not found: {db_path}")
+                    return None
+                
+                # Check file permissions (GDAL GeoPackage driver requires read/write)
+                if not os.access(db_path, os.R_OK):
+                    self.log_error(
+                        f"GeoPackage/Spatialite file not readable: {db_path}. "
+                        f"GDAL driver requires read access."
+                    )
+                    return None
+                
+                if not os.access(db_path, os.W_OK):
+                    self.log_warning(
+                        f"GeoPackage/Spatialite file not writable: {db_path}. "
+                        f"GDAL driver typically requires write access even for read operations. "
+                        f"This may cause issues with spatial indexes and temporary tables."
+                    )
+                    # Don't return None - allow read-only operation but warn
+                
                 return db_path
             
             # Fallback: Parse source string manually
@@ -269,9 +319,71 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         # Extract layer properties
         table = layer_props.get("layer_name")
-        geom_field = layer_props.get("geometry_field", "geometry")
+        geom_field = layer_props.get("layer_geometry_field", "geom")
         primary_key = layer_props.get("primary_key_name")
         layer = layer_props.get("layer")  # QgsVectorLayer instance
+        
+        # CRITICAL FIX: Get actual geometry column name from layer's data source
+        # Use QGIS API which is more reliable than parsing URIs or querying databases
+        if layer:
+            try:
+                # METHOD 1: Try QGIS API first - most reliable
+                provider = layer.dataProvider()
+                
+                # Get the URI object which contains all connection details
+                from qgis.core import QgsDataSourceUri
+                uri_string = provider.dataSourceUri()
+                
+                # Parse the URI to get geometry column
+                uri_obj = QgsDataSourceUri(uri_string)
+                
+                # For OGR/Spatialite layers, get the geometry column name
+                geom_col_from_uri = uri_obj.geometryColumn()
+                if geom_col_from_uri:
+                    geom_field = geom_col_from_uri
+                else:
+                    # METHOD 2: Try to extract from URI string manually
+                    if '|' in uri_string:
+                        parts = uri_string.split('|')
+                        for part in parts:
+                            if part.startswith('geometryname='):
+                                geom_field = part.split('=')[1]
+                                break
+                    
+                    # METHOD 3: Query the actual database as fallback
+                    if geom_field == layer_props.get("layer_geometry_field", "geom"):
+                        db_path = self._get_spatialite_db_path(layer)
+                        
+                        if db_path:
+                            import sqlite3
+                            try:
+                                conn = sqlite3.connect(db_path)
+                                cursor = conn.cursor()
+                                
+                                # Extract actual table name from URI (without layer name prefix)
+                                actual_table = uri_obj.table()
+                                if not actual_table:
+                                    # Fallback: extract from URI string
+                                    for part in uri_string.split('|'):
+                                        if part.startswith('layername='):
+                                            actual_table = part.split('=')[1]
+                                            break
+                                
+                                # Query GeoPackage geometry_columns table
+                                cursor.execute(
+                                    "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
+                                    (actual_table,)
+                                )
+                                result = cursor.fetchone()
+                                if result:
+                                    geom_field = result[0]
+                                
+                                conn.close()
+                            except Exception as e:
+                                self.log_warning(f"Database query error: {e}")
+                
+            except Exception as e:
+                self.log_warning(f"Error detecting geometry column name: {e}")
         
         # Source geometry should be WKT string from prepare_spatialite_source_geom
         if not source_geom:

@@ -312,13 +312,29 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     pk_field = "$id"
                     self.log_warning(f"No primary key found for {layer.name()}, using $id (may not work for all formats)")
                 
-                selected_ids = [f.id() for f in layer.selectedFeatures()]
-                id_list = ','.join(str(fid) for fid in selected_ids)
-                
-                # Use actual field name instead of $id for better compatibility
+                # Get actual field values from selected features
                 if pk_field == "$id":
+                    # Use QGIS feature IDs
+                    selected_ids = [f.id() for f in layer.selectedFeatures()]
+                    id_list = ','.join(str(fid) for fid in selected_ids)
                     new_subset_expression = f"$id IN ({id_list})"
                 else:
+                    # Get actual field values and check field type
+                    from qgis.PyQt.QtCore import QVariant
+                    field_idx = layer.fields().indexFromName(pk_field)
+                    field_type = layer.fields()[field_idx].type()
+                    
+                    # Extract values from the primary key field
+                    selected_values = [f.attribute(pk_field) for f in layer.selectedFeatures()]
+                    
+                    # Quote string values, keep numeric values unquoted
+                    if field_type == QVariant.String:
+                        # String field - quote values and escape single quotes
+                        id_list = ','.join(f"'{str(val).replace(chr(39), chr(39)+chr(39))}'" for val in selected_values)
+                    else:
+                        # Numeric field - no quotes needed
+                        id_list = ','.join(str(val) for val in selected_values)
+                    
                     new_subset_expression = f'"{pk_field}" IN ({id_list})'
                 
                 self.log_debug(f"Generated subset expression using key '{pk_field}': {new_subset_expression[:100]}...")
