@@ -307,6 +307,7 @@ class FilterEngineTask(QgsTask):
         self.param_other_layers_combine_operator = None
         self.param_buffer_expression = None
         self.param_buffer_value = None
+        self.param_buffer_type = 0  # Default: Round (0), Flat (1), Square (2)
         self.param_source_schema = None
         self.param_source_table = None
         self.param_source_layer_id = None
@@ -868,6 +869,27 @@ class FilterEngineTask(QgsTask):
         # Extract buffer parameters if configured
         has_buffer = self.task_parameters["filtering"]["has_buffer_value"]
         logger.info(f"  has_buffer_value: {has_buffer}")
+        
+        # Extract buffer_type configuration
+        has_buffer_type = self.task_parameters["filtering"].get("has_buffer_type", False)
+        buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
+        logger.info(f"  has_buffer_type: {has_buffer_type}")
+        logger.info(f"  buffer_type: {buffer_type_str}")
+        
+        # Map buffer_type string to QGIS END_CAP_STYLE integer
+        # Round = 0 (default), Flat = 1, Square = 2
+        buffer_type_mapping = {
+            "Round": 0,
+            "Flat": 1,
+            "Square": 2
+        }
+        
+        if has_buffer_type:
+            self.param_buffer_type = buffer_type_mapping.get(buffer_type_str, 0)
+            logger.info(f"  ✓ Buffer type set: {buffer_type_str} (END_CAP_STYLE={self.param_buffer_type})")
+        else:
+            self.param_buffer_type = 0  # Default to Round
+            logger.info(f"  ℹ️  Buffer type not configured, using default: Round (END_CAP_STYLE=0)")
         
         if has_buffer is True:
             buffer_property = self.task_parameters["filtering"]["buffer_value_property"]
@@ -1488,7 +1510,7 @@ class FilterEngineTask(QgsTask):
         alg_params = {
             'DISSOLVE': True,
             'DISTANCE': buffer_distance,
-            'END_CAP_STYLE': 0,
+            'END_CAP_STYLE': self.param_buffer_type,  # Use configured buffer type (0=Round, 1=Flat, 2=Square)
             'INPUT': layer,
             'JOIN_STYLE': 0,
             'MITER_LIMIT': 2,
@@ -2995,7 +3017,7 @@ class FilterEngineTask(QgsTask):
         Export layers to GeoPackage format using QGIS processing.
         
         Args:
-            layer_names: List of layer names to export
+            layer_names: List of layer names (str) or layer info dicts to export
             output_path: Output GPKG file path
             save_styles: Whether to include layer styles
             
@@ -3006,7 +3028,9 @@ class FilterEngineTask(QgsTask):
         
         # Collect layer objects
         layer_objects = []
-        for layer_name in layer_names:
+        for layer_item in layer_names:
+            # Handle both dict (layer info) and string (layer name) formats
+            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
             layer = self._get_layer_by_name(layer_name)
             if layer:
                 layer_objects.append(layer)
@@ -3045,7 +3069,7 @@ class FilterEngineTask(QgsTask):
         Updates task description to show export progress.
         
         Args:
-            layer_names: List of layer names to export
+            layer_names: List of layer names (str) or layer info dicts to export
             output_folder: Output directory path
             projection: Target CRS or None
             datatype: Export format
@@ -3058,7 +3082,10 @@ class FilterEngineTask(QgsTask):
         logger.info(f"Exporting {len(layer_names)} layer(s) to {datatype} in directory {output_folder}")
         
         total_layers = len(layer_names)
-        for idx, layer_name in enumerate(layer_names, 1):
+        for idx, layer_item in enumerate(layer_names, 1):
+            # Handle both dict (layer info) and string (layer name) formats
+            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
+            
             # Update task description with current progress
             self.setDescription(f"Exporting layer {idx}/{total_layers}: {layer_name}")
             self.setProgress(int((idx / total_layers) * 90))  # Reserve 90% for export, 10% for zip
@@ -3160,7 +3187,9 @@ class FilterEngineTask(QgsTask):
                 )
             elif len(layers) == 1:
                 # Single layer export
-                layer = self._get_layer_by_name(layers[0])
+                # Handle both dict (layer info) and string (layer name) formats
+                layer_name = layers[0]['layer_name'] if isinstance(layers[0], dict) else layers[0]
+                layer = self._get_layer_by_name(layer_name)
                 if not layer:
                     return False
                 

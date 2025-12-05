@@ -85,6 +85,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._updating_layers = False
         self._updating_current_layer = False
         self._signals_connected = False
+    
+    def _safe_get_layer_props(self, layer):
+        """
+        Safely get layer properties from PROJECT_LAYERS with validation.
+        
+        Args:
+            layer (QgsVectorLayer): The layer to get properties for
+            
+        Returns:
+            dict or None: Layer properties if found, None otherwise
+        """
+        if layer is None:
+            return None
+        
+        if not isinstance(layer, QgsVectorLayer):
+            return None
+            
+        layer_id = layer.id()
+        if layer_id not in self.PROJECT_LAYERS:
+            logger.warning(f"Layer {layer.name()} (ID: {layer_id}) not found in PROJECT_LAYERS")
+            return None
+            
+        return self.PROJECT_LAYERS[layer_id]
         
         # Check for vector layers in the project, not just PROJECT_LAYERS
         # PROJECT_LAYERS may be empty on initialization even if vector layers exist
@@ -705,7 +728,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 background-color: {colors_bg[2]};
                 border: 1px solid {colors_bg[1]};
                 border-radius: 4px;
-                padding: 10px 15px;
+                padding: 0px 0px;
                 margin: 3px;
                 color: {colors_font[2]};
                 font-weight: normal;
@@ -722,7 +745,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 color: {colors_font[1]};
             }}
             QToolBox QToolButton {{
-                padding: 22px 15px;
+                padding: 0px 0px;
                 min-height: 70px;
                 max-height: 70px;
             }}"""
@@ -764,11 +787,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     # Set button size based on group - increased for better touch targets
                     if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
-                        # Sidebar buttons - 38px minimum for better usability
-                        widget_obj.setMinimumHeight(38)
-                        widget_obj.setMaximumHeight(38)
-                        widget_obj.setMinimumWidth(38)
-                        widget_obj.setMaximumWidth(38)
+                        # Sidebar buttons - 40px minimum for better usability (matches CSS)
+                        widget_obj.setMinimumHeight(40)
+                        widget_obj.setMaximumHeight(40)
+                        widget_obj.setMinimumWidth(40)
+                        widget_obj.setMaximumWidth(40)
                     else:
                         # Action buttons keep original size
                         widget_obj.setMinimumHeight(icon_size * 2)
@@ -794,12 +817,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     widget_obj.setFont(font)
         
-        # Set sizes for key widgets - increased from icon_size * 3 to accommodate 38px buttons with padding
+        # Set sizes for key widgets - accommodate 40px buttons with padding
         icon_size = icons_sizes["OTHERS"]
         for widget in [self.widget_exploring_keys, self.widget_filtering_keys, self.widget_exporting_keys]:
-            widget.setMinimumWidth(55)  # Allow smaller collapse
-            widget.setMaximumWidth(110)  # Accommodate 38px buttons + padding + borders
-            widget.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+            # Width: 40px button + 16px CSS padding + ~8px layout margins = ~64px
+            widget.setMinimumWidth(80)
+            widget.setMaximumWidth(80)
+            widget.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
         
         # Set frame actions size
         icon_size = icons_sizes["ACTION"]
@@ -1043,6 +1067,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
 
                 if self.current_layer != None:
+                    # CRITICAL: Use safe getter to validate layer exists in PROJECT_LAYERS
+                    layer_props = self._safe_get_layer_props(self.current_layer)
+                    if layer_props is None:
+                        logger.warning(f"Cannot initialize single_selection exploring - layer not in PROJECT_LAYERS. Skipping.")
+                        return
+                    
                     # CRITICAL: Disconnect signals BEFORE updating widgets to prevent unwanted triggers
                     self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
                     self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
@@ -1053,7 +1083,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     # CRITICAL FIX: Update SINGLE_SELECTION_FEATURES widget to use current layer
                     # This ensures the QgsFeaturePickerWidget displays features from the correct layer
-                    layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
                     
@@ -2531,7 +2560,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.manage_output_name()
                         self.select_tabTools_index()
                         self.current_layer_changed(layer)
-                        self.exploring_groupbox_init()
+                        
+                        # CRITICAL: Only initialize exploring groupbox if layer exists in PROJECT_LAYERS
+                        # This prevents KeyError when layers are being added/removed
+                        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+                            self.exploring_groupbox_init()
+                        else:
+                            logger.warning(f"Skipping exploring_groupbox_init for layer {layer.name()} - not yet in PROJECT_LAYERS")
+                        
                         self.filtering_auto_current_layer_changed()
                         
                         # CRITICAL: Always refresh filtering combobox after layer changes

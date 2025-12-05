@@ -191,8 +191,11 @@ class FilterMateApp:
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
-        self.iface.projectRead.connect(lambda: self.manage_task('project_read'))
-        self.iface.newProjectCreated.connect(lambda: self.manage_task('new_project'))
+        # Use QTimer.singleShot to defer project signal handling until QGIS is in stable state
+        # This prevents access violations during project transitions
+        from qgis.PyQt.QtCore import QTimer
+        self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
+        self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
         # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
         self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
         self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
@@ -280,12 +283,25 @@ class FilterMateApp:
            return
         
         if task_name in ('project_read', 'new_project'):
+            # Verify project is valid before processing
+            from qgis.core import QgsProject
+            project = QgsProject.instance()
+            if not project:
+                logger.warning(f"Project not available for {task_name}, skipping")
+                return
+            
             self.app_postgresql_temp_schema_setted = False
             self._safe_cancel_all_tasks()
             init_env_vars()
 
             global ENV_VARS
             self.PROJECT = ENV_VARS["PROJECT"]
+            
+            # Verify project is still valid after init
+            if not self.PROJECT:
+                logger.warning(f"Project became invalid during {task_name}, skipping")
+                return
+                
             self.MapLayerStore = self.PROJECT.layerStore()
             init_layers = list(self.PROJECT.mapLayers().values())
             self.init_filterMate_db()
@@ -360,11 +376,30 @@ class FilterMateApp:
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
 
     def _safe_cancel_all_tasks(self):
-        """Safely cancel all tasks in the task manager to avoid access violations."""
+        """Safely cancel all tasks in the task manager to avoid access violations.
+        
+        Note: We cancel tasks individually instead of using cancelAll() to avoid
+        Windows access violations that occur when cancelAll() is called from Qt signals
+        during project transitions.
+        """
         try:
             task_manager = QgsApplication.taskManager()
-            if task_manager and task_manager.count() > 0:
-                task_manager.cancelAll()
+            if not task_manager:
+                return
+            
+            # Get list of task IDs first (avoid iterating while modifying)
+            task_ids = []
+            for task_id in range(task_manager.count()):
+                task = task_manager.task(task_id)
+                if task:
+                    task_ids.append(task.taskId())
+            
+            # Cancel each task individually
+            for task_id in task_ids:
+                task = task_manager.task(task_id)
+                if task and task.canCancel():
+                    task.cancel()
+                    
         except Exception as e:
             logger.warning(f"Could not cancel tasks: {e}")
 
@@ -1121,13 +1156,19 @@ class FilterMateApp:
 
         global ENV_VARS
 
+        # CRITICAL: Validate and update PROJECT_LAYERS before UI refresh
+        # This ensures layer IDs are synchronized before dockwidget accesses them
+        if result_project_layers is None:
+            logger.error("layer_management_engine_task_completed received None for result_project_layers")
+            return
+        
         self.PROJECT_LAYERS = result_project_layers
         self.PROJECT = ENV_VARS["PROJECT"]
-    
         
-
+        logger.debug(f"Updated PROJECT_LAYERS with {len(self.PROJECT_LAYERS)} layers after {task_name}")
+        
         ENV_VARS["PATH_ABSOLUTE_PROJECT"] = os.path.normpath(self.PROJECT.readPath("./"))
-        if ENV_VARS["PATH_ABSOLUTE_PROJECT"] =='./':
+        if ENV_VARS["PATH_ABSOLUTE_PROJECT"] =='./':':
             if ENV_VARS["PLATFORM"].startswith('win'):
                 ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
             else:
@@ -1152,6 +1193,11 @@ class FilterMateApp:
                                 # Widget may not exist or already removed
                                 pass
 
+                        # CRITICAL: Verify layer structure before accessing nested properties
+                        if "infos" not in self.PROJECT_LAYERS[layer_key] or "layer_provider_type" not in self.PROJECT_LAYERS[layer_key]["infos"]:
+                            logger.warning(f"Layer {layer_key} missing required 'infos' or 'layer_provider_type' in PROJECT_LAYERS")
+                            continue
+                            
                         layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
                         if layer_source_type not in self.project_datasources:
                             self.project_datasources[layer_source_type] = {}
@@ -1202,40 +1248,46 @@ class FilterMateApp:
                             except (KeyError, AttributeError, RuntimeError) as e:
                                 # Widget may not exist or already removed
                                 pass
-
-                        layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
-                        if layer_source_type not in self.project_datasources:
-                            self.project_datasources[layer_source_type] = {}
-
-                    
-                        layer_props = self.PROJECT_LAYERS[layer_key]
-                        layer = None
-                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
-                        if len(layers) == 1:
-                            layer = layers[0]
-                        
-                        # Skip if layer not found
-                        if layer is None:
-                            continue
-                        
-                        source_uri, authcfg_id = get_data_source_uri(layer)
-
-                        if authcfg_id != None:
-
-                            if authcfg_id not in self.project_datasources[layer_source_type].keys():
-                                connexion, source_uri = get_datasource_connexion_from_layer(layer)
-                                self.project_datasources[layer_source_type][authcfg_id] = connexion
-                            
-                        
                         else:
+                            # CRITICAL: Only process layers that still exist in PROJECT_LAYERS
+                            # Verify layer structure before accessing nested properties
+                            if "infos" not in self.PROJECT_LAYERS[layer_key] or "layer_provider_type" not in self.PROJECT_LAYERS[layer_key]["infos"]:
+                                logger.warning(f"Layer {layer_key} missing required 'infos' or 'layer_provider_type' in PROJECT_LAYERS")
+                                continue
 
-                            uri = source_uri.uri().strip()
-                            relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
-                            absolute_path = os.path.normpath(os.path.join(ENV_VARS["PATH_ABSOLUTE_PROJECT"], relative_path))
-                            if absolute_path in self.project_datasources[layer_source_type].keys():
-                                self.project_datasources[layer_source_type][absolute_path].remove(uri)
-                            if uri in self.project_datasources[layer_source_type][absolute_path]:
-                                self.project_datasources[layer_source_type][absolute_path].remove(uri)
+                            layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
+                            if layer_source_type not in self.project_datasources:
+                                self.project_datasources[layer_source_type] = {}
+
+                        
+                            layer_props = self.PROJECT_LAYERS[layer_key]
+                            layer = None
+                            layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
+                            if len(layers) == 1:
+                                layer = layers[0]
+                            
+                            # Skip if layer not found
+                            if layer is None:
+                                continue
+                        
+                            source_uri, authcfg_id = get_data_source_uri(layer)
+
+                            if authcfg_id != None:
+
+                                if authcfg_id not in self.project_datasources[layer_source_type].keys():
+                                    connexion, source_uri = get_datasource_connexion_from_layer(layer)
+                                    self.project_datasources[layer_source_type][authcfg_id] = connexion
+                                
+                            
+                            else:
+
+                                uri = source_uri.uri().strip()
+                                relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
+                                absolute_path = os.path.normpath(os.path.join(ENV_VARS["PATH_ABSOLUTE_PROJECT"], relative_path))
+                                if absolute_path in self.project_datasources[layer_source_type].keys():
+                                    self.project_datasources[layer_source_type][absolute_path].remove(uri)
+                                if uri in self.project_datasources[layer_source_type][absolute_path]:
+                                    self.project_datasources[layer_source_type][absolute_path].remove(uri)
                 
                 
                 self.save_project_variables()                    
