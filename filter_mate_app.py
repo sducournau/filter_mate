@@ -1168,7 +1168,7 @@ class FilterMateApp:
         logger.debug(f"Updated PROJECT_LAYERS with {len(self.PROJECT_LAYERS)} layers after {task_name}")
         
         ENV_VARS["PATH_ABSOLUTE_PROJECT"] = os.path.normpath(self.PROJECT.readPath("./"))
-        if ENV_VARS["PATH_ABSOLUTE_PROJECT"] =='./':':
+        if ENV_VARS["PATH_ABSOLUTE_PROJECT"] =='./':
             if ENV_VARS["PLATFORM"].startswith('win'):
                 ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
             else:
