@@ -6,7 +6,7 @@ This directory contains the Docusaurus-based documentation website for FilterMat
 
 Visit the documentation at: **https://sducournau.github.io/filter_mate/**
 
-*Last updated: December 7, 2025*
+*Last updated: December 7, 2025 - 23:30*
 
 ## 🚀 Quick Start
 
