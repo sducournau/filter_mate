@@ -2,6 +2,161 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.2.0] - 2025-12-07 - Stability & Compatibility Improvements
+
+### 🔧 Stability Enhancements
+
+#### Qt JSON View Crash Prevention
+- **Improved Error Handling**: Enhanced crash prevention in Qt JSON view component
+- **Tab Widget Safety**: Better handling of tab widget errors during initialization
+- **Theme Integration**: More robust QGIS theme detection and synchronization
+- **Resource Management**: Optimized memory usage and cleanup
+
+#### UI/UX Refinements
+- **Error Recovery**: Graceful degradation when UI components fail
+- **Visual Consistency**: Improved theme synchronization across all widgets
+- **Feedback Messages**: Enhanced user notifications for edge cases
+
+### 🐛 Bug Fixes
+
+- Fixed potential crashes in Qt JSON view initialization
+- Improved tab widget error handling and recovery
+- Enhanced theme switching stability
+- Better resource cleanup on plugin unload
+
+### 📚 Documentation
+
+- Updated crash fix documentation (`docs/fixes/QT_JSON_VIEW_CRASH_FIX_2025_12_07.md`)
+- Enhanced troubleshooting guides
+- Improved code comments and inline documentation
+
+### 🔄 Maintenance
+
+- Code cleanup and refactoring
+- Updated dependencies documentation
+- Improved error logging and diagnostics
+
+---
+
+## [2.1.0] - 2025-12-07 - Stable Production Release
+
+### 🎉 Production Ready - Comprehensive Multi-Backend System
+
+FilterMate 2.1.0 marks the stable production release with full multi-backend architecture, comprehensive testing, and extensive documentation.
+
+### ✨ Major Features
+
+#### Complete Backend Architecture
+- **PostgreSQL Backend**: Materialized views, server-side operations (>50k features)
+- **Spatialite Backend**: Temporary tables, R-tree indexes (10k-50k features)
+- **OGR Backend**: Universal fallback for all data sources (<10k features)
+- **Factory Pattern**: Automatic backend selection based on data source
+- **Performance Warnings**: Intelligent recommendations for optimal backend usage
+
+#### Advanced UI System
+- **Dynamic Dimensions**: Adaptive interface based on screen resolution
+  - Compact mode (<1920x1080): Optimized for laptops
+  - Normal mode (≥1920x1080): Comfortable spacing
+  - 15-20% vertical space savings in compact mode
+- **Theme Synchronization**: Automatic QGIS theme detection and matching
+- **Responsive Design**: All widgets adapt to available space
+
+#### Robust Error Handling
+- **Geometry Repair**: 5-strategy automatic repair system
+- **SQLite Lock Management**: Retry mechanism with exponential backoff (5 attempts)
+- **Connection Pooling**: Optimized database connection management
+- **Graceful Degradation**: Fallback mechanisms for all operations
+
+#### Filter History System
+- **In-Memory Management**: No database overhead
+- **Full Undo/Redo**: Multiple levels of history
+- **State Persistence**: Layer-specific filter history
+- **Performance**: Instant undo/redo operations
+
+### 🔧 Improvements
+
+#### Performance Optimizations
+- Query predicate ordering (2.5x faster)
+- Intelligent caching for repeated queries
+- Optimized spatial index usage
+- Reduced memory footprint
+
+#### User Experience
+- Clear performance warnings with recommendations
+- Better error messages with actionable guidance
+- Visual feedback during long operations
+- Comprehensive tooltips and help text
+
+### 📚 Documentation
+
+- Complete architecture documentation (`docs/architecture.md`)
+- Backend API reference (`docs/BACKEND_API.md`)
+- Developer onboarding guide (`docs/DEVELOPER_ONBOARDING.md`)
+- UI system documentation (`docs/UI_SYSTEM_README.md`)
+- Comprehensive testing guides
+- GitHub Copilot instructions (`.github/copilot-instructions.md`)
+- Serena MCP integration (`.serena/` configuration)
+
+### 🧪 Testing & Quality
+
+- Comprehensive unit tests for all backends
+- Integration tests for multi-layer operations
+- Performance benchmarks
+- UI validation scripts
+- Continuous testing framework
+
+### 📦 Deployment
+
+- Streamlined release process
+- Automated UI compilation (`compile_ui.sh`)
+- Release zip creation script (`create_release_zip.py`)
+- Version management automation
+- GitHub release workflow
+
+---
+
+## [2.0.1] - 2024-12-07 - Dynamic UI Dimensions
+
+### 🎨 UI/UX Improvements - Dynamic Adaptive Interface
+
+#### Comprehensive Dynamic Dimensions System
+- **Adaptive UI**: Interface automatically adjusts to screen resolution
+  - Compact mode (< 1920x1080): Optimized for laptops and small screens
+  - Normal mode (≥ 1920x1080): Comfortable spacing for large displays
+- **Tool Buttons**: Reduced to 18x18px (compact) with 16px icons for better fit
+- **Input Widgets**: ComboBox and LineEdit dynamically sized (24px compact / 30px normal)
+- **Frames**: Exploring and Filtering frames with adaptive min heights
+- **Widget Keys**: Narrower button columns in compact mode (45-90px vs 55-110px)
+- **GroupBox**: Adaptive minimum heights (40px compact / 50px normal)
+- **Layouts**: Dynamic spacing and margins (3/2px compact / 6/4px normal)
+
+#### Implementation Details
+- Added 8 new dimension categories in `ui_config.py`
+- New `apply_dynamic_dimensions()` method applies settings at runtime
+- Automatic detection and application based on screen resolution
+- All standard Qt widgets (QComboBox, QLineEdit, QSpinBox) dynamically adjusted
+- ~15-20% vertical space saved in compact mode
+
+#### Space Optimization (Compact Mode)
+- Widget heights: -20% (30px → 24px)
+- Tool buttons: -36% (28px → 18px)
+- Frame heights: -20% reduction
+- Widget keys width: -18% reduction
+
+**Files Modified**:
+- `modules/ui_config.py`: +52 lines (new dimensions)
+- `filter_mate_dockwidget.py`: +113 lines (apply_dynamic_dimensions)
+- `filter_mate_dockwidget_base.ui`: Tool buttons constraints updated
+- `fix_tool_button_sizes.py`: Utility script for UI modifications
+
+**Documentation Added**:
+- `docs/UI_DYNAMIC_PARAMETERS_ANALYSIS.md`: Complete analysis
+- `docs/IMPLEMENTATION_DYNAMIC_DIMENSIONS.md`: Implementation details
+- `docs/DEPLOYMENT_GUIDE_DYNAMIC_DIMENSIONS.md`: Deployment guide
+- `DYNAMIC_DIMENSIONS_SUMMARY.md`: Quick reference
+
+---
+
 ## [2.0.0] - 2024-12-07 - Production Release
 
 ### 🎉 Major Release - Production Ready

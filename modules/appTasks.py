@@ -3538,7 +3538,7 @@ class FilterEngineTask(QgsTask):
     def _manage_spatialite_subset(self, layer, sql_subset_string, primary_key_name, geom_key_name, 
                                    name, custom=False, cur=None, conn=None, current_seq_order=0):
         """
-        Handle Spatialite temporary tables for filtering (Phase 2 implementation).
+        Handle Spatialite temporary tables for filtering.
         
         Alternative to PostgreSQL materialized views using create_temp_spatialite_table().
         

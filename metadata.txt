@@ -6,19 +6,19 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.0.0
+version=2.2.0
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.0 - Production-Ready Multi-Backend Plugin!
+about=FilterMate v2.2 - Enhanced Stability & Qt Compatibility!
 
- NEW in v2.0:
- - STABLE: Production-ready release with comprehensive testing
- - ROBUST: Advanced error handling and geometry repair
- - RELIABLE: SQLite database lock management with retry logic
- - IMPROVED UI: Enhanced theme support and user feedback
- - BUG FIXES: Critical fixes for undo/redo and field selection
- - PERFORMANCE: Optimized query execution with predicate ordering
+ NEW in v2.2:
+ - STABILITY: Improved Qt JSON view crash prevention
+ - UI FIXES: Better tab widget handling and theme integration
+ - RELIABILITY: Enhanced error recovery mechanisms
+ - PERFORMANCE: Optimized resource management
+ - COMPATIBILITY: Better QGIS theme synchronization
+ - MAINTENANCE: Code cleanup and documentation updates
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
@@ -42,12 +42,18 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
-    Version 2.0.0 (December 2025) - Production Release
+    Version 2.2.0 (December 2025) - Stability Improvements
+    STABILITY: Improved Qt JSON view crash prevention
+    FIXED: Tab widget error handling and recovery
+    IMPROVED: Theme synchronization and resource management
+    OPTIMIZED: Performance and memory usage
+    MAINTAINED: Updated documentation and code cleanup
+    
+    Version 2.1.0 (December 2025) - Production Release
     STABLE: Production-ready multi-backend architecture
     FIXED: Critical undo/redo functionality restored
-    FIXED: Field selection now includes all fields (e.g., "id")
+    FIXED: Field selection now includes all fields
     FIXED: SQLite database lock errors with retry mechanism
-    FIXED: Buffer operations with invalid geometries (auto-repair)
     FIXED: Subset string handling for OGR layers
     IMPROVED: Advanced geometry repair with multiple strategies
     IMPROVED: Enhanced UI theme support and consistency
@@ -59,7 +65,7 @@ changelog=
     IMPROVED: Better error messages with troubleshooting hints
     FIXED: Plugin starts even if psycopg2 not installed
     PERFORMANCE: Same speed as before with PostgreSQL, new Spatialite backend for other formats
-    BREAKING: None (100% backward compatible with v1.8)
+    BREAKING: None (100%% backward compatible with v1.8)
     
     Version 1.8 (Previous)
     - Rework filtering logic: use of temporary materialized views and indexes

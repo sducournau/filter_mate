@@ -1,16 +1,17 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 1.9.1** | December 2025
+**Version 2.2.0** | December 2025
 
-**FilterMate is a QGIS plugin that provides advanced filtering and export capabilities for vector data - now works with ANY data source!**
+**FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v1.9
-- ✅ **Works WITHOUT PostgreSQL** - No database server required!
-- ✅ **Multi-backend architecture** - Automatic backend selection (PostgreSQL/Spatialite/OGR)
-- ✅ **Universal compatibility** - Shapefile, GeoPackage, Spatialite, PostgreSQL
-- ✅ **Performance optimizations** - 2-45× faster with intelligent caching and indexing
-- ✅ **Robust error handling** - Automatic geometry repair and retry mechanisms
-- ✅ **Filter history** - Full undo/redo support with in-memory management
+### 🎉 What's New in v2.2
+- ✅ **Enhanced Stability** - Improved Qt JSON view crash prevention
+- ✅ **Better Error Recovery** - Robust tab widget and theme handling
+- ✅ **Complete Multi-Backend** - PostgreSQL, Spatialite, and OGR implementations
+- ✅ **Dynamic UI** - Adaptive interface that adjusts to screen resolution
+- ✅ **Robust Error Handling** - Automatic geometry repair and retry mechanisms
+- ✅ **Theme Synchronization** - Matches QGIS interface theme automatically
+- ✅ **Performance Optimized** - 2.5× faster with intelligent query ordering
 
 ### Key Features
 - 🔍 **Intuitive search** for entities in any layer
@@ -20,6 +21,8 @@
 - 🌍 **Automatic CRS reprojection** on the fly
 - 📝 **Filter history** - Easy undo/redo for all operations
 - 🚀 **Performance warnings** - Intelligent recommendations for large datasets
+- 🎨 **Adaptive UI** - Dynamic dimensions based on screen resolution
+- 🌓 **Theme support** - Automatic synchronization with QGIS theme
 <br>
 <br>
 Github page : https://sducournau.github.io/filter_mate
@@ -220,5 +223,109 @@ SELECT * FROM sqlite_master WHERE type = 'index' AND name LIKE '%idx%';
 
 ---
 
-# 4. Advanced Features
+# 4. Installation & Support
+
+## 4.1 Installation
+
+### From QGIS Plugin Repository
+1. Open QGIS
+2. Go to `Plugins` → `Manage and Install Plugins`
+3. Search for "FilterMate"
+4. Click `Install Plugin`
+
+### Manual Installation
+1. Download latest release from [GitHub](https://github.com/sducournau/filter_mate/releases)
+2. Extract ZIP to QGIS plugins directory:
+   - **Windows**: `C:\Users\<username>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\`
+   - **Linux**: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
+   - **macOS**: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
+3. Restart QGIS
+4. Enable plugin in `Plugins` → `Manage and Install Plugins`
+
+### Optional: Install PostgreSQL Support
+```bash
+# Method 1: pip (recommended)
+pip install psycopg2-binary
+
+# Method 2: QGIS Python console
+import pip
+pip.main(['install', 'psycopg2-binary'])
+
+# Method 3: OSGeo4W Shell (Windows)
+py3_env
+pip install psycopg2-binary
+```
+
+## 4.2 System Requirements
+
+- **QGIS**: Version 3.0 or higher
+- **Python**: 3.7+ (included with QGIS)
+- **Optional**: PostgreSQL/PostGIS server for optimal performance
+- **Optional**: psycopg2 Python package for PostgreSQL support
+
+## 4.3 Support & Documentation
+
+- **GitHub**: [https://github.com/sducournau/filter_mate](https://github.com/sducournau/filter_mate)
+- **Website**: [https://sducournau.github.io/filter_mate](https://sducournau.github.io/filter_mate)
+- **Issues**: [Report bugs](https://github.com/sducournau/filter_mate/issues)
+- **Documentation Index**: [docs/INDEX.md](docs/INDEX.md) - Complete documentation guide
+
+### 📚 Documentation Structure
+
+**For Users:**
+- Installation and setup guides (this README)
+- Feature overview and usage examples
+
+**For Developers:**
+- [Developer Onboarding](docs/DEVELOPER_ONBOARDING.md) - Start here!
+- [Architecture](docs/architecture.md) - System design and components
+- [Backend API](docs/BACKEND_API.md) - Backend interface reference
+- [Implementation Status](docs/IMPLEMENTATION_STATUS.md) - Current features and performance
+
+**For Contributors:**
+- [GitHub Copilot Guidelines](.github/copilot-instructions.md) - Coding standards
+- [UI Testing Guide](docs/UI_TESTING_GUIDE.md) - Testing procedures
+- [Theme System](docs/THEMES.md) - Theme development
+
+**Archived Documentation:**
+- [Archived Docs](docs/archived/) - Historical fixes, improvements, and planning
+
+## 4.4 Contributing
+
+Contributions welcome! See [DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md) for development setup.
+
+**Quick Start for Developers:**
+1. Read [docs/INDEX.md](docs/INDEX.md) for documentation overview
+2. Follow [docs/DEVELOPER_ONBOARDING.md](docs/DEVELOPER_ONBOARDING.md) for setup
+3. Review [.github/copilot-instructions.md](.github/copilot-instructions.md) for coding standards
+4. Check [docs/architecture.md](docs/architecture.md) to understand the system
+
+## 4.5 License
+
+FilterMate is released under the GNU General Public License v3.0. See [LICENSE](LICENSE) file for details.
+
+---
+
+# 5. Version History
+
+See [CHANGELOG.md](CHANGELOG.md) for complete version history.
+
+**Current Version:** 2.1.0 (December 2025)
+- Production-ready release
+- Complete multi-backend architecture
+- Dynamic UI system with adaptive dimensions
+- Enhanced theme support and synchronization
+- Comprehensive testing and documentation
+
+**Previous Versions:**
+- 2.0.0: Production release with multi-backend
+- 1.9.x: Beta releases with Spatialite support
+- 1.0.x: Initial PostgreSQL-only releases
+
+---
+
+**Developed by**: imagodata  
+**Contact**: simon.ducournau+filter_mate@gmail.com  
+**Repository**: https://github.com/sducournau/filter_mate  
+**Plugin Page**: https://plugins.qgis.org/plugins/filter_mate
 

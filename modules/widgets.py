@@ -431,9 +431,24 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
         self.config_data = config_data
+        
+        # Dynamic sizing based on UIConfig
+        try:
+            from ..ui_config import UIConfig
+            combobox_height = UIConfig.get_config('combobox', 'height') or 30
+            list_min_height = UIConfig.get_config('list', 'min_height') or 150
+            
+            # Calculate total height: 2 QLineEdit + spacing + list
+            lineedit_height = combobox_height * 2 + 2  # 2 lineEdit + spacing
+            total_min_height = lineedit_height + list_min_height + 4  # +4 for layout spacing
+        except:
+            total_min_height = 210  # Fallback: 54px (lineEdits) + 150px (list) + 6px
+        
         self.setMinimumWidth(30)
         self.setMaximumWidth(16777215)
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.setMinimumHeight(total_min_height)
+        # Remove setMaximumHeight to allow expansion
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)
 
         font = QFont("Segoe UI", 8)
@@ -441,6 +456,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(2)
         self.filter_le = QLineEdit(self)
         self.filter_le.setPlaceholderText('Type to filter...')
         self.items_le = QLineEdit(self)
@@ -803,7 +820,14 @@ class ListWidgetWrapper(QListWidget):
 
         super(ListWidgetWrapper, self).__init__(parent)
 
-        self.setMinimumHeight(100)
+        # Dynamic sizing based on UIConfig - minimum height for displaying multiple items
+        try:
+            from ..ui_config import UIConfig
+            list_min_height = UIConfig.get_config('list', 'min_height') or 120
+        except:
+            list_min_height = 120  # Reduced height for compact display (3-4 items)
+        
+        self.setMinimumHeight(list_min_height)
         self.identifier_field_name = identifier_field_name
         self.identifier_field_type_numeric = primary_key_is_numeric
         self.filter_expression = ''
@@ -903,10 +927,18 @@ class QgsCheckableComboBoxLayer(QComboBox):
         super(QgsCheckableComboBoxLayer, self).__init__(parent)
 
         self.parent = parent
-        self.setBaseSize(30, 0)
-        self.setMinimumHeight(30)
+        
+        # Dynamic sizing based on UIConfig
+        try:
+            from ..ui_config import UIConfig
+            combobox_height = UIConfig.get_config('combobox', 'height') or 30
+        except:
+            combobox_height = 30
+        
+        self.setBaseSize(combobox_height, 0)
+        self.setMinimumHeight(combobox_height)
         self.setMinimumWidth(30)
-        self.setMaximumHeight(30)
+        self.setMaximumHeight(combobox_height)
         self.setMaximumWidth(16777215)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setCursor(Qt.PointingHandCursor)

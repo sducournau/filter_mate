@@ -47,11 +47,6 @@ class FilterMate:
         :type iface: QgsInterface
         """
 
-        # app = QApplication.instance()
-        # app.setStyleSheet(".QWidget {color: yellow; background-color: dark;}")
-        # You can even read the stylesheet from a file
-
-
         # Save reference to the QGIS interface
         self.iface = iface
         self.current_index = 0
@@ -287,17 +282,29 @@ class FilterMate:
 
             #print "** STARTING FilterMate"
 
-            
-
-            # dockwidget may not exist if:
-            #    first run of plugin
-            #    removed on close (see self.onClosePlugin method)
-            if not self.app:
-                self.app = FilterMateApp(self.plugin_dir)
-                self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
-            else:
-                self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
-                self.app.dockwidget.show()
+            try:
+                # dockwidget may not exist if:
+                #    first run of plugin
+                #    removed on close (see self.onClosePlugin method)
+                if not self.app:
+                    # Create app WITHOUT calling run() automatically
+                    self.app = FilterMateApp(self.plugin_dir)
+                    # NOW call run() after QGIS is stable and user clicked the button
+                    self.app.run()
+                    self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                else:
+                    # App already exists, just show the dockwidget
+                    self.app.run()
+                    self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
+                    self.app.dockwidget.show()
+            except Exception as e:
+                iface.messageBar().pushCritical(
+                    "FilterMate",
+                    f"Error loading plugin: {str(e)}. Check QGIS Python console for details."
+                )
+                import traceback
+                print(f"FilterMate Error: {traceback.format_exc()}")
+                self.pluginIsActive = False
             
 
 

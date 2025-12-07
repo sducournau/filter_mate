@@ -14,9 +14,75 @@ class JsonView(QtWidgets.QTreeView):
         super(JsonView, self).__init__(parent)
         self.model = model
         self.plugin_dir = plugin_dir
+        
+        # CRITICAL: Set model IMMEDIATELY to avoid Qt crashes
+        if model is not None:
+            self.setModel(model)
+        
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._menu)
         self.setItemDelegate(delegate.JsonDelegate())
+        
+        # Amélioration de la visibilité
+        self.setStyleSheet("""
+            QTreeView {
+                font-size: 9pt;
+                background-color: #ffffff;
+                alternate-background-color: #f5f5f5;
+                selection-background-color: #0078d4;
+                selection-color: white;
+                border: 2px solid #999999;
+                gridline-color: #d0d0d0;
+            }
+            QTreeView::item {
+                padding: 3px;
+                min-height: 22px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            QTreeView::item:hover {
+                background-color: #e5f3ff;
+            }
+            QTreeView::item:selected {
+                background-color: #0078d4;
+                color: white;
+            }
+            QTreeView::branch {
+                background-color: transparent;
+            }
+            QHeaderView::section {
+                background-color: #f0f0f0;
+                padding: 4px;
+                border: 1px solid #c0c0c0;
+                border-left: none;
+                font-weight: bold;
+                font-size: 9pt;
+                min-height: 24px;
+            }
+            QHeaderView::section:first {
+                border-left: 1px solid #c0c0c0;
+            }
+        """)
+        
+        # Configuration additionnelle pour la lisibilité
+        self.setAlternatingRowColors(True)
+        self.setUniformRowHeights(False)
+        font = self.font()
+        font.setPointSize(9)
+        self.setFont(font)
+        
+        # Configuration des colonnes pour meilleure visibilité
+        header = self.header()
+        header.setStretchLastSection(False)
+        header.setVisible(True)
+        header.setDefaultAlignment(QtCore.Qt.AlignLeft)
+        # Colonne Property (clé): largeur interactive avec minimum
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Interactive)
+        # Colonne Value: largeur interactive
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Interactive)
+        # Définir des largeurs initiales optimales
+        header.resizeSection(0, 180)
+        header.resizeSection(1, 240)
+        header.setMinimumSectionSize(120)
 
 
     # def leaveEvent(self, QEvent):

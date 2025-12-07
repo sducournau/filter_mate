@@ -1,4 +1,51 @@
-# Known Issues and Bugs
+# Known Issues and Bugs - FilterMate v2.1.0
+
+## RESOLVED ISSUES (v2.0.0 - v2.1.0)
+
+### ✅ Undo/Redo Functionality (CRITICAL - FIXED)
+**Status:** RESOLVED in v2.0.0
+**Issue:** Filter history undo/redo was broken
+**Solution:** Restored in-memory filter history management
+**Files:** `modules/filter_history.py`, `filter_mate_app.py`
+
+### ✅ Field Selection (CRITICAL - FIXED)
+**Status:** RESOLVED in v2.0.0
+**Issue:** Fields like "id" were missing from selection
+**Solution:** Fixed field name filtering and inclusion logic
+**Files:** `modules/appTasks.py`, `filter_mate_app.py`
+
+### ✅ SQLite Database Locks (HIGH - FIXED)
+**Status:** RESOLVED in v2.0.0
+**Issue:** "database is locked" errors with concurrent operations
+**Solution:** Implemented retry mechanism with exponential backoff (5 attempts)
+**Files:** `modules/backends/spatialite_backend.py`, `modules/appUtils.py`
+
+### ✅ Buffer Geometry Errors (MEDIUM - FIXED)
+**Status:** RESOLVED in v2.0.0
+**Issue:** Invalid geometries causing buffer operations to fail
+**Solution:** Automatic geometry repair with ST_MakeValid/MakeValid
+**Files:** All backend implementations
+
+## CURRENT KNOWN ISSUES
+
+### 1. Combobox Layer Icons Format Mismatch (LOW PRIORITY)
+
+**Status:** Known, not critical  
+**Location:** `modules/appTasks.py:2311`, `filter_mate_dockwidget.py:489, 508, 539`
+
+**Issue:**
+- `layer.geometryType()` returns QGIS enum (e.g., `QgsWkbTypes.PointGeometry`)
+- Converted to numeric string (`"0"`, `"1"`, `"2"`)
+- `icon_per_geometry_type()` expects format `'GeometryType.Point'`
+- Result: Icon mismatch in layer combobox
+
+**Impact:** Cosmetic only - icons don't display correctly in combobox
+**Workaround:** Icons still work via fallback mechanism
+**Fix Required:** Standardize geometry type string format across codebase
+
+### None Critical
+
+All critical and high-priority issues have been resolved in v2.1.0. The plugin is fully functional for production use.
 
 ## Current Issues
 

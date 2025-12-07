@@ -26,6 +26,7 @@ from .modules.feedback_utils import (
     show_performance_warning, show_error_with_context
 )
 from .modules.filter_history import HistoryManager
+from .modules.ui_config import UIConfig, DisplayProfile
 from .resources import *
 import uuid
 
@@ -155,7 +156,9 @@ class FilterMateApp:
 
         self.project_datasources = {}
         self.app_postgresql_temp_schema_setted = False
-        self.run()
+        self._signals_connected = False
+        # Note: Do NOT call self.run() here - it will be called from filter_mate.py
+        # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
 
     def run(self):
@@ -182,6 +185,31 @@ class FilterMateApp:
             init_layers = list(self.PROJECT.mapLayers().values())
 
             self.init_filterMate_db()
+            
+            # Initialize UI profile based on screen resolution
+            try:
+                from qgis.PyQt.QtWidgets import QApplication
+                screen = QApplication.primaryScreen()
+                if screen:
+                    screen_geometry = screen.geometry()
+                    screen_width = screen_geometry.width()
+                    screen_height = screen_geometry.height()
+                    
+                    # Use compact mode for resolutions < 1920x1080
+                    if screen_width < 1920 or screen_height < 1080:
+                        UIConfig.set_profile(DisplayProfile.COMPACT)
+                        logger.info(f"FilterMate: Using COMPACT profile for resolution {screen_width}x{screen_height}")
+                    else:
+                        UIConfig.set_profile(DisplayProfile.NORMAL)
+                        logger.info(f"FilterMate: Using NORMAL profile for resolution {screen_width}x{screen_height}")
+                else:
+                    # Fallback to normal if screen detection fails
+                    UIConfig.set_profile(DisplayProfile.NORMAL)
+                    logger.warning("FilterMate: Could not detect screen, using NORMAL profile")
+            except Exception as e:
+                logger.error(f"FilterMate: Error detecting screen resolution: {e}")
+                UIConfig.set_profile(DisplayProfile.NORMAL)
+            
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
 
             # show the dockwidget
@@ -193,19 +221,23 @@ class FilterMateApp:
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
             if init_layers != None and len(init_layers) > 0:
                 from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(100, lambda: self.manage_task('add_layers', init_layers))
+                # Increased delay to 500ms to ensure complete initialization
+                QTimer.singleShot(500, lambda: self.manage_task('add_layers', init_layers))
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
         # Use QTimer.singleShot to defer project signal handling until QGIS is in stable state
         # This prevents access violations during project transitions
-        from qgis.PyQt.QtCore import QTimer
-        self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
-        self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
-        # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
-        self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
-        self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
-        self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+        # Only connect signals once to avoid multiple connections on plugin reload
+        if not self._signals_connected:
+            from qgis.PyQt.QtCore import QTimer
+            self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
+            self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
+            # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
+            self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+            self._signals_connected = True
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
 
@@ -276,6 +308,15 @@ class FilterMateApp:
         """
 
         assert task_name in list(self.tasks_descriptions.keys())
+        
+        # Guard: Ensure dockwidget is fully initialized before processing tasks
+        # Exception: remove_all_layers, project_read, new_project can run without full initialization
+        if task_name not in ('remove_all_layers', 'project_read', 'new_project'):
+            if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
+                logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 300ms...")
+                from qgis.PyQt.QtCore import QTimer
+                QTimer.singleShot(300, lambda: self.manage_task(task_name, data))
+                return
 
         if self.dockwidget != None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
@@ -1071,103 +1112,73 @@ class FilterMateApp:
                     iface.messageBar().pushCritical("FilterMate", error_msg)
                     return
             
-            conn = self.get_spatialite_connection()
-            if conn is None:
+            try:
+                conn = self.get_spatialite_connection()
+                if conn is None:
+                    error_msg = "Cannot initialize FilterMate database: connection failed"
+                    logger.error(error_msg)
+                    iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                    return
+            except Exception as e:
+                error_msg = f"Critical error connecting to database: {str(e)}"
+                logger.error(error_msg)
+                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
                 return
 
-            with conn:
-                cur = conn.cursor()
-                cur.execute("""PRAGMA foreign_keys = ON;""")
-                
-                # Check if database is already initialized
-                cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_projects';""")
-                tables_exist = cur.fetchone()[0] > 0
-                
-                if not tables_exist:
-                    # Initialize database only if tables don't exist
-                    cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
-                                                                                                                                    plugin_name='FilterMate',
-                                                                                                                                    version='1.6'
-                                                                                                                                    )
-                    )
-
-                    cur.execute("""CREATE TABLE fm_projects (
-                                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                    _created_at DATETIME NOT NULL,
-                                    _updated_at DATETIME NOT NULL,
-                                    project_name VARYING CHARACTER(255) NOT NULL,
-                                    project_path VARYING CHARACTER(255) NOT NULL,
-                                    project_settings TEXT NOT NULL);
-                                    """)
-
-                    cur.execute("""CREATE TABLE fm_subset_history (
-                                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                    _updated_at DATETIME NOT NULL,
-                                    fk_project VARYING CHARACTER(255) NOT NULL,
-                                    layer_id VARYING CHARACTER(255) NOT NULL,
-                                    layer_source_id VARYING CHARACTER(255) NOT NULL,
-                                    seq_order INTEGER NOT NULL,
-                                    subset_string TEXT NOT NULL,
-                                    FOREIGN KEY (fk_project)  
-                                    REFERENCES fm_projects(project_id));
-                                    """)
+            try:
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute("""PRAGMA foreign_keys = ON;""")
                     
-                    cur.execute("""CREATE TABLE fm_project_layers_properties (
-                                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                    _updated_at DATETIME NOT NULL,
-                                    fk_project VARYING CHARACTER(255) NOT NULL,
-                                    layer_id VARYING CHARACTER(255) NOT NULL,
-                                    meta_type VARYING CHARACTER(255) NOT NULL,
-                                    meta_key VARYING CHARACTER(255) NOT NULL,
-                                    meta_value TEXT NOT NULL,
-                                    FOREIGN KEY (fk_project)  
-                                    REFERENCES fm_projects(project_id),
-                                    CONSTRAINT property_unicity
-                                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                                    """)
+                    # Check if database is already initialized
+                    cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_projects';""")
+                    tables_exist = cur.fetchone()[0] > 0
                     
-                    self.project_uuid = uuid.uuid4()
-                
-                    cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
-                                                                                                                                                                        project_id=self.project_uuid,
-                                                                                                                                                                        project_name=self.project_file_name,
-                                                                                                                                                                        project_path=self.project_file_path,
-                                                                                                                                                                        project_settings=json.dumps(project_settings).replace("\'","\'\'")
-                                                                                                                                                                        )
-                    )
+                    if not tables_exist:
+                        # Initialize database only if tables don't exist
+                        cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
+                                                                                                                                        plugin_name='FilterMate',
+                                                                                                                                        version='1.6'
+                                                                                                                                        )
+                        )
 
-                    conn.commit()
-                    
-                    # Set the project UUID for newly initialized database
-                    QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-                else:
-                    # Database already initialized, check if this project exists
-                    cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
-                                                                                                                                                    project_name=self.project_file_name,
-                                                                                                                                                    project_path=self.project_file_path
-                                                                                                                                                    )
-                    )
+                        cur.execute("""CREATE TABLE fm_projects (
+                                        project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                        _created_at DATETIME NOT NULL,
+                                        _updated_at DATETIME NOT NULL,
+                                        project_name VARYING CHARACTER(255) NOT NULL,
+                                        project_path VARYING CHARACTER(255) NOT NULL,
+                                        project_settings TEXT NOT NULL);
+                                        """)
 
-                    results = cur.fetchall()
-
-                    if len(results) == 1:
-                        result = results[0]
-                        project_settings = result[-1].replace("\'\'", "\'")
-                        self.project_uuid = result[0]
-                        self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
-                        QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-
-                        # cur.execute("""UPDATE fm_projects 
-                        #                 SET _updated_at = datetime(),
-                        #                     project_settings = '{project_settings}' 
-                        #                 WHERE project_id = '{project_id}'""".format(
-                        #                                                             project_settings=project_settings,
-                        #                                                             project_id=project_id
-                        #                                                             )
-                        # )
-
-                    else:
+                        cur.execute("""CREATE TABLE fm_subset_history (
+                                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                        _updated_at DATETIME NOT NULL,
+                                        fk_project VARYING CHARACTER(255) NOT NULL,
+                                        layer_id VARYING CHARACTER(255) NOT NULL,
+                                        layer_source_id VARYING CHARACTER(255) NOT NULL,
+                                        seq_order INTEGER NOT NULL,
+                                        subset_string TEXT NOT NULL,
+                                        FOREIGN KEY (fk_project)  
+                                        REFERENCES fm_projects(project_id));
+                                        """)
+                        
+                        cur.execute("""CREATE TABLE fm_project_layers_properties (
+                                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                        _updated_at DATETIME NOT NULL,
+                                        fk_project VARYING CHARACTER(255) NOT NULL,
+                                        layer_id VARYING CHARACTER(255) NOT NULL,
+                                        meta_type VARYING CHARACTER(255) NOT NULL,
+                                        meta_key VARYING CHARACTER(255) NOT NULL,
+                                        meta_value TEXT NOT NULL,
+                                        FOREIGN KEY (fk_project)  
+                                        REFERENCES fm_projects(project_id),
+                                        CONSTRAINT property_unicity
+                                        UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
+                                        """)
+                        
                         self.project_uuid = uuid.uuid4()
+                    
                         cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
                                                                                                                                                                             project_id=self.project_uuid,
                                                                                                                                                                             project_name=self.project_file_name,
@@ -1175,12 +1186,62 @@ class FilterMateApp:
                                                                                                                                                                             project_settings=json.dumps(project_settings).replace("\'","\'\'")
                                                                                                                                                                             )
                         )
+
+                        conn.commit()
+                        
+                        # Set the project UUID for newly initialized database
                         QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+                    else:
+                        # Database already initialized, check if this project exists
+                        cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
+                                                                                                                                                        project_name=self.project_file_name,
+                                                                                                                                                        project_path=self.project_file_path
+                                                                                                                                                        )
+                        )
 
-                    conn.commit()
+                        results = cur.fetchall()
 
-            cur.close()
-            conn.close()
+                        if len(results) == 1:
+                            result = results[0]
+                            project_settings = result[-1].replace("\'\'", "\'")
+                            self.project_uuid = result[0]
+                            self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
+                            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+
+                            # cur.execute("""UPDATE fm_projects 
+                            #                 SET _updated_at = datetime(),
+                            #                     project_settings = '{project_settings}' 
+                            #                 WHERE project_id = '{project_id}'""".format(
+                            #                                                             project_settings=project_settings,
+                            #                                                             project_id=project_id
+                            #                                                             )
+                            # )
+
+                        else:
+                            self.project_uuid = uuid.uuid4()
+                            cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+                                                                                                                                                                                project_id=self.project_uuid,
+                                                                                                                                                                                project_name=self.project_file_name,
+                                                                                                                                                                                project_path=self.project_file_path,
+                                                                                                                                                                                project_settings=json.dumps(project_settings).replace("\'","\'\'")
+                                                                                                                                                                                )
+                            )
+                            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+
+                        conn.commit()
+
+            except Exception as e:
+                error_msg = f"Error during database initialization: {str(e)}"
+                logger.error(error_msg)
+                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                return
+            finally:
+                if conn:
+                    try:
+                        cur.close()
+                        conn.close()
+                    except Exception:
+                        pass
 
             # if "FILTER" in self.CONFIG_DATA["CURRENT_PROJECT"] and "app_postgresql_temp_schema" in self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]:
             #     self.app_postgresql_temp_schema = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"]

@@ -4,12 +4,22 @@ UI Styles Module for FilterMate
 
 Handles loading and applying QSS stylesheets to the FilterMate dockwidget.
 Supports multiple themes and dynamic color replacement.
+Integrates with UIConfig for dynamic sizing based on display profiles.
 """
 
 import os
 from typing import Dict, Optional
 from PyQt5.QtCore import QFile, QTextStream, QIODevice
+from PyQt5.QtWidgets import QWidget
 from qgis.core import QgsApplication
+
+# Import UIConfig for dynamic sizing
+try:
+    from .ui_config import UIConfig, DisplayProfile
+    UI_CONFIG_AVAILABLE = True
+except ImportError:
+    UI_CONFIG_AVAILABLE = False
+    print("FilterMate: UIConfig not available, using default dimensions")
 
 
 class StyleLoader:
@@ -150,6 +160,8 @@ class StyleLoader:
         """
         Load stylesheet with colors from config.json.
         
+        Also loads UI profile from config and applies dynamic dimensions.
+        
         Args:
             config_data: Configuration dictionary from config.json
             theme: Theme name (None = use ACTIVE_THEME from config)
@@ -157,6 +169,13 @@ class StyleLoader:
         Returns:
             str: Stylesheet with config colors applied
         """
+        # Load UI profile if UIConfig is available
+        if UI_CONFIG_AVAILABLE:
+            try:
+                UIConfig.load_from_config(config_data)
+            except Exception as e:
+                print(f"FilterMate: Could not load UI profile: {e}")
+        
         # Get raw stylesheet template (without color replacements)
         stylesheet = cls._load_raw_stylesheet('default')  # Always use default.qss file
         
@@ -201,6 +220,10 @@ class StyleLoader:
             # Apply color replacements
             for placeholder, color_value in color_map.items():
                 stylesheet = stylesheet.replace(placeholder, color_value)
+            
+            # Apply dynamic dimensions from UIConfig if available
+            if UI_CONFIG_AVAILABLE:
+                stylesheet = cls._apply_dynamic_dimensions(stylesheet)
             
             return stylesheet
             
@@ -334,6 +357,105 @@ class StyleLoader:
     def clear_cache(cls):
         """Clear stylesheet cache"""
         cls._styles_cache.clear()
+    
+    @classmethod
+    def _apply_dynamic_dimensions(cls, stylesheet: str) -> str:
+        """
+        Apply dynamic dimensions from UIConfig to stylesheet.
+        
+        Replaces dimension placeholders with values from current UI profile.
+        
+        Args:
+            stylesheet: Base stylesheet content
+        
+        Returns:
+            str: Stylesheet with dynamic dimensions applied
+        """
+        if not UI_CONFIG_AVAILABLE:
+            return stylesheet
+        
+        try:
+            # Get current profile config
+            profile = UIConfig.get_all_dimensions()
+            
+            # Define dimension replacements
+            # Format: {placeholder: (component, key)}
+            dimension_map = {
+                # Buttons
+                '{button_height}': ('button', 'height'),
+                '{button_icon_size}': ('button', 'icon_size'),
+                '{button_border_radius}': ('button', 'border_radius'),
+                '{action_button_height}': ('action_button', 'height'),
+                '{action_button_icon_size}': ('action_button', 'icon_size'),
+                '{tool_button_height}': ('tool_button', 'height'),
+                '{tool_button_icon_size}': ('tool_button', 'icon_size'),
+                
+                # Inputs
+                '{input_height}': ('input', 'height'),
+                '{input_border_radius}': ('input', 'border_radius'),
+                
+                # ComboBox
+                '{combobox_height}': ('combobox', 'height'),
+                '{combobox_item_height}': ('combobox', 'item_height'),
+                
+                # Frames
+                '{frame_min_height}': ('frame', 'min_height'),
+                '{frame_padding}': ('frame', 'padding'),
+                '{action_frame_height}': ('action_frame', 'min_height'),
+                
+                # Splitter
+                '{splitter_width}': ('splitter', 'handle_width'),
+                
+                # Scrollbar
+                '{scrollbar_width}': ('scrollbar', 'width'),
+                
+                # Spacing
+                '{spacing_small}': ('spacing', 'small'),
+                '{spacing_medium}': ('spacing', 'medium'),
+                '{spacing_large}': ('spacing', 'large'),
+                
+                # Labels
+                '{label_font_size}': ('label', 'font_size'),
+                
+                # Tree
+                '{tree_item_height}': ('tree', 'item_height'),
+                '{tree_icon_size}': ('tree', 'icon_size'),
+                
+                # Tabs
+                '{tab_height}': ('tab', 'height'),
+                '{tab_font_size}': ('tab', 'font_size')
+            }
+            
+            # Apply replacements
+            for placeholder, (component, key) in dimension_map.items():
+                value = UIConfig.get_config(component, key)
+                if value is not None:
+                    # Convert to string with 'px' suffix if numeric
+                    if isinstance(value, (int, float)):
+                        value_str = f"{int(value)}px"
+                    else:
+                        value_str = str(value)
+                    
+                    stylesheet = stylesheet.replace(placeholder, value_str)
+            
+            # Apply padding strings (special format)
+            button_padding = UIConfig.get_padding_string('button')
+            stylesheet = stylesheet.replace('{button_padding}', button_padding)
+            
+            action_padding = UIConfig.get_padding_string('action_button')
+            stylesheet = stylesheet.replace('{action_button_padding}', action_padding)
+            
+            input_padding = UIConfig.get_padding_string('input')
+            stylesheet = stylesheet.replace('{input_padding}', input_padding)
+            
+            combobox_padding = UIConfig.get_padding_string('combobox')
+            stylesheet = stylesheet.replace('{combobox_padding}', combobox_padding)
+            
+            return stylesheet
+            
+        except Exception as e:
+            print(f"FilterMate: Error applying dynamic dimensions: {e}")
+            return stylesheet
     
     @classmethod
     def reload_theme(cls, widget, theme: Optional[str] = None):
