@@ -112,7 +112,7 @@ pip install psycopg2-binary
 - Spatialite backend works well
 - No additional installation needed
 
-### For Small Datasets (<10,000 features)
+### For Small Datasets (Less than 10,000 features)
 
 - Any backend will work fine
 - OGR backend is sufficient

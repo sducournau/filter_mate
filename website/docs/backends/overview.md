@@ -44,10 +44,10 @@ graph TD
 
 | Feature | PostgreSQL | Spatialite | OGR |
 |---------|-----------|-----------|-----|
-| **Speed (10k features)** | <1s ⚡ | <2s ✅ | ~5s ⚠️ |
-| **Speed (100k features)** | <2s ⚡ | ~10s ✅ | ~30s ⚠️ |
-| **Speed (1M features)** | ~10s ⚡ | ~60s ⚠️ | >120s 🐌 |
-| **Concurrent Operations** | Excellent ⭐⭐⭐ | Good ⭐⭐ | Limited ⭐ |
+| **Speed (10k features)** | Less than 1s | Less than 2s | Around 5s |
+| **Speed (100k features)** | Less than 2s | Around 10s | Around 30s |
+| **Speed (1M features)** | Around 10s | Around 60s | More than 120s |
+| **Concurrent Operations** | Excellent | Good | Limited |
 | **Installation** | Optional | Built-in | Built-in |
 | **Best For** | Large datasets | Medium datasets | All formats |
 
