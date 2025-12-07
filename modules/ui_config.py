@@ -232,7 +232,7 @@ class UIConfig:
             "frame": {
                 "min_height": 80,
                 "max_height": 200,
-                "padding": 10,
+                "padding": 8,
                 "border_width": 1
             },
             
@@ -267,7 +267,7 @@ class UIConfig:
             # Layout dimensions (NEW)
             "layout": {
                 "spacing_main": 6,       # Confortable pour conteneur principal
-                "spacing_section": 8,    # Entre sections (exploring, filtering, etc.)
+                "spacing_section": 6,    # Entre sections (exploring, filtering, etc.) - cohérent ×3
                 "spacing_content": 6,    # Dans les contenus (keys, values)
                 "spacing_buttons": 8,    # Entre boutons
                 "spacing_frame": 8,      # Spacing interne des frames (exploring, filtering)

@@ -2,6 +2,17 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.2.1] - 2025-12-07 - Maintenance Release
+
+### 🔧 Maintenance
+
+- **Release Management**: Improved release tagging and deployment procedures
+- **Build Scripts**: Enhanced build automation and version management
+- **Documentation**: Updated release documentation and procedures
+- **Code Cleanup**: Minor code formatting and organization improvements
+
+---
+
 ## [2.2.0] - 2025-12-07 - Stability & Compatibility Improvements
 
 ### 🔧 Stability Enhancements

@@ -907,7 +907,7 @@ class FilterMateApp:
         #     cursor.execute(sql_statement)
 
 
-    def save_variables_from_layer(self, layer, layer_properties=[]):
+    def save_variables_from_layer(self, layer, layer_properties=None):
         """
         Save layer filtering properties to both QGIS variables and Spatialite database.
         
@@ -919,6 +919,7 @@ class FilterMateApp:
             layer (QgsVectorLayer): Layer to save properties for
             layer_properties (list): List of tuples (key_group, key, value, type)
                 Example: [('filtering', 'layer_filter_expression', 'population > 1000', 'str')]
+                If None or empty, saves all properties
                 
         Notes:
             - Uses parameterized SQL queries to prevent injection
@@ -928,6 +929,9 @@ class FilterMateApp:
             - Uses context manager for automatic connection cleanup
         """
 
+        if layer_properties is None:
+            layer_properties = []
+        
         layer_all_properties_flag = False
 
         assert isinstance(layer, QgsVectorLayer)
@@ -977,7 +981,7 @@ class FilterMateApp:
                                      layer_property[0], layer_property[1], str(value_typped))
                                 )
 
-    def remove_variables_from_layer(self, layer, layer_properties=[]):
+    def remove_variables_from_layer(self, layer, layer_properties=None):
         """
         Remove layer filtering properties from QGIS variables and Spatialite database.
         
@@ -987,7 +991,7 @@ class FilterMateApp:
         Args:
             layer (QgsVectorLayer): Layer to remove properties from
             layer_properties (list): List of tuples (key_group, key, value, type)
-                If empty, removes ALL filterMate variables for the layer
+                If None or empty, removes ALL filterMate variables for the layer
                 
         Notes:
             - Sets QGIS variables to empty string (effectively removes them)
@@ -996,6 +1000,9 @@ class FilterMateApp:
             - Handles both selective and bulk removal
             - Uses context manager for safe database operations
         """
+        
+        if layer_properties is None:
+            layer_properties = []
         
         layer_all_properties_flag = False
 

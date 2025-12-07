@@ -1642,11 +1642,11 @@ class FilterEngineTask(QgsTask):
         alg_params = {
             'DISSOLVE': True,
             'DISTANCE': buffer_distance,
-            'END_CAP_STYLE': self.param_buffer_type,  # Use configured buffer type (0=Round, 1=Flat, 2=Square)
+            'END_CAP_STYLE': int(self.param_buffer_type),  # Use configured buffer type (0=Round, 1=Flat, 2=Square)
             'INPUT': layer,
-            'JOIN_STYLE': 0,
-            'MITER_LIMIT': 2,
-            'SEGMENTS': 5,
+            'JOIN_STYLE': int(0),
+            'MITER_LIMIT': float(2),
+            'SEGMENTS': int(5),
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         

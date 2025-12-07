@@ -36,3 +36,10 @@ htmlcov/
 # Development
 *.log
 .env
+
+# Docusaurus
+website/node_modules/
+website/.docusaurus/
+website/build/
+website/.cache-loader/
+website/package-lock.json

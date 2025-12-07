@@ -179,7 +179,7 @@
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
             "PROJECTION_TO_EXPORT": "EPSG:31370",
-            "HAS_STYLES_TO_EXPORT": true,
+            "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,
             "DATATYPE_TO_EXPORT": "GPKG",

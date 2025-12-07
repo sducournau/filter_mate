@@ -1122,6 +1122,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 assert isinstance(layer, QgsVectorLayer)
             try:    
                 self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].clear()
+                
+                # CRITICAL: Check if layer exists in PROJECT_LAYERS before accessing
+                if layer.id() not in self.PROJECT_LAYERS:
+                    print(f"FilterMate: Layer {layer.name()} not in PROJECT_LAYERS yet, skipping")
+                    return
+                
                 layer_props = self.PROJECT_LAYERS[layer.id()]
 
                 if layer_props["filtering"]["has_layers_to_filter"] == True:
@@ -1166,20 +1172,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             i += 1    
             
             except Exception as e:
-                self.exception = e
+                # Log the error without storing in self.exception
+                print(f"FilterMate: Error in filtering_populate_layers_chekableCombobox: {type(e).__name__}: {e}")
+                
                 # Check if layer is still valid (not deleted)
                 try:
                     if layer is not None and not sip.isdeleted(layer):
-                        # Pass empty list for properties parameter (signal expects list, not exception)
-                        self.resetLayerVariableOnErrorEvent(layer, [])
-                        # Log the actual exception
-                        print(f"FilterMate: Error accessing layer properties: {e}")
+                        # Pass explicitly typed empty list for properties parameter
+                        empty_properties = []
+                        self.resetLayerVariableOnErrorEvent(layer, empty_properties)
                     else:
-                        # Layer has been deleted, log the error but don't try to emit signal
-                        print(f"FilterMate: Cannot reset layer variable - layer has been deleted: {e}")
-                except RuntimeError:
+                        # Layer has been deleted
+                        print(f"FilterMate: Cannot reset layer variable - layer has been deleted")
+                except RuntimeError as runtime_err:
                     # Layer C++ object is deleted
-                    print(f"FilterMate: Cannot reset layer variable - layer C++ object deleted: {e}")
+                    print(f"FilterMate: Cannot reset layer variable - layer C++ object deleted: {runtime_err}")
 
     def exporting_populate_combobox(self):
 
@@ -3177,17 +3184,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 webbrowser.open(self.CONFIG_DATA["APP"]["GITHUB_PAGE"])
 
 
-    def setLayerVariableEvent(self, layer=None, properties=[]):
+    def setLayerVariableEvent(self, layer=None, properties=None):
+        """
+        Emit signal to set layer variables.
+        
+        Args:
+            layer: QgsVectorLayer to set, or None to use current_layer
+            properties: List of properties (default: empty list)
+        """
+        if properties is None:
+            properties = []
 
         if self.widgets_initialized is True:
             if layer == None:
                 layer = self.current_layer
+            
+            # Ensure properties is a list type for PyQt signal
+            if not isinstance(properties, list):
+                print(f"FilterMate Warning: properties is {type(properties)}, converting to list")
+                properties = []
 
             self.settingLayerVariable.emit(layer, properties)
 
 
-    def resetLayerVariableOnErrorEvent(self, layer, properties=[]):
-
+    def resetLayerVariableOnErrorEvent(self, layer, properties=None):
+        """
+        Emit signal to reset layer variables after an error.
+        
+        Args:
+            layer: QgsVectorLayer to reset, or None to use current_layer
+            properties: List of properties (default: empty list)
+        """
+        if properties is None:
+            properties = []
 
         if self.widgets_initialized is True:
             if layer == None:
@@ -3196,19 +3225,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Double-check layer is valid before emitting signal
             try:
                 if layer is not None and not sip.isdeleted(layer):
+                    # Ensure properties is a list type for PyQt signal
+                    if not isinstance(properties, list):
+                        print(f"FilterMate Warning: properties is {type(properties)}, converting to list")
+                        properties = []
                     self.resettingLayerVariableOnError.emit(layer, properties)
                 else:
                     print(f"FilterMate: Cannot emit resettingLayerVariableOnError - layer is None or deleted")
             except RuntimeError as e:
                 # Layer C++ object is deleted
                 print(f"FilterMate: Cannot emit resettingLayerVariableOnError - layer object deleted: {e}")
+            except TypeError as e:
+                # Signal emission failed due to type mismatch
+                print(f"FilterMate: Signal emission failed - type error: {e}")
+                print(f"  layer type: {type(layer)}, properties type: {type(properties)}")
 
 
-    def resetLayerVariableEvent(self, layer=None, properties=[]):
+    def resetLayerVariableEvent(self, layer=None, properties=None):
+        """
+        Emit signal to reset layer variables.
+        
+        Args:
+            layer: QgsVectorLayer to reset, or None to use current_layer
+            properties: List of properties (default: empty list)
+        """
+        if properties is None:
+            properties = []
 
         if self.widgets_initialized is True:
             if layer == None:
                 layer = self.current_layer
+            
+            # Ensure properties is a list type for PyQt signal
+            if not isinstance(properties, list):
+                print(f"FilterMate Warning: properties is {type(properties)}, converting to list")
+                properties = []
            
             self.resettingLayerVariable.emit(layer, properties)
 

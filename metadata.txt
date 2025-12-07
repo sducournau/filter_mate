@@ -6,7 +6,7 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.2.0
+version=2.2.1
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
@@ -42,12 +42,16 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
+    Version 2.2.1 (December 2025) - Maintenance Release
+    MAINTENANCE: Code cleanup and documentation updates
+    IMPROVED: Build and deployment scripts
+    UPDATED: Release management procedures
+    
     Version 2.2.0 (December 2025) - Stability Improvements
     STABILITY: Improved Qt JSON view crash prevention
     FIXED: Tab widget error handling and recovery
     IMPROVED: Theme synchronization and resource management
     OPTIMIZED: Performance and memory usage
-    MAINTAINED: Updated documentation and code cleanup
     
     Version 2.1.0 (December 2025) - Production Release
     STABLE: Production-ready multi-backend architecture

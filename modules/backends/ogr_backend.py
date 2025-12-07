@@ -17,6 +17,28 @@ from ..appUtils import safe_set_subset_string
 logger = get_tasks_logger()
 
 
+def escape_ogr_identifier(identifier: str) -> str:
+    """
+    Escape identifier for OGR SQL expressions.
+    
+    OGR uses double quotes for identifiers but has limited support.
+    Some formats (Shapefile) have restrictions on field names.
+    
+    Args:
+        identifier: Field or table name
+        
+    Returns:
+        Escaped identifier
+    """
+    # Remove problematic characters and truncate if needed
+    # Note: This is a basic implementation. Different OGR drivers have different rules.
+    if ' ' in identifier:
+        logger.warning(f"OGR identifier '{identifier}' contains spaces - may cause issues with some formats")
+    
+    # Always use double quotes for OGR
+    return f'"{identifier}"'
+
+
 class OGRGeometricFilter(GeometricFilterBackend):
     """
     OGR backend for geometric filtering.
@@ -227,13 +249,21 @@ class OGRGeometricFilter(GeometricFilterBackend):
         if buffer_value and buffer_value > 0:
             self.log_info(f"Applying buffer of {buffer_value} to source layer")
             try:
+                # Ensure buffer_value is numeric
+                buffer_dist = float(buffer_value)
+                
+                # Log layer details for debugging
+                self.log_debug(f"Buffer source layer: {source_layer.name()}, "
+                              f"CRS: {source_layer.crs().authid()}, "
+                              f"Features: {source_layer.featureCount()}")
+                
                 buffer_result = processing.run("native:buffer", {
                     'INPUT': source_layer,
-                    'DISTANCE': buffer_value,
-                    'SEGMENTS': 5,
-                    'END_CAP_STYLE': 0,  # Round
-                    'JOIN_STYLE': 0,  # Round
-                    'MITER_LIMIT': 2,
+                    'DISTANCE': buffer_dist,
+                    'SEGMENTS': int(5),
+                    'END_CAP_STYLE': int(0),  # Round
+                    'JOIN_STYLE': int(0),  # Round
+                    'MITER_LIMIT': float(2.0),
                     'DISSOLVE': False,
                     'OUTPUT': 'memory:'
                 })
@@ -241,6 +271,21 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 return buffer_result['OUTPUT']
             except Exception as buffer_error:
                 self.log_error(f"Buffer operation failed: {str(buffer_error)}")
+                self.log_error(f"  - Buffer value: {buffer_value} (type: {type(buffer_value).__name__})")
+                self.log_error(f"  - Source layer: {source_layer.name()}")
+                self.log_error(f"  - CRS: {source_layer.crs().authid()} (Geographic: {source_layer.crs().isGeographic()})")
+                
+                # Check for common error causes
+                if source_layer.crs().isGeographic() and float(buffer_value) > 1:
+                    self.log_error(
+                        f"ERROR: Geographic CRS detected with large buffer value!\n"
+                        f"  A buffer of {buffer_value}° in a geographic CRS (lat/lon) is equivalent to\n"
+                        f"  approximately {float(buffer_value) * 111}km at the equator.\n"
+                        f"  → Solution: Reproject your layer to a projected CRS (e.g., EPSG:3857, EPSG:2154)"
+                    )
+                
+                import traceback
+                self.log_debug(f"Buffer traceback: {traceback.format_exc()}")
                 return None
         return source_layer
     
@@ -322,6 +367,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     # Get actual field values and check field type
                     from qgis.PyQt.QtCore import QVariant
                     field_idx = layer.fields().indexFromName(pk_field)
+                    
+                    if field_idx < 0:
+                        self.log_error(f"Primary key field '{pk_field}' not found in layer")
+                        return False
+                    
                     field_type = layer.fields()[field_idx].type()
                     
                     # Extract values from the primary key field
@@ -335,7 +385,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         # Numeric field - no quotes needed
                         id_list = ','.join(str(val) for val in selected_values)
                     
-                    new_subset_expression = f'"{pk_field}" IN ({id_list})'
+                    # Use escape function for field name
+                    escaped_pk = escape_ogr_identifier(pk_field)
+                    new_subset_expression = f'{escaped_pk} IN ({id_list})'
                 
                 self.log_debug(f"Generated subset expression using key '{pk_field}': {new_subset_expression[:100]}...")
                 
@@ -455,7 +507,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 layer.removeSelection()
                 
                 # Use attribute-based filter (much faster than ID list for large datasets)
-                new_subset_expression = f'"{temp_field}" = 1'
+                escaped_temp = escape_ogr_identifier(temp_field)
+                new_subset_expression = f'{escaped_temp} = 1'
                 
                 # Combine with old subset if needed
                 if old_subset and combine_operator:
@@ -488,12 +541,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 layer, source_layer, predicates, buffer_value,
                 old_subset, combine_operator
             )
-            
-        except Exception as e:
-            self.log_error(f"Error applying OGR filter: {str(e)}")
-            import traceback
-            self.log_debug(f"Traceback: {traceback.format_exc()}")
-            return False
     
     def get_backend_name(self) -> str:
         """Get backend name"""

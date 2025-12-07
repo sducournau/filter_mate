@@ -150,8 +150,9 @@ ui_utils.configure_tool_buttons(
 **Caractéristiques** :
 - Boutons : 40px (standard), 48px (action), 36px (outils)
 - Icônes : 20-25px
-- Espacements : 5-15px
-- Marges : 5-15px
+- Espacements : 6-10px (principal), 6-8px (sections)
+- Marges : 4-10px
+- Padding frames : 8px
 - ComboBox : 36px
 - Inputs : 36px
 
