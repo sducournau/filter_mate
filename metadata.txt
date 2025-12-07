@@ -32,6 +32,8 @@ about=FilterMate v2.2 - Enhanced Stability & Qt Compatibility!
  - Filter history with easy undo/redo
  
  Performance: Automatically uses PostgreSQL when available for optimal speed, falls back to Spatialite or local backend otherwise.
+ 
+ Full documentation: https://sducournau.github.io/filter_mate
 
 tracker=https://github.com/sducournau/filter_mate/issues
 repository=https://github.com/sducournau/filter_mate

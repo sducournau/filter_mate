@@ -25,7 +25,9 @@
 - 🌓 **Theme support** - Automatic synchronization with QGIS theme
 <br>
 <br>
-Github page : https://sducournau.github.io/filter_mate
+📚 **Documentation** : https://sducournau.github.io/filter_mate
+<br>
+Github repository : https://github.com/sducournau/filter_mate
 <br>
 Qgis plugin repository : https://plugins.qgis.org/plugins/filter_mate
 
