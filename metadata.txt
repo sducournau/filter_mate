@@ -83,7 +83,7 @@ changelog=
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export
 
-homepage=https://sducournau.github.io/filter_mate
+homepage=https://github.com/sducournau/filter_mate
 category=Plugins
 icon=icon.png
 # experimental flag
