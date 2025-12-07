@@ -1,10 +1,18 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.2.1** | December 2025
+**Version 2.2.2** | December 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.2
+### 🎉 What's New in v2.2.2
+- ✅ **Real-time Configuration** - JSON tree view changes apply instantly without restart
+- ✅ **Dynamic UI Profiles** - Switch between compact/normal/auto modes on-the-fly
+- ✅ **Enhanced Config Types** - Dropdown selectors for key configuration fields
+- ✅ **Auto-Save Configuration** - All changes automatically saved to config.json
+- ✅ **Type Safety** - Invalid config values prevented at UI level
+- ✅ **Better UX** - Live icon updates and profile switching feedback
+
+### Previous Updates (v2.2.1)
 - ✅ **Enhanced Stability** - Improved Qt JSON view crash prevention
 - ✅ **Better Error Recovery** - Robust tab widget and theme handling
 - ✅ **Complete Multi-Backend** - PostgreSQL, Spatialite, and OGR implementations

@@ -276,11 +276,16 @@ QToolBox::tab {
     color: {color_font_0};
 }
 
+QToolBox::tab:hover:!selected {
+    background-color: {color_2};
+    border: 1px solid {color_accent};
+}
+
 QToolBox::tab:selected {
-    background-color: {color_accent_light_bg};
+    background-color: {color_accent};
     border: 2px solid {color_accent};
     font-weight: bold;
-    color: {color_accent_dark};
+    color: {color_1};
 }
 
 /* ========================================================================

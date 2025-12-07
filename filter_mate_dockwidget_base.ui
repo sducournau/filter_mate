@@ -9,19 +9,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>470</width>
-    <height>939</height>
+    <width>351</width>
+    <height>796</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>421</width>
-    <height>611</height>
+    <width>351</width>
+    <height>615</height>
    </size>
   </property>
   <property name="baseSize">
    <size>
-    <width>350</width>
+    <width>160</width>
     <height>0</height>
    </size>
   </property>
@@ -402,8 +402,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>460</width>
-             <height>285</height>
+             <width>341</width>
+             <height>359</height>
             </rect>
            </property>
            <layout class="QGridLayout" name="gridLayout_main_header">
@@ -1414,7 +1414,7 @@
              <enum>QFrame::Panel</enum>
             </property>
             <property name="currentIndex">
-             <number>2</number>
+             <number>0</number>
             </property>
             <property name="tabSpacing">
              <number>0</number>
@@ -1424,8 +1424,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>458</width>
-               <height>290</height>
+               <width>318</width>
+               <height>246</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -2604,22 +2604,6 @@
                   </item>
                  </layout>
                 </item>
-                <item>
-                 <spacer name="horizontalSpacer_filtering_values_right">
-                  <property name="orientation">
-                   <enum>Qt::Horizontal</enum>
-                  </property>
-                  <property name="sizeType">
-                   <enum>QSizePolicy::Preferred</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>20</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
                </layout>
               </item>
              </layout>
@@ -2629,8 +2613,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>458</width>
-               <height>290</height>
+               <width>687</width>
+               <height>236</height>
               </rect>
              </property>
              <attribute name="icon">
@@ -3466,8 +3450,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>458</width>
-               <height>290</height>
+               <width>409</width>
+               <height>155</height>
               </rect>
              </property>
              <attribute name="icon">

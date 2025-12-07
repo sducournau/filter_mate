@@ -153,6 +153,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.export_properties_tuples_dict = None
         self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
 
+        # Initialize config changes tracking
+        self.pending_config_changes = []
+        self.config_changes_pending = False
+
         self.setupUi(self)
         self.setupUiCustom()
         self.manage_ui_style()
@@ -648,11 +652,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 from .modules.ui_elements import get_spacer_size
                 from .modules.ui_config import DisplayProfile
                 
+                # Initialize with default values to avoid UnboundLocalError
+                spacer_sizes = {
+                    'exploring': 4,
+                    'filtering': 4,
+                    'exporting': 4
+                }
+                
                 # Get consistent spacing from config
                 layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
                 
                 # Get compact mode status from UIConfig
-                is_compact = UIConfig.active_profile == DisplayProfile.COMPACT
+                is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
                 
                 # Get dynamic spacer sizes based on active profile
                 # Use section-specific sizes from ui_elements configuration
@@ -865,6 +876,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 "CUSTOM_SELECTION":{"TYPE":"GroupBox","WIDGET":self.mGroupBox_exploring_custom_selection, "SIGNALS":[("clicked", lambda state, x='custom_selection': self.exploring_groupbox_changed(x))]},
                                 "CONFIGURATION_TREE_VIEW":{"TYPE":"JsonTreeView","WIDGET":self.config_view, "SIGNALS":[("collapsed", None),("expanded", None)]},
                                 "CONFIGURATION_MODEL":{"TYPE":"JsonModel","WIDGET":self.config_model, "SIGNALS":[("itemChanged", None)]},
+                                "CONFIGURATION_BUTTONBOX":{"TYPE":"DialogButtonBox","WIDGET":self.buttonBox, "SIGNALS":[("accepted", None),("rejected", None)]},
                                 "TOOLS":{"TYPE":"ToolBox","WIDGET":self.toolBox_tabTools, "SIGNALS":[("currentChanged", self.select_tabTools_index)]}
                                 }   
 
@@ -937,6 +949,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets_initialized = True
 
     def data_changed_configuration_model(self, input_data=None):
+        """Track configuration changes without applying them immediately"""
 
         if self.widgets_initialized is True:
 
@@ -952,12 +965,283 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 item_key = item_key.parent()
 
             items_keys_values_path.reverse()
+            
+            # Store change for later application
+            self.pending_config_changes.append({
+                'path': items_keys_values_path,
+                'index': index,
+                'item': item
+            })
+            self.config_changes_pending = True
+            
+            # Enable OK/Cancel buttons when changes are pending
+            if hasattr(self, 'buttonBox'):
+                self.buttonBox.setEnabled(True)
+                logger.info("Configuration buttons enabled (changes pending)")
+            
+            # Mark that changes are pending (visual feedback could be added)
+            logger.info(f"Configuration change pending: {' → '.join(items_keys_values_path)}")
+            
+            # Note: Changes are NOT applied immediately
+            # They will be applied when user clicks OK button
 
+
+    def apply_pending_config_changes(self):
+        """Apply all pending configuration changes when OK button is clicked"""
+        
+        if not self.config_changes_pending or not self.pending_config_changes:
+            logger.info("No pending configuration changes to apply")
+            return
+        
+        logger.info(f"Applying {len(self.pending_config_changes)} pending configuration change(s)")
+        
+        changes_summary = []
+        
+        for change in self.pending_config_changes:
+            items_keys_values_path = change['path']
+            index = change['index']
+            item = change['item']
+            
+            # Handle ICONS changes
             if 'ICONS' in items_keys_values_path:
                 self.set_widget_icon(items_keys_values_path)
+                changes_summary.append(f"Icon: {' → '.join(items_keys_values_path[-2:])}")
+            
+            # Handle ACTIVE_THEME changes - apply new theme
+            if 'ACTIVE_THEME' in items_keys_values_path:
+                try:
+                    # Get the new theme value from the edited item
+                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+                    value_data = value_item.data(QtCore.Qt.UserRole)
+                    
+                    # Handle ChoicesType format (dict with 'value' and 'choices')
+                    if isinstance(value_data, dict) and 'value' in value_data:
+                        new_theme_value = value_data['value']
+                    else:
+                        # Fallback for string format (backward compatibility)
+                        new_theme_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+                    
+                    if new_theme_value:
+                        logger.info(f"ACTIVE_THEME changed to: {new_theme_value}")
+                        
+                        # Apply new theme
+                        from .modules.ui_styles import StyleLoader
+                        
+                        if new_theme_value == 'auto':
+                            # Auto-detect theme from QGIS
+                            detected_theme = StyleLoader.detect_qgis_theme()
+                            logger.info(f"Auto-detected QGIS theme: {detected_theme}")
+                            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected_theme)
+                        else:
+                            # Apply specified theme (default, dark, light)
+                            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme_value)
+                        
+                        changes_summary.append(f"Theme: {new_theme_value}")
+                        
+                except Exception as e:
+                    logger.error(f"Error applying ACTIVE_THEME change: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            
+            # Handle UI_PROFILE changes - apply new dimensions immediately
+            if 'UI_PROFILE' in items_keys_values_path:
+                try:
+                    # Get the new profile value from the edited item
+                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+                    value_data = value_item.data(QtCore.Qt.UserRole)
+                    
+                    # Handle ChoicesType format (dict with 'value' and 'choices')
+                    if isinstance(value_data, dict) and 'value' in value_data:
+                        new_profile_value = value_data['value']
+                    else:
+                        # Fallback for string format (backward compatibility)
+                        new_profile_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+                    
+                    if new_profile_value:
+                        logger.info(f"UI_PROFILE changed to: {new_profile_value}")
+                        
+                        # Update UIConfig with new profile
+                        if UI_CONFIG_AVAILABLE:
+                            from .modules.ui_config import UIConfig, DisplayProfile
+                            
+                            if new_profile_value == 'compact':
+                                UIConfig.set_profile(DisplayProfile.COMPACT)
+                                logger.info("Switched to COMPACT profile")
+                            elif new_profile_value == 'normal':
+                                UIConfig.set_profile(DisplayProfile.NORMAL)
+                                logger.info("Switched to NORMAL profile")
+                            elif new_profile_value == 'auto':
+                                # Detect optimal profile based on screen size
+                                detected_profile = UIConfig.detect_optimal_profile()
+                                UIConfig.set_profile(detected_profile)
+                                logger.info(f"Auto-detected profile: {detected_profile.value}")
+                            
+                            # Re-apply dynamic dimensions with new profile
+                            self.apply_dynamic_dimensions()
+                            
+                            # Show confirmation message to user
+                            profile_display = UIConfig.get_profile_name().upper()
+                            iface.messageBar().pushSuccess(
+                                "FilterMate",
+                                f"UI profile changed to {profile_display} mode. Dimensions updated.",
+                                3
+                            )
+                        else:
+                            logger.warning("UI_CONFIG not available - cannot apply profile changes")
+                            
+                except Exception as e:
+                    logger.error(f"Error applying UI_PROFILE change: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            
+            # Handle STYLES_TO_EXPORT changes - update export style combobox
+            if 'STYLES_TO_EXPORT' in items_keys_values_path:
+                try:
+                    # Get the new style value from the edited item
+                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+                    value_data = value_item.data(QtCore.Qt.UserRole)
+                    
+                    # Handle ChoicesType format (dict with 'value' and 'choices')
+                    if isinstance(value_data, dict) and 'value' in value_data:
+                        new_style_value = value_data['value']
+                    else:
+                        # Fallback for string format (backward compatibility)
+                        new_style_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+                    
+                    if new_style_value and 'STYLE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
+                        logger.info(f"STYLES_TO_EXPORT changed to: {new_style_value}")
+                        
+                        # Update the combobox selection
+                        style_combo = self.widgets["EXPORTING"]["STYLE_TO_EXPORT"]["WIDGET"]
+                        index_to_set = style_combo.findText(new_style_value)
+                        if index_to_set >= 0:
+                            style_combo.setCurrentIndex(index_to_set)
+                            logger.info(f"Export style updated to: {new_style_value}")
+                            
+                            iface.messageBar().pushInfo(
+                                "FilterMate",
+                                f"Export style changed to {new_style_value}",
+                                3
+                            )
+                        
+                except Exception as e:
+                    logger.error(f"Error applying STYLES_TO_EXPORT change: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            
+            # Handle DATATYPE_TO_EXPORT changes - update export format combobox
+            if 'DATATYPE_TO_EXPORT' in items_keys_values_path:
+                try:
+                    # Get the new format value from the edited item
+                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+                    value_data = value_item.data(QtCore.Qt.UserRole)
+                    
+                    # Handle ChoicesType format (dict with 'value' and 'choices')
+                    if isinstance(value_data, dict) and 'value' in value_data:
+                        new_format_value = value_data['value']
+                    else:
+                        # Fallback for string format (backward compatibility)
+                        new_format_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+                    
+                    if new_format_value and 'DATATYPE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
+                        logger.info(f"DATATYPE_TO_EXPORT changed to: {new_format_value}")
+                        
+                        # Update the combobox selection
+                        format_combo = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
+                        index_to_set = format_combo.findText(new_format_value)
+                        if index_to_set >= 0:
+                            format_combo.setCurrentIndex(index_to_set)
+                            logger.info(f"Export format updated to: {new_format_value}")
+                            
+                            iface.messageBar().pushInfo(
+                                "FilterMate",
+                                f"Export format changed to {new_format_value}",
+                                3
+                            )
+                        
+                except Exception as e:
+                    logger.error(f"Error applying DATATYPE_TO_EXPORT change: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
 
             self.save_configuration_model()
+        
+        # Clear pending changes after applying them
+        self.pending_config_changes = []
+        self.config_changes_pending = False
+        
+        # Disable OK/Cancel buttons after changes have been applied
+        if hasattr(self, 'buttonBox'):
+            self.buttonBox.setEnabled(False)
+            logger.info("Configuration buttons disabled (changes applied)")
+        
+        logger.info("All pending configuration changes have been applied and saved")
 
+
+    def cancel_pending_config_changes(self):
+        """Cancel pending configuration changes when Cancel button is clicked"""
+        
+        if not self.config_changes_pending or not self.pending_config_changes:
+            logger.info("No pending configuration changes to cancel")
+            return
+        
+        logger.info(f"Cancelling {len(self.pending_config_changes)} pending configuration change(s)")
+        
+        # Reload configuration from file to revert changes in tree view
+        try:
+            with open(self.plugin_dir + '/config/config.json', 'r') as infile:
+                self.CONFIG_DATA = json.load(infile)
+            
+            # Recreate model with original data
+            self.config_model = JsonModel(
+                data=self.CONFIG_DATA, 
+                editable_keys=True, 
+                editable_values=True, 
+                plugin_dir=self.plugin_dir
+            )
+            
+            # Update view
+            if hasattr(self, 'config_view') and self.config_view is not None:
+                self.config_view.setModel(self.config_model)
+                self.config_view.model = self.config_model
+            
+            # Clear pending changes
+            self.pending_config_changes = []
+            self.config_changes_pending = False
+            
+            # Disable buttons after cancelling changes
+            if hasattr(self, 'buttonBox'):
+                self.buttonBox.setEnabled(False)
+                logger.info("Configuration buttons disabled (changes cancelled)")
+            
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                "Configuration changes cancelled and reverted",
+                3
+            )
+            logger.info("Configuration changes cancelled successfully")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling configuration changes: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error cancelling changes: {str(e)}",
+                5
+            )
+
+
+    def on_config_buttonbox_accepted(self):
+        """Called when OK button is clicked"""
+        logger.info("Configuration OK button clicked")
+        self.apply_pending_config_changes()
+
+
+    def on_config_buttonbox_rejected(self):
+        """Called when Cancel button is clicked"""
+        logger.info("Configuration Cancel button clicked")
+        self.cancel_pending_config_changes()
 
 
     def reload_configuration_model(self):
@@ -1012,6 +1296,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.config_view.setAnimated(True)
             self.config_view.setEnabled(True)
             self.config_view.show()
+            
+            # Disable OK/Cancel buttons by default (no changes pending)
+            if hasattr(self, 'buttonBox'):
+                self.buttonBox.setEnabled(False)
+                logger.info("Configuration buttons disabled (no pending changes)")
+            
+            # Connect OK/Cancel button signals
+            if hasattr(self, 'buttonBox'):
+                self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
+                self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
+                logger.info("Configuration button signals connected")
         except Exception as e:
             logger.error(f"Error creating configuration model: {e}")
             import traceback
@@ -1551,10 +1846,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # are already connected via connect_widgets_signals() above.
         # No need for manual connection to avoid double signal firing.
         
-        #self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].itemChanged.connect(self.data_changed_configuration_model)
-        # self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].dataChanged.connect(self.save_configuration_model)
-        # self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsInserted.connect(self.save_configuration_model)
-        # self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].rowsRemoved.connect(self.save_configuration_model)
+        # Connect configuration model signal to detect changes in JSON tree view
+        self.widgets["DOCK"]["CONFIGURATION_MODEL"]["WIDGET"].itemChanged.connect(self.data_changed_configuration_model)
         # self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].filterExpressionChanged()
         
         # self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].contextMenuEvent

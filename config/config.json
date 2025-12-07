@@ -1,14 +1,16 @@
 {
     "APP": {
         "DOCKWIDGET": {
-            "UI_PROFILE": "auto",
-            "UI_PROFILE_OPTIONS": {
-                "description": "UI display profile: 'auto' (detect from screen), 'compact' for small screens, 'normal' for standard displays",
-                "available_profiles": [
+            "UI_PROFILE": {
+                "choices": [
                     "auto",
                     "compact",
                     "normal"
                 ],
+                "value": "compact"
+            },
+            "_UI_PROFILE_META": {
+                "description": "UI display profile: 'auto' (detect from screen), 'compact' for small screens, 'normal' for standard displays",
                 "auto_detection_thresholds": {
                     "compact_if_width_less_than": 1920,
                     "compact_if_height_less_than": 1080
@@ -72,8 +74,23 @@
                 }
             },
             "COLORS": {
-                "ACTIVE_THEME": "auto",
-                "THEME_SOURCE": "config",
+                "ACTIVE_THEME": {
+                    "choices": [
+                        "auto",
+                        "default",
+                        "dark",
+                        "light"
+                    ],
+                    "value": "default"
+                },
+                "THEME_SOURCE": {
+                    "choices": [
+                        "config",
+                        "qgis",
+                        "system"
+                    ],
+                    "value": "config"
+                },
                 "THEMES": {
                     "default": {
                         "BACKGROUND": [
@@ -212,7 +229,7 @@
                 "OUT_DistributionClusters_7449fae9_2edf_479b_a10f_51bd0478fd0a",
                 "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
-            "HAS_PROJECTION_TO_EXPORT": false,
+            "HAS_PROJECTION_TO_EXPORT": true,
             "PROJECTION_TO_EXPORT": "EPSG:31370",
             "HAS_STYLES_TO_EXPORT": true,
             "STYLES_TO_EXPORT": "QML",

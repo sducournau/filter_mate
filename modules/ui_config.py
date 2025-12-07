@@ -672,7 +672,13 @@ class UIConfig:
         """
         try:
             # Check if UI_PROFILE is defined in config
-            ui_profile = config_dict.get("APP", {}).get("DOCKWIDGET", {}).get("UI_PROFILE", "auto")
+            ui_profile_config = config_dict.get("APP", {}).get("DOCKWIDGET", {}).get("UI_PROFILE", "auto")
+            
+            # Extract value if UI_PROFILE is a dict with 'value' key, otherwise use as-is
+            if isinstance(ui_profile_config, dict) and "value" in ui_profile_config:
+                ui_profile = ui_profile_config["value"]
+            else:
+                ui_profile = ui_profile_config
             
             # Handle auto-detection
             if ui_profile == "auto" and auto_detect:

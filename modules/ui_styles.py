@@ -51,19 +51,19 @@ class StyleLoader:
             'color_accent_dark': '#01579B'      # Accent dark border
         },
         'dark': {
-            'color_bg_0': '#1E1E1E',    # Dark frame background
-            'color_1': '#2D2D30',       # Widget background
-            'color_2': '#3E3E42',       # Selected items
-            'color_bg_3': '#007ACC',    # Splitter hover
-            'color_3': '#D0D0D0',       # Light text
-            'color_font_0': '#EFF0F1',  # Primary text (very light)
-            'color_font_1': '#D0D0D0',  # Secondary text
-            'color_font_2': '#808080',  # Disabled text
-            'color_accent': '#007ACC',
-            'color_accent_hover': '#1E90FF',
-            'color_accent_pressed': '#005A9E',
-            'color_accent_light_bg': '#1E3A5F',
-            'color_accent_dark': '#003D66'
+            'color_bg_0': '#1E1E1E',    # Dark frame background (harmonisé avec JsonView)
+            'color_1': '#252526',       # Widget background (VS Code dark style)
+            'color_2': '#37373D',       # Selected items (plus visible)
+            'color_bg_3': '#0E639C',    # Splitter hover (bleu plus sombre)
+            'color_3': '#CCCCCC',       # Light text (légèrement plus doux)
+            'color_font_0': '#D4D4D4',  # Primary text (plus confortable pour les yeux)
+            'color_font_1': '#9D9D9D',  # Secondary text (plus de contraste avec primary)
+            'color_font_2': '#6A6A6A',  # Disabled text (plus foncé pour bien différencier)
+            'color_accent': '#007ACC',  # Bleu VS Code (parfait)
+            'color_accent_hover': '#1177BB',    # Hover plus subtil
+            'color_accent_pressed': '#005A9E',  # Pressed reste sombre
+            'color_accent_light_bg': '#264F78', # Background accentué plus visible (harmonisé)
+            'color_accent_dark': '#FFFFFF'      # Text sur fond accentué (blanc pour contraste)
         },
         'light': {
             'color_bg_0': '#FFFFFF',    # Very light frame background
@@ -189,7 +189,12 @@ class StyleLoader:
             # Check if new THEMES structure exists
             if "THEMES" in colors_config and "ACTIVE_THEME" in colors_config:
                 # Use new theme system
-                active_theme = theme if theme else colors_config["ACTIVE_THEME"]
+                # Extract value if ACTIVE_THEME is a dict with 'value' key, otherwise use as-is
+                active_theme_config = colors_config["ACTIVE_THEME"]
+                if isinstance(active_theme_config, dict) and "value" in active_theme_config:
+                    active_theme = theme if theme else active_theme_config["value"]
+                else:
+                    active_theme = theme if theme else active_theme_config
                 theme_colors = colors_config["THEMES"].get(active_theme, colors_config["THEMES"]["default"])
                 bg = theme_colors["BACKGROUND"]
                 font = theme_colors["FONT"]
@@ -343,7 +348,13 @@ class StyleLoader:
         """
         try:
             colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
-            active_theme = colors_config.get("ACTIVE_THEME", "default")
+            active_theme_config = colors_config.get("ACTIVE_THEME", "default")
+            
+            # Extract value if ACTIVE_THEME is a dict with 'value' key, otherwise use as-is
+            if isinstance(active_theme_config, dict) and "value" in active_theme_config:
+                active_theme = active_theme_config["value"]
+            else:
+                active_theme = active_theme_config
             
             # Auto-detect from QGIS if set to 'auto'
             if active_theme == "auto":

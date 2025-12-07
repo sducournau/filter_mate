@@ -4408,7 +4408,14 @@ class LayersManagementEngineTask(QgsTask):
                 return False
 
         # Sort layers once after all operations (performance optimization)
-        self.project_layers = dict(OrderedDict(sorted(self.project_layers.items(), key = lambda layer: (getitem(layer[1]['infos'], 'layer_geometry_type'), getitem(layer[1]['infos'], 'layer_name')))))
+        # Use .get() with default values to handle missing keys gracefully
+        self.project_layers = dict(OrderedDict(sorted(
+            self.project_layers.items(), 
+            key=lambda layer: (
+                layer[1]['infos'].get('layer_geometry_type', 'Unknown'),
+                layer[1]['infos'].get('layer_name', '')
+            )
+        )))
 
         return True
     
@@ -4519,9 +4526,57 @@ class LayersManagementEngineTask(QgsTask):
                 logger.debug(f"Added layer_table_name to database for layer {layer.id()}")
             except Exception as e:
                 logger.warning(f"Could not add layer_table_name to database: {e}")
+        
+        # Add layer_provider_type if missing (for layers created before this feature)
+        if "layer_provider_type" not in infos:
+            layer_provider_type = detect_layer_provider_type(layer)
+            infos["layer_provider_type"] = layer_provider_type
+            logger.info(f"Added layer_provider_type='{layer_provider_type}' for layer {layer.id()}")
             
-            # Set as QGIS layer variable
-            QgsExpressionContextUtils.setLayerVariable(layer, "filterMate_infos_layer_table_name", source_table_name)
+            # Add to database
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_provider_type', ?)""",
+                    (str(self.project_uuid), layer.id(), layer_provider_type)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.debug(f"Added layer_provider_type to database for layer {layer.id()}")
+            except Exception as e:
+                logger.warning(f"Could not add layer_provider_type to database: {e}")
+            
+            # Set as QGIS layer variable (use infos dict value)
+            QgsExpressionContextUtils.setLayerVariable(layer, "filterMate_infos_layer_table_name", infos.get("layer_table_name", ""))
+        
+        # Add layer_geometry_type if missing (for layers created before this feature)
+        if "layer_geometry_type" not in infos:
+            layer_geometry_type = geometry_type_to_string(layer)
+            infos["layer_geometry_type"] = layer_geometry_type
+            logger.info(f"Added layer_geometry_type='{layer_geometry_type}' for layer {layer.id()}")
+            
+            # Add to database
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_geometry_type', ?)""",
+                    (str(self.project_uuid), layer.id(), layer_geometry_type)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.debug(f"Added layer_geometry_type to database for layer {layer.id()}")
+            except Exception as e:
+                logger.warning(f"Could not add layer_geometry_type to database: {e}")
 
     def _detect_layer_metadata(self, layer, layer_provider_type):
         """
@@ -4645,7 +4700,15 @@ class LayersManagementEngineTask(QgsTask):
             layer: QgsVectorLayer to index
             layer_props: Layer properties dictionary
         """
-        if layer_props["infos"]["layer_provider_type"] == PROVIDER_POSTGRES:
+        # Safely get provider type with fallback
+        layer_provider_type = layer_props.get("infos", {}).get("layer_provider_type")
+        
+        # If not found in props, detect it directly
+        if not layer_provider_type:
+            layer_provider_type = detect_layer_provider_type(layer)
+            logger.debug(f"Provider type not in layer_props, detected as: {layer_provider_type}")
+        
+        if layer_provider_type == PROVIDER_POSTGRES:
             try:
                 self.create_spatial_index_for_postgresql_layer(layer, layer_props)
             except (psycopg2.Error, AttributeError, KeyError) as e:

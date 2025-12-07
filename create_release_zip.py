@@ -40,7 +40,7 @@ def create_plugin_zip():
     """Create ZIP archive for FilterMate plugin"""
     plugin_dir = Path(__file__).parent
     parent_dir = plugin_dir.parent
-    zip_path = parent_dir / 'filter_mate_v2.2.0.zip'
+    zip_path = parent_dir / 'filter_mate_v2.2.2.zip'
     
     print(f"Creating ZIP archive: {zip_path}")
     print(f"From directory: {plugin_dir}")

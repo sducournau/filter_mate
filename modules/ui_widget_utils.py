@@ -14,10 +14,11 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QSize, Qt
 
 try:
-    from .ui_config import UIConfig
+    from .ui_config import UIConfig, DisplayProfile
     UI_CONFIG_AVAILABLE = True
 except ImportError:
     UI_CONFIG_AVAILABLE = False
+    DisplayProfile = None
 
 
 def apply_button_dimensions(button: QPushButton, button_type: str = "button") -> None:
@@ -274,8 +275,6 @@ def switch_profile(profile_name: str) -> bool:
         return False
     
     try:
-        from .ui_config import DisplayProfile
-        
         if profile_name.lower() == "compact":
             UIConfig.set_profile(DisplayProfile.COMPACT)
             return True
@@ -420,18 +419,32 @@ def auto_configure_from_environment(config_data: dict = None) -> dict:
         
         # Override with config if provided and not "auto"
         if config_data:
-            ui_profile = config_data.get("APP", {}).get("DOCKWIDGET", {}).get("UI_PROFILE", "auto")
+            ui_profile_config = config_data.get("APP", {}).get("DOCKWIDGET", {}).get("UI_PROFILE", "auto")
+            
+            # Extract value if UI_PROFILE is a dict with 'value' key, otherwise use as-is
+            if isinstance(ui_profile_config, dict) and "value" in ui_profile_config:
+                ui_profile = ui_profile_config["value"]
+            else:
+                ui_profile = ui_profile_config
+                
             if ui_profile in ["compact", "normal"]:
                 # User explicitly set a profile, don't auto-detect
                 if ui_profile == "compact":
-                    UIConfig.set_profile(UIConfig.DisplayProfile.COMPACT)
+                    UIConfig.set_profile(DisplayProfile.COMPACT)
                 else:
-                    UIConfig.set_profile(UIConfig.DisplayProfile.NORMAL)
+                    UIConfig.set_profile(DisplayProfile.NORMAL)
                 result['profile_detected'] = ui_profile
                 result['profile_source'] = 'config.json'
             
             # Check theme setting
-            theme_setting = config_data.get("APP", {}).get("DOCKWIDGET", {}).get("COLORS", {}).get("ACTIVE_THEME", "auto")
+            theme_setting_config = config_data.get("APP", {}).get("DOCKWIDGET", {}).get("COLORS", {}).get("ACTIVE_THEME", "auto")
+            
+            # Extract value if ACTIVE_THEME is a dict with 'value' key, otherwise use as-is
+            if isinstance(theme_setting_config, dict) and "value" in theme_setting_config:
+                theme_setting = theme_setting_config["value"]
+            else:
+                theme_setting = theme_setting_config
+                
             if theme_setting != "auto":
                 result['theme_detected'] = theme_setting
                 result['theme_source'] = 'config.json'

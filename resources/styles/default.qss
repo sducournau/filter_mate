@@ -90,12 +90,11 @@ QgsCheckableComboBox::indicator:checked {
 }
 
 /* ToolBox TabWidget */
-QWidget {
-    background-color: {color_bg_0};
-}
+/* Note: Removed generic QWidget background to prevent unwanted overrides */
+/* Instead, backgrounds are set explicitly on specific widgets */
 
 QToolBox {
-    background-color: transparent;
+    background-color: {color_bg_0};
     border: none;
     padding: 4px;
 }
@@ -103,7 +102,7 @@ QToolBox {
 /* Style pour les onglets du QToolBox */
 QToolBox::tab {
     background-color: {color_1};
-    border: 1px solid {color_1};
+    border: 1px solid {color_2};
     border-radius: 4px;
     padding: 0;
     margin: 2px;
@@ -180,14 +179,14 @@ QDockWidget::float-button:pressed {
     background: {color_accent};
 }
 
-/* Frames */
+/* Frames - Base styling */
 QFrame {
     background-color: {color_bg_0};
     border: none;
     border-radius: 4px;
     padding: 4px;
-    margin: 2px;
-    color: {color_3};
+    margin: 0px;
+    color: {color_font_0};
 }
 
 /* Frame ToolSet - Integration améliorée */
@@ -200,8 +199,8 @@ QFrame#frame_toolset {
 
 /* Expression Builder */
 QgsExpressionBuilderWidget {
-    background-color: {color_bg_0};
-    border: none;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 4px;
     padding: 8px;
     color: {color_font_0};
@@ -209,14 +208,16 @@ QgsExpressionBuilderWidget {
 
 /* Scroll Area */
 QScrollArea {
-    background-color: {color_bg_0};
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 4px;
     color: {color_font_0};
 }
 
 /* Collapsible Group Box */
 QgsCollapsibleGroupBox {
-    background-color: {color_bg_0};
-    border: none;
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 4px;
     padding: 8px;
     padding-top: 24px;
@@ -373,11 +374,11 @@ QScrollBar::sub-page:horizontal {
 /* GroupBox Styling */
 QGroupBox {
     background-color: transparent;
-    border: 1px solid {color_1};
+    border: 1px solid {color_2};
     border-radius: 3px;
     margin-top: 0.8ex;
     padding: 8px;
-    font-weight: bold;
+    font-weight: 600;
     color: {color_font_0};
 }
 
@@ -696,13 +697,15 @@ QProgressBar::chunk {
 }
 
 /* Widget Keys Panels - Sidebar buttons */
+/* Harmonized background with main frame color for consistency */
 QWidget#widget_exploring_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
-    background-color: {color_2};
+    background-color: {color_1};
+    border: 1px solid {color_2};
     border-radius: 6px;
     padding: 8px;
-    margin: 4px;
+    margin: 2px;
 }
 
 /* Buttons inside widget_exploring_keys - Non-checkable */
@@ -910,12 +913,20 @@ QFrame#frame_actions QPushButton:!checkable:disabled {
     opacity: 0.4;
 }
 
-/* TreeView */
-QTreeView {
-    background-color: {color_bg_0};
+/* TreeView & ListWidget - Harmonized backgrounds */
+QTreeView,
+QListWidget {
+    background-color: {color_1};
     border: 1px solid {color_2};
+    border-radius: 3px;
     color: {color_font_0};
-    padding: 0;
+    padding: 2px;
+}
+
+QTreeView:focus,
+QListWidget:focus {
+    border: 2px solid {color_accent};
+    padding: 1px;
 }
 
 QTreeView::item {

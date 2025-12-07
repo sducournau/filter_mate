@@ -23,45 +23,8 @@ class JsonView(QtWidgets.QTreeView):
         self.customContextMenuRequested.connect(self._menu)
         self.setItemDelegate(delegate.JsonDelegate())
         
-        # Amélioration de la visibilité
-        self.setStyleSheet("""
-            QTreeView {
-                font-size: 9pt;
-                background-color: #ffffff;
-                alternate-background-color: #f5f5f5;
-                selection-background-color: #0078d4;
-                selection-color: white;
-                border: 2px solid #999999;
-                gridline-color: #d0d0d0;
-            }
-            QTreeView::item {
-                padding: 3px;
-                min-height: 22px;
-                border-bottom: 1px solid #e0e0e0;
-            }
-            QTreeView::item:hover {
-                background-color: #e5f3ff;
-            }
-            QTreeView::item:selected {
-                background-color: #0078d4;
-                color: white;
-            }
-            QTreeView::branch {
-                background-color: transparent;
-            }
-            QHeaderView::section {
-                background-color: #f0f0f0;
-                padding: 4px;
-                border: 1px solid #c0c0c0;
-                border-left: none;
-                font-weight: bold;
-                font-size: 9pt;
-                min-height: 24px;
-            }
-            QHeaderView::section:first {
-                border-left: 1px solid #c0c0c0;
-            }
-        """)
+        # Amélioration de la visibilité avec support du thème dark
+        self._apply_theme_stylesheet()
         
         # Configuration additionnelle pour la lisibilité
         self.setAlternatingRowColors(True)
@@ -84,6 +47,102 @@ class JsonView(QtWidgets.QTreeView):
         header.resizeSection(1, 240)
         header.setMinimumSectionSize(120)
 
+    def _apply_theme_stylesheet(self):
+        """Apply stylesheet based on detected theme (dark/light)."""
+        # Détection simple du thème basée sur la palette
+        try:
+            from qgis.core import QgsApplication
+            palette = QgsApplication.palette()
+            bg_color = palette.color(QtGui.QPalette.Window)
+            is_dark = bg_color.lightness() < 128
+        except:
+            is_dark = False
+        
+        if is_dark:
+            # Thème sombre optimisé
+            self.setStyleSheet("""
+                QTreeView {
+                    font-size: 9pt;
+                    background-color: #1E1E1E;
+                    alternate-background-color: #252526;
+                    selection-background-color: #264F78;
+                    selection-color: #FFFFFF;
+                    border: 1px solid #3E3E42;
+                    gridline-color: #3E3E42;
+                    color: #D4D4D4;
+                }
+                QTreeView::item {
+                    padding: 3px;
+                    min-height: 22px;
+                    border-bottom: 1px solid #2D2D30;
+                }
+                QTreeView::item:hover {
+                    background-color: #2A2D2E;
+                }
+                QTreeView::item:selected {
+                    background-color: #264F78;
+                    color: #FFFFFF;
+                }
+                QTreeView::item:selected:hover {
+                    background-color: #094771;
+                }
+                QTreeView::branch {
+                    background-color: transparent;
+                }
+                QHeaderView::section {
+                    background-color: #252526;
+                    padding: 4px;
+                    border: 1px solid #3E3E42;
+                    border-left: none;
+                    font-weight: bold;
+                    font-size: 9pt;
+                    min-height: 24px;
+                    color: #CCCCCC;
+                }
+                QHeaderView::section:first {
+                    border-left: 1px solid #3E3E42;
+                }
+            """)
+        else:
+            # Thème clair
+            self.setStyleSheet("""
+                QTreeView {
+                    font-size: 9pt;
+                    background-color: #ffffff;
+                    alternate-background-color: #f5f5f5;
+                    selection-background-color: #0078d4;
+                    selection-color: white;
+                    border: 2px solid #999999;
+                    gridline-color: #d0d0d0;
+                }
+                QTreeView::item {
+                    padding: 3px;
+                    min-height: 22px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                QTreeView::item:hover {
+                    background-color: #e5f3ff;
+                }
+                QTreeView::item:selected {
+                    background-color: #0078d4;
+                    color: white;
+                }
+                QTreeView::branch {
+                    background-color: transparent;
+                }
+                QHeaderView::section {
+                    background-color: #f0f0f0;
+                    padding: 4px;
+                    border: 1px solid #c0c0c0;
+                    border-left: none;
+                    font-weight: bold;
+                    font-size: 9pt;
+                    min-height: 24px;
+                }
+                QHeaderView::section:first {
+                    border-left: 1px solid #c0c0c0;
+                }
+            """)
 
     # def leaveEvent(self, QEvent):
     #     self.onLeaveEvent.emit()
