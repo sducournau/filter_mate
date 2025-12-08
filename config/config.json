@@ -175,8 +175,8 @@
         },
         "OPTIONS": {
             "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
-            "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
-            "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
+            "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
+            "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
             "APP_SQLITE_PATH": "C:\\Users\\SimonDucorneau\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\FilterMate",
             "FRESH_RELOAD_FLAG": false
         }

@@ -2816,27 +2816,26 @@ class FilterEngineTask(QgsTask):
     
     def _get_combine_operator(self):
         """
-        Get SQL set operator for combining with distant layers' existing filters.
+        Get operator for combining with distant layers' existing filters.
         
-        Converts UI operators to SQL set operations for distant layer filtering:
-        - 'AND' → 'INTERSECT' (intersection of sets)
-        - 'AND NOT' → 'EXCEPT' (set difference)
-        - 'OR' → 'UNION' (union of sets)
+        Returns the operator directly from UI for use in WHERE clauses:
+        - 'AND': Logical AND (intersection)
+        - 'AND NOT': Logical AND NOT (exclusion)
+        - 'OR': Logical OR (union)
+        
+        Note: These operators are used directly in SQL WHERE clauses for all backends
+        (PostgreSQL, Spatialite, OGR). For PostgreSQL set operations (UNION, INTERSECT, EXCEPT),
+        use a different method when combining subqueries.
         
         Returns:
-            str: 'INTERSECT', 'UNION', 'EXCEPT', or None
+            str: 'AND', 'OR', 'AND NOT', or None
         """
         if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
             return None
         
-        operator_map = {
-            'AND': 'INTERSECT',
-            'AND NOT': 'EXCEPT',
-            'OR': 'UNION'
-        }
-        
+        # Return operator directly - no conversion needed for WHERE clause combinations
         other_op = getattr(self, 'param_other_layers_combine_operator', None)
-        return operator_map.get(other_op, other_op)
+        return other_op
     
     def _prepare_source_geometry(self, layer_provider_type):
         """
