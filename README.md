@@ -1,10 +1,10 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.2.3** | December 2025
+**Version 2.2.4** | December 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.2.3
+### 🎉 What's New in v2.2.4
 - ✅ **Color Harmonization** - Enhanced visual distinction with +300% frame contrast
 - ✅ **WCAG Accessibility** - AA/AAA compliant text contrast (17.4:1 ratio)
 - ✅ **Reduced Eye Strain** - Optimized color palette for long work sessions

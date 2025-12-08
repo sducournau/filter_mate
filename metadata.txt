@@ -6,13 +6,13 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.2.3
+version=2.2.4
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.2.3 - Color Harmonization & Accessibility!
+about=FilterMate v2.2.4 - Color Harmonization & Accessibility!
 
- NEW in v2.2.3:
+ NEW in v2.2.4:
  - COLOR HARMONIZATION: Enhanced visual distinction and contrast
  - ACCESSIBILITY: WCAG 2.1 AA/AAA compliant text contrast (17.4:1)
  - THEME REFINEMENTS: Improved frame backgrounds and borders

@@ -2,6 +2,32 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.2.4] - 2025-12-08 - Production Release
+
+### 🚀 Release Highlights
+- **Production-Ready**: Stable release with all v2.2.x improvements
+- **Color Harmonization**: Complete WCAG AA/AAA accessibility compliance
+- **Configuration System**: Real-time JSON reactivity and dynamic UI
+- **Multi-Backend Support**: PostgreSQL, Spatialite, and OGR fully implemented
+- **Enhanced Stability**: Robust error handling and crash prevention
+
+### 📦 What's Included
+All features from v2.2.0 through v2.2.3:
+- Color harmonization with +300% frame contrast
+- WCAG 2.1 AA/AAA text contrast (17.4:1 primary, 8.86:1 secondary)
+- Real-time configuration updates without restart
+- Dynamic UI profile switching (compact/normal/auto)
+- Qt JSON view crash prevention
+- Automated WCAG compliance testing
+- Enhanced visual hierarchy and reduced eye strain
+
+### 🎯 Target Audience
+Production users requiring:
+- Accessibility compliance (WCAG 2.1)
+- Multi-backend flexibility
+- Long work session comfort
+- Stable, well-tested filtering solution
+
 ## [2.2.3] - 2025-12-08 - Color Harmonization & Accessibility
 
 ### 🎨 UI Improvements - Color Harmonization Excellence
