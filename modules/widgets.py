@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger('FilterMate')
 
 class PopulateListEngineTask(QgsTask):
-    """Main QgsTask class which filter and unfilter data"""
+    """Main QgsTask class which filter, undo and redo data"""
 
     def __init__(self, description, parent, action, silent_flag):
 

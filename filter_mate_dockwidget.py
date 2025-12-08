@@ -906,7 +906,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         self.widgets["ACTION"] = {
                                 "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(state, x))], "ICON":None},
-                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_undo_filter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
+                                "UNDO":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_undo_filter, "SIGNALS":[("clicked", lambda state, x='undo': self.launchTaskEvent(state, x))], "ICON":None},
+                                "REDO":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_redo_filter, "SIGNALS":[("clicked", lambda state, x='redo': self.launchTaskEvent(state, x))], "ICON":None},
                                 "RESET":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_reset, "SIGNALS":[("clicked", lambda state, x='reset': self.launchTaskEvent(state, x))], "ICON":None},
                                 "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None},
                                 "ABOUT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_about, "SIGNALS":[("clicked", self.open_project_page)], "ICON":None}
@@ -1923,9 +1924,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
             if self.tabTools_current_index == 1:
+                # Exporting tab is active (index 1)
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
-            else:
+                # Disable other action buttons (Filter, Undo, Redo, Reset)
+                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["UNDO"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["REDO"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["RESET"]["WIDGET"].setEnabled(False)
+                # Keep About/Help button enabled
+            elif self.tabTools_current_index == 3:
+                # Configuration tab is active (index 3)
+                # Disable all action buttons except About/Help
+                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["UNDO"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["REDO"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["RESET"]["WIDGET"].setEnabled(False)
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
+                # Keep About/Help button enabled
+            else:
+                # Other tabs (Filtering, History) are active
+                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
+                # Re-enable other action buttons
+                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(True)
+                self.widgets["ACTION"]["UNDO"]["WIDGET"].setEnabled(True)
+                self.widgets["ACTION"]["REDO"]["WIDGET"].setEnabled(True)
+                self.widgets["ACTION"]["RESET"]["WIDGET"].setEnabled(True)
 
             self.set_exporting_properties()
 

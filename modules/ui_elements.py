@@ -69,6 +69,14 @@ SPACERS = {
     "config": [
         "verticalSpacer_config_bottom",
     ],
+    
+    "actions": [
+        "horizontalSpacer_actions_filter_undo",
+        "horizontalSpacer_actions_undo_redo",
+        "horizontalSpacer_actions_redo_reset",
+        "horizontalSpacer_actions_reset_export",
+        "horizontalSpacer_actions_export_about",
+    ],
 }
 
 # Flat list of all spacers
@@ -204,6 +212,7 @@ COMPACT_SPACER_SIZES = {
     "exporting_keys": 4,    # Between key fields (tight)
     "exporting_values": 5,  # Between value controls
     "config": 8,            # Config section (more breathing room)
+    "actions": 0,           # Action buttons (no spacing for compact layout)
 }
 
 # Default spacer sizes for normal mode
@@ -216,6 +225,7 @@ NORMAL_SPACER_SIZES = {
     "exporting_keys": 6,    # Between key fields
     "exporting_values": 8,  # Between value controls
     "config": 12,           # Config section (more space)
+    "actions": 2,           # Action buttons (minimal spacing)
 }
 
 

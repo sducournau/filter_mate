@@ -107,7 +107,7 @@ PREDICATE_SQL_MAPPING = {
 # ============================================================================
 
 TASK_FILTER = 'filter'
-TASK_UNFILTER = 'unfilter'
+TASK_UNDO = 'undo'
 TASK_RESET = 'reset'
 TASK_EXPORT = 'export'
 TASK_ADD_LAYERS = 'add_layers'

@@ -7,7 +7,7 @@
                     "compact",
                     "normal"
                 ],
-                "value": "auto"
+                "value": "compact"
             },
             "_UI_PROFILE_META": {
                 "description": "UI display profile: 'auto' (detect from screen), 'compact' for small screens, 'normal' for standard displays",
@@ -42,7 +42,8 @@
                 "ICONS": {
                     "ACTION": {
                         "FILTER": "filter.png",
-                        "UNFILTER": "unfilter.png",
+                        "UNDO": "undo.png",
+                        "REDO": "redo.png",
                         "RESET": "reset.png",
                         "EXPORT": "export.png",
                         "ABOUT": "icon.png"
@@ -175,9 +176,9 @@
         },
         "OPTIONS": {
             "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
-            "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
-            "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
-            "APP_SQLITE_PATH": "",
+            "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate",
+            "QGIS_PLUGIN_REPOSITORY": "https://github.com/sducournau/filter_mate",
+            "APP_SQLITE_PATH": "C:\\Users\\Simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\imagodata\\FilterMate",
             "FRESH_RELOAD_FLAG": false
         }
     },
@@ -185,9 +186,17 @@
         "EXPORTING": {
             "HAS_LAYERS_TO_EXPORT": false,
             "LAYERS_TO_EXPORT": [
+                "Ducts_1d9473f3_02d8_47c1_9350_1b07ae8d5c9c",
+                "Sheaths_6693ee26_f5c4_4cef_9525_807b161feeaa",
+                "SubDucts_470f8224_3785_4de7_94c9_37cb223a50a5",
+                "Structures_6a78c6ce_9a60_4c9f_b0a5_ae65dabe0dc1",
+                "OUT_DemandPoints_84fb240d_1248_429f_a6c4_9735f80b8fda",
+                "Structures_974318b6_4708_4ded_8562_228095d0f982",
+                "OUT_DistributionClusters_7449fae9_2edf_479b_a10f_51bd0478fd0a",
+                "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:3857",
+            "PROJECTION_TO_EXPORT": "EPSG:31370",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,
@@ -195,9 +204,7 @@
             "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
             "OUTPUT_FOLDER_TO_EXPORT": "",
             "HAS_ZIP_TO_EXPORT": false,
-            "ZIP_TO_EXPORT": "",
-            "BATCH_OUTPUT_FOLDER": false,
-            "BATCH_ZIP": false
+            "ZIP_TO_EXPORT": ""
         },
         "OPTIONS": {
             "LAYERS": {
@@ -214,19 +221,155 @@
         "EXPORT": {
             "HAS_LAYERS_TO_EXPORT": true,
             "LAYERS_TO_EXPORT": [
+                "Ducts_1d9473f3_02d8_47c1_9350_1b07ae8d5c9c",
+                "Sheaths_6693ee26_f5c4_4cef_9525_807b161feeaa",
+                "SubDucts_470f8224_3785_4de7_94c9_37cb223a50a5",
+                "Structures_6a78c6ce_9a60_4c9f_b0a5_ae65dabe0dc1",
+                "OUT_DemandPoints_84fb240d_1248_429f_a6c4_9735f80b8fda",
+                "Structures_974318b6_4708_4ded_8562_228095d0f982",
+                "OUT_DistributionClusters_7449fae9_2edf_479b_a10f_51bd0478fd0a",
+                "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:3857",
+            "PROJECTION_TO_EXPORT": "EPSG:31370",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
-            "HAS_DATATYPE_TO_EXPORT": false,
+            "HAS_DATATYPE_TO_EXPORT": true,
             "DATATYPE_TO_EXPORT": "GPKG",
-            "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
-            "OUTPUT_FOLDER_TO_EXPORT": "",
+            "HAS_OUTPUT_FOLDER_TO_EXPORT": true,
+            "OUTPUT_FOLDER_TO_EXPORT": "c:\\users\\simon\\downloads\\mro_woluwe_03_pop_033_qgis\\mro_woluwe_03_pop_033_qgis\\mro_woluwe_03_pop_033_ducts.gpkg",
             "HAS_ZIP_TO_EXPORT": false,
             "ZIP_TO_EXPORT": ""
         },
         "layers": [
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Line",
+                "layer_id": "Ducts_1d9473f3_02d8_47c1_9350_1b07ae8d5c9c",
+                "layer_name": "Ducts",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Ducts",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": false,
+                "primary_key_name": "ID",
+                "primary_key_type": "String"
+            },
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Line",
+                "layer_id": "Sheaths_6693ee26_f5c4_4cef_9525_807b161feeaa",
+                "layer_name": "Sheaths",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Sheaths",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": false,
+                "primary_key_name": "ID",
+                "primary_key_type": "String"
+            },
+            {
+                "is_already_subset": true,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Line",
+                "layer_id": "SubDucts_470f8224_3785_4de7_94c9_37cb223a50a5",
+                "layer_name": "SubDucts",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "SubDucts",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": false,
+                "primary_key_name": "ID",
+                "primary_key_type": "String"
+            },
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Point",
+                "layer_id": "Structures_6a78c6ce_9a60_4c9f_b0a5_ae65dabe0dc1",
+                "layer_name": "Address",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Address",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": false,
+                "primary_key_name": "ID",
+                "primary_key_type": "String"
+            },
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Point",
+                "layer_id": "OUT_DemandPoints_84fb240d_1248_429f_a6c4_9735f80b8fda",
+                "layer_name": "Home Count",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Home Count",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": true,
+                "primary_key_name": "AGG_ID",
+                "primary_key_type": "Integer"
+            },
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Point",
+                "layer_id": "Structures_974318b6_4708_4ded_8562_228095d0f982",
+                "layer_name": "Structures",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Structures",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": false,
+                "primary_key_name": "ID",
+                "primary_key_type": "String"
+            },
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Polygon",
+                "layer_id": "OUT_DistributionClusters_7449fae9_2edf_479b_a10f_51bd0478fd0a",
+                "layer_name": "Distribution Cluster",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Distribution Cluster",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": true,
+                "primary_key_name": "AGG_ID",
+                "primary_key_type": "Integer"
+            },
+            {
+                "is_already_subset": false,
+                "is_current_layer": false,
+                "layer_crs_authid": "EPSG:31370",
+                "layer_geometry_field": "geom",
+                "layer_geometry_type": "GeometryType.Polygon",
+                "layer_id": "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2",
+                "layer_name": "Drop Cluster",
+                "layer_provider_type": "ogr",
+                "layer_schema": "NULL",
+                "layer_table_name": "Drop Cluster",
+                "primary_key_idx": 0,
+                "primary_key_is_numeric": true,
+                "primary_key_name": "AGG_ID",
+                "primary_key_type": "Integer"
+            }
         ]
     }
 }

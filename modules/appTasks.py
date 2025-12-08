@@ -292,7 +292,8 @@ def should_reproject_layer(layer, target_crs_authid):
 
 MESSAGE_TASKS_CATEGORIES = {
                             'filter':'FilterLayers',
-                            'unfilter':'FilterLayers',
+                            'undo':'FilterLayers',
+                            'redo':'FilterLayers',
                             'reset':'FilterLayers',
                             'export':'ExportLayers',
                             'add_layers':'ManageLayers',
@@ -407,7 +408,7 @@ class SourceGeometryCache:
 
 
 class FilterEngineTask(QgsTask):
-    """Main QgsTask class which filter and unfilter data"""
+    """Main QgsTask class which filter, undo and redo data"""
     
     # Cache de classe (partagé entre toutes les instances de FilterEngineTask)
     _geometry_cache = SourceGeometryCache()
@@ -716,8 +717,11 @@ class FilterEngineTask(QgsTask):
         if self.task_action == 'filter':
             return self.execute_filtering()
         
-        elif self.task_action == 'unfilter':
-            return self.execute_unfiltering()
+        elif self.task_action == 'undo':
+            return self.execute_undoing()
+        
+        elif self.task_action == 'redo':
+            return self.execute_redoing()
         
         elif self.task_action == 'reset':
             return self.execute_reseting()
@@ -3041,7 +3045,7 @@ class FilterEngineTask(QgsTask):
         return result 
      
 
-    def execute_unfiltering(self):
+    def execute_undoing(self):
         """
         Execute undo operation using the new HistoryManager system.
         
@@ -3049,7 +3053,7 @@ class FilterEngineTask(QgsTask):
         filter state instead of manipulating the database history table directly.
         
         IMPORTANT: This bypasses manage_layer_subset_strings to avoid triggering
-        the old _unfilter_action that would delete database history entries.
+        the old _undo_action that would delete database history entries.
         """
         # Get history manager from task parameters (passed from filter_mate_app)
         history_manager = self.task_parameters["task"].get("history_manager")
@@ -3127,6 +3131,61 @@ class FilterEngineTask(QgsTask):
                     self.setProgress((i/self.layers_count)*100)
                     if self.isCanceled():
                         return False
+        
+        return True
+    
+    def execute_redoing(self):
+        """
+        Execute redo operation using the HistoryManager system.
+        
+        This method uses the in-memory history manager to restore the next
+        filter state (after an undo) without manipulating the database directly.
+        """
+        # Get history manager from task parameters (passed from filter_mate_app)
+        history_manager = self.task_parameters["task"].get("history_manager")
+        
+        if not history_manager:
+            logger.error("FilterMate: No history_manager in task parameters, cannot redo")
+            return False
+        
+        # Get history for source layer
+        history = history_manager.get_history(self.source_layer.id())
+        
+        if not history or not history.can_redo():
+            logger.info("FilterMate: No redo history available")
+            return False
+        
+        # Use history manager to get next state
+        next_state = history.redo()
+        
+        if next_state:
+            logger.info(f"FilterMate: Restoring next filter: {next_state.description}")
+            # Apply next filter expression to source layer directly
+            safe_set_subset_string(self.source_layer, next_state.expression)
+            
+            # Restore associated layers filters from their history
+            i = 1
+            self.setProgress((i/self.layers_count)*100)
+            
+            for layer_provider_type in self.layers:
+                for layer, layer_props in self.layers[layer_provider_type]:
+                    # Get history for this associated layer
+                    layer_history = history_manager.get_history(layer.id())
+                    
+                    if layer_history and layer_history.can_redo():
+                        # Restore next filter for this layer
+                        layer_next_state = layer_history.redo()
+                        if layer_next_state:
+                            safe_set_subset_string(layer, layer_next_state.expression)
+                            logger.info(f"FilterMate: Restored filter for layer {layer.name()}: {layer_next_state.description}")
+                    
+                    i += 1
+                    self.setProgress((i/self.layers_count)*100)
+                    if self.isCanceled():
+                        return False
+        else:
+            logger.warning("FilterMate: History redo returned None")
+            return False
         
         return True
     
@@ -4344,12 +4403,12 @@ class FilterEngineTask(QgsTask):
         return True
 
 
-    def _unfilter_action(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
+    def _undo_action(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
         """
-        Execute unfilter action (restore previous filter state).
+        Execute undo action (restore previous filter state).
         
         Args:
-            layer: QgsVectorLayer to unfilter
+            layer: QgsVectorLayer to undo filter on
             primary_key_name: Primary key field name
             geom_key_name: Geometry field name
             name: Layer identifier
@@ -4385,7 +4444,7 @@ class FilterEngineTask(QgsTask):
             sql_subset_string = results[0][-1]
             
             if use_spatialite:
-                logger.info("Unfilter - Spatialite backend - recreating previous subset")
+                logger.info("Undo - Spatialite backend - recreating previous subset")
                 success = self._manage_spatialite_subset(
                     layer, sql_subset_string, primary_key_name, geom_key_name,
                     name, custom=False, cur=None, conn=None, current_seq_order=0
@@ -4475,8 +4534,8 @@ class FilterEngineTask(QgsTask):
                 elif use_postgresql:
                     return self._reset_action_postgresql(layer, name, cur, conn)
             
-            elif self.task_action == 'unfilter':
-                return self._unfilter_action(
+            elif self.task_action == 'undo':
+                return self._undo_action(
                     layer, primary_key_name, geom_key_name, name, custom,
                     cur, conn, last_subset_id, use_postgresql, use_spatialite
                 )
@@ -4531,7 +4590,7 @@ class FilterEngineTask(QgsTask):
 
                     if self.task_action == 'filter':
                         result_action = 'Layer(s) filtered'
-                    elif self.task_action == 'unfilter':
+                    elif self.task_action == 'undo':
                         result_action = 'Layer(s) filtered to precedent state'
                     elif self.task_action == 'reset':
                         result_action = 'Layer(s) unfiltered'
@@ -4573,7 +4632,7 @@ class FilterEngineTask(QgsTask):
 
 
 class LayersManagementEngineTask(QgsTask):
-    """Main QgsTask class which filter and unfilter data"""
+    """Main QgsTask class which filter, undo and redo data"""
 
     resultingLayers = pyqtSignal(dict)
     savingLayerVariable = pyqtSignal(QgsVectorLayer, str, object, type)
