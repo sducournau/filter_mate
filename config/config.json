@@ -204,7 +204,9 @@
             "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
             "OUTPUT_FOLDER_TO_EXPORT": "",
             "HAS_ZIP_TO_EXPORT": false,
-            "ZIP_TO_EXPORT": ""
+            "ZIP_TO_EXPORT": "",
+            "BATCH_OUTPUT_FOLDER": false,
+            "BATCH_ZIP": false
         },
         "OPTIONS": {
             "LAYERS": {

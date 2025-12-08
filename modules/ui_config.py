@@ -112,14 +112,14 @@ class UIConfig:
             
             # Frame exploring dimensions (NEW)
             "frame_exploring": {
-                "min_height": 200,
-                "base_height": 250,
-                "max_height": 400
+                "min_height": 150,
+                "base_height": 200,
+                "max_height": 350
             },
             
             # Frame filtering dimensions (NEW)
             "frame_filtering": {
-                "min_height": 250
+                "min_height": 200
             },
             
             # Widget keys dimensions (NEW)
