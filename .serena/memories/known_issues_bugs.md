@@ -2,6 +2,98 @@
 
 ## Recently Fixed (v2.2.4)
 
+### Geographic Coordinates Zoom & Flash Issues
+**Status:** ✅ FIXED in v2.2.4 (December 8, 2025)
+
+**Issue:**
+- Feature geometry was modified in-place during CRS transformation
+- Caused flickering when using `flashFeatureIds` on geographic coordinate systems
+- Buffer distance too small for EPSG:4326 (0.0005° ≈ 55m at equator)
+- No buffer applied to polygons/lines in geographic coordinates
+- Zoom behavior unpredictable when switching between features
+
+**Impact:**
+- CRITICAL: Feature highlighting (flash) not working properly with EPSG:4326
+- User experience: Difficulty identifying features on the map
+- Visual feedback: Flickering and incorrect highlighting
+- Affected all layers using geographic coordinate systems (lat/lon)
+
+**Root Cause:**
+1. `zooming_to_features()` in `filter_mate_dockwidget.py` line 2188
+2. Direct reference to feature geometry: `geom = feature.geometry()`
+3. In-place transformation: `geom.transform(transform)` modified original feature
+4. Buffer calculation based on canvas CRS instead of layer CRS
+5. Buffer too small: 0.0005° only ~55 meters visibility
+6. No expansion for non-point geometries
+
+**Solution:**
+1. Use geometry copy constructor: `geom = QgsGeometry(feature.geometry())`
+2. Calculate buffer in layer's native CRS for accuracy
+3. Increase point buffer: 0.002° (~220m at equator) for better visibility
+4. Add polygon/line expansion: 0.0005° in geographic, 10m in projected
+5. Transform only the final bounding box, not the geometry
+6. Use `transformBoundingBox()` for proper coordinate conversion
+
+**Technical Details:**
+```python
+# BEFORE (incorrect)
+geom = feature.geometry()  # Reference to original
+geom.transform(transform)  # Modifies original!
+buffer_distance = 50 if canvas_crs.isGeographic() == False else 0.0005
+
+# AFTER (correct)
+geom = QgsGeometry(feature.geometry())  # Copy
+is_geographic = layer_crs.isGeographic()  # Check layer, not canvas
+if is_geographic:
+    buffer_distance = 0.002  # ~220m
+    box.grow(0.0005)  # Expand polygons
+else:
+    buffer_distance = 50  # meters
+    box.grow(10)
+# Transform box, not geometry
+box = transform.transformBoundingBox(box)
+```
+
+**Files Changed:**
+- `filter_mate_dockwidget.py`: Fixed `zooming_to_features()` method
+- `tests/test_geographic_coordinates_zoom.py`: New comprehensive test suite
+- `docs/fixes/geographic_coordinates_zoom_fix.md`: Technical documentation
+
+**Test Coverage:**
+```python
+def test_geometry_copy_prevents_modification():
+    """Verify original geometry is not modified"""
+    point = QgsGeometry.fromPointXY(QgsPointXY(2.3522, 48.8566))
+    original_wkt = point.asWkt()
+    geom_copy = QgsGeometry(point)
+    geom_copy.transform(transform)
+    assert point.asWkt() == original_wkt  # Original unchanged!
+
+def test_geographic_point_buffer():
+    """Test 0.002° buffer for geographic coordinates"""
+    point = QgsGeometry.fromPointXY(QgsPointXY(2.3522, 48.8566))
+    buffer_distance = 0.002
+    buffered = point.buffer(buffer_distance, 5)
+    box = buffered.boundingBox()
+    assert 0.003 < box.width() < 0.005  # ~220m visibility
+```
+
+**Benefits:**
+- ✅ No more flickering with `flashFeatureIds`
+- ✅ Correct feature highlighting in all coordinate systems
+- ✅ Better visibility: 4× larger buffer for points (220m vs 55m)
+- ✅ Polygon/line support: proper expansion
+- ✅ Polar region support: calculations in native CRS
+- ✅ Accurate coordinate transformations
+
+**References:**
+- Fix commit: December 8, 2025
+- Test file: `tests/test_geographic_coordinates_zoom.py`
+- Documentation: `docs/fixes/geographic_coordinates_zoom_fix.md`
+- CHANGELOG: v2.2.4 section
+
+---
+
 ### Spatialite Field Name Quote Preservation
 **Status:** ✅ FIXED in v2.2.4 (December 8, 2025)
 

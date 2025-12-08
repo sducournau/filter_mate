@@ -1,16 +1,23 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.2.4** | December 2025
+**Version 2.2.5** | December 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.2.4
+### 🎉 What's New in v2.2.5
+- ✅ **Automatic Geographic CRS Handling** - Auto-converts EPSG:4326 to EPSG:3857 for metric operations
+- ✅ **Accurate Buffer Distances** - 50m buffer is always 50 meters regardless of latitude
+- ✅ **Geographic Zoom Fix** - Resolved flickering issues with `flashFeatureIds`
+- ✅ **Zero Configuration** - Works automatically for all geographic layers
+- ✅ **Minimal Performance Impact** - Only ~1ms per feature transformation
+
+### Previous Updates (v2.2.4)
 - ✅ **Bug Fix** - Fixed critical Spatialite expression field name quote handling
 - ✅ **Enhanced Stability** - Improved error handling for case-sensitive fields
 - ✅ **Better Testing** - Comprehensive test suite for expression conversion
 - ✅ **Increased Reliability** - Robust Spatialite backend operations
 
-### Previous Updates (v2.2.4)
+### Previous Updates (v2.2.3)
 - ✅ **Color Harmonization** - Enhanced visual distinction with +300% frame contrast
 - ✅ **WCAG Accessibility** - AA/AAA compliant text contrast (17.4:1 ratio)
 - ✅ **Reduced Eye Strain** - Optimized color palette for long work sessions

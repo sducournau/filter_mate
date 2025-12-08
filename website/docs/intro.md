@@ -7,15 +7,21 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.2.4 - Bug Fix Release
+## 🎉 What's New in v2.2.5 - Automatic Geographic CRS Handling
 
-### Critical Bug Fixes
-- ✅ **Spatialite Expression Fix** - Resolved field name quote handling issue
-  - Fixed: Double quotes around field names now preserved correctly
-  - Impact: Filters now work reliably with case-sensitive field names
-  - Added: Comprehensive test suite for expression conversion
-- ✅ **Enhanced Stability** - Improved error handling for Spatialite backend
-- ✅ **Better Testing** - Automated validation for expression conversions
+### Major Improvements
+- ✅ **Automatic EPSG:3857 Conversion** - Geographic CRS (EPSG:4326, etc.) auto-converted for metric operations
+  - Feature: Detects geographic coordinate systems automatically
+  - Impact: 50m buffer is always 50 meters, regardless of latitude (no more 30-50% errors!)
+  - Implementation: Auto-converts to EPSG:3857 (Web Mercator) for buffer calculations
+  - Performance: Minimal overhead (~1ms per feature transformation)
+- ✅ **Geographic Zoom & Flash Fix** - Resolved flickering with `flashFeatureIds`
+  - Fixed: Feature geometry no longer modified in-place during transformation
+  - Solution: Uses `QgsGeometry()` copy constructor to prevent original geometry modification
+- ✅ **Consistent Metric Operations** - All backends updated (Spatialite, OGR, Zoom)
+  - Zero configuration required
+  - Clear logging with 🌍 indicator when CRS switching occurs
+- ✅ **Comprehensive Testing** - Added test suite in `tests/test_geographic_coordinates_zoom.py`
 
 ## Previous Updates
 

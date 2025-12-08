@@ -1430,13 +1430,28 @@ class FilterEngineTask(QgsTask):
         
         geometries = []
 
-        if self.has_to_reproject_source_layer is True:
-            transform = QgsCoordinateTransform(
-                QgsCoordinateReferenceSystem(self.source_crs.authid()), 
-                QgsCoordinateReferenceSystem(self.source_layer_crs_authid), 
-                self.PROJECT
-            )
-            logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
+        # Determine target CRS for buffer operations
+        target_crs = QgsCoordinateReferenceSystem(self.source_layer_crs_authid)
+        is_geographic = target_crs.isGeographic()
+        
+        # CRITICAL: For geographic coordinates, switch to EPSG:3857 for metric calculations
+        # This ensures accurate buffer distances in meters instead of imprecise degrees
+        use_metric_crs = False
+        if is_geographic and self.param_buffer_value is not None and self.param_buffer_value > 0:
+            logger.info(f"🌍 Geographic CRS detected: {target_crs.authid()}")
+            logger.info(f"   → Switching to EPSG:3857 for metric-based buffer calculations")
+            target_crs = QgsCoordinateReferenceSystem("EPSG:3857")
+            use_metric_crs = True
+        
+        # Setup reprojection transforms
+        if self.has_to_reproject_source_layer is True or use_metric_crs:
+            source_crs_obj = QgsCoordinateReferenceSystem(self.source_crs.authid())
+            transform = QgsCoordinateTransform(source_crs_obj, target_crs, self.PROJECT)
+            
+            if use_metric_crs:
+                logger.debug(f"Will reproject from {self.source_crs.authid()} → EPSG:3857 (metric) for buffer")
+            else:
+                logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
 
         # Log buffer settings for debugging
         logger.debug(f"Buffer settings: param_buffer_value={self.param_buffer_value}")
@@ -1451,12 +1466,12 @@ class FilterEngineTask(QgsTask):
                 if geom_copy.isMultipart():
                     geom_copy.convertToSingleType()
                     
-                if self.has_to_reproject_source_layer is True:
+                if self.has_to_reproject_source_layer is True or use_metric_crs:
                     geom_copy.transform(transform)
                     
-                # Apply buffer if configured
+                # Apply buffer if configured (now always in meters)
                 if self.param_buffer_value is not None and self.param_buffer_value > 0:
-                    logger.info(f"Applying buffer of {self.param_buffer_value}m to geometry")
+                    logger.info(f"Applying buffer of {self.param_buffer_value}m to geometry (CRS: {target_crs.authid()})")
                     original_wkt_type = geom_copy.asWkt().split('(')[0].strip()
                     geom_copy = geom_copy.buffer(self.param_buffer_value, 5)
                     buffered_wkt_type = geom_copy.asWkt().split('(')[0].strip()
@@ -1473,12 +1488,22 @@ class FilterEngineTask(QgsTask):
 
         # Collect all geometries into one
         collected_geometry = QgsGeometry.collectGeometry(geometries)
+        
+        # CRITICAL: If we used metric CRS for buffer, transform back to target layer CRS
+        if use_metric_crs:
+            final_crs = QgsCoordinateReferenceSystem(self.source_layer_crs_authid)
+            back_transform = QgsCoordinateTransform(target_crs, final_crs, self.PROJECT)
+            collected_geometry.transform(back_transform)
+            logger.info(f"✓ Transformed buffered geometry from EPSG:3857 back to {final_crs.authid()}")
+        
         wkt = collected_geometry.asWkt()
         
         # Log the final geometry type
         geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
         logger.info(f"  Final collected geometry type: {geom_type}")
         logger.info(f"  Number of geometries collected: {len(geometries)}")
+        if use_metric_crs:
+            logger.info(f"  ✓ Buffer calculated in EPSG:3857 (metric), result in {self.source_layer_crs_authid}")
         
         # Escape single quotes for SQL
         wkt_escaped = wkt.replace("'", "''")

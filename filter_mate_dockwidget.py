@@ -2184,24 +2184,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
                 if len(features_with_geometry) == 1:
                     feature = features_with_geometry[0]
-                    geom = feature.geometry()
+                    # CRITICAL: Create a copy to avoid modifying the original geometry
+                    geom = QgsGeometry(feature.geometry())
                     
                     # Get CRS information
                     layer_crs = self.current_layer.crs()
                     canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
+                    is_geographic = layer_crs.isGeographic()
                     
-                    # Transform geometry to canvas CRS if needed
-                    if layer_crs != canvas_crs:
-                        transform = QgsCoordinateTransform(layer_crs, canvas_crs, QgsProject.instance())
-                        geom.transform(transform)
+                    # CRITICAL: For geographic coordinates, switch to EPSG:3857 for metric calculations
+                    # This ensures accurate buffer distances in meters instead of imprecise degrees
+                    if is_geographic:
+                        # Transform to Web Mercator (EPSG:3857) for metric-based buffer
+                        work_crs = QgsCoordinateReferenceSystem("EPSG:3857")
+                        to_metric = QgsCoordinateTransform(layer_crs, work_crs, QgsProject.instance())
+                        geom.transform(to_metric)
+                        logger.debug(f"FilterMate: Switched from {layer_crs.authid()} to EPSG:3857 for metric buffer")
+                    else:
+                        # Already in projected coordinates, use layer CRS
+                        work_crs = layer_crs
                     
                     if str(feature.geometry().type()) == 'GeometryType.Point':
-                        # Use 50 meters buffer in canvas CRS (usually projected meters)
-                        # If canvas is in geographic coordinates, use smaller value
-                        buffer_distance = 50 if canvas_crs.isGeographic() == False else 0.0005
+                        # Apply buffer in meters (work_crs is now always metric)
+                        buffer_distance = 50  # 50 meters for all points
                         box = geom.buffer(buffer_distance, 5).boundingBox()
                     else:
+                        # For polygons/lines, add small buffer for better visibility
                         box = geom.boundingBox()
+                        box.grow(10)  # 10 meters expansion in all cases
+                    
+                    # Transform box to canvas CRS if needed
+                    if work_crs != canvas_crs:
+                        transform = QgsCoordinateTransform(work_crs, canvas_crs, QgsProject.instance())
+                        box = transform.transformBoundingBox(box)
 
                     self.iface.mapCanvas().zoomToFeatureExtent(box)
                 else:
