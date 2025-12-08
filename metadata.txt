@@ -6,13 +6,13 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.2.5
+version=2.2.4
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.2.5 - Enhanced Stability & Bug Fixes!
+about=FilterMate v2.2.4 - Enhanced Stability & Bug Fixes!
 
- NEW in v2.2.5:
+ NEW in v2.2.4:
  - BUG FIX: Fixed Spatialite expression field name quote handling
  - STABILITY: Improved error handling for case-sensitive field names
  - TESTING: Comprehensive test suite for expression conversion
@@ -42,7 +42,7 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
-    Version 2.2.5 (December 2025) - Bug Fix Release
+    Version 2.2.4 (December 2025) - Bug Fix Release
     BUG FIX: Fixed Spatialite field name quote handling
     IMPROVED: Expression conversion reliability
     ADDED: Comprehensive test suite for Spatialite expressions

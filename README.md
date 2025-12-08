@@ -1,10 +1,10 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.2.5** | December 2025
+**Version 2.2.4** | December 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.2.5
+### 🎉 What's New in v2.2.4
 - ✅ **Bug Fix** - Fixed critical Spatialite expression field name quote handling
 - ✅ **Enhanced Stability** - Improved error handling for case-sensitive fields
 - ✅ **Better Testing** - Comprehensive test suite for expression conversion
