@@ -151,7 +151,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.project_props = None
         self.layer_properties_tuples_dict = None
         self.export_properties_tuples_dict = None
-        self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"" }'
+        self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"","batch_output_folder":false,"batch_zip":false }'
 
         # Initialize config changes tracking
         self.pending_config_changes = []
@@ -305,7 +305,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Create horizontal layout for backend indicator (right-aligned)
         backend_indicator_layout = QtWidgets.QHBoxLayout()
-        backend_indicator_layout.setContentsMargins(2, 0, 2, 2)
+        backend_indicator_layout.setContentsMargins(2, 0, 2, 0)
         backend_indicator_layout.setSpacing(0)
         backend_indicator_layout.addStretch()  # Push label to the right
         backend_indicator_layout.addWidget(self.backend_indicator_label)
@@ -388,8 +388,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         layout = self.verticalLayout_filtering_values
         layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
 
-        layout = self.verticalLayout_exporting_values
-        layout.insertWidget(1, self.checkableComboBoxLayer_exporting_layers)
+        # Find the layout that contains verticalSpacer_exporting_values_top
+        # This layout is the second child of horizontalLayout_3 in the exporting tab
+        exporting_tab_layout = self.findChild(QHBoxLayout, 'horizontalLayout_3')
+        if exporting_tab_layout:
+            # The verticalLayout is the layout at index 1 (second item) of horizontalLayout_3
+            exporting_values_layout = exporting_tab_layout.itemAt(1)
+            if exporting_values_layout:
+                # Insert the combobox right after the top spacer (index 1)
+                exporting_values_layout.insertWidget(1, self.checkableComboBoxLayer_exporting_layers)
 
         #self.custom_identify_tool = CustomIdentifyTool(self.iface)
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
@@ -420,6 +427,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Get frame dimensions
             frame_exploring_min = UIConfig.get_config('frame_exploring', 'min_height')
+            frame_exploring_max = UIConfig.get_config('frame_exploring', 'max_height')
             frame_filtering_min = UIConfig.get_config('frame_filtering', 'min_height')
             
             # Apply to ComboBoxes
@@ -469,13 +477,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Harmonize all checkable pushbuttons in exploring/filtering/exporting sections
             try:
                 from qgis.PyQt.QtWidgets import QPushButton
+                from .modules.ui_config import DisplayProfile
                 
-                # Standard dimensions for all checkable pushbuttons (keys column)
-                pushbutton_min_width = 18
-                pushbutton_max_width = 20
-                pushbutton_min_height = 18
-                pushbutton_max_height = 25
-                pushbutton_icon_size = 16
+                # Get dynamic dimensions based on active profile (compact/normal)
+                is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
+                
+                if is_compact:
+                    # Compact mode - smaller pushbuttons
+                    pushbutton_min_width = 18
+                    pushbutton_max_width = 20
+                    pushbutton_min_height = 18
+                    pushbutton_max_height = 25
+                    pushbutton_icon_size = 16
+                else:
+                    # Normal mode - larger pushbuttons (ratio ~1.5x)
+                    pushbutton_min_width = 27
+                    pushbutton_max_width = 30
+                    pushbutton_min_height = 27
+                    pushbutton_max_height = 38
+                    pushbutton_icon_size = 24
                 
                 # Get all checkable pushbuttons with consistent naming pattern
                 checkable_buttons = []
@@ -532,7 +552,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             
                             checkable_buttons.append(button_name)
                 
-                logger.info(f"Harmonized {len(checkable_buttons)} checkable pushbuttons with consistent dimensions: {pushbutton_min_width}-{pushbutton_max_width}x{pushbutton_min_height}-{pushbutton_max_height}px, icon={pushbutton_icon_size}px")
+                mode_name = 'COMPACT' if is_compact else 'NORMAL'
+                logger.info(f"Harmonized {len(checkable_buttons)} checkable pushbuttons in {mode_name} mode with dynamic dimensions: {pushbutton_min_width}-{pushbutton_max_width}x{pushbutton_min_height}-{pushbutton_max_height}px, icon={pushbutton_icon_size}px")
                 
             except Exception as e:
                 logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
@@ -542,6 +563,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply to main frames
             if hasattr(self, 'frame_exploring'):
                 self.frame_exploring.setMinimumHeight(frame_exploring_min)
+                self.frame_exploring.setMaximumHeight(frame_exploring_max)
             
             if hasattr(self, 'frame_filtering'):
                 self.frame_filtering.setMinimumHeight(frame_filtering_min)
@@ -864,8 +886,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                                 "projection_to_export":(("exporting","has_projection_to_export"),("exporting","projection_to_export")),
                                                 "styles_to_export":(("exporting","has_styles_to_export"),("exporting","styles_to_export")),
                                                 "datatype_to_export":(("exporting","has_datatype_to_export"),("exporting","datatype_to_export")),
-                                                "output_folder_to_export":(("exporting","has_output_folder_to_export"),("exporting","output_folder_to_export")),
-                                                "zip_to_export":(("exporting", "has_zip_to_export"), ("exporting", "zip_to_export"))
+                                                "output_folder_to_export":(("exporting","has_output_folder_to_export"),("exporting","batch_output_folder"),("exporting","output_folder_to_export")),
+                                                "zip_to_export":(("exporting", "has_zip_to_export"), ("exporting", "batch_zip"), ("exporting", "zip_to_export")),
+                                                "batch_output_folder":(("exporting","has_output_folder_to_export"),("exporting","batch_output_folder"),("exporting","output_folder_to_export")),
+                                                "batch_zip":(("exporting", "has_zip_to_export"), ("exporting", "batch_zip"), ("exporting", "zip_to_export"))
                                                 }
 
         self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
@@ -932,6 +956,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "HAS_DATATYPE_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_datatype, "SIGNALS":[("clicked", lambda state, x='has_datatype_to_export': self.project_property_changed(x, state))], "ICON":None},
                                     "HAS_OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_output_folder, "SIGNALS":[("clicked", lambda state, x='has_output_folder_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_path()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_ZIP_TO_EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exporting_zip, "SIGNALS":[("clicked", lambda state, x='has_zip_to_export', custom_functions={"ON_CHANGE": lambda x: self.dialog_export_output_pathzip()}: self.project_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "BATCH_OUTPUT_FOLDER":{"TYPE":"CheckBox", "WIDGET":self.checkBox_batch_exporting_output_folder, "SIGNALS":[("stateChanged", lambda state, x='batch_output_folder': self.project_property_changed(x, bool(state)))], "ICON":None},
+                                    "BATCH_ZIP":{"TYPE":"CheckBox", "WIDGET":self.checkBox_batch_exporting_zip, "SIGNALS":[("stateChanged", lambda state, x='batch_zip': self.project_property_changed(x, bool(state)))], "ICON":None},
                                     "LAYERS_TO_EXPORT":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_exporting_layers, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_export(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_export()}, x='layers_to_export': self.project_property_changed(x, state, custom_functions))]},
                                     "PROJECTION_TO_EXPORT":{"TYPE":"QgsProjectionSelectionWidget", "WIDGET":self.mQgsProjectionSelectionWidget_exporting_projection, "SIGNALS":[("crsChanged", lambda state, x='projection_to_export', custom_functions={"CUSTOM_DATA": lambda x: self.get_current_crs_authid()}: self.project_property_changed(x, state, custom_functions))]},
                                     "STYLES_TO_EXPORT":{"TYPE":"ComboBox", "WIDGET":self.comboBox_exporting_styles, "SIGNALS":[("currentTextChanged", lambda state, x='styles_to_export': self.project_property_changed(x, state))]},
@@ -1429,13 +1455,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     i = 0
                     
                     for key in self.PROJECT_LAYERS:
-                        if self.PROJECT_LAYERS[key]["infos"]["is_already_subset"] is False:
-                            self.PROJECT_LAYERS[key]["infos"]["subset_history"] = []
+                        # Verify required keys exist in layer info
+                        if "infos" not in self.PROJECT_LAYERS[key]:
+                            continue
+                        
+                        layer_info = self.PROJECT_LAYERS[key]["infos"]
+                        required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
+                        if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                            continue
+                        
+                        if layer_info["is_already_subset"] is False:
+                            layer_info["subset_history"] = []
 
-                        layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
-                        layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
-                        layer_crs_authid = self.PROJECT_LAYERS[key]["infos"]["layer_crs_authid"]
-                        layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+                        layer_id = layer_info["layer_id"]
+                        layer_name = layer_info["layer_name"]
+                        layer_crs_authid = layer_info["layer_crs_authid"]
+                        layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
 
                         # Only add vector layers (skip raster layers)
                         layer_obj = self.PROJECT.mapLayer(layer_id)
@@ -1453,10 +1488,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 else:
                     i = 0
                     for key in self.PROJECT_LAYERS:
-                        layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
-                        layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
-                        layer_crs_authid = self.PROJECT_LAYERS[key]["infos"]["layer_crs_authid"]
-                        layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+                        # Verify required keys exist in layer info
+                        if "infos" not in self.PROJECT_LAYERS[key]:
+                            continue
+                        
+                        layer_info = self.PROJECT_LAYERS[key]["infos"]
+                        required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
+                        if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                            continue
+                        
+                        layer_id = layer_info["layer_id"]
+                        layer_name = layer_info["layer_name"]
+                        layer_crs_authid = layer_info["layer_crs_authid"]
+                        layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
                         
                         # Only add vector layers (skip raster layers)
                         layer_obj = self.PROJECT.mapLayer(layer_id)
@@ -1500,10 +1544,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
             item_index = 0  # Track actual item position in widget
             for key in self.PROJECT_LAYERS:
-                layer_id = self.PROJECT_LAYERS[key]["infos"]["layer_id"]
-                layer_name = self.PROJECT_LAYERS[key]["infos"]["layer_name"]
-                layer_crs_authid = self.PROJECT_LAYERS[key]["infos"]["layer_crs_authid"]
-                layer_icon = self.icon_per_geometry_type(self.PROJECT_LAYERS[key]["infos"]["layer_geometry_type"])
+                # Verify required keys exist in layer info
+                if "infos" not in self.PROJECT_LAYERS[key]:
+                    continue
+                
+                layer_info = self.PROJECT_LAYERS[key]["infos"]
+                required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
+                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                    continue
+                
+                layer_id = layer_info["layer_id"]
+                layer_name = layer_info["layer_name"]
+                layer_crs_authid = layer_info["layer_crs_authid"]
+                layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
                 
                 # Only add vector layers (skip raster layers)
                 layer_obj = self.PROJECT.mapLayer(layer_id)
@@ -2768,17 +2821,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         if "ON_FALSE" in custom_functions:
                             custom_functions["ON_FALSE"](0)
                 else:    
-                    
-                    if self.project_props[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()] is state and state is True:
-                        self.project_props[property_path[0].upper()][property_path[1].upper()] = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
-                        flag_value_changed = True
-                        if "ON_TRUE" in custom_functions:
-                            custom_functions["ON_TRUE"](0)
+                    # For non-PushButton widgets (CheckBox, ComboBox, etc.)
+                    # Update the value if the parent group is enabled
+                    if self.project_props[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()] is True:
+                        # Get the value from custom function or use input_data directly
+                        new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
+                        
+                        # Only mark as changed if value actually changed
+                        if self.project_props[property_path[0].upper()][property_path[1].upper()] != new_value:
+                            self.project_props[property_path[0].upper()][property_path[1].upper()] = new_value
+                            flag_value_changed = True
+                            
+                            if new_value and "ON_TRUE" in custom_functions:
+                                custom_functions["ON_TRUE"](0)
+                            elif not new_value and "ON_FALSE" in custom_functions:
+                                custom_functions["ON_FALSE"](0)
 
             if flag_value_changed is True:
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
-                self.CONFIG_DATA['CURRENT_PROJECT']['EXPORT'] = self.project_props['EXPORTING']
+                self.CONFIG_DATA['CURRENT_PROJECT']['EXPORTING'] = self.project_props['EXPORTING']
                 self.setProjectVariablesEvent()
 
 
@@ -2961,6 +3023,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
                         if widget_type == 'PushButton':
                             self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(self.project_props[property_path[0].upper()][property_path[1].upper()])
+                        elif widget_type == 'CheckBox':
+                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(self.project_props[property_path[0].upper()][property_path[1].upper()])
                         elif widget_type == 'CheckableComboBox':
                             self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setCheckedItems(self.project_props[property_path[0].upper()][property_path[1].upper()])
                         elif widget_type == 'CustomCheckableComboBox':
@@ -3041,6 +3105,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
                     elif group_name in self.export_properties_tuples_dict:
                         if widget_type == 'PushButton':
+                            self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(state)
+                            self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].isChecked()
+                        elif widget_type == 'CheckBox':
                             self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(state)
                             self.project_props[property_path[0].upper()][property_path[1].upper()] = self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].isChecked()
                         elif widget_type == 'CheckableComboBox':
@@ -3576,16 +3643,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Determine backend and styling
         if provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
             backend_text = "Backend: PostgreSQL"
-            style = "color: #2ecc71; font-size: 10px; padding: 2px; font-weight: bold;"
+            style = "color: #2ecc71; font-size: 8pt; padding: 1px 4px;"
         elif provider_type == 'spatialite':
             backend_text = "Backend: Spatialite"
-            style = "color: #3498db; font-size: 10px; padding: 2px; font-weight: bold;"
+            style = "color: #3498db; font-size: 8pt; padding: 1px 4px;"
         elif provider_type == 'ogr':
             backend_text = "Backend: OGR"
-            style = "color: #f39c12; font-size: 10px; padding: 2px;"
+            style = "color: #f39c12; font-size: 8pt; padding: 1px 4px;"
         elif provider_type == 'postgresql' and not POSTGRESQL_AVAILABLE:
             backend_text = "Backend: OGR (PostgreSQL unavailable)"
-            style = "color: #e74c3c; font-size: 10px; padding: 2px;"
+            style = "color: #e74c3c; font-size: 8pt; padding: 1px 4px;"
         else:
             backend_text = f"Backend: {provider_type}"
         

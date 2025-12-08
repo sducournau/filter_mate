@@ -1376,18 +1376,26 @@ class FilterMateApp:
                                 pass
 
                         # CRITICAL: Verify layer structure before accessing nested properties
-                        if "infos" not in self.PROJECT_LAYERS[layer_key] or "layer_provider_type" not in self.PROJECT_LAYERS[layer_key]["infos"]:
-                            logger.warning(f"Layer {layer_key} missing required 'infos' or 'layer_provider_type' in PROJECT_LAYERS")
+                        if "infos" not in self.PROJECT_LAYERS[layer_key]:
+                            logger.warning(f"Layer {layer_key} missing required 'infos' in PROJECT_LAYERS")
+                            continue
+                        
+                        layer_info = self.PROJECT_LAYERS[layer_key]["infos"]
+                        required_keys = ["layer_provider_type", "layer_name", "layer_id"]
+                        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                        
+                        if missing_keys:
+                            logger.warning(f"Layer {layer_key} missing required keys in infos: {missing_keys}")
                             continue
                             
-                        layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
+                        layer_source_type = layer_info["layer_provider_type"]                    
                         if layer_source_type not in self.project_datasources:
                             self.project_datasources[layer_source_type] = {}
 
                     
                         layer_props = self.PROJECT_LAYERS[layer_key]
                         layer = None
-                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
+                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_info["layer_name"]) if layer.id() == layer_info["layer_id"]]
                         if len(layers) == 1:
                             layer = layers[0]
                         
@@ -1433,18 +1441,26 @@ class FilterMateApp:
                         else:
                             # CRITICAL: Only process layers that still exist in PROJECT_LAYERS
                             # Verify layer structure before accessing nested properties
-                            if "infos" not in self.PROJECT_LAYERS[layer_key] or "layer_provider_type" not in self.PROJECT_LAYERS[layer_key]["infos"]:
-                                logger.warning(f"Layer {layer_key} missing required 'infos' or 'layer_provider_type' in PROJECT_LAYERS")
+                            if "infos" not in self.PROJECT_LAYERS[layer_key]:
+                                logger.warning(f"Layer {layer_key} missing required 'infos' in PROJECT_LAYERS")
+                                continue
+                            
+                            layer_info = self.PROJECT_LAYERS[layer_key]["infos"]
+                            required_keys = ["layer_provider_type", "layer_name", "layer_id"]
+                            missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                            
+                            if missing_keys:
+                                logger.warning(f"Layer {layer_key} missing required keys in infos: {missing_keys}")
                                 continue
 
-                            layer_source_type = self.PROJECT_LAYERS[layer_key]["infos"]["layer_provider_type"]                    
+                            layer_source_type = layer_info["layer_provider_type"]                    
                             if layer_source_type not in self.project_datasources:
                                 self.project_datasources[layer_source_type] = {}
 
                         
                             layer_props = self.PROJECT_LAYERS[layer_key]
                             layer = None
-                            layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["infos"]["layer_name"]) if layer.id() == layer_props["infos"]["layer_id"]]
+                            layers = [layer for layer in self.PROJECT.mapLayersByName(layer_info["layer_name"]) if layer.id() == layer_info["layer_id"]]
                             if len(layers) == 1:
                                 layer = layers[0]
                             
@@ -1517,7 +1533,11 @@ class FilterMateApp:
                 for project_datasource in self.project_datasources[current_datasource].keys():
                     datasources = self.project_datasources[current_datasource][project_datasource]
                     for datasource in datasources:
-                        datasource_ext = datasource.split('|')[0].split('.')[1] if len(datasource.split('|')[0]) >= 1 and len(datasource.split('|')[0].split('.')) >= 1 else datasource
+                        # Extract file extension safely
+                        datasource_path = datasource.split('|')[0]
+                        path_parts = datasource_path.split('.')
+                        # Check if there's an extension (at least 2 parts after split)
+                        datasource_ext = path_parts[-1] if len(path_parts) >= 2 else datasource_path
                         datasource_type_name = [ogr_name for ogr_name in ogr_driver_list if ogr_name.upper() == datasource_ext.upper()]
 
                     if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] is True:

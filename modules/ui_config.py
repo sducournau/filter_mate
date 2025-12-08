@@ -37,28 +37,28 @@ class UIConfig:
             
             # Button dimensions
             "button": {
-                "height": 32,
-                "icon_size": 18,
-                "padding": {"top": 4, "right": 8, "bottom": 4, "left": 8},
-                "border_radius": 6,
-                "min_width": 80
+                "height": 48,
+                "icon_size": 27,
+                "padding": {"top": 6, "right": 12, "bottom": 6, "left": 12},
+                "border_radius": 9,
+                "min_width": 120
             },
             
             # Action buttons (filter, export, etc.)
             "action_button": {
-                "height": 36,
-                "icon_size": 22,
-                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
-                "border_radius": 8,
-                "min_width": 100
+                "height": 54,
+                "icon_size": 33,
+                "padding": {"top": 9, "right": 15, "bottom": 9, "left": 15},
+                "border_radius": 12,
+                "min_width": 150
             },
             
             # Tool buttons (identify, zoom, etc.)
             "tool_button": {
-                "height": 28,
-                "icon_size": 20,
-                "padding": {"top": 2, "right": 2, "bottom": 2, "left": 2},
-                "border_radius": 3
+                "height": 42,
+                "icon_size": 30,
+                "padding": {"top": 3, "right": 3, "bottom": 3, "left": 3},
+                "border_radius": 5
             },
             
             # Frame and container dimensions
@@ -84,36 +84,37 @@ class UIConfig:
             
             # ComboBox dimensions
             "combobox": {
-                "height": 24,
-                "padding": {"top": 3, "right": 6, "bottom": 3, "left": 6},
-                "item_height": 24,
-                "icon_size": 16
+                "height": 36,
+                "padding": {"top": 5, "right": 9, "bottom": 5, "left": 9},
+                "item_height": 36,
+                "icon_size": 24
             },
             
             # SpinBox and input fields
             "input": {
-                "height": 24,
-                "padding": {"top": 3, "right": 6, "bottom": 3, "left": 6},
-                "border_radius": 4
+                "height": 36,
+                "padding": {"top": 5, "right": 9, "bottom": 5, "left": 9},
+                "border_radius": 6
             },
             
             # Layout dimensions (NEW)
             "layout": {
-                "spacing_main": 2,       # Ultra compact pour conteneur principal
-                "spacing_section": 2,    # Entre sections (exploring, filtering, etc.) - réduit pour backend
-                "spacing_content": 2,    # Dans les contenus (keys, values)
-                "spacing_buttons": 3,    # Entre boutons
-                "spacing_frame": 3,      # Spacing interne des frames (exploring, filtering)
-                "margins_main": 2,       # Marges minimales pour conteneur
-                "margins_section": 2,    # Marges pour sections - réduit
-                "margins_content": 2,    # Marges pour contenus
-                "margins_frame": {"left": 3, "top": 4, "right": 3, "bottom": 4}  # Marges des frames groupbox - réduites
+                "spacing_main": 4,       # Ratio 2.0x - confortable pour conteneur principal
+                "spacing_section": 4,    # Ratio 2.0x - entre sections (exploring, filtering, etc.)
+                "spacing_content": 4,    # Ratio 2.0x - dans les contenus (keys, values)
+                "spacing_buttons": 6,    # Ratio 2.0x - entre boutons
+                "spacing_frame": 6,      # Ratio 2.0x - spacing interne des frames
+                "margins_main": 4,       # Ratio 2.0x - marges confortables pour conteneur
+                "margins_section": 4,    # Ratio 2.0x - marges pour sections
+                "margins_content": 4,    # Ratio 2.0x - marges pour contenus
+                "margins_frame": {"left": 6, "top": 8, "right": 6, "bottom": 8}  # Ratio 2.0x - marges des frames groupbox
             },
             
             # Frame exploring dimensions (NEW)
             "frame_exploring": {
                 "min_height": 200,
-                "base_height": 250
+                "base_height": 250,
+                "max_height": 400
             },
             
             # Frame filtering dimensions (NEW)
@@ -136,54 +137,54 @@ class UIConfig:
             
             # Spacer dimensions (NEW) - Compact mode
             "spacer": {
-                "default_size": 3,      # Default for compact mode - réduit
-                "section_main": 4,
-                "section_exploring": 3,
-                "section_filtering": 3,
-                "section_exporting": 3,
-                "section_config": 6
+                "default_size": 6,      # Ratio 2.0x (3→6)
+                "section_main": 8,      # Ratio 2.0x (4→8)
+                "section_exploring": 3, # Réduit pour moins d'espace au-dessus
+                "section_filtering": 6, # Ratio 2.0x (3→6)
+                "section_exporting": 6, # Ratio 2.0x (3→6)
+                "section_config": 12    # Ratio 2.0x (6→12)
             },
             
             # Labels and text
             "label": {
-                "font_size": 9,
-                "line_height": 14,
-                "padding": 3
+                "font_size": 14,
+                "line_height": 21,
+                "padding": 6
             },
             
             # Tree/List widgets
             "tree": {
-                "item_height": 24,
-                "indent": 16,
-                "icon_size": 14
+                "item_height": 36,
+                "indent": 24,
+                "icon_size": 21
             },
             
             # List widget (for custom feature picker)
             "list": {
-                "min_height": 150,  # Minimum height to display 5-6 items
-                "item_height": 24,
-                "icon_size": 14
+                "min_height": 225,  # Ratio 1.5x - minimum height to display 5-6 items
+                "item_height": 36,
+                "icon_size": 21
             },
             
             # Tab widget
             "tab": {
-                "height": 28,
-                "padding": {"top": 4, "right": 10, "bottom": 4, "left": 10},
-                "font_size": 9
+                "height": 42,
+                "padding": {"top": 6, "right": 15, "bottom": 6, "left": 15},
+                "font_size": 14
             },
             
             # Spacing and margins
             "spacing": {
-                "small": 3,
-                "medium": 6,
-                "large": 10,
-                "extra_large": 15
+                "small": 6,
+                "medium": 12,
+                "large": 20,
+                "extra_large": 30
             },
             
             "margins": {
-                "tight": {"top": 3, "right": 3, "bottom": 3, "left": 3},
-                "normal": {"top": 6, "right": 6, "bottom": 6, "left": 6},
-                "loose": {"top": 10, "right": 10, "bottom": 10, "left": 10}
+                "tight": {"top": 6, "right": 6, "bottom": 6, "left": 6},
+                "normal": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+                "loose": {"top": 20, "right": 20, "bottom": 20, "left": 20}
             },
             
             # Scrollbar dimensions
@@ -204,28 +205,28 @@ class UIConfig:
             
             # Button dimensions
             "button": {
-                "height": 40,
-                "icon_size": 20,
+                "height": 48,
+                "icon_size": 27,
                 "padding": {"top": 8, "right": 12, "bottom": 8, "left": 12},
-                "border_radius": 10,
-                "min_width": 100
+                "border_radius": 9,
+                "min_width": 120
             },
             
             # Action buttons (filter, export, etc.)
             "action_button": {
-                "height": 48,
-                "icon_size": 25,
-                "padding": {"top": 10, "right": 15, "bottom": 10, "left": 15},
-                "border_radius": 10,
-                "min_width": 120
+                "height": 54,
+                "icon_size": 33,
+                "padding": {"top": 9, "right": 15, "bottom": 9, "left": 15},
+                "border_radius": 12,
+                "min_width": 150
             },
             
             # Tool buttons (identify, zoom, etc.)
             "tool_button": {
-                "height": 36,
-                "icon_size": 24,
-                "padding": {"top": 4, "right": 6, "bottom": 4, "left": 6},
-                "border_radius": 6
+                "height": 42,
+                "icon_size": 30,
+                "padding": {"top": 3, "right": 3, "bottom": 3, "left": 3},
+                "border_radius": 5
             },
             
             # Frame and container dimensions
@@ -252,9 +253,9 @@ class UIConfig:
             # ComboBox dimensions
             "combobox": {
                 "height": 36,
-                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
-                "item_height": 32,
-                "icon_size": 20
+                "padding": {"top": 5, "right": 9, "bottom": 5, "left": 9},
+                "item_height": 36,
+                "icon_size": 24
             },
             
             # SpinBox and input fields
@@ -266,21 +267,22 @@ class UIConfig:
             
             # Layout dimensions (NEW)
             "layout": {
-                "spacing_main": 6,       # Confortable pour conteneur principal
-                "spacing_section": 6,    # Entre sections (exploring, filtering, etc.) - cohérent ×3
-                "spacing_content": 6,    # Dans les contenus (keys, values)
-                "spacing_buttons": 8,    # Entre boutons
-                "spacing_frame": 8,      # Spacing interne des frames (exploring, filtering)
-                "margins_main": 4,       # Marges confortables pour conteneur
-                "margins_section": 6,    # Marges pour sections
-                "margins_content": 4,    # Marges pour contenus
-                "margins_frame": {"left": 8, "top": 10, "right": 8, "bottom": 10}  # Marges des frames groupbox
+                "spacing_main": 4,       # Ratio 2.0x - confortable pour conteneur principal
+                "spacing_section": 1,    # Réduit au minimum pour moins d'espace au-dessus des frames
+                "spacing_content": 4,    # Ratio 2.0x - dans les contenus (keys, values)
+                "spacing_buttons": 6,    # Ratio 2.0x - entre boutons
+                "spacing_frame": 6,      # Ratio 2.0x - spacing interne des frames
+                "margins_main": 4,       # Ratio 2.0x - marges confortables pour conteneur
+                "margins_section": 4,    # Ratio 2.0x - marges pour sections
+                "margins_content": 4,    # Ratio 2.0x - marges pour contenus
+                "margins_frame": {"left": 6, "top": 8, "right": 6, "bottom": 8}  # Ratio 2.0x - marges des frames groupbox
             },
             
             # Frame exploring dimensions (NEW)
             "frame_exploring": {
-                "min_height": 250,
-                "base_height": 300
+                "min_height": 280,
+                "base_height": 350,
+                "max_height": 550
             },
             
             # Frame filtering dimensions (NEW)
@@ -303,54 +305,54 @@ class UIConfig:
             
             # Spacer dimensions (NEW) - Normal mode
             "spacer": {
-                "default_size": 8,      # Default for normal mode
-                "section_main": 10,
-                "section_exploring": 8,
-                "section_filtering": 6,
-                "section_exporting": 6,
-                "section_config": 12
+                "default_size": 6,       # Ratio 2.0x (3→6)
+                "section_main": 8,       # Ratio 2.0x (4→8)
+                "section_exploring": 1,  # Minimal pour réduire l'espace au-dessus
+                "section_filtering": 6,  # Ratio 2.0x (3→6)
+                "section_exporting": 6,  # Ratio 2.0x (3→6)
+                "section_config": 12     # Ratio 2.0x (6→12)
             },
             
             # Labels and text
             "label": {
-                "font_size": 10,
-                "line_height": 16,
-                "padding": 4
+                "font_size": 14,
+                "line_height": 21,
+                "padding": 6
             },
             
             # Tree/List widgets
             "tree": {
-                "item_height": 28,
-                "indent": 20,
-                "icon_size": 16
+                "item_height": 36,
+                "indent": 24,
+                "icon_size": 21
             },
             
             # List widget (for custom feature picker)
             "list": {
-                "min_height": 200,  # Larger minimum for normal profile
-                "item_height": 28,
-                "icon_size": 16
+                "min_height": 225,  # Ratio 1.5x - larger minimum for normal profile
+                "item_height": 36,
+                "icon_size": 21
             },
             
             # Tab widget
             "tab": {
-                "height": 36,
-                "padding": {"top": 8, "right": 15, "bottom": 8, "left": 15},
-                "font_size": 10
+                "height": 42,
+                "padding": {"top": 6, "right": 15, "bottom": 6, "left": 15},
+                "font_size": 14
             },
             
             # Spacing and margins
             "spacing": {
-                "small": 5,
-                "medium": 10,
-                "large": 15,
-                "extra_large": 20
+                "small": 6,
+                "medium": 12,
+                "large": 20,
+                "extra_large": 30
             },
             
             "margins": {
-                "tight": {"top": 5, "right": 5, "bottom": 5, "left": 5},
-                "normal": {"top": 10, "right": 10, "bottom": 10, "left": 10},
-                "loose": {"top": 15, "right": 15, "bottom": 15, "left": 15}
+                "tight": {"top": 6, "right": 6, "bottom": 6, "left": 6},
+                "normal": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+                "loose": {"top": 20, "right": 20, "bottom": 20, "left": 20}
             },
             
             # Scrollbar dimensions

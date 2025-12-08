@@ -572,8 +572,12 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     
                 self.layer = layer
 
-                if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
-                    self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
+                # Validate required keys exist before accessing
+                if "infos" in layer_props and "primary_key_name" in layer_props["infos"]:
+                    if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
+                        self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
+                else:
+                    logger.warning(f"layer_props missing required keys in setLayer for layer {layer.id()}")
 
                 self.manage_list_widgets(layer_props)
 
@@ -749,7 +753,20 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def add_list_widget(self, layer_props):
-        self.list_widgets[self.layer.id()] = ListWidgetWrapper(layer_props["infos"]["primary_key_name"], layer_props["infos"]["primary_key_is_numeric"], self)
+        # Validate required keys exist
+        if "infos" not in layer_props:
+            logger.warning("layer_props missing 'infos' dictionary in add_list_widget")
+            return
+        
+        required_keys = ["primary_key_name", "primary_key_is_numeric"]
+        infos = layer_props["infos"]
+        missing_keys = [k for k in required_keys if k not in infos or infos[k] is None]
+        
+        if missing_keys:
+            logger.warning(f"layer_props['infos'] missing required keys: {missing_keys} in add_list_widget")
+            return
+        
+        self.list_widgets[self.layer.id()] = ListWidgetWrapper(infos["primary_key_name"], infos["primary_key_is_numeric"], self)
         self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
         self.layout.addWidget(self.list_widgets[self.layer.id()])
 

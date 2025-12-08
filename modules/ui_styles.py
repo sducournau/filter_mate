@@ -36,16 +36,16 @@ class StyleLoader:
     # Default color schemes (matching config.json COLORS structure)
     COLOR_SCHEMES = {
         'default': {
-            'color_bg_0': '#EFEFEF',      # BACKGROUND[0] - Frame background (darker for better contrast)
-            'color_1': '#FFFFFF',         # BACKGROUND[1] - Widget background
-            'color_2': '#D0D0D0',         # BACKGROUND[2] - Selected items (darker: was #DADADA)
+            'color_bg_0': '#EFEFEF',      # BACKGROUND[0] - Frame background (darker for separation)
+            'color_1': '#FFFFFF',         # BACKGROUND[1] - Widget background (pure white)
+            'color_2': '#D0D0D0',         # BACKGROUND[2] - Borders/selected (clear contrast)
             'color_bg_3': '#2196F3',      # BACKGROUND[3] - Accent color
-            'color_3': '#4A4A4A',         # FONT[1] - Text color (more contrast: was #616161)
-            'color_font_0': '#1A1A1A',    # FONT[0] - Primary text (darker for WCAG AA: was #212121)
-            'color_font_1': '#4A4A4A',    # FONT[1] - Secondary text (more contrast: was #616161)
-            'color_font_2': '#888888',    # FONT[2] - Disabled text (darker: was #9E9E9E)
-            'color_accent': '#1565C0',    # Accent primary (darker for better contrast: was #1976D2)
-            'color_accent_hover': '#1E88E5',     # Accent hover (adjusted)
+            'color_3': '#4A4A4A',         # FONT[1] - Text color (WCAG AA compliant)
+            'color_font_0': '#1A1A1A',    # FONT[0] - Primary text (near-black, WCAG AA)
+            'color_font_1': '#4A4A4A',    # FONT[1] - Secondary text (distinct from primary)
+            'color_font_2': '#888888',    # FONT[2] - Disabled text (clearly muted)
+            'color_accent': '#1565C0',    # Accent primary (darker blue, better contrast)
+            'color_accent_hover': '#1E88E5',     # Accent hover (lighter for feedback)
             'color_accent_pressed': '#0D47A1',   # Accent pressed (very dark blue)
             'color_accent_light_bg': '#E3F2FD', # Accent light background
             'color_accent_dark': '#01579B'      # Accent dark border
@@ -66,19 +66,19 @@ class StyleLoader:
             'color_accent_dark': '#FFFFFF'      # Text sur fond accentué (blanc pour contraste)
         },
         'light': {
-            'color_bg_0': '#FFFFFF',    # Very light frame background
-            'color_1': '#F5F5F5',       # Widget background
-            'color_2': '#E0E0E0',       # Selected items
+            'color_bg_0': '#FFFFFF',    # Pure white frame background (maximum brightness)
+            'color_1': '#F8F8F8',       # Widget background (subtle contrast)
+            'color_2': '#CCCCCC',       # Borders (clearly visible)
             'color_bg_3': '#2196F3',    # Splitter hover
-            'color_3': '#424242',       # Dark text
-            'color_font_0': '#000000',  # Primary text (pure black)
-            'color_font_1': '#424242',  # Secondary text
-            'color_font_2': '#9E9E9E',  # Disabled text
-            'color_accent': '#2196F3',
-            'color_accent_hover': '#64B5F6',
-            'color_accent_pressed': '#1976D2',
-            'color_accent_light_bg': '#E3F2FD',
-            'color_accent_dark': '#0D47A1'
+            'color_3': '#333333',       # Dark text (excellent readability)
+            'color_font_0': '#000000',  # Primary text (pure black, maximum contrast)
+            'color_font_1': '#333333',  # Secondary text (very dark gray)
+            'color_font_2': '#999999',  # Disabled text (medium gray)
+            'color_accent': '#1976D2',  # Accent primary (Material Blue)
+            'color_accent_hover': '#2196F3',    # Accent hover (lighter blue)
+            'color_accent_pressed': '#0D47A1',  # Accent pressed (dark blue)
+            'color_accent_light_bg': '#E3F2FD', # Accent light background
+            'color_accent_dark': '#0D47A1'      # Accent dark border
         }
     }
     

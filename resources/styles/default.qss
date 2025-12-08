@@ -676,8 +676,8 @@ QTabBar::tab:hover:!selected {
 
 /* Backend Indicator Label */
 QLabel#label_backend_indicator {
-    font-size: 10px;
-    padding: 2px;
+    font-size: 8pt;
+    padding: 1px 4px;
     text-align: right;
 }
 

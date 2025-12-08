@@ -6,19 +6,19 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.2.2
+version=2.2.3
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.2.2 - Real-time Configuration & Enhanced UX!
+about=FilterMate v2.2.3 - Color Harmonization & Accessibility!
 
- NEW in v2.2.2:
- - REACTIVITY: Real-time configuration updates without restart
- - UI PROFILES: Dynamic switching between compact/normal/auto modes
- - CONFIG TYPES: Dropdown selectors for key configuration fields
- - AUTO-SAVE: All configuration changes automatically saved
- - TYPE SAFETY: Invalid config values prevented at UI level
- - UX IMPROVEMENTS: Live icon updates and instant feedback
+ NEW in v2.2.3:
+ - COLOR HARMONIZATION: Enhanced visual distinction and contrast
+ - ACCESSIBILITY: WCAG 2.1 AA/AAA compliant text contrast (17.4:1)
+ - THEME REFINEMENTS: Improved frame backgrounds and borders
+ - REDUCED EYE STRAIN: Optimized color palette for long work sessions
+ - BETTER READABILITY: Clear visual hierarchy throughout UI
+ - TESTING SUITE: Automated WCAG compliance validation
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)

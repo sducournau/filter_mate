@@ -46,12 +46,12 @@ def test_button_dimensions():
     print("\n=== BOUTONS ===")
     
     tests = [
-        ("button.height", "button", "height", 1.1, 1.4),
-        ("button.icon_size", "button", "icon_size", 1.0, 1.3),
-        ("action_button.height", "action_button", "height", 1.2, 1.5),
-        ("action_button.icon_size", "action_button", "icon_size", 1.0, 1.3),
-        ("tool_button.height", "tool_button", "height", 1.2, 1.5),
-        ("tool_button.icon_size", "tool_button", "icon_size", 1.1, 1.3),
+        ("button.height", "button", "height", 1.4, 1.6),
+        ("button.icon_size", "button", "icon_size", 1.4, 1.6),
+        ("action_button.height", "action_button", "height", 1.4, 1.6),
+        ("action_button.icon_size", "action_button", "icon_size", 1.4, 1.6),
+        ("tool_button.height", "tool_button", "height", 1.4, 1.6),
+        ("tool_button.icon_size", "tool_button", "icon_size", 1.4, 1.6),
     ]
     
     results = []
@@ -75,9 +75,9 @@ def test_input_dimensions():
     print("\n=== CHAMPS DE SAISIE ===")
     
     tests = [
-        ("combobox.height", "combobox", "height", 1.3, 1.6),
-        ("combobox.icon_size", "combobox", "icon_size", 1.1, 1.4),
-        ("input.height", "input", "height", 1.3, 1.6),
+        ("combobox.height", "combobox", "height", 1.4, 1.6),
+        ("combobox.icon_size", "combobox", "icon_size", 1.4, 1.6),
+        ("input.height", "input", "height", 1.4, 1.6),
     ]
     
     results = []
@@ -100,11 +100,11 @@ def test_layout_spacing():
     print("\n=== LAYOUTS & ESPACEMENTS ===")
     
     tests = [
-        ("layout.spacing_main", "layout", "spacing_main", 2.5, 3.5),
-        ("layout.spacing_section", "layout", "spacing_section", 2.5, 3.5),
-        ("layout.spacing_buttons", "layout", "spacing_buttons", 2.0, 3.0),
-        ("layout.margins_main", "layout", "margins_main", 1.5, 2.5),
-        ("layout.margins_section", "layout", "margins_section", 2.5, 3.5),
+        ("layout.spacing_main", "layout", "spacing_main", 1.9, 2.1),
+        ("layout.spacing_section", "layout", "spacing_section", 1.9, 2.1),
+        ("layout.spacing_buttons", "layout", "spacing_buttons", 1.9, 2.1),
+        ("layout.margins_main", "layout", "margins_main", 1.9, 2.1),
+        ("layout.margins_section", "layout", "margins_section", 1.9, 2.1),
     ]
     
     results = []
@@ -177,8 +177,8 @@ def test_text_dimensions():
     print("\n=== TEXTE & TYPOGRAPHIE ===")
     
     tests = [
-        ("label.font_size", "label", "font_size", 1.0, 1.2),
-        ("label.line_height", "label", "line_height", 1.0, 1.3),
+        ("label.font_size", "label", "font_size", 1.4, 1.6),
+        ("label.line_height", "label", "line_height", 1.4, 1.6),
     ]
     
     results = []

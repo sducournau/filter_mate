@@ -83,7 +83,7 @@ graph TD
 **When Used**:
 - Layer source is Spatialite
 - Automatically available
-- **Good for <50,000 features**
+- **Good for &lt;50,000 features**
 
 [Learn more →](./spatialite.md)
 

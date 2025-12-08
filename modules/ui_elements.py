@@ -126,6 +126,7 @@ LAYOUTS = {
     ],
     
     "actions": [
+        "horizontalLayout_actions_container",
         "horizontalLayout_actions_bottom",
     ],
 }
@@ -209,7 +210,7 @@ COMPACT_SPACER_SIZES = {
 # Optimized for larger screens - comfortable spacing
 NORMAL_SPACER_SIZES = {
     "main": 10,             # Main container spacers
-    "exploring": 8,         # Exploring section spacers
+    "exploring": 1,         # Exploring section spacers - minimal pour maximiser l'espace
     "filtering_keys": 6,    # Between key fields
     "filtering_values": 8,  # Between value controls
     "exporting_keys": 6,    # Between key fields

@@ -1,0 +1,9 @@
+# Serena configuration for FilterMate project
+# Disable language servers temporarily for WSL compatibility
+
+[general]
+# Don't use language servers - fallback to basic mode
+disable_language_servers = true
+
+# Alternative: only enable specific languages
+# enabled_languages = []

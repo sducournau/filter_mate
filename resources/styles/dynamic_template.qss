@@ -233,8 +233,8 @@ QLabel:disabled {
 /* Backend indicator label */
 QLabel#label_backend_indicator {
     color: {color_font_1};
-    font-size: 9pt;
-    padding: {spacing_small};
+    font-size: 8pt;
+    padding: 1px 4px;
 }
 
 /* ========================================================================

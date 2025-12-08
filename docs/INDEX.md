@@ -18,6 +18,7 @@
 ### UI & Themes
 - **[UI_SYSTEM_OVERVIEW.md](UI_SYSTEM_OVERVIEW.md)** - Complete UI system guide
 - **[THEMES.md](THEMES.md)** - Theme system documentation
+- **[COLOR_HARMONIZATION.md](COLOR_HARMONIZATION.md)** - Color harmonization & accessibility (v2.2.2+)
 - **[UI_DYNAMIC_CONFIG.md](UI_DYNAMIC_CONFIG.md)** - Dynamic UI configuration
 - **[UI_TESTING_GUIDE.md](UI_TESTING_GUIDE.md)** - UI testing procedures
 - **[UI_STYLES_TESTING_CHECKLIST.md](UI_STYLES_TESTING_CHECKLIST.md)** - Styles testing checklist
