@@ -881,16 +881,20 @@ class FilterEngineTask(QgsTask):
         """
         Combine new expression with existing subset string using combine operator.
         
+        Uses logical operators (AND, AND NOT, OR) for source layer filtering.
+        
         Returns:
             str: Combined expression
         """
-        if not self.param_source_old_subset or not self.param_source_layer_combine_operator:
+        combine_operator = self._get_source_combine_operator()
+        if not self.param_source_old_subset or not combine_operator:
             return expression
         
         # Extract WHERE clause from old subset
         index_where = self.param_source_old_subset.find('WHERE')
         if index_where == -1:
-            return expression
+            # If no WHERE clause, simple combination
+            return f'( {self.param_source_old_subset} ) {combine_operator} ( {expression} )'
         
         param_old_subset_where = self.param_source_old_subset[index_where:]
         param_source_old_subset = self.param_source_old_subset[:index_where]
@@ -901,7 +905,7 @@ class FilterEngineTask(QgsTask):
         
         combined = (
             f'{param_source_old_subset} {param_old_subset_where} '
-            f'{self.param_source_layer_combine_operator} {expression} )'
+            f'{combine_operator} ( {expression} ) )'
         )
         
         return combined
@@ -942,10 +946,11 @@ class FilterEngineTask(QgsTask):
                 )
         
         # Combine with old subset if needed
-        if self.param_source_old_subset and self.param_source_layer_combine_operator:
+        combine_operator = self._get_source_combine_operator()
+        if self.param_source_old_subset and combine_operator:
             expression = (
                 f'( {self.param_source_old_subset} ) '
-                f'{self.param_source_layer_combine_operator} {expression}'
+                f'{combine_operator} ( {expression} )'
             )
         
         return expression
@@ -2793,12 +2798,33 @@ class FilterEngineTask(QgsTask):
             safe_log(logger, logging.ERROR, f"Error in execute_geometric_filtering for {layer.name()}: {e}", exc_info=True)
             return False
     
-    def _get_combine_operator(self):
+    def _get_source_combine_operator(self):
         """
-        Get SQL operator for combining with existing filters.
+        Get logical operator for combining with source layer's existing filter.
+        
+        Returns logical operators (AND, AND NOT, OR) directly from UI.
+        These are used in simple SQL WHERE clause combinations.
         
         Returns:
-            str: 'AND', 'OR', 'INTERSECT', 'UNION', 'EXCEPT', or None
+            str: 'AND', 'AND NOT', 'OR', or None
+        """
+        if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
+            return None
+        
+        # Return source layer operator directly (no conversion needed)
+        return getattr(self, 'param_source_layer_combine_operator', None)
+    
+    def _get_combine_operator(self):
+        """
+        Get SQL set operator for combining with distant layers' existing filters.
+        
+        Converts UI operators to SQL set operations for distant layer filtering:
+        - 'AND' → 'INTERSECT' (intersection of sets)
+        - 'AND NOT' → 'EXCEPT' (set difference)
+        - 'OR' → 'UNION' (union of sets)
+        
+        Returns:
+            str: 'INTERSECT', 'UNION', 'EXCEPT', or None
         """
         if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
             return None

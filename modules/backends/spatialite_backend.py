@@ -40,7 +40,12 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         self.logger = logger
         self._temp_table_name = None
         self._temp_table_conn = None
-        self._use_temp_table = True  # Use temp table optimization by default
+        # CRITICAL FIX: Temp tables don't work with setSubsetString!
+        # QGIS uses its own connection to evaluate subset strings,
+        # and SQLite TEMP tables are connection-specific.
+        # When we create a TEMP table in our connection, QGIS cannot see it.
+        # Solution: Always use inline WKT in GeomFromText() for subset strings.
+        self._use_temp_table = False  # DISABLED: doesn't work with setSubsetString
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -180,12 +185,23 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         Create temporary table with source geometry and spatial index.
         
-        This is the KEY optimization for Spatialite performance:
-        - Instead of: GeomFromText('...2MB WKT...') parsed for each row
-        - Use: JOIN with indexed temp table
+        ⚠️ WARNING: This optimization is DISABLED for setSubsetString!
         
-        Performance: O(1) insertion + O(log n) indexed queries
-        vs O(n × m) where m = WKT parsing time
+        WHY DISABLED:
+        - SQLite TEMP tables are connection-specific
+        - QGIS uses its own connection for evaluating subset strings
+        - When we create a TEMP table, QGIS cannot see it
+        - Result: "no such table: _fm_temp_geom_xxx" error
+        
+        SOLUTION:
+        - Use inline WKT with GeomFromText() for subset strings
+        - This function kept for potential future use with direct SQL queries
+        - Could be re-enabled for export operations (not filtering)
+        
+        Performance Note:
+        - Inline WKT: O(n × m) where m = WKT parsing time
+        - With temp table: O(1) insertion + O(log n) indexed queries
+        - Trade-off: Compatibility vs Performance
         
         Args:
             db_path: Path to Spatialite database
@@ -407,9 +423,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         self.log_debug(f"Geometry expression: {geom_expr}")
         
-        # OPTIMIZATION DECISION: Use temp table for large WKT (>100KB)
-        # or if explicitly enabled
-        use_temp_table = self._use_temp_table and (wkt_length > 100000 or wkt_length > 50000)
+        # CRITICAL: Temp tables DON'T WORK with setSubsetString!
+        # QGIS uses its own connection and cannot see TEMP tables from our connection.
+        # Always use inline WKT for subset string filtering.
+        # Note: This may be slow for very large WKT, but it's the only way that works.
+        use_temp_table = False  # FORCED: temp tables incompatible with setSubsetString
         
         if use_temp_table and layer:
             self.log_info(f"WKT size {wkt_length} chars - using OPTIMIZED temp table method")
@@ -454,15 +472,23 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         else:
             use_temp_table = False
         
-        # Fallback: Use inline WKT if temp table not used
+        # Use inline WKT (required for setSubsetString compatibility)
         if not use_temp_table:
             if wkt_length > 500000:
                 self.log_warning(
-                    f"Very large WKT ({wkt_length} chars) without temp table optimization. "
-                    "Performance may be reduced. Consider using smaller source selection."
+                    f"Very large WKT ({wkt_length} chars) in subset string. "
+                    "This may cause slow performance. Consider using smaller source selection or PostgreSQL."
                 )
+            elif wkt_length > 100000:
+                self.log_info(
+                    f"Large WKT ({wkt_length} chars) in subset string. "
+                    "Performance may be reduced for datasets >10k features."
+                )
+            
+            # IMPORTANT: Single quotes in WKT must be escaped for SQL
+            # This was already done in prepare_spatialite_source_geom()
             source_geom_expr = f"GeomFromText('{source_geom}')"
-            self.log_debug("Using standard inline WKT method")
+            self.log_info(f"Using inline WKT method (required for QGIS subset strings)")
         
         # NOTE: Buffer is already applied in prepare_spatialite_source_geom()
         if buffer_expression:
@@ -565,6 +591,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 
                 if feature_count == 0:
                     self.log_warning("Filter resulted in 0 features - check if expression is correct")
+                    self.log_debug("Possible causes:")
+                    self.log_debug("  - No features actually match the spatial criteria")
+                    self.log_debug("  - Wrong CRS (source and target geometries in different projections)")
+                    self.log_debug("  - Invalid WKT geometry")
                 
                 if elapsed > 5.0:
                     self.log_warning(f"Slow filter operation ({elapsed:.2f}s) - consider using PostgreSQL for better performance")
@@ -578,10 +608,18 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_error(f"✗ setSubsetString() returned False - filter expression may be invalid")
                 self.log_error("Common issues:")
-                self.log_error("  1. Spatial functions not available (mod_spatialite not loaded)")
-                self.log_error("  2. Invalid WKT geometry")
+                self.log_error("  1. Spatial functions not available (mod_spatialite not loaded by QGIS)")
+                self.log_error("  2. Invalid WKT geometry syntax")
                 self.log_error("  3. Wrong geometry column name")
-                self.log_error("  4. Syntax error in SQL expression")
+                self.log_error("  4. SQL syntax error")
+                self.log_error("  5. Referencing non-existent table (e.g., temp tables)")
+                
+                # Check if expression references a temp table (common mistake)
+                if '_fm_temp_geom_' in final_expression:
+                    self.log_error("⚠️ CRITICAL ERROR: Expression references temp table!")
+                    self.log_error("   Temp tables DON'T WORK with QGIS setSubsetString()!")
+                    self.log_error("   QGIS uses its own connection and cannot see our temp tables.")
+                    self.log_error("   This should have been fixed - please report this bug.")
                 
                 # Try a simple test to see if spatial functions work
                 try:
@@ -593,7 +631,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                         # Restore no filter
                         layer.setSubsetString("")
                     else:
-                        self.log_error("Even simple geometry expression failed")
+                        self.log_error("Even simple geometry expression failed - layer may not support subset strings")
                 except Exception as test_error:
                     self.log_debug(f"Test expression error: {test_error}")
             
