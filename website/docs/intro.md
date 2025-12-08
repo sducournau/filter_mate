@@ -7,19 +7,35 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.2.3
+## 🎉 What's New in v2.2.3 - Color Harmonization & Accessibility
 
+### UI Excellence
 - ✅ **Color Harmonization** - Enhanced visual distinction with +300% frame contrast
-- ✅ **WCAG Accessibility** - AA/AAA compliant text contrast (17.4:1 ratio)
+- ✅ **WCAG 2.1 Compliance** - AA/AAA accessibility standards for all text
+  - Primary text: 17.4:1 contrast ratio (AAA)
+  - Secondary text: 8.86:1 contrast ratio (AAA)
+  - Disabled text: 4.6:1 contrast ratio (AA)
 - ✅ **Reduced Eye Strain** - Optimized color palette for long work sessions
 - ✅ **Better Readability** - Clear visual hierarchy throughout interface
-- ✅ **Theme Refinements** - Improved frame backgrounds and borders
+- ✅ **Theme Refinements** - Darker frames (#EFEFEF), clearer borders (#D0D0D0)
 - ✅ **Automated Testing** - WCAG compliance validation suite
 
-## Previous Updates (v2.2.1)
+## Previous Updates
 
+### v2.2.2 - Configuration Reactivity (December 8, 2025)
+- ✅ **Real-time Config Updates** - JSON tree view changes apply instantly without restart
+- ✅ **Dynamic UI Switching** - Switch compact/normal/auto modes on the fly
+- ✅ **Live Icon Updates** - Configuration changes reflected immediately
+- ✅ **ChoicesType Integration** - Dropdown selectors for validated config fields
+- ✅ **Type Safety** - Invalid values prevented at UI level
+- ✅ **Auto-save** - All configuration changes saved automatically
+
+### v2.2.1 - Maintenance (December 7, 2025)
 - ✅ **Enhanced Stability** - Improved Qt JSON view crash prevention
 - ✅ **Better Error Recovery** - Robust tab widget and theme handling
+- ✅ **Build Improvements** - Enhanced automation and version management
+
+### v2.2.0 & Earlier
 - ✅ **Complete Multi-Backend** - PostgreSQL, Spatialite, and OGR implementations
 - ✅ **Dynamic UI** - Adaptive interface that adjusts to screen resolution
 - ✅ **Robust Error Handling** - Automatic geometry repair and retry mechanisms

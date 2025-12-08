@@ -1,6 +1,6 @@
 {
   "name": "filter-mate-docs",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "private": true,
   "description": "FilterMate documentation website",
   "scripts": {

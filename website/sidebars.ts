@@ -45,6 +45,8 @@ const sidebars: SidebarsConfig = {
       label: 'Advanced Topics',
       items: [
         'advanced/configuration',
+        'advanced/configuration-reactivity',
+        'advanced/accessibility',
         'advanced/performance-tuning',
         'advanced/troubleshooting',
         'advanced/known-issues',
@@ -77,6 +79,7 @@ const sidebars: SidebarsConfig = {
       label: 'Themes',
       items: [
         'themes/overview',
+        'themes/color-harmonization',
         'themes/available-themes',
         'themes/custom-themes',
       ],

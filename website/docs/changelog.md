@@ -6,6 +6,65 @@ sidebar_position: 100
 
 All notable changes to FilterMate are documented here.
 
+## [2.2.3] - December 8, 2025 - Color Harmonization & Accessibility
+
+### 🎨 UI Improvements
+- **Enhanced Visual Distinction**: Significantly improved contrast between UI elements
+- **WCAG 2.1 Compliance**: AA/AAA accessibility standards met for all text
+  - Primary text contrast: 17.4:1 (AAA compliance)
+  - Secondary text contrast: 8.86:1 (AAA compliance)
+  - Disabled text: 4.6:1 (AA compliance)
+- **Theme Refinements**: 
+  - `default` theme: Darker frame backgrounds (#EFEFEF), clearer borders (#D0D0D0)
+  - `light` theme: Better widget contrast (#F8F8F8), visible borders (#CCCCCC)
+- **Accent Colors**: Deeper blue (#1565C0) for better contrast on white backgrounds
+- **Frame Separation**: +300% contrast improvement between frames and widgets
+- **Border Visibility**: +40% darker borders for clearer field delimitation
+
+### 📊 Accessibility & Ergonomics
+- ✅ Reduced eye strain with optimized color contrasts
+- ✅ Clear visual hierarchy throughout the interface
+- ✅ Better distinction for users with mild visual impairments
+- ✅ Long work session comfort improved
+
+### 🧪 Testing & Documentation
+- **New Test Suite**: `test_color_contrast.py` validates WCAG compliance
+- **Visual Preview**: `generate_color_preview.py` creates interactive HTML comparison
+- **Documentation**: Complete color harmonization guide
+
+## [2.2.2] - December 8, 2025 - Configuration Reactivity
+
+### ✨ New Features
+- **Real-time Configuration Updates**: JSON tree view changes now auto-apply without restart
+- **Dynamic UI Profile Switching**: Instant switching between compact/normal/auto modes
+- **Live Icon Updates**: Configuration icon changes reflected immediately
+- **Automatic Saving**: All config changes auto-save to config.json
+
+### 🎯 Enhanced Configuration Types
+- **ChoicesType Integration**: Dropdown selectors for key config fields
+  - UI_PROFILE, ACTIVE_THEME, THEME_SOURCE dropdowns
+  - STYLES_TO_EXPORT, DATATYPE_TO_EXPORT format selectors
+- **Type Safety**: Invalid values prevented at UI level
+
+### 🔧 Technical Improvements
+- **Signal Management**: Activated itemChanged signal for config handler
+- **Smart Path Detection**: Auto-detection of configuration change type
+- **New Module**: config_helpers.py with get/set config utilities
+- **Error Handling**: Comprehensive error handling with user feedback
+
+### 🎨 Initial Color Harmonization Work
+- Enhanced contrast between UI elements in normal mode
+- WCAG AAA compliance (17.4:1 for primary text)
+- Better frame/widget distinction
+
+## [2.2.1] - December 7, 2025 - Maintenance Release
+
+### 🔧 Maintenance
+- ✅ Release Management: Improved release tagging and deployment procedures
+- ✅ Build Scripts: Enhanced build automation and version management
+- ✅ Documentation: Updated release documentation and procedures
+- ✅ Code Cleanup: Minor code formatting and organization improvements
+
 ## [2.2.0] - December 2025
 
 ### Added
