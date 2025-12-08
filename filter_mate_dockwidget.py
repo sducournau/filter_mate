@@ -2359,10 +2359,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             if isinstance(input, QgsFeature):
                 if identify_by_primary_key_name is True:
-                    if layer_props["infos"]["primary_key_is_numeric"] is True: 
-                        expression = layer_props["infos"]["primary_key_name"] + " = {}".format(input[layer_props["infos"]["primary_key_name"]])
+                    pk_name = layer_props["infos"]["primary_key_name"]
+                    # Try to get the primary key value using multiple methods
+                    pk_value = None
+                    try:
+                        # First try with attribute() method
+                        pk_value = input.attribute(pk_name)
+                    except (KeyError, IndexError):
+                        try:
+                            # Fallback to field index
+                            fields = input.fields()
+                            idx = fields.indexFromName(pk_name)
+                            if idx >= 0:
+                                pk_value = input.attributes()[idx]
+                        except:
+                            pass
+                    
+                    if pk_value is not None:
+                        if layer_props["infos"]["primary_key_is_numeric"] is True: 
+                            expression = pk_name + " = {}".format(pk_value)
+                        else:
+                            expression = pk_name + " = '{}'".format(pk_value)
                     else:
-                        expression = layer_props["infos"]["primary_key_name"] + " = '{}'".format(input[layer_props["infos"]["primary_key_name"]])
+                        # If we can't get the primary key, use the feature as-is
+                        features = [input]
+                        print(f"FilterMate Warning: Could not access primary key '{pk_name}' in feature. Using feature directly.")
                 else:
                     features = [input]
 

@@ -54,6 +54,48 @@ slug: /
 - 🎨 **Adaptive UI** - Dynamic dimensions based on screen resolution
 - 🌓 **Theme support** - Automatic synchronization with QGIS theme
 
+## 🎯 How FilterMate Chooses the Best Backend
+
+FilterMate automatically selects the optimal backend for your data source to provide the best performance. Here's how it works:
+
+```mermaid
+flowchart TD
+    Start[User selects a layer] --> Detect[Detect data source type]
+    Detect --> IsPostgres{PostgreSQL<br/>source?}
+    
+    IsPostgres -->|Yes| CheckPsycopg{psycopg2<br/>installed?}
+    IsPostgres -->|No| IsSpatialite{Spatialite<br/>source?}
+    
+    CheckPsycopg -->|✅ Yes| UsePostgres[PostgreSQL Backend<br/>⚡ Optimal Performance<br/>< 1s for millions of features]
+    CheckPsycopg -->|❌ No| WarnPostgres[⚠️ Warning: Install psycopg2<br/>for better performance]
+    
+    WarnPostgres --> FallbackSpatialite[Fallback to Spatialite]
+    
+    IsSpatialite -->|Yes| UseSpatialite[Spatialite Backend<br/>✅ Good Performance<br/>1-10s for 100k features]
+    IsSpatialite -->|No| UseOGR[OGR Backend<br/>🔄 Universal Compatibility<br/>Works with any format]
+    
+    UsePostgres --> Features1[• Materialized views<br/>• GIST spatial indexes<br/>• Server-side operations]
+    UseSpatialite --> Features2[• Temporary tables<br/>• R-tree indexes<br/>• Built-in support]
+    FallbackSpatialite --> Features2
+    UseOGR --> Features3[• QGIS Processing<br/>• Memory layers<br/>• Shapefiles, GeoPackage, etc.]
+    
+    Features1 --> Result[✅ Ready to filter]
+    Features2 --> Result
+    Features3 --> Result
+    
+    style UsePostgres fill:#51cf66
+    style UseSpatialite fill:#ffd43b
+    style UseOGR fill:#74c0fc
+    style Result fill:#51cf66
+```
+
+**Key Takeaways:**
+- 🚀 **PostgreSQL**: Best for large datasets (>50k features) - requires psycopg2
+- 📊 **Spatialite**: Good balance for medium datasets (10k-50k features) - built-in
+- 🔄 **OGR**: Universal compatibility for all formats - works everywhere
+
+Learn more in the [Backend Selection Guide](./backends/backend-selection.md).
+
 ## Quick Links
 
 - [Installation Guide](./installation.md)

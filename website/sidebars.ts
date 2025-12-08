@@ -26,6 +26,8 @@ const sidebars: SidebarsConfig = {
         'user-guide/export-features',
         'user-guide/filter-history',
         'user-guide/advanced-features',
+        'user-guide/user-stories',
+        'user-guide/workflows',
       ],
     },
     {
@@ -33,6 +35,7 @@ const sidebars: SidebarsConfig = {
       label: 'Backends',
       items: [
         'backends/overview',
+        'backends/visual-comparison',
         'backends/postgresql',
         'backends/spatialite',
         'backends/ogr',
@@ -57,6 +60,7 @@ const sidebars: SidebarsConfig = {
       label: 'Developer Guide',
       items: [
         'developer-guide/architecture',
+        'developer-guide/architecture-simplified',
         'developer-guide/development-setup',
         'developer-guide/contributing',
         'developer-guide/code-style',

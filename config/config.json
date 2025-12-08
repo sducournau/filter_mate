@@ -94,19 +94,19 @@
                 "THEMES": {
                     "default": {
                         "BACKGROUND": [
-                            "#EFEFEF",
+                            "#F5F5F5",
                             "#FFFFFF",
-                            "#D0D0D0",
+                            "#E0E0E0",
                             "#2196F3"
                         ],
                         "FONT": [
-                            "#1A1A1A",
-                            "#4A4A4A",
-                            "#888888"
+                            "#212121",
+                            "#616161",
+                            "#BDBDBD"
                         ],
                         "ACCENT": {
-                            "PRIMARY": "#1565C0",
-                            "HOVER": "#1E88E5",
+                            "PRIMARY": "#1976D2",
+                            "HOVER": "#2196F3",
                             "PRESSED": "#0D47A1",
                             "LIGHT_BG": "#E3F2FD",
                             "DARK": "#01579B"
@@ -135,19 +135,19 @@
                     "light": {
                         "BACKGROUND": [
                             "#FFFFFF",
-                            "#F8F8F8",
-                            "#CCCCCC",
+                            "#F5F5F5",
+                            "#E0E0E0",
                             "#2196F3"
                         ],
                         "FONT": [
                             "#000000",
-                            "#333333",
-                            "#999999"
+                            "#424242",
+                            "#9E9E9E"
                         ],
                         "ACCENT": {
-                            "PRIMARY": "#1976D2",
-                            "HOVER": "#2196F3",
-                            "PRESSED": "#0D47A1",
+                            "PRIMARY": "#2196F3",
+                            "HOVER": "#64B5F6",
+                            "PRESSED": "#1976D2",
                             "LIGHT_BG": "#E3F2FD",
                             "DARK": "#0D47A1"
                         }
@@ -183,7 +183,7 @@
     },
     "CURRENT_PROJECT": {
         "EXPORTING": {
-            "HAS_LAYERS_TO_EXPORT": true,
+            "HAS_LAYERS_TO_EXPORT": false,
             "LAYERS_TO_EXPORT": [
                 "Ducts_1d9473f3_02d8_47c1_9350_1b07ae8d5c9c",
                 "Sheaths_6693ee26_f5c4_4cef_9525_807b161feeaa",
@@ -191,21 +191,20 @@
                 "Structures_6a78c6ce_9a60_4c9f_b0a5_ae65dabe0dc1",
                 "OUT_DemandPoints_84fb240d_1248_429f_a6c4_9735f80b8fda",
                 "Structures_974318b6_4708_4ded_8562_228095d0f982",
-                "Couche_regroup_e_eb95ea72_c16e_4262_8485_d14d714a1f85",
                 "OUT_DistributionClusters_7449fae9_2edf_479b_a10f_51bd0478fd0a",
                 "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
-            "HAS_PROJECTION_TO_EXPORT": true,
+            "HAS_PROJECTION_TO_EXPORT": false,
             "PROJECTION_TO_EXPORT": "EPSG:31370",
-            "HAS_STYLES_TO_EXPORT": true,
+            "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
-            "HAS_DATATYPE_TO_EXPORT": true,
-            "DATATYPE_TO_EXPORT": "GeoJSON",
-            "HAS_OUTPUT_FOLDER_TO_EXPORT": true,
-            "OUTPUT_FOLDER_TO_EXPORT": "c:\\users\\simonducorneau\\onedrive - constructel belgium sa\\documents\\mro_woluwe_03_pop_033_qgis\\mro_woluwe_03_pop_033_qgis",
+            "HAS_DATATYPE_TO_EXPORT": false,
+            "DATATYPE_TO_EXPORT": "GPKG",
+            "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
+            "OUTPUT_FOLDER_TO_EXPORT": "",
             "HAS_ZIP_TO_EXPORT": false,
             "ZIP_TO_EXPORT": "",
-            "BATCH_OUTPUT_FOLDER": true,
+            "BATCH_OUTPUT_FOLDER": false,
             "BATCH_ZIP": false
         },
         "OPTIONS": {
@@ -229,22 +228,19 @@
                 "Structures_6a78c6ce_9a60_4c9f_b0a5_ae65dabe0dc1",
                 "OUT_DemandPoints_84fb240d_1248_429f_a6c4_9735f80b8fda",
                 "Structures_974318b6_4708_4ded_8562_228095d0f982",
-                "Couche_regroup_e_eb95ea72_c16e_4262_8485_d14d714a1f85",
                 "OUT_DistributionClusters_7449fae9_2edf_479b_a10f_51bd0478fd0a",
                 "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
-            "HAS_PROJECTION_TO_EXPORT": true,
+            "HAS_PROJECTION_TO_EXPORT": false,
             "PROJECTION_TO_EXPORT": "EPSG:31370",
-            "HAS_STYLES_TO_EXPORT": true,
+            "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
-            "HAS_DATATYPE_TO_EXPORT": true,
+            "HAS_DATATYPE_TO_EXPORT": false,
             "DATATYPE_TO_EXPORT": "GPKG",
-            "HAS_OUTPUT_FOLDER_TO_EXPORT": true,
-            "OUTPUT_FOLDER_TO_EXPORT": "c:\\users\\simonducorneau\\onedrive - constructel belgium sa\\documents\\mro_woluwe_03_pop_033_qgis\\nouveau dossier\\mro_woluwe_03_pop_033.gpkg",
+            "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
+            "OUTPUT_FOLDER_TO_EXPORT": "",
             "HAS_ZIP_TO_EXPORT": false,
-            "ZIP_TO_EXPORT": "",
-            "BATCH_OUTPUT_FOLDER": true,
-            "BATCH_ZIP": false
+            "ZIP_TO_EXPORT": ""
         },
         "layers": [
             {
@@ -261,7 +257,8 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": false,
                 "primary_key_name": "ID",
-                "primary_key_type": "String"
+                "primary_key_type": "String",
+                "subset_history": []
             },
             {
                 "is_already_subset": false,
@@ -277,7 +274,8 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": false,
                 "primary_key_name": "ID",
-                "primary_key_type": "String"
+                "primary_key_type": "String",
+                "subset_history": []
             },
             {
                 "is_already_subset": false,
@@ -293,7 +291,8 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": false,
                 "primary_key_name": "ID",
-                "primary_key_type": "String"
+                "primary_key_type": "String",
+                "subset_history": []
             },
             {
                 "is_already_subset": false,
@@ -309,7 +308,8 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": false,
                 "primary_key_name": "ID",
-                "primary_key_type": "String"
+                "primary_key_type": "String",
+                "subset_history": []
             },
             {
                 "is_already_subset": false,
@@ -325,10 +325,11 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": true,
                 "primary_key_name": "AGG_ID",
-                "primary_key_type": "Integer"
+                "primary_key_type": "Integer",
+                "subset_history": []
             },
             {
-                "is_already_subset": true,
+                "is_already_subset": false,
                 "is_current_layer": false,
                 "layer_crs_authid": "EPSG:31370",
                 "layer_geometry_field": "geom",
@@ -341,26 +342,11 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": false,
                 "primary_key_name": "ID",
-                "primary_key_type": "String"
+                "primary_key_type": "String",
+                "subset_history": []
             },
             {
-                "is_already_subset": false,
-                "is_current_layer": false,
-                "layer_crs_authid": "EPSG:31370",
-                "layer_geometry_field": "NULL",
-                "layer_geometry_type": "GeometryType.Polygon",
-                "layer_id": "Couche_regroup_e_eb95ea72_c16e_4262_8485_d14d714a1f85",
-                "layer_name": "Couche regroup\u00e9e",
-                "layer_provider_type": "memory",
-                "layer_schema": "NULL",
-                "layer_table_name": "Couche regroup\u00e9e",
-                "primary_key_idx": 0,
-                "primary_key_is_numeric": true,
-                "primary_key_name": "AGG_ID",
-                "primary_key_type": "integer"
-            },
-            {
-                "is_already_subset": false,
+                "is_already_subset": true,
                 "is_current_layer": false,
                 "layer_crs_authid": "EPSG:31370",
                 "layer_geometry_field": "geom",
@@ -373,7 +359,8 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": true,
                 "primary_key_name": "AGG_ID",
-                "primary_key_type": "Integer"
+                "primary_key_type": "Integer",
+                "subset_history": []
             },
             {
                 "is_already_subset": false,
@@ -389,7 +376,8 @@
                 "primary_key_idx": 0,
                 "primary_key_is_numeric": true,
                 "primary_key_name": "AGG_ID",
-                "primary_key_type": "Integer"
+                "primary_key_type": "Integer",
+                "subset_history": []
             }
         ]
     }

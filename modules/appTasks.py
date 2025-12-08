@@ -832,10 +832,15 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (processed_expression, is_field_expression) or (None, None) if invalid
         """
-        if QgsExpression(expression).isField():
+        # FIXED: Only reject if expression is JUST a field name (no operators)
+        # Allow expressions like "HOMECOUNT = 10" or "field > 5"
+        qgs_expr = QgsExpression(expression)
+        if qgs_expr.isField() and not any(op in expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
+            logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
             return None, None
         
-        if not QgsExpression(expression).isValid():
+        if not qgs_expr.isValid():
+            logger.warning(f"Invalid QGIS expression: '{expression}'")
             return None, None
         
         # Add leading space and check for field equality

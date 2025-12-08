@@ -3,6 +3,7 @@
 Create distribution ZIP for FilterMate plugin
 """
 import os
+import re
 import zipfile
 from pathlib import Path
 
@@ -17,10 +18,27 @@ EXCLUDE_PATTERNS = [
     '*.pyc',
     '*.pyo',
     'compile_ui.bat',
+    'compile_ui.sh',
     'rebuild_ui.bat',
     'filter_mate_dockwidget_base.py.backup',
     'create_release_zip.py',  # Exclude this script itself
+    'website',  # Exclude website directory
+    'docs',  # Exclude docs directory
+    'tests',  # Exclude tests directory
 ]
+
+def get_version_from_metadata():
+    """Extract version from metadata.txt"""
+    metadata_path = Path(__file__).parent / 'metadata.txt'
+    try:
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            match = re.search(r'^version=(.+)$', content, re.MULTILINE)
+            if match:
+                return match.group(1).strip()
+    except Exception as e:
+        print(f"Warning: Could not read version from metadata.txt: {e}")
+    return "unknown"
 
 def should_exclude(file_path):
     """Check if file should be excluded based on patterns"""
@@ -40,7 +58,10 @@ def create_plugin_zip():
     """Create ZIP archive for FilterMate plugin"""
     plugin_dir = Path(__file__).parent
     parent_dir = plugin_dir.parent
-    zip_path = parent_dir / 'filter_mate_v2.2.2.zip'
+    
+    # Get version from metadata.txt
+    version = get_version_from_metadata()
+    zip_path = parent_dir / f'filter_mate_v{version}.zip'
     
     print(f"Creating ZIP archive: {zip_path}")
     print(f"From directory: {plugin_dir}")
