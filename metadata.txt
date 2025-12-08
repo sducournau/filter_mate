@@ -6,19 +6,17 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.2.4
+version=2.2.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.2.4 - Color Harmonization & Accessibility!
+about=FilterMate v2.2.5 - Enhanced Stability & Bug Fixes!
 
- NEW in v2.2.4:
- - COLOR HARMONIZATION: Enhanced visual distinction and contrast
- - ACCESSIBILITY: WCAG 2.1 AA/AAA compliant text contrast (17.4:1)
- - THEME REFINEMENTS: Improved frame backgrounds and borders
- - REDUCED EYE STRAIN: Optimized color palette for long work sessions
- - BETTER READABILITY: Clear visual hierarchy throughout UI
- - TESTING SUITE: Automated WCAG compliance validation
+ NEW in v2.2.5:
+ - BUG FIX: Fixed Spatialite expression field name quote handling
+ - STABILITY: Improved error handling for case-sensitive field names
+ - TESTING: Comprehensive test suite for expression conversion
+ - RELIABILITY: Enhanced Spatialite backend robustness
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
@@ -44,10 +42,10 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
-    Version 2.2.1 (December 2025) - Maintenance Release
-    MAINTENANCE: Code cleanup and documentation updates
-    IMPROVED: Build and deployment scripts
-    UPDATED: Release management procedures
+    Version 2.2.5 (December 2025) - Bug Fix Release
+    BUG FIX: Fixed Spatialite field name quote handling
+    IMPROVED: Expression conversion reliability
+    ADDED: Comprehensive test suite for Spatialite expressions
     
     Version 2.2.0 (December 2025) - Stability Improvements
     STABILITY: Improved Qt JSON view crash prevention
@@ -83,7 +81,7 @@ changelog=
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export
 
-homepage=https://github.com/sducournau/filter_mate
+homepage=https://sducournau.github.io/filter_mate/
 category=Plugins
 icon=icon.png
 # experimental flag

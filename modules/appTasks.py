@@ -1267,9 +1267,10 @@ class FilterEngineTask(QgsTask):
         
         # Handle LIKE/ILIKE - Spatialite doesn't have ILIKE, use LIKE with LOWER()
         # For case-insensitive matching in Spatialite
+        # IMPORTANT: Process ILIKE first, before processing LIKE, to avoid double-replacement
         expression = re.sub(r'(\w+)\s+ILIKE\s+', r'LOWER(\1) LIKE LOWER(', expression, flags=re.IGNORECASE)
-        expression = re.sub('not', ' NOT ', expression, flags=re.IGNORECASE)
-        expression = re.sub('like', ' LIKE ', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bNOT\b', ' NOT ', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bLIKE\b', ' LIKE ', expression, flags=re.IGNORECASE)
         
         # Convert PostgreSQL :: type casting to Spatialite CAST() function
         # PostgreSQL: "field"::numeric -> Spatialite: CAST("field" AS REAL)
@@ -1278,11 +1279,15 @@ class FilterEngineTask(QgsTask):
         expression = re.sub(r'(["\w]+)::text', r'CAST(\1 AS TEXT)', expression)
         expression = re.sub(r'(["\w]+)::double', r'CAST(\1 AS REAL)', expression)
         
-        # Handle numeric comparisons - ensure fields are cast properly
-        expression = expression.replace('" >', ' ').replace('">', ' ')
-        expression = expression.replace('" <', ' ').replace('"<', ' ')
-        expression = expression.replace('" +', ' ').replace('"+', ' ')
-        expression = expression.replace('" -', ' ').replace('"-', ' ')
+        # CRITICAL FIX: Do NOT remove quotes from field names!
+        # Spatialite needs quotes for case-sensitive field names, just like PostgreSQL.
+        # Unlike the PostgreSQL version that adds ::numeric for type casting,
+        # Spatialite will do implicit type conversion when needed.
+        # The quotes MUST be preserved for field names like "HOMECOUNT".
+        #
+        # Note: The old code had these lines which REMOVED quotes:
+        #   expression = expression.replace('" >', ' ').replace('">', ' ')
+        # This was WRONG and caused "HOMECOUNT" > 100 to become HOMECOUNT > 100
         
         # Spatial functions compatibility (most are identical, but document them)
         # ST_Buffer, ST_Intersects, ST_Contains, ST_Distance, ST_Union, ST_Transform

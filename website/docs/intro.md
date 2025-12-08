@@ -7,9 +7,19 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.2.4 - Color Harmonization & Accessibility
+## 🎉 What's New in v2.2.5 - Bug Fix Release
 
-### UI Excellence
+### Critical Bug Fixes
+- ✅ **Spatialite Expression Fix** - Resolved field name quote handling issue
+  - Fixed: Double quotes around field names now preserved correctly
+  - Impact: Filters now work reliably with case-sensitive field names
+  - Added: Comprehensive test suite for expression conversion
+- ✅ **Enhanced Stability** - Improved error handling for Spatialite backend
+- ✅ **Better Testing** - Automated validation for expression conversions
+
+## Previous Updates
+
+### v2.2.4 - Color Harmonization & Accessibility (December 8, 2025)
 - ✅ **Color Harmonization** - Enhanced visual distinction with +300% frame contrast
 - ✅ **WCAG 2.1 Compliance** - AA/AAA accessibility standards for all text
   - Primary text: 17.4:1 contrast ratio (AAA)
@@ -19,8 +29,6 @@ slug: /
 - ✅ **Better Readability** - Clear visual hierarchy throughout interface
 - ✅ **Theme Refinements** - Darker frames (#EFEFEF), clearer borders (#D0D0D0)
 - ✅ **Automated Testing** - WCAG compliance validation suite
-
-## Previous Updates
 
 ### v2.2.2 - Configuration Reactivity (December 8, 2025)
 - ✅ **Real-time Config Updates** - JSON tree view changes apply instantly without restart

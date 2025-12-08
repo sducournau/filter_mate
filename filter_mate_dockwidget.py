@@ -3560,9 +3560,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def open_project_page(self):
-        if "APP" in self.CONFIG_DATA:
-            if "GITHUB_PAGE" in self.CONFIG_DATA["APP"] and self.CONFIG_DATA["APP"]["GITHUB_PAGE"].find("http") >= 0:
-                webbrowser.open(self.CONFIG_DATA["APP"]["GITHUB_PAGE"])
+        if "APP" in self.CONFIG_DATA and "OPTIONS" in self.CONFIG_DATA["APP"]:
+            if "GITHUB_PAGE" in self.CONFIG_DATA["APP"]["OPTIONS"]:
+                url = self.CONFIG_DATA["APP"]["OPTIONS"]["GITHUB_PAGE"]
+                if url and url.startswith("http"):
+                    webbrowser.open(url)
 
 
     def setLayerVariableEvent(self, layer=None, properties=None):

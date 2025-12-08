@@ -2,6 +2,23 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [Unreleased]
+
+## [2.2.5] - 2025-12-08 - Bug Fix Release
+
+### 🐛 Bug Fixes
+- **CRITICAL FIX: Spatialite Expression Quotes**: Fixed bug where double quotes around field names were removed during expression conversion
+  - Issue: `"HOMECOUNT" > 100` was incorrectly converted to `HOMECOUNT > 100`
+  - Impact: Filters failed on Spatialite layers with case-sensitive field names
+  - Solution: Removed quote-stripping code in `qgis_expression_to_spatialite()`
+  - Spatialite now preserves field name quotes, relying on implicit type conversion
+  - Added comprehensive test suite in `tests/test_spatialite_expression_quotes.py`
+
+### 🧪 Testing
+- Added comprehensive test suite for Spatialite expression conversion
+- Validated field name quote preservation across various scenarios
+- Ensured backward compatibility with existing expressions
+
 ## [2.2.4] - 2025-12-08 - Production Release
 
 ### 🚀 Release Highlights
