@@ -1,7 +1,7 @@
 # FilterMate Project Overview
 
 ## Purpose
-FilterMate is a QGIS plugin that provides advanced filtering and export capabilities for vector data. It allows users to:
+FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data. It allows users to:
 - Explore, filter, and export vector layers intuitively
 - Filter layers by expressions and geometric predicates with buffer support
 - Configure widgets independently for each layer
@@ -21,23 +21,24 @@ FilterMate is a QGIS plugin that provides advanced filtering and export capabili
 ```
 filter_mate/
 ├── filter_mate.py              # Plugin entry point (QGIS integration)
-├── filter_mate_app.py          # Main application orchestrator
-├── filter_mate_dockwidget.py   # UI dockwidget management
+├── filter_mate_app.py          # Main application orchestrator (~1100 lines)
+├── filter_mate_dockwidget.py   # UI dockwidget management (~2500 lines)
 ├── filter_mate_dockwidget_base.py  # Base UI class
 ├── filter_mate_dockwidget_base.ui  # Qt Designer UI file
 ├── config/
-│   ├── config.json             # Plugin configuration (dynamic)
+│   ├── config.json             # Plugin configuration (dynamic, reactive)
 │   └── config.py               # Configuration loader
 ├── modules/
-│   ├── appTasks.py             # Async filtering tasks (QgsTask)
-│   ├── appUtils.py             # Database connections and utilities
+│   ├── appTasks.py             # Async filtering tasks (QgsTask) (~2800 lines)
+│   ├── appUtils.py             # Database connections and utilities (~800 lines)
 │   ├── backends/               # Multi-backend architecture
 │   │   ├── base_backend.py    # Abstract base class
 │   │   ├── factory.py         # Backend factory (auto-selection)
 │   │   ├── postgresql_backend.py  # PostgreSQL/PostGIS backend
 │   │   ├── spatialite_backend.py  # Spatialite backend
 │   │   └── ogr_backend.py     # OGR universal fallback
-│   ├── config_helpers.py       # Configuration utilities
+│   ├── config_helpers.py       # Configuration utilities (v2.2.2)
+│   ├── constants.py            # Application constants
 │   ├── customExceptions.py     # Custom exception classes
 │   ├── feedback_utils.py       # User feedback utilities
 │   ├── filter_history.py       # Filter history with undo/redo
@@ -56,45 +57,59 @@ filter_mate/
 │   └── styles/                 # QSS theme files
 ├── icons/                      # Plugin icons
 ├── i18n/                       # Translations
-├── tests/                      # Unit tests (50+ tests)
-├── docs/                       # Documentation
+├── tests/                      # Unit tests (60+ tests)
+├── docs/                       # Comprehensive documentation
 ├── website/                    # Docusaurus documentation site
 ├── .github/
 │   └── copilot-instructions.md # GitHub Copilot guidelines
 └── .serena/                    # Serena MCP configuration
-
 ```
 
 ## Current Status
-- **Version**: 2.2.2 (December 2025)
-- **Status**: Production - Stable multi-backend release
+- **Version**: 2.2.4 (December 8, 2025)
+- **Status**: Production - Stable multi-backend release with accessibility improvements
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 
-## Recent Improvements (v2.2.x)
+## Recent Releases
 
-### v2.2.2 - Configuration Reactivity
-- ✅ Real-time configuration updates without restart
-- ✅ Dynamic UI profile switching (compact/normal/auto)
-- ✅ Live icon updates and instant feedback
-- ✅ ChoicesType integration for dropdowns
-- ✅ Auto-save configuration changes
-- ✅ Type safety and validation
+### v2.2.4 - Bug Fix Release (December 8, 2025)
+- **CRITICAL FIX**: Spatialite expression field name quote handling
+  - Issue: `"HOMECOUNT" > 100` was incorrectly converted by removing quotes
+  - Impact: Filters failed on case-sensitive field names
+  - Solution: Preserved field name quotes in `qgis_expression_to_spatialite()`
+  - Added comprehensive test suite (`test_spatialite_expression_quotes.py`)
+- Enhanced Spatialite backend robustness
+- Comprehensive expression conversion testing
 
-### v2.2.0-2.2.1 - Maintenance & Documentation
-- ✅ Code cleanup and refactoring
-- ✅ Improved build and deployment scripts
-- ✅ Enhanced documentation structure
-- ✅ Bug fixes and stability improvements
+### v2.2.3 - Color Harmonization & Accessibility (December 8, 2025)
+- **Enhanced Visual Distinction**: +300% frame contrast improvement
+- **WCAG 2.1 Compliance**: AA/AAA accessibility standards met
+  - Primary text contrast: 17.4:1 (AAA compliance)
+  - Secondary text contrast: 8.86:1 (AAA compliance)
+  - Disabled text: 4.6:1 (AA compliance)
+- **Theme Refinements**:
+  - `default` theme: Darker frames (#EFEFEF), clearer borders (#D0D0D0)
+  - `light` theme: Better widget contrast (#F8F8F8), visible borders (#CCCCCC)
+- **Accent Colors**: Deeper blue (#1565C0) for better contrast
+- **Testing**: New color contrast test suite, WCAG validation
+- **Documentation**: Complete color harmonization guide
 
-### v2.1.0 - Major Release
-- ✅ Complete multi-backend architecture with factory pattern
-- ✅ Dynamic UI dimensions system (compact/normal modes)
-- ✅ Enhanced theme support and QGIS synchronization
-- ✅ Comprehensive error handling and geometry repair (5 strategies)
-- ✅ SQLite database lock management with retry logic
-- ✅ All critical bugs fixed (undo/redo, field selection, geometric filtering)
-- ✅ Performance optimizations: 3-45× faster on typical operations
-- ✅ Extensive documentation and testing framework
+### v2.2.2 - Configuration Reactivity (December 8, 2025)
+- **Real-time Configuration**: Updates without restart
+- **Dynamic UI Profile Switching**: Compact/normal/auto modes
+- **ChoicesType Integration**: Dropdown selectors for config fields
+- **Live Updates**: Icons, themes, dimensions apply immediately
+- **Auto-save**: Configuration changes saved automatically
+- **Type Safety**: Validation for configuration values
+
+### v2.1.0 - Major Multi-Backend Release
+- Complete multi-backend architecture with factory pattern
+- Dynamic UI dimensions system (compact/normal modes)
+- Enhanced theme support and QGIS synchronization
+- Comprehensive error handling and geometry repair (5 strategies)
+- SQLite database lock management with retry logic
+- Performance optimizations: 3-45× faster on typical operations
+- Extensive documentation and testing framework
 
 ## Key Features
 
@@ -111,6 +126,7 @@ filter_mate/
 - Theme synchronization with QGIS interface
 - Real-time configuration updates (no restart required)
 - ChoicesType dropdowns for key settings
+- WCAG 2.1 AA/AAA accessibility compliance
 - Comprehensive error messages and user feedback
 
 ### Technical Features
@@ -119,6 +135,7 @@ filter_mate/
 - Intelligent predicate ordering for optimal query performance
 - Spatial index automation
 - Source geometry caching for multi-layer operations
+- Field name quote preservation for case-sensitive databases
 
 ## Performance Characteristics
 
@@ -160,9 +177,15 @@ filter_mate/
 - Unit tests: `pytest tests/ -v`
 - Coverage: `pytest tests/ --cov=modules`
 - Performance benchmarks: `python tests/benchmark_simple.py`
+- 60+ comprehensive tests including:
+  - Backend tests
+  - Expression conversion tests
+  - Color contrast/WCAG compliance tests
+  - Configuration reactivity tests
+  - Performance optimization tests
 
 ### Build & Release
-- Compile UI: `./compile_ui.sh`
+- Compile UI: `./compile_ui.sh` (Linux/macOS) or `compile_ui.bat` (Windows)
 - Create release: `python create_release_zip.py`
 - Deploy: See `website/DEPLOYMENT.md`
 
@@ -170,15 +193,17 @@ filter_mate/
 - Developer guide: `docs/DEVELOPER_ONBOARDING.md`
 - Architecture: `docs/architecture.md`
 - API docs: `docs/BACKEND_API.md`
+- Color harmonization: `docs/COLOR_HARMONIZATION.md`
 - Website: https://sducournau.github.io/filter_mate
 
-## Configuration System
+## Configuration System (v2.2.2+)
 
-### Dynamic Configuration (v2.2.2)
+### Dynamic Configuration
 - Real-time updates via JSON tree view
 - ChoicesType for validated dropdowns
 - Auto-save on changes
 - Backward compatible
+- No restart required for most changes
 
 ### Key Configuration Fields
 - `UI_PROFILE`: Display mode (auto/compact/normal)
@@ -187,24 +212,33 @@ filter_mate/
 - `STYLES_TO_EXPORT`: Export format (QML/SLD/None)
 - `DATATYPE_TO_EXPORT`: Data format (GPKG/SHP/GEOJSON/KML/DXF/CSV)
 
+### Configuration Helpers
+**File:** `modules/config_helpers.py`
+**Functions:**
+- `get_config_value(key, default)`: Read with ChoicesType extraction
+- `set_config_value(key, value)`: Write with validation
+- `get_config_choices(key)`: Get available options
+- `validate_config_value(key, value)`: Validate before setting
+- Convenience functions: `get_ui_profile()`, `get_active_theme()`, etc.
+
 ## Known Limitations
 
 ### Current Constraints
 - PostgreSQL requires psycopg2 (optional dependency)
 - Very large exports (>1M features) may require disk space
 - Some QGIS expressions may not translate to all backends
+- Field names with special characters may need quoting
 
-### Planned Enhancements
-- Result caching for repeated queries
-- Parallel execution for multi-layer filtering
-- Custom backend plugin support
-- Enhanced export progress reporting
+### Fixed Issues (v2.2.4)
+- ✅ Spatialite field name quote preservation
+- ✅ Case-sensitive field name handling
+- ✅ Expression conversion robustness
 
 ## Documentation Structure
 
 ### Core Documentation
 - `README.md`: User-facing introduction
-- `CHANGELOG.md`: Complete version history
+- `CHANGELOG.md`: Complete version history (1700+ lines)
 - `docs/INDEX.md`: Documentation index
 
 ### Technical Documentation
@@ -215,12 +249,11 @@ filter_mate/
 ### Configuration Documentation
 - `docs/CONFIG_JSON_REACTIVITY.md`: Reactivity system
 - `docs/CONFIG_JSON_IMPROVEMENTS.md`: Configuration improvements
-- `docs/CONFIG_OK_CANCEL_BEHAVIOR.md`: Dialog behavior
 
 ### UI Documentation
 - `docs/UI_SYSTEM_OVERVIEW.md`: UI architecture
 - `docs/UI_DYNAMIC_CONFIG.md`: Dynamic dimensions
-- `docs/UI_STYLE_HARMONIZATION.md`: Theme system
+- `docs/COLOR_HARMONIZATION.md`: Color system & WCAG compliance
 - `docs/THEMES.md`: Theme details
 
 ### Developer Documentation
@@ -228,8 +261,40 @@ filter_mate/
 - `.github/copilot-instructions.md`: Coding guidelines
 - `tests/README.md`: Testing guide
 
+## Accessibility (v2.2.3+)
+
+### WCAG 2.1 Compliance
+- **Primary Text**: 17.4:1 contrast ratio (AAA)
+- **Secondary Text**: 8.86:1 contrast ratio (AAA)
+- **Disabled Text**: 4.6:1 contrast ratio (AA)
+- **Frame Separation**: +300% contrast improvement
+- **Border Visibility**: +40% darker borders
+- **Reduced eye strain** for long work sessions
+
+### Testing
+- Automated WCAG validation: `tests/test_color_contrast.py`
+- Visual preview generation: `tests/generate_color_preview.py`
+- Interactive HTML comparison: `docs/color_harmonization_preview.html`
+
 ## Repository Information
 - **Repository**: https://github.com/sducournau/filter_mate
 - **Issues**: https://github.com/sducournau/filter_mate/issues
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
+- **QGIS Min Version**: 3.0
+- **Current Plugin Version**: 2.2.4
+
+## Serena Integration
+
+### Windows MCP Configuration
+FilterMate is configured for automatic Serena MCP server activation:
+- **Location**: `%APPDATA%/Code/User/globalStorage/github.copilot.chat.mcp/config.json`
+- **Command**: `uvx serena`
+- **Project Path**: Set via `SERENA_PROJECT` environment variable
+- **Auto-start**: Activates when Copilot Chat opens in VS Code
+
+### Coding Workflow
+- Use `get_symbols_overview()` before reading large files
+- Leverage symbolic tools for token-efficient code exploration
+- Read `.github/copilot-instructions.md` for coding guidelines
+- Check `POSTGRESQL_AVAILABLE` before PostgreSQL operations

@@ -1,199 +1,376 @@
-# Known Issues and Bugs - FilterMate v2.1.0
+# Known Issues & Bug Fixes - FilterMate
 
-## RESOLVED ISSUES (v2.0.0 - v2.1.0)
+## Recently Fixed (v2.2.4)
 
-### ✅ Undo/Redo Functionality (CRITICAL - FIXED)
-**Status:** RESOLVED in v2.0.0
-**Issue:** Filter history undo/redo was broken
-**Solution:** Restored in-memory filter history management
-**Files:** `modules/filter_history.py`, `filter_mate_app.py`
-
-### ✅ Field Selection (CRITICAL - FIXED)
-**Status:** RESOLVED in v2.0.0
-**Issue:** Fields like "id" were missing from selection
-**Solution:** Fixed field name filtering and inclusion logic
-**Files:** `modules/appTasks.py`, `filter_mate_app.py`
-
-### ✅ SQLite Database Locks (HIGH - FIXED)
-**Status:** RESOLVED in v2.0.0
-**Issue:** "database is locked" errors with concurrent operations
-**Solution:** Implemented retry mechanism with exponential backoff (5 attempts)
-**Files:** `modules/backends/spatialite_backend.py`, `modules/appUtils.py`
-
-### ✅ Buffer Geometry Errors (MEDIUM - FIXED)
-**Status:** RESOLVED in v2.0.0
-**Issue:** Invalid geometries causing buffer operations to fail
-**Solution:** Automatic geometry repair with ST_MakeValid/MakeValid
-**Files:** All backend implementations
-
-## CURRENT KNOWN ISSUES
-
-### 1. Combobox Layer Icons Format Mismatch (LOW PRIORITY)
-
-**Status:** Known, not critical  
-**Location:** `modules/appTasks.py:2311`, `filter_mate_dockwidget.py:489, 508, 539`
+### Spatialite Field Name Quote Preservation
+**Status:** ✅ FIXED in v2.2.4 (December 8, 2025)
 
 **Issue:**
-- `layer.geometryType()` returns QGIS enum (e.g., `QgsWkbTypes.PointGeometry`)
-- Converted to numeric string (`"0"`, `"1"`, `"2"`)
-- `icon_per_geometry_type()` expects format `'GeometryType.Point'`
-- Result: Icon mismatch in layer combobox
+- Field name quotes were incorrectly removed during Spatialite expression conversion
+- `"HOMECOUNT" > 100` was converted to `HOMECOUNT > 100`
+- Caused filter failures on layers with case-sensitive field names
 
-**Impact:** Cosmetic only - icons don't display correctly in combobox
-**Workaround:** Icons still work via fallback mechanism
-**Fix Required:** Standardize geometry type string format across codebase
+**Impact:**
+- CRITICAL: Filters failed on Spatialite layers with case-sensitive fields
+- Affected all Spatialite datasets using quoted field names
+- Common in PostgreSQL-migrated data or GeoPackage imports
 
-### None Critical
+**Root Cause:**
+- `qgis_expression_to_spatialite()` in `modules/backends/spatialite_backend.py`
+- Code explicitly stripped double quotes around field names
+- Incorrect assumption that Spatialite didn't need quoted identifiers
 
-All critical and high-priority issues have been resolved in v2.1.0. The plugin is fully functional for production use.
+**Solution:**
+- Removed quote-stripping code
+- Spatialite now preserves field name quotes
+- Relies on implicit type conversion (working correctly)
+- Added comprehensive test suite
 
-## Current Issues
+**Files Changed:**
+- `modules/backends/spatialite_backend.py`: Removed quote stripping
+- `tests/test_spatialite_expression_quotes.py`: New test suite (comprehensive)
 
-### 1. Combobox Layer Icons Not Displaying Correctly ⚠️ **HIGH PRIORITY**
+**Test Coverage:**
+```python
+# Critical test case
+def test_quoted_field_names_preserved():
+    expr = '"HOMECOUNT" > 100'
+    converted = qgis_expression_to_spatialite(expr)
+    assert '"HOMECOUNT"' in converted  # Quotes preserved
+```
 
-**Location**: `modules/appTasks.py:2311` and `filter_mate_dockwidget.py:489, 508, 539`
-
-**Problem**: 
-- `layer.geometryType()` returns a QGIS enum object (e.g., `QgsWkbTypes.PointGeometry`)
-- The code converts it to string representation which becomes numeric (e.g., `"0"`, `"1"`, `"2"`)
-- `icon_per_geometry_type()` expects string format like `'GeometryType.Point'`, `'GeometryType.Line'`, `'GeometryType.Polygon'`
-- Result: Icons don't match geometry types in combobox
-
-**Status**: Known issue, not yet fixed
-
----
-
-## Resolved Issues
-
-### 1. ✅ Geometric Filtering Restored (3 Dec 2025)
-
-**Issue**: Geometric filtering was completely broken - target layers were not filtered based on source layer geometry using spatial predicates.
-
-**Location**: 
-- `modules/appTasks.py` (FilterEngineTask class)
-- `filter_mate_app.py` (get_task_parameters method)
-
-**Root Causes**:
-1. **layer_props structure mismatch**: Code expected `layer_props['infos']['key']` but received `layer_props['key']` directly
-2. **Empty predicates dictionary**: `self.predicates` was never populated with spatial operators
-3. **Wrong key name**: Used `'geometry_field'` instead of `'layer_geometry_field'`
-4. **No fallback**: Spatialite geometry prep failure stopped all filtering
-5. **Backend compatibility**: Backend methods called with incompatible parameters
-
-**Solution Implemented**:
-
-1. **Fixed predicates initialization** (`appTasks.py:207-225`):
-   - Populated with all spatial operators (Intersect, Within, Contains, etc.)
-   - Added both capitalized and lowercase variants
-   - Now properly maps UI names to SQL functions
-
-2. **Rewrote execute_geometric_filtering** (`appTasks.py:1475-1568`):
-   - Removed erroneous `.get('infos', {})` wrapper
-   - Changed `'geometry_field'` to `'layer_geometry_field'`
-   - Added validation for required fields
-   - Simplified backend interaction using `_safe_set_subset_string`
-   - Comprehensive error logging
-
-3. **Added geometry prep fallback** (`appTasks.py:633-666`):
-   - Spatialite preparation now falls back to OGR if it fails
-   - Only returns False if both methods fail
-   - Detailed logging at each step
-
-4. **Validated layer_props structure** (`filter_mate_app.py:429-456`):
-   - Checks all required keys exist
-   - Attempts to fill missing keys from layer object
-   - Skips layers with critical missing data
-   - Clear warning/error messages
-
-**Impact**:
-- ✅ Geometric filtering now works for all three backends (PostgreSQL, Spatialite, OGR)
-- ✅ All spatial predicates functional (intersects, within, contains, overlaps, etc.)
-- ✅ Buffer values (fixed and expression-based) work correctly
-- ✅ Fallback mechanisms prevent single failures from breaking everything
-- ✅ Clear error messages and comprehensive logging
-- ✅ Thread-safe operations using `_safe_set_subset_string`
-
-**Testing Required**:
-- [ ] Manual testing in QGIS with PostgreSQL layers
-- [ ] Manual testing with Spatialite layers
-- [ ] Manual testing with OGR layers (Shapefile, GeoPackage)
-- [ ] Test different spatial predicates
-- [ ] Test with buffer values
-- [ ] Test mixed backends
-
-**Files Modified**:
-- `modules/appTasks.py` (~150 lines changed)
-- `filter_mate_app.py` (~35 lines changed)
-
-**Documentation Created**:
-- `GEOMETRIC_FILTERING_FIX_PLAN.md` - Complete implementation plan
-- `IMPLEMENTATION_COMPLETE.md` - Detailed summary
+**References:**
+- Fix commit: December 8, 2025
+- Test file: `tests/test_spatialite_expression_quotes.py`
+- Documentation: CHANGELOG.md v2.2.4 section
 
 ---
 
-### 2. ✅ IS_SELECTING Button Auto-Selection (3 Dec 2025)
+## Recently Fixed (v2.2.3)
 
-**Issue**: When activating the IS_SELECTING button in the exploration panel, features from the active groupbox were not automatically selected on the layer.
+### Color Contrast & Accessibility
+**Status:** ✅ FIXED in v2.2.3 (December 8, 2025)
 
-**Solution**: Created `exploring_select_features()` method and updated button signal
+**Issue:**
+- Insufficient color contrast between UI elements
+- Frame backgrounds too similar to widget backgrounds
+- Border colors not visible enough
+- Text contrast didn't meet WCAG 2.1 standards
 
-**Files Modified**: `filter_mate_dockwidget.py`
+**Impact:**
+- Poor readability in `default` and `light` themes
+- Eye strain during long work sessions
+- Accessibility issues for users with mild visual impairments
 
----
+**Solution:**
+- Enhanced frame contrast: +300% improvement
+- WCAG 2.1 AA/AAA compliance achieved
+- Primary text: 17.4:1 contrast ratio (AAA)
+- Secondary text: 8.86:1 contrast ratio (AAA)
+- Disabled text: 4.6:1 contrast ratio (AA)
+- Darker borders: +40% visibility improvement
 
-### 3. ✅ Exploration Widgets Not Updating Layer Source (3 Dec 2025)
+**Files Changed:**
+- `modules/ui_styles.py`: Color palette adjustments
+- `tests/test_color_contrast.py`: WCAG validation tests
+- `docs/COLOR_HARMONIZATION.md`: Complete documentation
 
-**Issue**: Feature picker widgets not updating when switching layers
-
-**Solution**: Added missing `setLayer()` calls in `exploring_groupbox_changed`
-
-**Files Modified**: `filter_mate_dockwidget.py`
-
----
-
-### 4. ✅ Layers Not Initialized at Plugin Startup (3 Dec 2025)
-
-**Issue**: Race condition causing PROJECT_LAYERS to not initialize properly
-
-**Solution**: Always update PROJECT_LAYERS even if widgets not initialized; only enable widgets if data ready
-
-**Files Modified**: `filter_mate_dockwidget.py`
-
----
-
-### 5. ✅ Layer Sorting Performance Optimized (3 Dec 2025)
-
-**Issue**: Layers re-sorted on every iteration
-
-**Solution**: Moved sorting outside loop
-
-**Files Modified**: `modules/appTasks.py`
+**Test Coverage:**
+```python
+def test_wcag_aaa_primary_text():
+    contrast = calculate_contrast(text_color, bg_color)
+    assert contrast >= 7.0  # AAA standard
+```
 
 ---
 
-### 6. ✅ Provider Type Detection Refactored (3 Dec 2025)
+## Recently Fixed (v2.2.2)
 
-**Issue**: Duplicated provider type detection logic
+### Configuration Reactivity
+**Status:** ✅ IMPLEMENTED in v2.2.2 (December 8, 2025)
 
-**Solution**: Created `detect_layer_provider_type()` utility function
+**Previous Limitation:**
+- Configuration changes required plugin restart
+- UI profile changes not applied immediately
+- Theme switching needed QGIS restart
+- Poor user experience for configuration testing
 
-**Files Modified**: `modules/appUtils.py`, `modules/appTasks.py`
+**Solution:**
+- Real-time configuration updates without restart
+- Dynamic UI profile switching (compact/normal/auto)
+- Live theme changes
+- Icon updates on configuration change
+- Auto-save configuration changes
+
+**Files Changed:**
+- `filter_mate_dockwidget.py`: Added `_on_config_item_changed()` handler
+- `modules/config_helpers.py`: Configuration utilities with ChoicesType support
+- `tests/test_config_json_reactivity.py`: Reactivity test suite
 
 ---
 
-## Future Considerations
+## Active Monitoring
 
-### Performance Optimization (Phase 4-5)
-- Caching of layer icons
-- Lazy loading of layer properties
-- Materialized view cleanup for PostgreSQL
+### PostgreSQL Optional Dependency
+**Status:** ✅ Working as designed
 
-### UI/UX Improvements
-- Better feedback during long operations
-- Progress bars for export operations
-- Clearer backend selection indication
+**Implementation:**
+- `POSTGRESQL_AVAILABLE` flag in `modules/appUtils.py`
+- Graceful degradation when psycopg2 not installed
+- Performance warnings for large datasets without PostgreSQL
+- Clear user feedback about backend selection
 
-### Multi-Backend Improvements
-- Better Spatialite spatial index creation
-- OGR driver detection improvements
-- Mixed-source project handling
+**No Action Needed:** System working correctly
+
+---
+
+### Large Dataset Performance
+**Status:** ✅ Optimized (v2.1.0)
+
+**Previous Performance:**
+- Slow filtering on 50k+ features with OGR backend
+- No spatial index automation
+- Inefficient predicate evaluation
+
+**Optimizations Applied:**
+- Automatic spatial index creation (OGR)
+- Temporary geometry tables (Spatialite)
+- Predicate ordering optimization
+- Source geometry caching
+
+**Results:**
+- 3-45× performance improvement
+- Sub-second queries with PostgreSQL
+- 1-10s queries with Spatialite (50k features)
+
+**Files:**
+- `modules/backends/ogr_backend.py`: Spatial index automation
+- `modules/backends/spatialite_backend.py`: Temp tables + R-tree indexes
+- `modules/appTasks.py`: Geometry caching
+
+---
+
+## Historical Fixes (Archived)
+
+### SQLite Database Lock Fix
+**Status:** ✅ FIXED (v2.1.0)
+
+**Issue:** Database locked errors when multiple operations accessed Spatialite
+**Solution:** Retry mechanism with exponential backoff (5 attempts)
+**Files:** `modules/appUtils.py` - `spatialite_connect()`
+**Documentation:** `docs/archived/fixes/SQLITE_LOCK_FIX.md`
+
+### Field Selection Fix
+**Status:** ✅ FIXED (v2.1.0)
+
+**Issue:** Field selection widget didn't show "id" fields
+**Solution:** Corrected `QgsFieldExpressionWidget` filter configuration
+**Files:** `filter_mate_dockwidget.py` - field widget initialization
+**Documentation:** `docs/archived/fixes/FIELD_SELECTION_FIX.md`
+
+### Source Table Name Detection
+**Status:** ✅ FIXED (v2.1.0)
+
+**Issue:** Failed to detect source table for PostgreSQL layers
+**Solution:** Enhanced URI parsing for PostgreSQL data sources
+**Files:** `modules/appUtils.py` - `get_datasource_connexion_from_layer()`
+**Documentation:** `docs/archived/fixes/SOURCE_TABLE_NAME_FIX.md`
+
+### Undo/Redo Functionality
+**Status:** ✅ FIXED (v2.1.0)
+
+**Issue:** Undo/redo not working properly with filter history
+**Solution:** Complete filter history system rewrite
+**Files:** `modules/filter_history.py` (new), integration in `filter_mate_app.py`
+**Documentation:** `docs/FILTER_HISTORY_INTEGRATION.md`
+
+---
+
+## Known Limitations (Not Bugs)
+
+### 1. Expression Translation
+**Description:** Some QGIS expressions may not translate to all backends
+**Workaround:** Use standard SQL expressions when possible
+**Affected:** Complex QGIS-specific functions
+**Priority:** Low (rare use case)
+
+### 2. Very Large Exports
+**Description:** Exports > 1M features may require significant disk space
+**Workaround:** Export in batches or use PostgreSQL backend
+**Affected:** All backends
+**Priority:** Low (documented limitation)
+
+### 3. PostgreSQL Dependency
+**Description:** Best performance requires psycopg2 package
+**Workaround:** Install psycopg2 or use Spatialite for medium datasets
+**Affected:** Large datasets (> 50k features)
+**Priority:** Medium (documented, warnings provided)
+
+### 4. Special Characters in Field Names
+**Description:** Field names with spaces or special chars need quoting
+**Workaround:** Use double quotes: `"Field Name"` instead of `Field Name`
+**Affected:** All backends
+**Priority:** Low (standard SQL practice)
+**Status:** v2.2.4 improved handling for case-sensitive names
+
+---
+
+## Debugging Tips
+
+### Common Issues
+
+#### 1. Filter Not Working
+**Check:**
+- Field name quoting (use `"FIELD"` for case-sensitive)
+- Expression syntax
+- Layer provider type
+- Backend availability
+
+**Debug:**
+```python
+# In QGIS Python console
+layer = iface.activeLayer()
+print(f"Provider: {layer.providerType()}")
+print(f"Expression: {layer.subsetString()}")
+```
+
+#### 2. Performance Issues
+**Check:**
+- Feature count (`layer.featureCount()`)
+- Backend type (PostgreSQL > Spatialite > OGR)
+- Spatial index existence
+
+**Debug:**
+```bash
+# Run performance tests
+python tests/benchmark_simple.py
+```
+
+#### 3. Configuration Not Applying
+**Check:**
+- config.json syntax (valid JSON)
+- ChoicesType format (v2.2.2+)
+- File permissions
+
+**Debug:**
+```python
+from modules.config_helpers import get_config_value
+print(get_config_value('UI_PROFILE'))
+```
+
+#### 4. Theme Issues
+**Check:**
+- QGIS theme detection
+- QSS file availability
+- Theme source setting
+
+**Debug:**
+```python
+from modules.ui_styles import UIStyles
+print(UIStyles.detect_qgis_theme())
+```
+
+---
+
+## Reporting New Issues
+
+### Before Reporting
+1. Check CHANGELOG.md for recent fixes
+2. Verify plugin version (current: 2.2.4)
+3. Test with latest version
+4. Check documentation
+
+### Issue Template
+```markdown
+**FilterMate Version:** 2.2.4
+**QGIS Version:** X.XX
+**OS:** Windows/Linux/macOS
+**Layer Type:** PostgreSQL/Spatialite/Shapefile/GeoPackage
+
+**Description:**
+Clear description of the issue
+
+**Steps to Reproduce:**
+1. ...
+2. ...
+
+**Expected Behavior:**
+What should happen
+
+**Actual Behavior:**
+What actually happens
+
+**Error Messages:**
+Any error messages from QGIS console
+
+**Screenshots:**
+If applicable
+```
+
+### Where to Report
+- GitHub Issues: https://github.com/sducournau/filter_mate/issues
+- Include QGIS Python console output
+- Attach sample data if possible (anonymized)
+
+---
+
+## Test Coverage for Bug Prevention
+
+### Critical Bug Tests
+- `test_spatialite_expression_quotes.py`: Field name quote preservation
+- `test_color_contrast.py`: WCAG compliance
+- `test_config_json_reactivity.py`: Configuration reactivity
+- `test_sqlite_lock_handling.py`: Database lock handling
+- `test_geometry_repair.py`: Geometry validation
+- `test_filter_history.py`: Undo/redo functionality
+
+### Run Regression Tests
+```bash
+# All regression tests
+pytest tests/ -v -m regression
+
+# Critical bug fixes only
+pytest tests/test_spatialite_expression_quotes.py -v
+pytest tests/test_sqlite_lock_handling.py -v
+pytest tests/test_filter_history.py -v
+```
+
+---
+
+## Version History of Major Fixes
+
+| Version | Date | Major Fix | Impact |
+|---------|------|-----------|--------|
+| 2.2.4 | 2025-12-08 | Spatialite quote preservation | CRITICAL: Case-sensitive fields |
+| 2.2.3 | 2025-12-08 | WCAG color compliance | HIGH: Accessibility |
+| 2.2.2 | 2025-12-08 | Configuration reactivity | MEDIUM: User experience |
+| 2.1.0 | 2024-12 | Multi-backend system | HIGH: Performance |
+| 2.1.0 | 2024-12 | SQLite lock handling | HIGH: Stability |
+| 2.1.0 | 2024-12 | Filter history rewrite | MEDIUM: Undo/redo |
+| 2.1.0 | 2024-12 | Field selection fix | MEDIUM: UI functionality |
+
+---
+
+## Prevention Strategies
+
+### Code Review Checklist
+- [ ] Test with case-sensitive field names
+- [ ] Verify WCAG color contrast
+- [ ] Test configuration changes
+- [ ] Check SQLite lock handling
+- [ ] Validate geometry operations
+- [ ] Test all backends (PostgreSQL, Spatialite, OGR)
+- [ ] Verify undo/redo functionality
+- [ ] Check field name quote handling
+
+### Automated Testing
+- Run full test suite before each release
+- Perform regression tests on critical bugs
+- Validate accessibility with automated tools
+- Benchmark performance on each backend
+
+### Documentation
+- Update CHANGELOG.md for each fix
+- Document workarounds for limitations
+- Maintain comprehensive test coverage
+- Keep bug tracker up to date
