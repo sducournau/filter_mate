@@ -11,7 +11,7 @@ Quick guide to FilterMate's main interface components and workflows.
 1. **Menu:** Vector → FilterMate
 2. **Toolbar:** Click FilterMate icon 
 
-    <img src="../../static/icons/logo.png" alt="logo" width="50"/>
+    <img src="../../static/icons/logo.png" alt="FilterMate plugin icon - funnel symbol with map layers" width="50"/>
 
 3. **Keyboard:** Configure in QGIS settings
 
@@ -22,7 +22,7 @@ FilterMate organizes features into 3 main tabs:
 ### 🎯 FILTERING Tab
 
 
-  <img src="../../static/icons/filter.png" alt="filter" width="100"/>
+  <img src="../../static/icons/filter.png" alt="Filter tab icon - funnel symbol for data filtering" width="100"/>
 
 **Purpose:** Create filtered subsets of your data
 
@@ -30,38 +30,38 @@ FilterMate organizes features into 3 main tabs:
 
   - **Reference Layer:**
 
-    <img src="../../static/icons/auto_layer_white.png" alt="layer" width="50"/>
+    <img src="../../static/icons/auto_layer_white.png" alt="Auto sync layer button - automatically follows QGIS active layer" width="50"/>
 
     Choose a comparison layer for spatial filtering / Sync active layer with plugin
 
   - **Layer Selector:**
 
-    <img src="../../static/icons/layers.png" alt="layers" width="50"/>
+    <img src="../../static/icons/layers.png" alt="Layer selector icon - stack of map layers for multi-selection" width="50"/>
 
     Choose which layers to filter (multi-selection supported)
   - **Expression Builder:** Write QGIS expressions for attribute filtering
 
 - **Combination settings:**
 
-    <img src="../../static/icons/add_multi.png" alt="add_multi" width="50"/>
+    <img src="../../static/icons/add_multi.png" alt="Combine operator icon - AND/OR logic for multiple filters" width="50"/>
 
     Combine multiple filters with AND/OR operators
 
 - **Spatial Predicates:**
 
-    <img src="../../static/icons/geo_predicates.png" alt="geo_predicates" width="50"/>
+    <img src="../../static/icons/geo_predicates.png" alt="Spatial predicates icon - geometric relationships like intersects and contains" width="50"/>
 
     Select geometric relationships (Intersects, Contains, Within, etc.)
 
 - **Buffer Settings:**
 
-    <img src="../../static/icons/geo_tampon.png" alt="buffer" width="50"/>
+    <img src="../../static/icons/geo_tampon.png" alt="Buffer distance icon - proximity zone settings with distance and units" width="50"/>
 
     Add proximity zones (distance, unit, type)
 
 - **Buffer Type Settings:**
 
-    <img src="../../static/icons/buffer_type.png" alt="buffer_type" width="50"/>
+    <img src="../../static/icons/buffer_type.png" alt="Buffer type icon - geometry calculation method selector (planar, geodesic, ellipsoidal)" width="50"/>
 
     Choose buffer geometry type (planar, geodesic, ellipsoidal)
 
@@ -82,37 +82,37 @@ FilterMate organizes features into 3 main tabs:
 - **Action Buttons:** 6 interactive buttons
   - **Identify:** 
   
-    <img src="../../static/icons/identify.png" alt="identify" width="50"/> 
+    <img src="../../static/icons/identify.png" alt="Identify button - highlight and flash features on the map canvas" width="50"/> 
 
     Highlight features on map
 
 
   - **Zoom:** 
   
-    <img src="../../static/icons/zoom.png" alt="zoom" width="50"/> 
+    <img src="../../static/icons/zoom.png" alt="Zoom button - center map view on selected features" width="50"/> 
   
     Center map on features
   - **Select:** 
     
-    <img src="../../static/icons/select_black.png" alt="select" width="50"/> 
+    <img src="../../static/icons/select_black.png" alt="Select button - enable interactive feature selection mode (toggle)" width="50"/> 
   
     Enable interactive selection mode
   
   - **Track:** 
   
-    <img src="../../static/icons/track.png" alt="track" width="50"/> 
+    <img src="../../static/icons/track.png" alt="Track button - synchronize selections between widgets and map (toggle)" width="50"/> 
     
     Sync selections between widgets and map
 
   - **Link:** 
   
-    <img src="../../static/icons/link.png" alt="link" width="50"/> 
+    <img src="../../static/icons/link.png" alt="Link button - share configuration across all selection widgets (toggle)" width="50"/> 
   
     Share configuration across widgets
   
   - **Reset parameters:** 
   
-    <img src="../../static/icons/auto_save.png" alt="auto_save" width="50"/> 
+    <img src="../../static/icons/auto_save.png" alt="Reset parameters button - restore layer default configuration settings" width="50"/> 
   
     Restore layer defaults parameters
 
@@ -139,7 +139,7 @@ FilterMate organizes features into 3 main tabs:
 ### 📤 EXPORTING Tab
 
 
-  <img src="../../static/icons/export.png" alt="export" width="100"/> 
+  <img src="../../static/icons/export.png" alt="Export tab icon - save data to various file formats" width="100"/> 
 
 
 **Purpose:** Export layers (filtered or unfiltered) to various formats
