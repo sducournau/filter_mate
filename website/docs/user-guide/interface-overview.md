@@ -21,9 +21,6 @@ FilterMate organizes features into 3 main tabs:
 
 ### 🎯 FILTERING Tab
 
-
-  <img src="../../static/icons/filter.png" alt="Filter tab icon - funnel symbol for data filtering" width="100"/>
-
 **Purpose:** Create filtered subsets of your data
 
 **Key Components:**
@@ -32,7 +29,7 @@ FilterMate organizes features into 3 main tabs:
 
     <img src="../../static/icons/auto_layer_white.png" alt="Auto sync layer button - automatically follows QGIS active layer" width="50"/>
 
-    Choose a comparison layer for spatial filtering / Sync active layer with plugin
+    Choose a source layer for spatial filtering / Sync active layer with plugin
 
   - **Layer Selector:**
 
@@ -137,9 +134,6 @@ FilterMate organizes features into 3 main tabs:
 ---
 
 ### 📤 EXPORTING Tab
-
-
-  <img src="../../static/icons/export.png" alt="Export tab icon - save data to various file formats" width="100"/> 
 
 
 **Purpose:** Export layers (filtered or unfiltered) to various formats

@@ -69,10 +69,6 @@ const config: Config = {
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
           breadcrumbs: true,
-          sidebar: {
-            hideable: true,
-            autoCollapseCategories: true,
-          },
         },
         blog: false,
         theme: {
@@ -160,6 +156,12 @@ const config: Config = {
     tableOfContents: {
       minHeadingLevel: 2,
       maxHeadingLevel: 4,
+    },
+    docs: {
+      sidebar: {
+        hideable: true,
+        autoCollapseCategories: true,
+      },
     },
     prism: {
       theme: prismThemes.github,
