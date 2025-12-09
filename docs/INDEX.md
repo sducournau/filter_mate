@@ -1,6 +1,6 @@
 # FilterMate Documentation Index
 
-**Version 2.1.0** | December 2025
+**Version 2.2.5** | December 9, 2025
 
 ## 📚 Active Documentation
 
@@ -14,6 +14,7 @@
 - **[FILTER_HISTORY_INTEGRATION.md](FILTER_HISTORY_INTEGRATION.md)** - Filter history system documentation
 - **[AUTO_CONFIGURATION.md](AUTO_CONFIGURATION.md)** - Auto-configuration system
 - **[INTEGRATION.md](INTEGRATION.md)** - Integration guidelines
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Filter history & favorites implementation
 
 ### UI & Themes
 - **[UI_SYSTEM_OVERVIEW.md](UI_SYSTEM_OVERVIEW.md)** - Complete UI system guide
@@ -23,31 +24,99 @@
 - **[UI_TESTING_GUIDE.md](UI_TESTING_GUIDE.md)** - UI testing procedures
 - **[UI_STYLES_TESTING_CHECKLIST.md](UI_STYLES_TESTING_CHECKLIST.md)** - Styles testing checklist
 
+### Configuration & JSON
+- **[CONFIG_JSON_IMPROVEMENTS.md](CONFIG_JSON_IMPROVEMENTS.md)** - JSON configuration improvements
+- **[CONFIG_JSON_REACTIVITY.md](CONFIG_JSON_REACTIVITY.md)** - Real-time configuration reactivity
+
+### User Documentation
+- **[USER_DOCUMENTATION_PLAN.md](USER_DOCUMENTATION_PLAN.md)** - User documentation plan and workflows
+
 ---
 
 ## 📦 Archived Documentation
 
-### Completed Fixes
-Located in: `archived/fixes/`
+Located in: `archived/`
 
-- **FIELD_SELECTION_FIX.md** - QgsFieldExpressionWidget configuration fix (completed)
-- **SOURCE_TABLE_NAME_FIX.md** - Source table name detection fix (completed)
-- **SQLITE_LOCK_FIX.md** - SQLite database locking fix (completed)
-- **SQLITE_LOCK_FIX_VISUAL.md** - Visual documentation of SQLite fix (completed)
-- **FIX_EXPLORING_MULTIPLE_SPACING.md** - Multiple selection spacing fix (completed)
-- **FIX_EXPLORING_SPACING_HEIGHTS.md** - Spacing heights fix (completed)
-- **FIX_EXPLORING_WIDGET_OVERLAP.md** - Widget overlap fix (completed)
+### Completed Fixes (`archived/fixes/`)
+- FIELD_SELECTION_FIX.md - QgsFieldExpressionWidget configuration fix
+- SOURCE_TABLE_NAME_FIX.md - Source table name detection fix
+- SQLITE_LOCK_FIX.md - SQLite database locking fix
+- SQLITE_LOCK_FIX_VISUAL.md - Visual documentation of SQLite fix
+- FIX_EXPLORING_MULTIPLE_SPACING.md - Multiple selection spacing fix
+- FIX_EXPLORING_SPACING_HEIGHTS.md - Spacing heights fix
+- FIX_EXPLORING_WIDGET_OVERLAP.md - Widget overlap fix
 
-### Completed UI Improvements
-Located in: `archived/ui-improvements/`
+### Completed UI Improvements (`archived/ui-improvements/`)
+- COMPACT_MODE_HARMONIZATION.md - Compact mode harmonization
+- COMPACT_MODE_TEST_GUIDE.md - Compact mode testing guide
+- UI_IMPROVEMENTS_README.md - UI improvements overview
+- UI_IMPROVEMENTS_REPORT.md - UI improvements report
+- UI_IMPROVEMENT_PLAN_2025.md - 2025 UI improvement plan
+- UI_STYLES_REFACTORING.md - Styles refactoring documentation
+- THEME_PREVIEW.md - Theme preview system
 
-- **COMPACT_MODE_HARMONIZATION.md** - Compact mode harmonization (completed)
-- **COMPACT_MODE_TEST_GUIDE.md** - Compact mode testing guide (completed)
-- **UI_IMPROVEMENTS_README.md** - UI improvements overview (completed)
-- **UI_IMPROVEMENTS_REPORT.md** - UI improvements report (completed)
-- **UI_IMPROVEMENT_PLAN_2025.md** - 2025 UI improvement plan (completed)
-- **UI_STYLES_REFACTORING.md** - Styles refactoring documentation (completed)
-- **THEME_PREVIEW.md** - Theme preview system (completed)
+### Historical Planning (`archived/planning/`)
+- UI_HARMONIZATION_PLAN.md - UI harmonization planning
+- UI_HARDCODED_PARAMETERS_ANALYSIS.md - Hardcoded parameters analysis
+- UI_DYNAMIC_PARAMETERS_ANALYSIS.md - Dynamic parameters analysis
+- IMPLEMENTATION_DYNAMIC_DIMENSIONS.md - Dynamic dimensions implementation
+- DEPLOYMENT_GUIDE_DYNAMIC_DIMENSIONS.md - Dynamic dimensions deployment
+- next_teps.md - Historical Docusaurus planning (French)
+
+### Website Deployment (`archived/website-deployment/`)
+- DOCUSAURUS_IMPLEMENTATION.md - Docusaurus setup documentation
+- QUICK_START_DEPLOY.md - Quick deployment guide
+
+---
+
+## 🌐 Website Documentation
+
+Location: `website/docs/`
+
+The user-facing documentation is built with Docusaurus and deployed to GitHub Pages:
+- **URL**: https://sducournau.github.io/filter_mate/
+- **Status**: website/DEVELOPMENT_STATUS.md
+- **Deployment**: Automatic via GitHub Actions
+
+### Main Sections
+- **Getting Started**: Quick start, first filter tutorial
+- **User Guide**: Interface, filtering, export, history
+- **Backends**: PostgreSQL, Spatialite, OGR comparison
+- **Advanced**: Configuration, performance tuning, troubleshooting
+- **Developer Guide**: Architecture, contributing, code style
+
+---
+
+## 📝 How to Use This Index
+
+### For Users
+→ Start with **website documentation**: https://sducournau.github.io/filter_mate/
+
+### For Developers
+→ Read **[DEVELOPER_ONBOARDING.md](DEVELOPER_ONBOARDING.md)** first  
+→ Then **[architecture.md](architecture.md)** for system understanding  
+→ Refer to **[BACKEND_API.md](BACKEND_API.md)** for implementation details
+
+### For Contributors
+→ Check **[../CONTRIBUTING.md](../CONTRIBUTING.md)** for guidelines  
+→ Review **[UI_SYSTEM_OVERVIEW.md](UI_SYSTEM_OVERVIEW.md)** for UI changes  
+→ Follow **[../README.md](../README.md)** for setup instructions
+
+---
+
+## 🔄 Documentation Updates
+
+**Last Major Update**: December 9, 2025
+- Translated French documentation to English
+- Consolidated duplicate content
+- Updated website development status
+- Moved outdated planning docs to archived/
+
+**Maintenance**:
+- Keep INDEX.md updated when adding new docs
+- Move completed feature docs to archived/ when appropriate
+- Update website/docs/ for user-facing changes
+- Keep technical docs in /docs/ for developers
 - **THEME_SYNC.md** - Theme synchronization (completed)
 
 ### Planning & Analysis Documents
