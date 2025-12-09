@@ -184,7 +184,7 @@
     },
     "CURRENT_PROJECT": {
         "EXPORTING": {
-            "HAS_LAYERS_TO_EXPORT": true,
+            "HAS_LAYERS_TO_EXPORT": false,
             "LAYERS_TO_EXPORT": [
                 "COURS_D_EAU_4b583086_cb0f_4e36_9326_8d9075d2f7f5",
                 "TRONCON_DE_ROUTE_9bc8a83d_3129_423d_aa13_f15138d49ab6",
@@ -196,7 +196,7 @@
                 "SURFACE_HYDROGRAPHIQUE_e9676506_c97b_429e_a667_c1d39c27d28e",
                 "ZONE_D_ACTIVITE_OU_D_INTERET_19278e4a_cb6c_491d_9412_3453814a32c5"
             ],
-            "HAS_PROJECTION_TO_EXPORT": true,
+            "HAS_PROJECTION_TO_EXPORT": false,
             "PROJECTION_TO_EXPORT": "EPSG:2154",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
@@ -211,7 +211,7 @@
         },
         "OPTIONS": {
             "LAYERS": {
-                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,
+                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
                 "LAYER_PROPERTIES_COUNT": 35,
                 "FEATURE_COUNT_LIMIT": 10000
             },

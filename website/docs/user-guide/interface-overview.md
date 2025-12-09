@@ -11,7 +11,7 @@ Quick guide to FilterMate's main interface components and workflows.
 1. **Menu:** Vector → FilterMate
 2. **Toolbar:** Click FilterMate icon 
 
-<img src="/filter_mate/icons/logo.png" alt="FilterMate plugin icon" width="32"/>
+    <img src="/filter_mate/icons/logo.png" alt="FilterMate plugin icon" width="32"/>
 
 3. **Keyboard:** Configure in QGIS settings
 
@@ -36,27 +36,26 @@ FilterMate organizes features into 3 main tabs:
     <img src="/filter_mate/icons/layers.png" alt="Layer selector icon" width="32"/>
 
     Choose which layers to filter (multi-selection supported)
-  - **Expression Builder:** Write QGIS expressions for attribute filtering
 
-- **Combination settings:**
+  - **Combination settings:**
 
     <img src="/filter_mate/icons/add_multi.png" alt="Combine operator icon" width="32"/>
 
     Combine multiple filters with AND/OR operators
 
-- **Spatial Predicates:**
+  - **Spatial Predicates:**
 
     <img src="/filter_mate/icons/geo_predicates.png" alt="Spatial predicates icon" width="32"/>
 
     Select geometric relationships (Intersects, Contains, Within, etc.)
 
-- **Buffer Settings:**
+  - **Buffer Settings:**
 
     <img src="/filter_mate/icons/geo_tampon.png" alt="Buffer distance icon" width="32"/>
 
     Add proximity zones (distance, unit, type)
 
-- **Buffer Type Settings:**
+  - **Buffer Type Settings:**
 
     <img src="/filter_mate/icons/buffer_type.png" alt="Buffer type icon" width="32"/>
 

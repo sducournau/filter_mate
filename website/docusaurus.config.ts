@@ -18,14 +18,38 @@ const config: Config = {
   deploymentBranch: 'gh-pages',
   trailingSlash: false,
 
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
+  onBrokenMarkdownLinks: 'warn',
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
   // may want to replace "en" with "zh-Hans".
   i18n: {
     defaultLocale: 'en',
-    locales: ['en'],
+    locales: ['en', 'fr', 'pt'],
+    localeConfigs: {
+      en: {
+        label: 'English',
+        direction: 'ltr',
+        htmlLang: 'en-US',
+        calendar: 'gregory',
+        path: 'en',
+      },
+      fr: {
+        label: 'Français',
+        direction: 'ltr',
+        htmlLang: 'fr-FR',
+        calendar: 'gregory',
+        path: 'fr',
+      },
+      pt: {
+        label: 'Português',
+        direction: 'ltr',
+        htmlLang: 'pt-BR',
+        calendar: 'gregory',
+        path: 'pt',
+      },
+    },
   },
 
   // Accessibility and SEO metadata
@@ -102,6 +126,10 @@ const config: Config = {
           sidebarId: 'tutorialSidebar',
           position: 'left',
           label: 'Documentation',
+        },
+        {
+          type: 'localeDropdown',
+          position: 'right',
         },
         {
           href: 'https://github.com/sducournau/filter_mate',

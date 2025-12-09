@@ -1,0 +1,18 @@
+{
+  "title": {
+    "message": "FilterMate",
+    "description": "Le titre dans la barre de navigation"
+  },
+  "logo.alt": {
+    "message": "Logo du plugin FilterMate - icône d'entonnoir avec des couches cartographiques représentant des capacités avancées de filtrage QGIS",
+    "description": "Le texte alternatif du logo de la barre de navigation"
+  },
+  "item.label.Documentation": {
+    "message": "Documentation",
+    "description": "Élément de la barre de navigation avec l'étiquette Documentation"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Élément de la barre de navigation avec l'étiquette GitHub"
+  }
+}

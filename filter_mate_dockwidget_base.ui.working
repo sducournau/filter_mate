@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>FilterMateDockWidgetBase</class>
  <widget class="QDockWidget" name="FilterMateDockWidgetBase">
@@ -236,6 +236,9 @@
     <kerning>true</kerning>
    </font>
   </property>
+  <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
   <property name="acceptDrops">
    <bool>true</bool>
   </property>
@@ -258,7 +261,9 @@
   <widget class="QWidget" name="dockWidgetContents">
    <layout class="QVBoxLayout" name="verticalLayout_main_root">
     <item>
-     <widget class="QSplitter" name="splitter_main_content"><property name="orientation"><enum>Qt::Vertical</enum></property><widget class="QFrame" name="frame_exploring">
+     <layout class="QVBoxLayout" name="verticalLayout_main_content">
+      <item>
+       <widget class="QFrame" name="frame_exploring">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -346,8 +351,8 @@
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>476</width>
-              <height>257</height>
+              <width>480</width>
+              <height>327</height>
              </rect>
             </property>
             <layout class="QGridLayout" name="gridLayout_main_header">
@@ -424,8 +429,11 @@
                       <property name="cursor">
                        <cursorShape>PointingHandCursor</cursorShape>
                       </property>
+                      <property name="toolTip">
+                       <string>Identify</string>
+                      </property>
                       <property name="text">
-                       <string />
+                       <string/>
                       </property>
                       <property name="iconSize">
                        <size>
@@ -496,8 +504,11 @@
                       <property name="cursor">
                        <cursorShape>PointingHandCursor</cursorShape>
                       </property>
+                      <property name="toolTip">
+                       <string>Zoom</string>
+                      </property>
                       <property name="text">
-                       <string />
+                       <string/>
                       </property>
                       <property name="iconSize">
                        <size>
@@ -574,11 +585,14 @@
                       <property name="focusPolicy">
                        <enum>Qt::ClickFocus</enum>
                       </property>
+                      <property name="toolTip">
+                       <string>Select</string>
+                      </property>
                       <property name="layoutDirection">
                        <enum>Qt::LeftToRight</enum>
                       </property>
                       <property name="text">
-                       <string />
+                       <string/>
                       </property>
                       <property name="iconSize">
                        <size>
@@ -658,11 +672,14 @@
                       <property name="focusPolicy">
                        <enum>Qt::ClickFocus</enum>
                       </property>
+                      <property name="toolTip">
+                       <string>Track</string>
+                      </property>
                       <property name="layoutDirection">
                        <enum>Qt::LeftToRight</enum>
                       </property>
                       <property name="text">
-                       <string />
+                       <string/>
                       </property>
                       <property name="iconSize">
                        <size>
@@ -742,11 +759,14 @@
                       <property name="focusPolicy">
                        <enum>Qt::ClickFocus</enum>
                       </property>
+                      <property name="toolTip">
+                       <string>Link</string>
+                      </property>
                       <property name="layoutDirection">
                        <enum>Qt::LeftToRight</enum>
                       </property>
                       <property name="text">
-                       <string />
+                       <string/>
                       </property>
                       <property name="iconSize">
                        <size>
@@ -823,8 +843,11 @@
                       <property name="mouseTracking">
                        <bool>true</bool>
                       </property>
+                      <property name="toolTip">
+                       <string>Reset parameters</string>
+                      </property>
                       <property name="text">
-                       <string />
+                       <string/>
                       </property>
                       <property name="iconSize">
                        <size>
@@ -949,6 +972,9 @@
                         <property name="cursor">
                          <cursorShape>IBeamCursor</cursorShape>
                         </property>
+                        <property name="toolTip">
+                         <string>Single feature picker</string>
+                        </property>
                         <property name="fetchLimit">
                          <number>10000</number>
                         </property>
@@ -980,6 +1006,9 @@
                         </property>
                         <property name="cursor">
                          <cursorShape>IBeamCursor</cursorShape>
+                        </property>
+                        <property name="toolTip">
+                         <string>Display expression/field</string>
                         </property>
                        </widget>
                       </item>
@@ -1021,7 +1050,7 @@
                    <property name="maximumSize">
                     <size>
                      <width>16777215</width>
-                     <height>29</height>
+                     <height>23</height>
                     </size>
                    </property>
                    <property name="font">
@@ -1118,6 +1147,9 @@
                       </property>
                       <property name="cursor">
                        <cursorShape>PointingHandCursor</cursorShape>
+                      </property>
+                      <property name="toolTip">
+                       <string>Display expression/field</string>
                       </property>
                      </widget>
                     </item>
@@ -1233,6 +1265,9 @@
                         <property name="cursor">
                          <cursorShape>IBeamCursor</cursorShape>
                         </property>
+                        <property name="statusTip">
+                         <string>Display expression/field</string>
+                        </property>
                        </widget>
                       </item>
                      </layout>
@@ -1250,7 +1285,9 @@
          </item>
         </layout>
        </widget>
-      <widget class="QFrame" name="frame_toolset">
+      </item>
+      <item>
+       <widget class="QFrame" name="frame_toolset">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -1368,8 +1405,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>474</width>
-                <height>295</height>
+                <width>478</width>
+                <height>270</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -1459,11 +1496,14 @@
                         <property name="focusPolicy">
                          <enum>Qt::ClickFocus</enum>
                         </property>
+                        <property name="toolTip">
+                         <string>Sync source layer and active layer</string>
+                        </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -1544,13 +1584,13 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Filtrage multicouche</string>
+                         <string>Enable distant layers to filter</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -1631,13 +1671,13 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Filtrage additif pour la couche sélectionnée</string>
+                         <string>Additive filtering for source layer and distant layers</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -1917,13 +1957,13 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Filtrage géospatial</string>
+                         <string>Enable geometric predicates</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2007,13 +2047,13 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Tampon</string>
+                         <string>Enable buffer</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2047,8 +2087,11 @@
                       </item>
                       <item>
                        <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type">
+                        <property name="toolTip">
+                         <string>Change buffer type</string>
+                        </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2110,6 +2153,9 @@
                      </property>
                      <property name="cursor">
                       <cursorShape>PointingHandCursor</cursorShape>
+                     </property>
+                     <property name="toolTip">
+                      <string>Source layer to filter</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -2193,7 +2239,7 @@
                         <bool>true</bool>
                        </property>
                        <property name="toolTip">
-                        <string>Couche de l'expression</string>
+                        <string>Source layer</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -2203,7 +2249,7 @@
                        </property>
                        <item>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                        </item>
                        <item>
@@ -2247,9 +2293,12 @@
                        <property name="tabletTracking">
                         <bool>true</bool>
                        </property>
+                       <property name="toolTip">
+                        <string>Distant layers</string>
+                       </property>
                        <item>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                        </item>
                        <item>
@@ -2315,7 +2364,7 @@
                       <bool>true</bool>
                      </property>
                      <property name="toolTip">
-                      <string>Prédicat géométrique</string>
+                      <string>Geometric predicates</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -2436,7 +2485,7 @@
                         <cursorShape>IBeamCursor</cursorShape>
                        </property>
                        <property name="toolTip">
-                        <string>Valeur en mètres</string>
+                        <string>Value in meters</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -2460,35 +2509,9 @@
                         <double>0.100000000000000</double>
                        </property>
                        <property name="stepType">
-                        <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
+                        <enum>QAbstractSpinBox::DefaultStepType</enum>
                        </property>
                        <property name="clearValue">
-                        <bool>true</bool>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="lineEdit_filtering_buffer_value_expression">
-                       <property name="enabled">
-                        <bool>true</bool>
-                       </property>
-                       <property name="font">
-                        <font>
-                         <family>Segoe UI Semibold</family>
-                         <pointsize>10</pointsize>
-                         <weight>75</weight>
-                         <italic>false</italic>
-                         <bold>true</bold>
-                         <underline>false</underline>
-                         <strikeout>false</strikeout>
-                         <stylestrategy>PreferAntialias</stylestrategy>
-                         <kerning>true</kerning>
-                        </font>
-                       </property>
-                       <property name="readOnly">
-                        <bool>false</bool>
-                       </property>
-                       <property name="clearButtonEnabled">
                         <bool>true</bool>
                        </property>
                       </widget>
@@ -2518,6 +2541,9 @@
                        <horstretch>0</horstretch>
                        <verstretch>0</verstretch>
                       </sizepolicy>
+                     </property>
+                     <property name="toolTip">
+                      <string>Buffer type</string>
                      </property>
                      <property name="editable">
                       <bool>true</bool>
@@ -2557,8 +2583,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>474</width>
-                <height>331</height>
+                <width>478</width>
+                <height>292</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -2640,13 +2666,13 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Layers to export</string>
+                         <string>Has layers to export</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2727,16 +2753,16 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Layers projection</string>
+                         <string>Change layers projection</string>
                         </property>
                         <property name="statusTip">
-                         <string />
+                         <string/>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2823,7 +2849,7 @@
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2910,7 +2936,7 @@
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -2997,7 +3023,7 @@
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -3077,11 +3103,14 @@
                         <property name="focusPolicy">
                          <enum>Qt::ClickFocus</enum>
                         </property>
+                        <property name="toolTip">
+                         <string>Name of zipfile</string>
+                        </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
                         <property name="text">
-                         <string />
+                         <string/>
                         </property>
                         <property name="iconSize">
                          <size>
@@ -3161,7 +3190,7 @@
                       <cursorShape>PointingHandCursor</cursorShape>
                      </property>
                      <property name="toolTip">
-                      <string>Sélectionnez le CRS pour l'export</string>
+                      <string>Select layers projection</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -3201,6 +3230,9 @@
                      </property>
                      <property name="cursor">
                       <cursorShape>PointingHandCursor</cursorShape>
+                     </property>
+                     <property name="toolTip">
+                      <string>Select style format</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -3261,7 +3293,7 @@
                       <cursorShape>PointingHandCursor</cursorShape>
                      </property>
                      <property name="toolTip">
-                      <string>Format de sortie</string>
+                      <string>Output format</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -3380,7 +3412,7 @@
                         <enum>Qt::LeftToRight</enum>
                        </property>
                        <property name="inputMask">
-                        <string />
+                        <string/>
                        </property>
                        <property name="clearButtonEnabled">
                         <bool>true</bool>
@@ -3416,8 +3448,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>474</width>
-                <height>155</height>
+                <width>478</width>
+                <height>173</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -3480,7 +3512,328 @@
          </item>
         </layout>
        </widget>
-      </widget></item>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_actions_container">
+        <item>
+         <widget class="QFrame" name="frame_actions">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Plain</enum>
+          </property>
+          <property name="lineWidth">
+           <number>0</number>
+          </property>
+          <property name="midLineWidth">
+           <number>0</number>
+          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_actions_bottom">
+           <item>
+            <widget class="QPushButton" name="pushButton_action_filter">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>12</pointsize>
+               <weight>50</weight>
+               <italic>false</italic>
+               <bold>false</bold>
+               <underline>false</underline>
+               <strikeout>false</strikeout>
+               <kerning>true</kerning>
+              </font>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="focusPolicy">
+              <enum>Qt::StrongFocus</enum>
+             </property>
+             <property name="contextMenuPolicy">
+              <enum>Qt::DefaultContextMenu</enum>
+             </property>
+             <property name="toolTip">
+              <string>Filter</string>
+             </property>
+             <property name="statusTip">
+              <string>Filter</string>
+             </property>
+             <property name="whatsThis">
+              <string>Filter</string>
+             </property>
+             <property name="layoutDirection">
+              <enum>Qt::LeftToRight</enum>
+             </property>
+             <property name="autoFillBackground">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>35</width>
+               <height>35</height>
+              </size>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_actions_filter_undo">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>4</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_action_undo_filter">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>12</pointsize>
+               <weight>50</weight>
+               <italic>false</italic>
+               <bold>false</bold>
+               <underline>false</underline>
+               <strikeout>false</strikeout>
+               <kerning>true</kerning>
+              </font>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="toolTip">
+              <string>Undo</string>
+             </property>
+             <property name="statusTip">
+              <string>Undo</string>
+             </property>
+             <property name="whatsThis">
+              <string>Undo</string>
+             </property>
+             <property name="autoFillBackground">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_actions_undo_reset">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>4</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_action_redo_filter">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>12</pointsize>
+               <weight>50</weight>
+               <italic>false</italic>
+               <bold>false</bold>
+               <underline>false</underline>
+               <strikeout>false</strikeout>
+               <kerning>true</kerning>
+              </font>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="toolTip">
+              <string>Redo</string>
+             </property>
+             <property name="statusTip">
+              <string>Redo</string>
+             </property>
+             <property name="whatsThis">
+              <string>Redo</string>
+             </property>
+             <property name="autoFillBackground">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>4</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_action_reset">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>12</pointsize>
+               <weight>75</weight>
+               <italic>false</italic>
+               <bold>true</bold>
+               <underline>false</underline>
+               <strikeout>false</strikeout>
+               <kerning>true</kerning>
+              </font>
+             </property>
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="toolTip">
+              <string>Unfilter</string>
+             </property>
+             <property name="statusTip">
+              <string>Unfilter</string>
+             </property>
+             <property name="whatsThis">
+              <string>Unfilter</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_actions_reset_export">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>4</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_action_export">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="toolTip">
+              <string>Export</string>
+             </property>
+             <property name="statusTip">
+              <string>Export</string>
+             </property>
+             <property name="whatsThis">
+              <string>Export</string>
+             </property>
+             <property name="layoutDirection">
+              <enum>Qt::RightToLeft</enum>
+             </property>
+             <property name="autoFillBackground">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="iconSize">
+              <size>
+               <width>35</width>
+               <height>35</height>
+              </size>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_actions_export_about">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Expanding</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>4</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_action_about">
+             <property name="toolTip">
+              <string>Documentation</string>
+             </property>
+             <property name="statusTip">
+              <string>Documentation</string>
+             </property>
+             <property name="whatsThis">
+              <string>Documentation</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="icon">
+              <iconset>
+               <normaloff>icon.png</normaloff>icon.png</iconset>
+             </property>
+             <property name="checkable">
+              <bool>false</bool>
+             </property>
+             <property name="flat">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
    </layout>
   </widget>
  </widget>
@@ -3527,6 +3880,6 @@
    <header>qgspropertyoverridebutton.h</header>
   </customwidget>
  </customwidgets>
- <resources />
- <connections />
+ <resources/>
+ <connections/>
 </ui>

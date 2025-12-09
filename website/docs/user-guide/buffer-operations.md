@@ -155,7 +155,7 @@ FILTERING Tab:
 
 ### Distance and Unit Selection
 
-<img src="/filter_mate/img/ui-filtering-buffer-distance.png" alt="ui-filtering-buffer-distance" width="500"/>
+<img src="/filter_mate/img/ui-filtering-buffer-distance.png" alt="ui-filtering-buffer-distance" width="300"/>
 
 *Configure buffer distance and select unit*
 
@@ -183,7 +183,7 @@ Regional analysis: 10-100km
 
 ### Buffer Type Selection
 
-<img src="/filter_mate/img/ui-filtering-buffer-type.png" alt="ui-filtering-buffer-type" width="500"/>
+<img src="/filter_mate/img/ui-filtering-buffer-type.png" alt="ui-filtering-buffer-type" width="300"/>
 
 *Choose buffer algorithm: Standard, Fast, or Segment*
 

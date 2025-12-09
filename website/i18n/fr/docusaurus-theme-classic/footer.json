@@ -1,0 +1,42 @@
+{
+  "link.title.Docs": {
+    "message": "Documentation",
+    "description": "Le titre de la colonne de liens de pied de page avec title=Docs dans le pied de page"
+  },
+  "link.title.Community": {
+    "message": "Communauté",
+    "description": "Le titre de la colonne de liens de pied de page avec title=Community dans le pied de page"
+  },
+  "link.title.More": {
+    "message": "Plus",
+    "description": "Le titre de la colonne de liens de pied de page avec title=More dans le pied de page"
+  },
+  "link.item.label.Getting Started": {
+    "message": "Premiers pas",
+    "description": "L'étiquette du lien de pied de page avec label=Getting Started vers /docs/installation"
+  },
+  "link.item.label.User Guide": {
+    "message": "Guide utilisateur",
+    "description": "L'étiquette du lien de pied de page avec label=User Guide vers /docs/user-guide/introduction"
+  },
+  "link.item.label.GitHub": {
+    "message": "GitHub",
+    "description": "L'étiquette du lien de pied de page avec label=GitHub vers https://github.com/sducournau/filter_mate"
+  },
+  "link.item.label.Issues": {
+    "message": "Problèmes",
+    "description": "L'étiquette du lien de pied de page avec label=Issues vers https://github.com/sducournau/filter_mate/issues"
+  },
+  "link.item.label.QGIS Plugin Repository": {
+    "message": "Dépôt de plugins QGIS",
+    "description": "L'étiquette du lien de pied de page avec label=QGIS Plugin Repository vers https://plugins.qgis.org/plugins/filter_mate"
+  },
+  "link.item.label.Accessibility": {
+    "message": "Accessibilité",
+    "description": "L'étiquette du lien de pied de page avec label=Accessibility vers /docs/accessibility"
+  },
+  "copyright": {
+    "message": "Copyright © 2025 FilterMate. Construit avec Docusaurus.",
+    "description": "Le copyright du pied de page"
+  }
+}
