@@ -553,9 +553,34 @@ is_valid($geometry)
 make_valid($geometry)
 ```
 
+### CRS Reprojection {#crs-reprojection}
+
+FilterMate automatically handles coordinate reference system (CRS) transformations when filtering layers with different projections.
+
+**Automatic Behavior**:
+- Target and reference layers can use different CRS
+- FilterMate reprojects on-the-fly for spatial operations
+- You'll see 🔄 indicator in logs when reprojection occurs
+
+**Best Practices**:
+1. **Use projected CRS** for accurate distance calculations (e.g., EPSG:3857, local UTM zones)
+2. **Avoid geographic CRS** (EPSG:4326) for buffer operations - use meters instead of degrees
+3. **Verify results** after reprojection with visual inspection
+
+**Example**:
+```
+Layer A: EPSG:4326 (WGS84) - Global coordinates
+Layer B: EPSG:2154 (Lambert 93) - France projection
+FilterMate: Automatically reprojects for comparison ✓
+```
+
+:::tip Performance Note
+Frequent CRS transformations can slow down operations on large datasets. For best performance, ensure your layers share the same CRS before filtering.
+:::
+
 ### Empty Results
 
-1. **Check CRS compatibility** - Ensure layers use compatible projections
+1. **Check CRS compatibility** - Ensure layers use compatible projections (see [CRS Reprojection](#crs-reprojection))
 2. **Verify reference geometry** - Confirm reference feature exists
 3. **Test simpler predicates** - Try `intersects` before `contains`
 4. **Inspect geometries** - Check for NULL or invalid geometries

@@ -25,7 +25,7 @@ This guide documents the most common mistakes users encounter when using FilterM
 
 ---
 
-## 1. ❌ Empty Filter Results
+## 1. Empty Filter Results {#1-empty-filter-results}
 
 **Symptom**: Filter returns 0 features, but you expected matches.
 
@@ -180,9 +180,9 @@ Look for red error messages
 
 ---
 
-## 2. ❌ PostgreSQL Backend Unavailable
+## 2. PostgreSQL Backend Unavailable {#2-postgresql-backend-unavailable}
 
-**Symptom**: Orange warning banner: "PostgreSQL backend unavailable, using fallback".
+**Symptom**: Warning message: `PostgreSQL backend unavailable - using fallback`
 
 ### Root Cause
 
@@ -269,7 +269,7 @@ print(psycopg2.__version__)
 
 ---
 
-## 3. ❌ Slow Performance (>30` seconds)
+## 3. Slow Performance (>30 seconds) {#3-slow-performance-30-seconds}
 
 **Symptom**: Filter operation takes more than 30 seconds.
 
@@ -376,7 +376,7 @@ UPDATE your_table SET geom = ST_MakeValid(geom);
 
 ---
 
-## 4. ❌ Incorrect Spatial Results
+## 4. Incorrect Spatial Results {#4-incorrect-spatial-results}
 
 **Symptom**: Features far from reference geometry are included in results.
 
@@ -429,7 +429,7 @@ Crosses: Linear intersection only
 ```
 
 **Solution**:
-See [Spatial Predicates Reference](../reference/spatial-predicates.md) for visual guide.
+See [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates.md) for visual guide.
 
 ---
 
@@ -466,7 +466,7 @@ Result: Wrong features selected
 
 ---
 
-## 5. ❌ Expression Syntax Errors
+## 5. Expression Syntax Errors {#5-expression-syntax-errors}
 
 **Symptom**: Red ✗ in expression builder with error message.
 
@@ -559,7 +559,7 @@ city = 'Paris' AND population > 100000
 
 ---
 
-## 6. ❌ Export Failures
+## 6. Export Failures {#6-export-failures}
 
 **Symptom**: Export button does nothing or shows error.
 
@@ -621,7 +621,7 @@ EPSG:2154 - Lambert 93 (France)
 
 ---
 
-## 7. ❌ Filter History Lost After Restart
+## 7. Filter History Lost After Restart {#7-filter-history-lost-after-restart}
 
 **Symptom**: Undo/redo history is empty after closing QGIS.
 
@@ -651,7 +651,7 @@ EPSG:2154 - Lambert 93 (France)
 
 ---
 
-## 8. ❌ CRS Mismatch Problems
+## 8. CRS Mismatch Problems {#8-crs-mismatch-problems}
 
 **Symptom**: Features appear in wrong location or spatial queries fail.
 

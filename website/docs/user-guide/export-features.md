@@ -15,9 +15,6 @@ The **EXPORTING tab** allows you to export layers from your QGIS project to stan
 - **Publishing** web maps
 - **Reporting** tabular data
 
-<!-- <!-- ![Exporting Tab Overview](/img/ui-components/ui-exporting-layer-selector.png --> -->
-*Multi-selection of layers to export in EXPORTING tab*
-
 **Key Features**:
 - Multi-selection of layers to export
 - Multiple output formats (GPKG, Shapefile, GeoJSON, etc.)
@@ -36,11 +33,9 @@ Layers can be exported **with or without** filters applied. If you've used the F
 
 Select which layers to export from your QGIS project:
 
-<!-- <!-- ![Layer Selector](/img/ui-components/ui-exporting-layer-selector.png --> -->
-*Check one or more layers to export*
+<img src="/filter_mate/img/ui-exporting-layer-selector.png" alt="ui-exporting-layer-selector" width="300"/>
 
-<!-- <!-- ![Has Layers Indicator](/img/ui-components/ui-exporting-has-layers-indicator.png --> -->
-*"Has Layers to Export" indicator (layers.png) appears when layers are selected*
+*Check one or more layers to export*
 
 **Features**:
 - **Multi-selection**: Export multiple layers at once
@@ -52,11 +47,10 @@ Select which layers to export from your QGIS project:
 
 Choose the output format for exported data:
 
-<!-- <!-- ![Format Selector](/img/ui-components/ui-exporting-format-selector.png --> -->
+<img src="/filter_mate/img/ui-exporting-format-selector.png" alt="ui-exporting-format-selector" width="300"/>
+
 *Dropdown with available export formats*
 
-<!-- <!-- ![Format Indicator](/img/ui-components/ui-exporting-format-indicator.png --> -->
-*"Has Datatype to Export" indicator (datatype.png)*
 
 ### Supported Formats
 
@@ -74,11 +68,10 @@ Choose the output format for exported data:
 
 Re-project layers during export to a different coordinate system:
 
-<!-- <!-- ![CRS Widget](/img/ui-components/ui-exporting-crs-widget.png --> -->
+<img src="/filter_mate/img/ui-exporting-crs-selector.png" alt="ui-exporting-crs-selector" width="300"/>
+
 *QgsProjectionSelectionWidget for CRS selection*
 
-<!-- <!-- ![CRS Indicator](/img/ui-components/ui-exporting-crs-indicator.png --> -->
-*"Has Projection to Export" indicator (projection_black.png)*
 
 **Features**:
 - Choose any EPSG code or custom CRS
@@ -103,9 +96,6 @@ Export layer styling alongside data:
 <!-- <!-- ![Style Selector](/img/ui-components/ui-exporting-style-selector.png --> -->
 *Choose style format: QML (QGIS), SLD (Standard), or ArcGIS*
 
-<!-- <!-- ![Style Indicator](/img/ui-components/ui-exporting-style-indicator.png --> -->
-*"Has Styles to Export" indicator (styles_black.png)*
-
 **Available Formats**:
 - **QML** (QGIS Style) - Full QGIS styling, preserves all features
 - **SLD** (Styled Layer Descriptor) - OGC standard, works in GeoServer, MapServer
@@ -124,17 +114,13 @@ ArcGIS     | Esri symbology             | ArcGIS Desktop, ArcGIS Pro
 
 Configure destination and delivery mode:
 
-<!-- <!-- ![Output Folder](/img/ui-components/ui-exporting-output-folder.png --> -->
+<img src="/filter_mate/img/ui-exporting-output-folder.png" alt="ui-exporting-output-folder" width="300"/>
+
 *QgsFileWidget for folder selection*
 
-<!-- <!-- ![Folder Indicator](/img/ui-components/ui-exporting-folder-indicator.png --> -->
-*"Has Output Folder to Export" indicator (folder_black.png)*
+<img src="/filter_mate/img/ui-exporting-output-zip.png" alt="ui-exporting-output-zip" width="300"/>
 
-<!-- <!-- ![Batch Mode](/img/ui-components/ui-exporting-batch-mode.png --> -->
 *Checkboxes for Batch mode and ZIP compression*
-
-<!-- <!-- ![ZIP Indicator](/img/ui-components/ui-exporting-zip-indicator.png --> -->
-*"Has ZIP to Export" indicator (zip.png)*
 
 **Options**:
 - **Output Folder**: Choose destination directory

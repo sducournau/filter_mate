@@ -248,7 +248,7 @@ Backend detected automatically based on layer type.
 graph TB
     subgraph "FilterMate Panel"
         LS[Layer Selector - Multi-selection]
-        AB[Action Buttons: Filter | Undo | Redo | Reset | Export | About]
+        AB["Action Buttons: Filter / Undo / Redo / Reset / Export / About"]
         TB[Tab Bar]
         
         subgraph "FILTERING Tab"

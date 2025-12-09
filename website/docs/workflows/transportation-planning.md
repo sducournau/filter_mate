@@ -718,9 +718,9 @@ For Shapefile:
 
 ### Related Workflows
 
-- **[Real Estate Analysis](./real-estate-analysis.md)**: Attribute filtering techniques
-- **[Emergency Services](./emergency-services.md)**: Buffer-based selection
-- **[Urban Planning Transit](./urban-planning-transit.md)**: Multi-layer spatial filtering
+- **[Real Estate Analysis](real-estate-analysis.md)**: Attribute filtering techniques
+- **[Emergency Services](emergency-services.md)**: Buffer-based selection
+- **[Urban Planning Transit](urban-planning-transit.md)**: Multi-layer spatial filtering
 
 ### Advanced Techniques
 
@@ -764,9 +764,9 @@ Outputs: .gpkg, .shp, .geojson, .dxf
 
 ### Further Learning
 
-- 📖 [CRS Reference Guide](../reference/crs-guide.md)
-- 📖 [Export Formats Comparison](../user-guide/export-formats.md)
-- 📖 [Field Calculator Deep Dive](../user-guide/field-calculator.md)
+- 📖 [Export Features Guide](../user-guide/export-features.md)
+- 📖 [Buffer Operations](../user-guide/buffer-operations.md)
+- 📖 [Performance Tuning](../advanced/performance-tuning.md)
 - 📖 [QGIS Processing Documentation](https://docs.qgis.org/latest/en/docs/user_manual/processing/index.html)
 
 ---

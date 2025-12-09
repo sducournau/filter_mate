@@ -454,9 +454,9 @@ distance(
 
 ### Related Workflows
 
-- **[Urban Planning Transit](./urban-planning-transit.md)**: Similar buffer analysis pattern
-- **[Environmental Protection](./environmental-protection.md)**: Inverse spatial queries
-- **[Real Estate Analysis](./real-estate-analysis.md)**: Multi-criteria filtering
+- **[Urban Planning Transit](urban-planning-transit.md)**: Similar buffer analysis pattern
+- **[Environmental Protection](environmental-protection.md)**: Inverse spatial queries
+- **[Real Estate Analysis](real-estate-analysis.md)**: Multi-criteria filtering
 
 ### Advanced Techniques
 

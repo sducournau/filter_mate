@@ -414,9 +414,9 @@ pip install psycopg2-binary
 
 ### Related Workflows
 
-- **[Emergency Services Coverage](./emergency-services.md)** - Similar distance analysis
-- **[Environmental Protection Zones](./environmental-protection.md)** - Multi-criteria filtering
-- **[Real Estate Analysis](./real-estate-analysis.md)** - Combined attribute filtering
+- **[Emergency Services Coverage](emergency-services.md)** - Similar distance analysis
+- **[Environmental Protection Zones](environmental-protection.md)** - Multi-criteria filtering
+- **[Real Estate Analysis](real-estate-analysis.md)** - Combined attribute filtering
 
 ### Advanced Techniques
 

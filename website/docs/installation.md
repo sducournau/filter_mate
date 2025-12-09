@@ -12,13 +12,13 @@ FilterMate is available through the QGIS Plugin Repository and works out of the 
 2. Go to **Plugins** → **Manage and Install Plugins**
 
 
- <img src="/filter_mate/img/install-1.png" alt="install-1" width="300"/>
+ <img src="/filter_mate/img/install-1.png" alt="install-1" width="500"/>
  
 *QGIS Plugin Manager - Search for FilterMate*
 
 3. Search for **"FilterMate"**
 
- <img src="/filter_mate/img/install-2.png" alt="install-2" width="300"/>
+ <img src="/filter_mate/img/install-2.png" alt="install-2" width="500"/>
 
 *Search results showing FilterMate plugin*
 

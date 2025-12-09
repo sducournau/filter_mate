@@ -10,22 +10,6 @@ Create buffers around geometries and use them for proximity analysis in the **FI
 
 A **buffer** is a polygon representing all points within a specified distance from a geometry. In FilterMate, buffers are configured in the **FILTERING tab** alongside geometric predicates for proximity-based spatial filtering.
 
-<!-- ![Buffer Distance Configuration](/img/ui-components/ui-filtering-buffer-distance.png -->
-*Buffer distance and unit selector in FILTERING tab*
-
-<!-- ![Buffer Type Selection](/img/ui-components/ui-filtering-buffer-type.png -->
-*Buffer type dropdown: Standard / Fast / Segment*
-
-**Buffer Indicators**:
-
-When configured, FilterMate displays visual badges:
-
-<!-- ![Buffer Value Indicator](/img/ui-components/ui-filtering-buffer-value-indicator.png -->
-*"Has Buffer Value" indicator (buffer_value.png)*
-
-<!-- ![Buffer Type Indicator](/img/ui-components/ui-filtering-buffer-type-indicator.png -->
-*"Has Buffer Type" indicator (buffer_type.png)*
-
 ### Key Uses
 
 Buffers are essential for:
@@ -171,7 +155,8 @@ FILTERING Tab:
 
 ### Distance and Unit Selection
 
-<!-- ![Buffer Distance](/img/ui-components/ui-filtering-buffer-distance.png -->
+<img src="/filter_mate/img/ui-filtering-buffer-distance.png" alt="ui-filtering-buffer-distance" width="500"/>
+
 *Configure buffer distance and select unit*
 
 **Supported Units**:
@@ -198,7 +183,8 @@ Regional analysis: 10-100km
 
 ### Buffer Type Selection
 
-<!-- ![Buffer Type](/img/ui-components/ui-filtering-buffer-type.png -->
+<img src="/filter_mate/img/ui-filtering-buffer-type.png" alt="ui-filtering-buffer-type" width="500"/>
+
 *Choose buffer algorithm: Standard, Fast, or Segment*
 
 **Selection Criteria**:

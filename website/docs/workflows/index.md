@@ -18,7 +18,7 @@ Each workflow tutorial is designed to:
 
 ### 🏙️ Urban Planning & Development
 
-**[Finding Properties Near Transit](./urban-planning-transit.md)**
+**[Finding Properties Near Transit](urban-planning-transit.md)**
 - **Scenario**: Identify all residential parcels within 500m of subway stations
 - **Skills**: Buffer operations, spatial predicates, multi-layer filtering
 - **Backend**: PostgreSQL (recommended for large parcel datasets)
@@ -29,7 +29,7 @@ Each workflow tutorial is designed to:
 
 ### 🌳 Environmental Analysis
 
-**[Protected Zone Impact Assessment](./environmental-protection.md)**
+**[Protected Zone Impact Assessment](environmental-protection.md)**
 - **Scenario**: Find industrial sites within protected water buffer zones
 - **Skills**: Geometric filtering, attribute constraints, geometry repair
 - **Backend**: Spatialite (good for regional datasets)
@@ -40,7 +40,7 @@ Each workflow tutorial is designed to:
 
 ### 🚒 Emergency Services
 
-**[Service Coverage Analysis](./emergency-services.md)**
+**[Service Coverage Analysis](emergency-services.md)**
 - **Scenario**: Identify areas more than 5km from nearest fire station
 - **Skills**: Inverse spatial queries, distance calculations, export results
 - **Backend**: OGR (universal compatibility)
@@ -51,7 +51,7 @@ Each workflow tutorial is designed to:
 
 ### 🏠 Real Estate Analysis
 
-**[Market Filtering & Export](./real-estate-analysis.md)**
+**[Market Filtering & Export](real-estate-analysis.md)**
 - **Scenario**: Filter properties by price, area, and school proximity
 - **Skills**: Combined attribute + geometric filtering, history management
 - **Backend**: Multi-backend comparison
@@ -62,7 +62,7 @@ Each workflow tutorial is designed to:
 
 ### 🚗 Transportation Planning
 
-**[Road Network Data Preparation](./transportation-planning.md)**
+**[Road Network Data Preparation](transportation-planning.md)**
 - **Scenario**: Export road segments within municipality with specific attributes
 - **Skills**: Attribute filtering, CRS transformation, batch export
 - **Backend**: Any (focuses on export features)
@@ -103,17 +103,17 @@ Install the **QuickOSM** plugin in QGIS:
 
 ### New to FilterMate?
 Start with **beginner workflows** (⭐):
-1. [Real Estate Analysis](./real-estate-analysis.md) - Simple filtering
-2. [Transportation Planning](./transportation-planning.md) - Export focus
+1. [Real Estate Analysis](real-estate-analysis.md) - Simple filtering
+2. [Transportation Planning](transportation-planning.md) - Export focus
 
 ### Comfortable with Basics?
 Try **intermediate workflows** (⭐⭐):
-1. [Urban Planning](./urban-planning-transit.md) - Spatial operations
-2. [Emergency Services](./emergency-services.md) - Distance analysis
+1. [Urban Planning](urban-planning-transit.md) - Spatial operations
+2. [Emergency Services](emergency-services.md) - Distance analysis
 
 ### Ready for Complex Tasks?
 Tackle **advanced workflows** (⭐⭐⭐):
-1. [Environmental Analysis](./environmental-protection.md) - Multi-criteria filtering
+1. [Environmental Analysis](environmental-protection.md) - Multi-criteria filtering
 
 ---
 

@@ -35,6 +35,10 @@ const sidebars: SidebarsConfig = {
       items: [
         'workflows/index',
         'workflows/urban-planning-transit',
+        'workflows/environmental-protection',
+        'workflows/emergency-services',
+        'workflows/real-estate-analysis',
+        'workflows/transportation-planning',
       ],
     },
     {

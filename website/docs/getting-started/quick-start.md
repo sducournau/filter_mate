@@ -10,17 +10,20 @@ Get started with FilterMate in 5 minutes! This guide covers the essential workfl
 
 1. In QGIS, load a vector layer (any format: Shapefile, GeoPackage, PostGIS, etc.)
 
-<!-- ![QGIS with layer loaded](/img/quickstart-1.png -->
+<img src="/filter_mate/img/quickstart-1.png" alt="quickstart-1" width="500"/>
+
 *QGIS with a vector layer loaded and ready for filtering*
 
 2. Click the **FilterMate** icon in the toolbar, or go to **Plugins** → **FilterMate**
 
-<!-- ![Open FilterMate](/img/quickstart-2.png -->
+<img src="/filter_mate/img/install-4.png" alt="install-4" width="500"/>
+
 *Opening FilterMate from the toolbar*
 
 3. The FilterMate dockable panel will appear
 
-<!-- ![FilterMate panel](/img/quickstart-3.png -->
+<img src="/filter_mate/img/quickstart-3.png" alt="quickstart-3" width="500"/>
+
 *FilterMate panel docked on the right side of QGIS*
 
 :::tip First Time?

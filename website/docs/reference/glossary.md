@@ -422,7 +422,7 @@ A test for a specific geometric relationship between two features.
 | **Disjoint** | Don't touch or overlap | Isolated features |
 | **Overlaps** | Partial overlap (same dimension) | Overlapping zones |
 
-**Visual Guide**: See [Spatial Predicates Reference](./spatial-predicates.md)
+**Visual Guide**: See [Spatial Predicates Reference](./cheat-sheets/spatial-predicates.md)
 
 ---
 
