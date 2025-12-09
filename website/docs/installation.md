@@ -11,12 +11,15 @@ FilterMate is available through the QGIS Plugin Repository and works out of the 
 1. Open QGIS
 2. Go to **Plugins** → **Manage and Install Plugins**
 
-<!-- ![QGIS Plugin Manager](/img/install-1.png -->
+
+ <img src="/filter_mate/img/install-1.png" alt="install-1" width="300"/>
+ 
 *QGIS Plugin Manager - Search for FilterMate*
 
 3. Search for **"FilterMate"**
 
-<!-- ![Search FilterMate](/img/install-2.png -->
+ <img src="/filter_mate/img/install-2.png" alt="install-2" width="300"/>
+
 *Search results showing FilterMate plugin*
 
 4. Click **Install Plugin**
@@ -106,4 +109,4 @@ except ImportError:
 
 - [Quick Start Tutorial](./getting-started/quick-start.md) - Learn the basics
 - [First Filter](./getting-started/first-filter.md) - Create your first filter
-- [Performance Comparison](./backends/performance-comparison.md) - Understand backend performance
+- [Performance Benchmarks](./backends/performance-benchmarks.md) - Understand backend performance

@@ -751,7 +751,7 @@ print(f"Success: {result}")
 
 ## See Also
 
-- [Backend Selection](../backends/backend-selection.md) - How backends are chosen
+- [Backend Selection](../backends/choosing-backend.md) - How backends are chosen
 - [PostgreSQL Backend](../backends/postgresql.md) - Reference implementation
 - [Spatialite Backend](../backends/spatialite.md) - Alternative reference
 - [Testing Guide](./testing.md) - Testing your backend

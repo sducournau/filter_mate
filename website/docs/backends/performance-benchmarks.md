@@ -430,7 +430,7 @@ SELECT * FROM sqlite_master WHERE type = 'table' AND name LIKE 'idx_%';
 
 ## See Also
 
-- [Backend Selection](./backend-selection.md) - Automatic backend selection
+- [Backend Selection](./choosing-backend.md) - Automatic backend selection
 - [PostgreSQL Backend](./postgresql.md) - PostgreSQL setup and tuning
 - [Spatialite Backend](./spatialite.md) - Spatialite optimization
 - [OGR Backend](./ogr.md) - OGR format support

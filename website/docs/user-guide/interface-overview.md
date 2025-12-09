@@ -11,7 +11,7 @@ Quick guide to FilterMate's main interface components and workflows.
 1. **Menu:** Vector → FilterMate
 2. **Toolbar:** Click FilterMate icon 
 
-<img src="/icons/logo.png" alt="FilterMate plugin icon" width="50"/>
+<img src="/filter_mate/icons/logo.png" alt="FilterMate plugin icon" width="32"/>
 
 3. **Keyboard:** Configure in QGIS settings
 
@@ -27,38 +27,38 @@ FilterMate organizes features into 3 main tabs:
 
   - **Reference Layer:**
 
-    <img src="/icons/auto_layer_white.png" alt="Auto sync layer button" width="50"/>
+    <img src="/filter_mate/icons/auto_layer_white.png" alt="Auto sync layer button" width="32"/>
 
     Choose a source layer for spatial filtering / Sync active layer with plugin
 
   - **Layer Selector:**
 
-    <img src="/icons/layers.png" alt="Layer selector icon" width="50"/>
+    <img src="/filter_mate/icons/layers.png" alt="Layer selector icon" width="32"/>
 
     Choose which layers to filter (multi-selection supported)
   - **Expression Builder:** Write QGIS expressions for attribute filtering
 
 - **Combination settings:**
 
-    <img src="/icons/add_multi.png" alt="Combine operator icon" width="50"/>
+    <img src="/filter_mate/icons/add_multi.png" alt="Combine operator icon" width="32"/>
 
     Combine multiple filters with AND/OR operators
 
 - **Spatial Predicates:**
 
-    <img src="/icons/geo_predicates.png" alt="Spatial predicates icon" width="50"/>
+    <img src="/filter_mate/icons/geo_predicates.png" alt="Spatial predicates icon" width="32"/>
 
     Select geometric relationships (Intersects, Contains, Within, etc.)
 
 - **Buffer Settings:**
 
-    <img src="/icons/geo_tampon.png" alt="Buffer distance icon" width="50"/>
+    <img src="/filter_mate/icons/geo_tampon.png" alt="Buffer distance icon" width="32"/>
 
     Add proximity zones (distance, unit, type)
 
 - **Buffer Type Settings:**
 
-    <img src="/icons/buffer_type.png" alt="Buffer type icon" width="50"/>
+    <img src="/filter_mate/icons/buffer_type.png" alt="Buffer type icon" width="32"/>
 
     Choose buffer geometry type (planar, geodesic, ellipsoidal)
 
@@ -79,37 +79,37 @@ FilterMate organizes features into 3 main tabs:
 - **Action Buttons:** 6 interactive buttons
   - **Identify:** 
   
-    <img src="/icons/identify.png" alt="Identify button" width="50"/> 
+    <img src="/filter_mate/icons/identify.png" alt="Identify button" width="32"/> 
 
     Highlight features on map
 
 
   - **Zoom:** 
   
-    <img src="/icons/zoom.png" alt="Zoom button" width="50"/> 
+    <img src="/filter_mate/icons/zoom.png" alt="Zoom button" width="32"/> 
   
     Center map on features
   - **Select:** 
     
-    <img src="/icons/select_black.png" alt="Select button" width="50"/> 
+    <img src="/filter_mate/icons/select_black.png" alt="Select button" width="32"/> 
   
     Enable interactive selection mode
   
   - **Track:** 
   
-    <img src="/icons/track.png" alt="Track button" width="50"/> 
+    <img src="/filter_mate/icons/track.png" alt="Track button" width="32"/> 
     
     Sync selections between widgets and map
 
   - **Link:** 
   
-    <img src="/icons/link.png" alt="Link button" width="50"/> 
+    <img src="/filter_mate/icons/link.png" alt="Link button" width="32"/> 
   
     Share configuration across widgets
   
   - **Reset parameters:** 
   
-    <img src="/icons/auto_save.png" alt="Reset parameters button" width="50"/> 
+    <img src="/filter_mate/icons/auto_save.png" alt="Reset parameters button" width="32"/> 
   
     Restore layer defaults parameters
 
@@ -141,37 +141,37 @@ FilterMate organizes features into 3 main tabs:
 **Key Components:**
 - **Layer Selector:**
 
-  <img src="/icons/layers.png" alt="layers" width="50"/>
+  <img src="/filter_mate/icons/layers.png" alt="layers" width="32"/>
 
   Choose layers to export
 
 - **CRS Transformation:**
 
-  <img src="/icons/projection_black.png" alt="projection_black" width="50"/>
+  <img src="/filter_mate/icons/projection_black.png" alt="projection_black" width="32"/>
 
   Reproject to different coordinate system
 
 - **Style Export:**
 
-  <img src="/icons/styles_white.png" alt="styles" width="50"/>
+  <img src="/filter_mate/icons/styles_white.png" alt="styles" width="32"/>
  
   Save QGIS styles (QML, SLD, ArcGIS)
 
 - **Format:** 
 
-  <img src="/icons/datatype.png" alt="datatype" width="50"/>
+  <img src="/filter_mate/icons/datatype.png" alt="datatype" width="32"/>
 
   GPKG, Shapefile, GeoJSON, KML, CSV, PostGIS, Spatialite
 
 - **Batch Mode:** Export each layer to separate file
 - **Output Folder:**
 
-  <img src="/icons/folder.png" alt="folder" width="50"/>
+  <img src="/filter_mate/icons/folder.png" alt="folder" width="32"/>
 
   Select destination directory
 - **ZIP Compression:**
 
-  <img src="/icons/zip.png" alt="zip" width="50"/>
+  <img src="/filter_mate/icons/zip.png" alt="zip" width="32"/>
 
   Package outputs for delivery
 
@@ -204,12 +204,12 @@ Always visible regardless of active tab:
 
 | Button | Icon | Action | Shortcut |
 |--------|------|--------|----------|
-| **FILTER** | ![Filter](/icons/filter.png) | Apply configured filters | F5 |
-| **UNDO** | ![Undo](/icons/undo.png) | Revert last filter | Ctrl+Z |
-| **REDO** | ![Redo](/icons/redo.png) | Reapply undone filter | Ctrl+Y |
-| **RESET** | ![Reset](/icons/reset.png) | Clear all filters | Ctrl+Shift+C |
-| **EXPORT** | ![Export](/icons/export.png) | Quick export | Ctrl+E |
-| **ABOUT** | ![Icon](/icons/icon.png) | Plugin information | - |
+| **FILTER** | <img src="/filter_mate/icons/filter.png" alt="Filter" width="32"/> | Apply configured filters | F5 |
+| **UNDO** | <img src="/filter_mate/icons/undo.png" alt="Undo" width="32"/> | Revert last filter | Ctrl+Z |
+| **REDO** | <img src="/filter_mate/icons/redo.png" alt="Redo" width="32"/> | Reapply undone filter | Ctrl+Y |
+| **RESET** | <img src="/filter_mate/icons/reset.png" alt="Reset" width="32"/> | Clear all filters | Ctrl+Shift+C |
+| **EXPORT** | <img src="/filter_mate/icons/export.png" alt="Export" width="32"/> | Quick export | Ctrl+E |
+| **ABOUT** | <img src="/filter_mate/icons/icon.png" alt="Icon" width="32"/> | Plugin information | - |
 
 ---
 

@@ -136,7 +136,7 @@ pip install psycopg2-binary
 - **[First Filter Tutorial](./first-filter.md)** - Detailed step-by-step example
 - **[Filtering Basics](../user-guide/filtering-basics.md)** - Learn about expressions and predicates
 - **[Geometric Filtering](../user-guide/geometric-filtering.md)** - Advanced spatial operations
-- **[Backend Comparison](../backends/performance-comparison.md)** - Understand backend performance
+- **[Backend Comparison](../backends/performance-benchmarks.md)** - Understand backend performance
 
 ## Troubleshooting
 

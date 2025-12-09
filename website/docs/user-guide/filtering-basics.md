@@ -26,7 +26,7 @@ All filtering operations are configured in the **FILTERING** tab at the top of t
 
 Before filtering, you must select one or more source layers:
 
-<img src="../../static/img/ui-filtering-layer-selector.png" alt="ui-filtering-layer-selector" width="300"/>
+<img src="/filter_mate/img/ui-filtering-layer-selector.png" alt="ui-filtering-layer-selector" width="300"/>
 
 *Multi-selection of layers with geometry type indicators (point/line/polygon)*
 
@@ -36,7 +36,7 @@ Before filtering, you must select one or more source layers:
 - **Backend badges**: Shows data source type (PostgreSQL⚡, Spatialite, OGR)
 - **Auto Current Layer**: Toggle button to automatically use QGIS's active layer
 
-<img src="../../../icons/auto_layer_white.png" alt="auto_layer_white" width="50"/>
+<img src="/filter_mate/icons/auto_layer_white.png" alt="auto_layer_white" width="50"/>
 
 *Toggle "Auto Current Layer" mode*
 
@@ -44,7 +44,7 @@ When "Auto Current Layer" is enabled, FilterMate automatically selects whichever
 
 **Layer Information Display**:
 
-<img src="../../static/img/ui-filtering-layer-info.png" alt="ui-filtering-layer-info" width="300"/>
+<img src="/filter_mate/img/ui-filtering-layer-info.png" alt="ui-filtering-layer-info" width="300"/>
 
 *Layer information: provider type, feature count, CRS*
 
@@ -58,7 +58,7 @@ Shows critical layer details:
 
 FilterMate uses **QGIS expressions** to filter features. These expressions are evaluated against each feature's attributes to determine which features should be included in the result.
 
-<img src="../../static/img/ui-filtering-expression-builder.png" alt="ui-filtering-expression-builder" width="500"/>
+<img src="/filter_mate/img/ui-filtering-expression-builder.png" alt="ui-filtering-expression-builder" width="500"/>
 
 *Expression builder with free-text input*
 
@@ -312,20 +312,20 @@ graph TD
 **Scenario**: Find all cities with population greater than 100,000
 
 **Step 1 - Open FILTERING Tab**
-<img src="../../static/img/workflow-attribute-01.png" alt="workflow-attribute-01" width="300"/>
+<img src="/filter_mate/img/workflow-attribute-01.png" alt="workflow-attribute-01" width="300"/>
 
 *Switch to FILTERING tab in FilterMate panel*
 
 **Step 2 - Select Source Layer**
 
-<img src="../../static/img/workflow-attribute-02.png" alt="workflow-attribute-02" width="300"/>
+<img src="/filter_mate/img/workflow-attribute-02.png" alt="workflow-attribute-02" width="300"/>
 
 - Check the "COMMUNE" layer in the layer selector
 - Verify layer information is displayed (feature count, CRS)
 
 **Step 3 - Enter Expression**
 
-<img src="../../static/img/workflow-attribute-03.png" alt="workflow-attribute-03" width="300"/>
+<img src="/filter_mate/img/workflow-attribute-03.png" alt="workflow-attribute-03" width="300"/>
 
 *Type expression: `population > 100000`*
 
@@ -345,7 +345,7 @@ The validator shows:
 
 **Step 6 - Apply Filter**
 
-<img src="../../static/img/workflow-attribute-04.png" alt="workflow-attribute-04" width="300"/>
+<img src="/filter_mate/img/workflow-attribute-04.png" alt="workflow-attribute-04" width="300"/>
 
 *Click FILTER button → Progress bar shows during processing*
 
@@ -355,7 +355,7 @@ The validator shows:
 
 **Step 8 - Access History**
 
-<img src="../../static/img/workflow-attribute-05.png" alt="workflow-attribute-05" width="300"/>
+<img src="/filter_mate/img/workflow-attribute-05.png" alt="workflow-attribute-05" width="300"/>
 
 *Filter automatically saved to history for future reuse*
 

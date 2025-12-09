@@ -663,7 +663,7 @@ Place icons in `icons/` folder.
 
 ## See Also
 
-- [Backend Configuration](../backends/backend-selection.md) - Backend-specific settings
+- [Backend Configuration](../backends/choosing-backend.md) - Backend-specific settings
 - [Performance Tuning](./performance-tuning.md) - Optimize your setup
 
 ---

@@ -289,7 +289,7 @@ Morning Session:
   [10:00] zone = 'commercial' AND available = 'yes' AND area > 5000 ⭐ Saved
   
 Afternoon Session:
-  [14:00] Retrieved: "Commercial available >5000"
+  [14:00] Retrieved: "Commercial available >5000`"
   [14:30] Modified: + "AND price < 500000"
   [15:00] New favorite: "Affordable commercial sites" ⭐
 ```
@@ -402,8 +402,8 @@ Import filters from colleagues or backup:
 
 ```
 ✅ Good:
-  "Commercial parcels >5000 sqm"
-  "Residential near transit <400m"
+  "Commercial parcels >5000` sqm"
+  "Residential near transit `<400m`"
   "High-priority incomplete projects"
 
 ❌ Bad:

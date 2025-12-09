@@ -557,10 +557,10 @@ ogr2ogr -f PostgreSQL \
 ## See Also
 
 - [Backends Overview](./overview.md) - Multi-backend architecture
-- [Backend Selection](./backend-selection.md) - Automatic selection logic
+- [Backend Selection](./choosing-backend.md) - Automatic selection logic
 - [PostgreSQL Backend](./postgresql.md) - For best performance
 - [Spatialite Backend](./spatialite.md) - For medium datasets
-- [Performance Comparison](./performance-comparison.md) - Detailed benchmarks
+- [Performance Comparison](./performance-benchmarks.md) - Detailed benchmarks
 
 ## Technical Details
 

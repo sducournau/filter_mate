@@ -16,13 +16,17 @@ Geometric filtering in FilterMate allows you to select features based on their *
 - **Combine Operator**: Use AND/OR when multiple predicates are selected
 - **Buffer Integration**: Combine with buffer zones for proximity analysis
 
-<!-- <!-- ![Spatial Predicates Selector](/img/ui-components/ui-filtering-spatial-predicates.png --> -->
+ <img src="/filter_mate/img/ui-filtering-spatial-predicates.png" alt="ui-filtering-spatial-predicates" width="300"/>
+
 *Multi-selection of spatial predicates in FILTERING tab*
 
-<!-- <!-- ![Reference Layer Selector](/img/ui-components/ui-filtering-reference-layer.png --> -->
+ <img src="/filter_mate/img/ui-filtering-reference-layer.png" alt="ui-filtering-reference-layer" width="300"/>
+
 *Select reference layer for spatial comparison*
 
-<!-- <!-- ![Combine Operator](/img/ui-components/ui-filtering-combine-operator.png --> -->
+
+ <img src="/filter_mate/img/ui-filtering-combine-operator.png" alt="ui-filtering-combine-operator" width="300"/>
+
 *Choose AND/OR to combine multiple predicates*
 
 ### Common Use Cases
@@ -35,18 +39,6 @@ Geometric filtering in FilterMate allows you to select features based on their *
 :::tip Location
 All geometric filtering is configured in the **FILTERING** tab, alongside attribute filters. Don't confuse this with the **EXPLORING** tab, which is for visualizing and selecting features from the current layer.
 :::
-
-## Status Indicators
-
-When geometric filters are configured, FilterMate displays visual indicators:
-
-<!-- <!-- ![Geometric Predicates Indicator](/img/ui-components/ui-filtering-has-predicates-indicator.png --> -->
-*"Has Geometric Predicates" indicator (geo_predicates.png)*
-
-<!-- <!-- ![Combine Operator Indicator](/img/ui-components/ui-filtering-has-combine-indicator.png --> -->
-*"Has Combine Operator" indicator (add_multi.png) - shown when multiple predicates selected*
-
-These badges provide quick visual feedback of active geometric filters.
 
 ## Spatial Predicates
 
@@ -327,64 +319,64 @@ sequenceDiagram
 
 **Scenario**: Find buildings within 200m of roads
 
-<!-- <!-- ![Step 1 - FILTERING Tab](/img/workflows/workflow-filtering-01.png --> -->
+<!-- <!-- ![Step 1 - FILTERING Tab](/img/workflows/workflow-filtering-01.png -->
 *1. Open FILTERING tab, interface ready*
 
-<!-- <!-- ![Step 2 - Select Source](/img/workflows/workflow-filtering-02.png --> -->
+<!-- <!-- ![Step 2 - Select Source](/img/workflows/workflow-filtering-02.png -->
 *2. Select "buildings" layer in layer selector*
 
-<!-- <!-- ![Step 3 - Layer Info](/img/workflows/workflow-filtering-03.png --> -->
+<!-- <!-- ![Step 3 - Layer Info](/img/workflows/workflow-filtering-03.png -->
 *3. Verify layer info: Spatialite, 15,234 features, EPSG:4326*
 
-<!-- <!-- ![Step 4 - Spatial Predicate](/img/workflows/workflow-filtering-04.png --> -->
+<!-- <!-- ![Step 4 - Spatial Predicate](/img/workflows/workflow-filtering-04.png -->
 *4. Select "Intersects" in spatial predicates multi-selector*
 
-<!-- <!-- ![Step 5 - Reference Layer](/img/workflows/workflow-filtering-05.png --> -->
+<!-- <!-- ![Step 5 - Reference Layer](/img/workflows/workflow-filtering-05.png -->
 *5. Select "roads" as reference layer (distant layer)*
 
-<!-- <!-- ![Step 6 - Buffer Distance](/img/workflows/workflow-filtering-06.png --> -->
+<!-- <!-- ![Step 6 - Buffer Distance](/img/workflows/workflow-filtering-06.png -->
 *6. Set buffer: Distance=200, Unit=meters*
 
-<!-- <!-- ![Step 7 - Buffer Type](/img/workflows/workflow-filtering-07.png --> -->
+<!-- <!-- ![Step 7 - Buffer Type](/img/workflows/workflow-filtering-07.png -->
 *7. Choose buffer type: Standard*
 
-<!-- <!-- ![Step 8 - Indicators](/img/workflows/workflow-filtering-08.png --> -->
+<!-- <!-- ![Step 8 - Indicators](/img/workflows/workflow-filtering-08.png -->
 *8. View active indicators: geo_predicates, buffer_value, buffer_type*
 
-<!-- <!-- ![Step 9 - Apply](/img/workflows/workflow-filtering-09.png --> -->
+<!-- <!-- ![Step 9 - Apply](/img/workflows/workflow-filtering-09.png -->
 *9. Click FILTER button (filter.png icon)*
 
-<!-- <!-- ![Step 10 - Progress](/img/workflows/workflow-filtering-10.png --> -->
+<!-- <!-- ![Step 10 - Progress](/img/workflows/workflow-filtering-10.png -->
 *10. Progress bar shows backend processing (PostgreSQL⚡ or Spatialite)*
 
-<!-- <!-- ![Step 11 - Results](/img/workflows/workflow-filtering-11.png --> -->
+<!-- <!-- ![Step 11 - Results](/img/workflows/workflow-filtering-11.png -->
 *11. Map displays filtered features: 3,847 buildings within 200m of roads*
 
 ## Combining Multiple Predicates
 
 When you select multiple spatial predicates, use the **Combine Operator** to specify how they should be combined:
 
-<!-- <!-- ![Combine Operator](/img/workflows/workflow-combine-02.png --> -->
+<!-- <!-- ![Combine Operator](/img/workflows/workflow-combine-02.png -->
 *Select AND or OR to combine predicates*
 
 **Example - Parcels that Intersect OR Touch a Protected Zone:**
 
-<!-- <!-- ![Step 1 - Multi-Predicates](/img/workflows/workflow-combine-01.png --> -->
+<!-- <!-- ![Step 1 - Multi-Predicates](/img/workflows/workflow-combine-01.png -->
 *1. Select both "Intersects" AND "Touches" predicates*
 
-<!-- <!-- ![Step 2 - OR Operator](/img/workflows/workflow-combine-02.png --> -->
+<!-- <!-- ![Step 2 - OR Operator](/img/workflows/workflow-combine-02.png -->
 *2. Choose "OR" in combine operator dropdown*
 
-<!-- <!-- ![Step 3 - Indicator](/img/workflows/workflow-combine-03.png --> -->
+<!-- <!-- ![Step 3 - Indicator](/img/workflows/workflow-combine-03.png -->
 *3. "Has Combine Operator" indicator activates (add_multi.png)*
 
-<!-- <!-- ![Step 4 - Reference](/img/workflows/workflow-combine-04.png --> -->
+<!-- <!-- ![Step 4 - Reference](/img/workflows/workflow-combine-04.png -->
 *4. Select "protected_zones" as reference layer*
 
-<!-- <!-- ![Step 5 - Results](/img/workflows/workflow-combine-05.png --> -->
+<!-- <!-- ![Step 5 - Results](/img/workflows/workflow-combine-05.png -->
 *5. Apply filter: 1,834 parcels found*
 
-<!-- <!-- ![Step 6 - Map View](/img/workflows/workflow-combine-06.png --> -->
+<!-- <!-- ![Step 6 - Map View](/img/workflows/workflow-combine-06.png -->
 *6. Parcels highlighted on map (intersecting OR touching zone)*
 
 **Combine Operator Logic**:

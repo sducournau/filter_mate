@@ -233,7 +233,7 @@ Buffers work seamlessly with **spatial predicates** in the FILTERING tab:
 |--------------|-----------|-----------------|--------|--------|
 | Buildings | Intersects | Roads | 200m | Buildings within 200m of roads |
 | Parcels | Within | Protected Zone | 50m | Parcels within 50m inside zone |
-| Facilities | Disjoint | Hazards | 500m | Facilities >500m from hazards |
+| Facilities | Disjoint | Hazards | 500m | Facilities >500m` from hazards |
 | POIs | Contains | District + Buffer | 100m | POIs in district + 100m margin |
     else OGR Fallback
         Q->>Q: QGIS buffer processing
@@ -530,7 +530,7 @@ ST_Buffer(
 - Hardware acceleration via GIST indexes
 - Parallel processing support
 - Optimized algorithms for large datasets
-- Best performance for >50k features
+- Best performance for >50k` features
 
 ### Spatialite (Good)
 
@@ -567,7 +567,7 @@ processing.run("native:buffer", {
 - No spatial index support
 - Slower performance
 - Limited to available QGIS algorithms
-- Not recommended for >10k features
+- Not recommended for >10k` features
 
 :::tip Performance Tip
 For datasets over 50k features with frequent buffer operations, use **PostgreSQL** for optimal performance. Spatialite is good for datasets under 50k features.
