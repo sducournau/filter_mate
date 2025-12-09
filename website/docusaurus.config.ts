@@ -29,6 +29,31 @@ const config: Config = {
     locales: ['en'],
   },
 
+  // Accessibility and SEO metadata
+  headTags: [
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'viewport',
+        content: 'width=device-width, initial-scale=1.0',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'description',
+        content: 'Accessible QGIS plugin documentation for FilterMate - Advanced filtering and export capabilities',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'keywords',
+        content: 'QGIS, plugin, filtering, GIS, spatial, accessibility, FilterMate',
+      },
+    },
+  ],
+
   markdown: {
     mermaid: true,
   },
@@ -40,9 +65,14 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          // Please change this to your repo.
-          editUrl:
-            'https://github.com/sducournau/filter_mate/tree/main/website/',
+          editUrl: 'https://github.com/sducournau/filter_mate/edit/main/website/',
+          showLastUpdateAuthor: true,
+          showLastUpdateTime: true,
+          breadcrumbs: true,
+          sidebar: {
+            hideable: true,
+            autoCollapseCategories: true,
+          },
         },
         blog: false,
         theme: {
@@ -55,10 +85,17 @@ const config: Config = {
   themeConfig: {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
+    announcementBar: {
+      id: 'accessibility',
+      content: '♿ FilterMate documentation strives for WCAG 2.1 AA compliance. <a href="/filter_mate/docs/accessibility">Learn more</a>',
+      backgroundColor: '#20232a',
+      textColor: '#fff',
+      isCloseable: true,
+    },
     navbar: {
       title: 'FilterMate',
       logo: {
-        alt: 'FilterMate Logo',
+        alt: 'FilterMate plugin logo - funnel icon with map layers representing advanced QGIS filtering capabilities',
         src: 'img/logo.png',
       },
       items: [
@@ -111,10 +148,18 @@ const config: Config = {
               label: 'QGIS Plugin Repository',
               href: 'https://plugins.qgis.org/plugins/filter_mate',
             },
+            {
+              label: 'Accessibility',
+              to: '/docs/accessibility',
+            },
           ],
         },
       ],
       copyright: `Copyright © ${new Date().getFullYear()} FilterMate. Built with Docusaurus.`,
+    },
+    tableOfContents: {
+      minHeadingLevel: 2,
+      maxHeadingLevel: 4,
     },
     prism: {
       theme: prismThemes.github,

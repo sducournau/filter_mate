@@ -974,6 +974,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 }
         
         self.widgets_initialized = True
+        
+        # Call select_tabTools_index to set initial button states based on current tab
+        self.select_tabTools_index()
 
     def data_changed_configuration_model(self, input_data=None):
         """Track configuration changes without applying them immediately"""
@@ -1923,6 +1926,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True:
 
             self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
+            
             if self.tabTools_current_index == 1:
                 # Exporting tab is active (index 1)
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
@@ -1932,15 +1936,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["ACTION"]["REDO"]["WIDGET"].setEnabled(False)
                 self.widgets["ACTION"]["RESET"]["WIDGET"].setEnabled(False)
                 # Keep About/Help button enabled
-            elif self.tabTools_current_index == 3:
-                # Configuration tab is active (index 3)
+            elif self.tabTools_current_index == 2:
+                # Configuration tab is active (index 2)
                 # Disable all action buttons except About/Help
                 self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
                 self.widgets["ACTION"]["UNDO"]["WIDGET"].setEnabled(False)
                 self.widgets["ACTION"]["REDO"]["WIDGET"].setEnabled(False)
                 self.widgets["ACTION"]["RESET"]["WIDGET"].setEnabled(False)
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
-                # Keep About/Help button enabled
+                # About button stays enabled (not explicitly disabled)
             else:
                 # Other tabs (Filtering, History) are active
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)

@@ -4,61 +4,257 @@ sidebar_position: 6
 
 # Export Features
 
-Export filtered features to various formats including GeoPackage, Shapefile, GeoJSON, CSV, and more.
+Export layers (filtered or unfiltered) to various formats using the **EXPORTING tab**.
 
 ## Overview
 
-After filtering features, you can **export** the results to create standalone datasets for:
+The **EXPORTING tab** allows you to export layers from your QGIS project to standalone datasets for:
 - **Sharing** with colleagues or clients
 - **Analysis** in other software
 - **Archiving** snapshots of data
 - **Publishing** web maps
 - **Reporting** tabular data
 
+<!-- <!-- ![Exporting Tab Overview](/img/ui-components/ui-exporting-layer-selector.png --> -->
+*Multi-selection of layers to export in EXPORTING tab*
+
+**Key Features**:
+- Multi-selection of layers to export
+- Multiple output formats (GPKG, Shapefile, GeoJSON, etc.)
+- CRS transformation (re-projection)
+- Style export (QML, SLD, ArcGIS)
+- Batch mode (separate files per layer)
+- ZIP compression for delivery
+
+:::tip Exporting Filtered Data
+Layers can be exported **with or without** filters applied. If you've used the FILTERING tab to create filtered subsets, those filters are preserved during export. To export unfiltered data, remove filters first in the FILTERING tab.
+:::
+
+## EXPORTING Tab Components
+
+### Layer Selection
+
+Select which layers to export from your QGIS project:
+
+<!-- <!-- ![Layer Selector](/img/ui-components/ui-exporting-layer-selector.png --> -->
+*Check one or more layers to export*
+
+<!-- <!-- ![Has Layers Indicator](/img/ui-components/ui-exporting-has-layers-indicator.png --> -->
+*"Has Layers to Export" indicator (layers.png) appears when layers are selected*
+
+**Features**:
+- **Multi-selection**: Export multiple layers at once
+- **Geometry indicators**: Visual icons for point/line/polygon layers
+- **Feature count**: Shows current feature count (respects active filters)
+- **Backend info**: Displays data source (PostgreSQL⚡, Spatialite, OGR)
+
+### Format Selection
+
+Choose the output format for exported data:
+
+<!-- <!-- ![Format Selector](/img/ui-components/ui-exporting-format-selector.png --> -->
+*Dropdown with available export formats*
+
+<!-- <!-- ![Format Indicator](/img/ui-components/ui-exporting-format-indicator.png --> -->
+*"Has Datatype to Export" indicator (datatype.png)*
+
 ### Supported Formats
 
-| Format | Type | Best For | Max Size |
-|--------|------|----------|----------|
-| **GeoPackage** | Vector | General use, large datasets | Unlimited |
-| **Shapefile** | Vector | Legacy compatibility | 2 GB |
-| **GeoJSON** | Vector | Web mapping, APIs | \~500 MB |
-| **KML/KMZ** | Vector | Google Earth, mobile | \~100 MB |
-| **CSV** | Tabular | Spreadsheets, coordinates only | Unlimited |
-| **PostGIS** | Database | Large datasets, enterprise | Unlimited |
-| **Spatialite** | Database | Medium datasets, portable | \~140 TB |
+| Format | Type | Best For | Max Size | Extension |
+|--------|------|----------|----------|-----------|
+| **GeoPackage** | Vector | General use, large datasets | Unlimited | `.gpkg` |
+| **Shapefile** | Vector | Legacy compatibility | 2 GB | `.shp` |
+| **GeoJSON** | Vector | Web mapping, APIs | ~500 MB | `.geojson` |
+| **KML/KMZ** | Vector | Google Earth, mobile | ~100 MB | `.kml`, `.kmz` |
+| **CSV** | Tabular | Spreadsheets, coordinates only | Unlimited | `.csv` |
+| **PostGIS** | Database | Large datasets, enterprise | Unlimited | `(database)` |
+| **Spatialite** | Database | Medium datasets, portable | ~140 TB | `.sqlite` |
+
+### CRS Transformation
+
+Re-project layers during export to a different coordinate system:
+
+<!-- <!-- ![CRS Widget](/img/ui-components/ui-exporting-crs-widget.png --> -->
+*QgsProjectionSelectionWidget for CRS selection*
+
+<!-- <!-- ![CRS Indicator](/img/ui-components/ui-exporting-crs-indicator.png --> -->
+*"Has Projection to Export" indicator (projection_black.png)*
+
+**Features**:
+- Choose any EPSG code or custom CRS
+- Common CRS presets (WGS84, Web Mercator, local projections)
+- On-the-fly reprojection during export
+- Preserves original layer (no modification)
+
+**Common CRS Transformations**:
+```
+Original → Export CRS    | Use Case
+-------------------------|----------------------------------
+EPSG:4326 → EPSG:3857   | Web mapping (Leaflet, OpenLayers)
+Local → EPSG:4326        | GPS compatibility
+EPSG:4326 → UTM zone    | Accurate distance measurements
+Various → Single CRS     | Harmonize multi-source data
+```
+
+### Style Export
+
+Export layer styling alongside data:
+
+<!-- <!-- ![Style Selector](/img/ui-components/ui-exporting-style-selector.png --> -->
+*Choose style format: QML (QGIS), SLD (Standard), or ArcGIS*
+
+<!-- <!-- ![Style Indicator](/img/ui-components/ui-exporting-style-indicator.png --> -->
+*"Has Styles to Export" indicator (styles_black.png)*
+
+**Available Formats**:
+- **QML** (QGIS Style) - Full QGIS styling, preserves all features
+- **SLD** (Styled Layer Descriptor) - OGC standard, works in GeoServer, MapServer
+- **ArcGIS** - ArcGIS-compatible styling for Esri software
+
+**Style Export Behavior**:
+```
+Format     | Includes                    | Compatible With
+-----------|----------------------------|---------------------------
+QML        | Full QGIS style tree       | QGIS only
+SLD        | Basic symbology + labels   | GeoServer, MapServer, QGIS
+ArcGIS     | Esri symbology             | ArcGIS Desktop, ArcGIS Pro
+```
+
+### Output Options
+
+Configure destination and delivery mode:
+
+<!-- <!-- ![Output Folder](/img/ui-components/ui-exporting-output-folder.png --> -->
+*QgsFileWidget for folder selection*
+
+<!-- <!-- ![Folder Indicator](/img/ui-components/ui-exporting-folder-indicator.png --> -->
+*"Has Output Folder to Export" indicator (folder_black.png)*
+
+<!-- <!-- ![Batch Mode](/img/ui-components/ui-exporting-batch-mode.png --> -->
+*Checkboxes for Batch mode and ZIP compression*
+
+<!-- <!-- ![ZIP Indicator](/img/ui-components/ui-exporting-zip-indicator.png --> -->
+*"Has ZIP to Export" indicator (zip.png)*
+
+**Options**:
+- **Output Folder**: Choose destination directory
+- **Batch Mode**: Export each layer to a separate file (vs single file for all)
+- **ZIP Compression**: Automatically compress output for delivery
+
+**Batch Mode Comparison**:
+```
+Normal Mode:
+output_folder/
+  └── export.gpkg (contains all layers)
+
+Batch Mode:
+output_folder/
+  ├── layer1.gpkg
+  ├── layer2.gpkg
+  └── layer3.gpkg
+
+Batch + ZIP:
+output_folder/
+  └── export_2024-12-09.zip
+      ├── layer1.gpkg
+      ├── layer2.gpkg
+      └── layer3.gpkg
+```
 
 ## Export Workflow
+
+Complete export process from EXPORTING tab:
 
 ```mermaid
 sequenceDiagram
     participant U as User
+    participant E as EXPORTING Tab
     participant FM as FilterMate
     participant Q as QGIS
     participant DB as Backend
     participant F as File System
     
-    U->>FM: Apply filter
-    FM->>Q: Filter layer
-    Q->>U: Show filtered count
+    U->>E: 1. Switch to EXPORTING tab
+    U->>E: 2. Select layers to export (multi-selection)
+    E->>U: Show "Has Layers to Export" indicator
     
-    U->>FM: Click Export
-    FM->>U: Show format options
-    U->>FM: Select format + settings
+    U->>E: 3. Choose format (GPKG/SHP/GeoJSON/etc.)
+    E->>U: Show "Has Datatype" indicator
     
-    FM->>Q: Prepare export
+    U->>E: 4. Optional: Select CRS transformation
+    E->>U: Show "Has Projection" indicator (if selected)
     
-    alt Database Backend
-        Q->>DB: Query filtered features
-        DB->>Q: Return feature stream
-    else File Backend
-        Q->>Q: Read filtered features
+    U->>E: 5. Optional: Choose style export (QML/SLD/ArcGIS)
+    E->>U: Show "Has Styles" indicator (if selected)
+    
+    U->>E: 6. Select output folder
+    E->>U: Show "Has Output Folder" indicator
+    
+    U->>E: 7. Optional: Enable batch mode + ZIP
+    E->>U: Show "Has ZIP" indicator (if enabled)
+    
+    U->>FM: 8. Click EXPORT button
+    FM->>Q: Prepare export parameters
+    
+    loop For Each Selected Layer
+        Q->>DB: Query features (with filters if applied)
+        DB->>Q: Return feature data
+        
+        alt CRS Transformation Needed
+            Q->>Q: Reproject geometries
+        end
+        
+        Q->>F: Write to output format
+        
+        alt Style Export Enabled
+            Q->>F: Write style file (.qml/.sld/etc.)
+        end
     end
     
-    Q->>F: Write to output format
-    F->>Q: Confirm write
-    Q->>FM: Export complete
-    FM->>U: Success message (1,234 features exported)
+    alt ZIP Compression Enabled
+        F->>F: Compress all outputs to ZIP
+    end
+    
+    F->>FM: Export complete
+    FM->>U: Show success message with file path(s)
 ```
+
+### Step-by-Step Example: Export After Filtering
+
+**Scenario**: Export buildings within 200m of roads (from FILTERING tab) to GeoPackage
+
+<!-- <!-- ![Step 1 - Filter Applied](/img/workflows/workflow-filtering-11.png --> -->
+*1. FILTERING tab: Filter applied, 3,847 buildings found*
+
+<!-- <!-- ![Step 2 - Switch to EXPORTING](/img/workflows/workflow-exporting-01.png --> -->
+*2. Switch to EXPORTING tab*
+
+<!-- <!-- ![Step 3 - Select Layers](/img/workflows/workflow-exporting-02.png --> -->
+*3. Select "buildings" layer to export (filtered subset will be exported)*
+
+<!-- <!-- ![Step 4 - Configure Export](/img/workflows/workflow-exporting-02.png --> -->
+*4. Configure: Format=GPKG, CRS=EPSG:3857 (Web Mercator), Styles=QML*
+
+All indicators active:
+- Has Layers to Export ✓
+- Has Datatype (GPKG) ✓
+- Has Projection (EPSG:3857) ✓
+- Has Styles (QML) ✓
+
+<!-- <!-- ![Step 5 - Output Folder](/img/workflows/workflow-exporting-03.png --> -->
+*5. Select output folder + filename*
+
+<!-- <!-- ![Step 6 - Export](/img/workflows/workflow-exporting-03.png --> -->
+*6. Click EXPORT button → Progress bar shows processing*
+
+<!-- <!-- ![Step 7 - Success](/img/workflows/workflow-exporting-04.png --> -->
+*7. Success notification with output path: `C:/exports/buildings_filtered.gpkg` (3,847 features, 2.3 MB)*
+
+**Result**:
+- File created: `buildings_filtered.gpkg`
+- Style file: `buildings_filtered.qml` (in same folder)
+- CRS: EPSG:3857 (reprojected from original EPSG:4326)
+- Features: 3,847 (filtered subset only)
 
 ## Format Details
 
@@ -562,40 +758,87 @@ export_geopackage("evacuation_analysis.gpkg")
    # Especially for historic datums
    ```
 
-## Batch Export
+## Batch Export Examples
 
-Export multiple filtered layers:
+### Multiple Filtered Layers
 
-```python
-# Define exports
-exports = [
-    {
-        'layer': 'parcels',
-        'filter': "zone = 'commercial'",
-        'output': 'commercial_parcels.gpkg'
-    },
-    {
-        'layer': 'buildings',
-        'filter': "year_built > 2020",
-        'output': 'recent_buildings.gpkg'
-    }
-]
+Export several layers with different configurations:
 
-# Process batch
-for export_config in exports:
-    apply_filter(export_config['layer'], export_config['filter'])
-    export_layer(export_config['output'])
+**Scenario**: Export 3 layers with different filters, formats, and CRS
+
+**Step 1 - Filter Layers** (in FILTERING tab):
 ```
+Layer 1 (parcels): zone = 'commercial'
+Layer 2 (buildings): year_built > 2020
+Layer 3 (roads): road_class = 'highway'
+```
+
+**Step 2 - Configure Batch Export** (in EXPORTING tab):
+```
+EXPORTING Tab Configuration:
+- Layers selected: parcels, buildings, roads (all 3)
+- Format: GeoPackage
+- CRS: EPSG:3857 (Web Mercator)
+- Styles: QML
+- Output folder: C:/exports/
+- Batch mode: ENABLED
+- ZIP: ENABLED
+```
+
+**Result**:
+```
+C:/exports/export_2024-12-09.zip
+  ├── parcels.gpkg (commercial zones, filtered)
+  ├── parcels.qml
+  ├── buildings.gpkg (recent buildings, filtered)
+  ├── buildings.qml
+  ├── roads.gpkg (highways, filtered)
+  └── roads.qml
+```
+
+**Benefits**:
+- Single operation exports all layers
+- Each layer in separate file (batch mode)
+- All reprojected to Web Mercator
+- Styles preserved
+- Compressed for delivery
+
+### Exporting Unfiltered Data
+
+To export complete layers (without filters):
+
+**Option 1 - Remove Filters First** (FILTERING tab):
+1. Switch to FILTERING tab
+2. Click RESET button to clear all filters
+3. Switch to EXPORTING tab
+4. Export as usual
+
+**Option 2 - Export Different Layers**:
+- Simply select layers that don't have filters applied
+- EXPORTING tab exports current layer state
+
+:::info Filtered vs Unfiltered Export
+- **With filters**: EXPORTING tab exports only features matching current filters
+- **Without filters**: Exports complete layer (all features)
+- Check feature count in layer selector to verify what will be exported
+:::
 
 ## Related Topics
 
-- [Filtering Basics](filtering-basics.md) - Create filters
-- [Geometric Filtering](geometric-filtering.md) - Spatial filters
-- [Buffer Operations](buffer-operations.md) - Proximity analysis
-- [Backend Performance](../backends/performance-comparison.md) - Optimize exports
+- [Filtering Basics](filtering-basics.md) - Create filters to export filtered subsets (FILTERING tab)
+- [Geometric Filtering](geometric-filtering.md) - Apply spatial filters before export
+- [Buffer Operations](buffer-operations.md) - Proximity-based filtering before export
+- [Interface Overview](interface-overview.md) - Complete EXPORTING tab component guide
+
+:::info Three Main Tabs Workflow
+1. **FILTERING tab**: Create filtered subsets (optional)
+2. **EXPLORING tab**: Visualize and verify features (optional)
+3. **EXPORTING tab**: Export to various formats (filtered or unfiltered)
+
+All three tabs work together to provide complete data processing workflow.
+:::
 
 ## Next Steps
 
-- **[Filter History](filter-history.md)** - Reuse filter configurations
-- **[Advanced Features](advanced-features.md)** - Complex export workflows
-- **[Backend Selection](../backends/backend-selection.md)** - Choose optimal backend for exports
+- **[Filter History](filter-history.md)** - Reuse filter configurations for exports
+- **[Interface Overview](interface-overview.md)** - Learn about all three main tabs

@@ -1,0 +1,1017 @@
+# FilterMate - Plan d'Amélioration Documentation Docusaurus
+
+**Date de création**: 9 décembre 2025  
+**Version du plugin**: 1.0.0 (à jour)  
+**Site existant**: https://sducournau.github.io/filter_mate/  
+**Objectif**: Enrichir le site Docusaurus existant avec captures d'écran et contenu détaillé
+
+---
+
+## 📋 Vue d'ensemble
+
+Ce document planifie l'enrichissement du site Docusaurus existant de FilterMate. Le site a une structure complète (35+ fichiers) mais nécessite:
+- 📸 **Captures d'écran** dans toutes les sections
+- ✍️ **Contenu détaillé** pour les pages placeholder
+- 🎬 **GIFs animés** pour les workflows
+- 🎨 **Diagrammes** pour l'architecture
+
+**État actuel**: 7 pages complètes, 28 placeholders
+
+---
+
+## 🎯 Objectifs de la documentation
+
+### 1. Public cible
+- **Utilisateurs débutants**: Premiers pas avec QGIS et filtrage de données (Getting Started ✅)
+- **Utilisateurs intermédiaires**: Workflows et features avancées (User Guide 🔨)
+- **Utilisateurs avancés**: Backends et configuration (Advanced 🔨)
+- **Développeurs**: Architecture et API (Developer Guide 🔨)
+
+### 2. Format de sortie
+- **Site Docusaurus** (déjà configuré et déployable via GitHub Actions)
+- **Structure existante** à enrichir, pas de réécriture nécessaire
+
+---
+
+## 📸 Captures d'écran essentielles (UI Components)
+
+### 🎯 Philosophie: Moins mais mieux
+
+**Objectif**: Documenter uniquement les **composants d'interface uniques** et le **workflow complet** une seule fois.
+
+**Principe**: 
+- ✅ 1 capture par widget/composant custom
+- ✅ 1 workflow illustré complet (8-10 étapes)
+- ❌ Pas de redondance entre pages
+- ❌ Pas de captures "avant/après" multiples
+
+---
+
+### 📦 Composants d'Interface Uniques (20-25 captures max)
+
+#### Groupe A: Layer Selection & Info (3 captures)
+- [ ] **ui-layer-selector**: ComboBox de sélection couche avec icônes type géométrie
+- [ ] **ui-layer-info**: Widget d'information couche (provider badge, feature count, CRS)
+- [ ] **ui-backend-indicator**: Indicateurs backend (PostgreSQL ⚡ / Spatialite / OGR)
+
+**Destination**: `website/static/img/ui-components/`
+
+#### Groupe B: Filtering Interface (5 captures)
+- [ ] **ui-expression-builder**: Zone de saisie expression (QTextEdit custom avec highlighting)
+- [ ] **ui-field-selector**: Widget liste champs disponibles (avec types)
+- [ ] **ui-validation-success**: Indicateur validation (coche verte + tooltip)
+- [ ] **ui-validation-error**: Indicateur erreur (croix rouge + message détaillé)
+- [ ] **ui-apply-button**: Bouton "Apply Filter" (états normal/hover/disabled)
+
+**Destination**: `website/static/img/ui-components/`
+
+#### Groupe C: Geometric Filtering (4 captures)
+- [ ] **ui-spatial-predicate**: ComboBox prédicats spatiaux (intersects, within, contains, etc.)
+- [ ] **ui-reference-layer**: Sélecteur couche de référence
+- [ ] **ui-buffer-controls**: Widget buffer (distance + unité + type)
+- [ ] **ui-buffer-preview**: Aperçu buffer sur carte (overlay transparent)
+
+**Destination**: `website/static/img/ui-components/`
+
+#### Groupe D: History & Favorites (4 captures)
+- [ ] **ui-history-list**: Widget liste historique (avec codes couleur et icônes)
+- [ ] **ui-history-entry**: Détail entrée historique (expanded view)
+- [ ] **ui-favorites-panel**: Panel favoris avec organisation
+- [ ] **ui-context-menu**: Menu contextuel (clic droit sur entrée)
+
+**Destination**: `website/static/img/ui-components/`
+
+#### Groupe E: Export Interface (3 captures)
+- [ ] **ui-export-format**: Sélecteur format export avec icônes
+- [ ] **ui-field-selector-export**: Widget sélection/ordre des champs
+- [ ] **ui-crs-transform**: Widget transformation CRS
+
+**Destination**: `website/static/img/ui-components/`
+
+#### Groupe F: Configuration (3 captures)
+- [ ] **ui-json-tree**: Qt JSON Tree View (widget principal config)
+- [ ] **ui-theme-selector**: Sélecteur de thème avec preview
+- [ ] **ui-config-tabs**: Système d'onglets configuration
+
+**Destination**: `website/static/img/ui-components/`
+
+#### Groupe G: Progress & Feedback (3 captures)
+- [ ] **ui-progress-bar**: Barre de progression (filtrage/export)
+- [ ] **ui-message-bar**: Barre de messages (success/warning/error)
+- [ ] **ui-task-notification**: Notification tâche background
+
+**Destination**: `website/static/img/ui-components/`
+
+---
+
+### 🔄 Workflow Complet Illustré (1 seul, 8-10 captures)
+
+**Scénario unique**: Filtrage géométrique + export (cas d'usage le plus complet)
+
+#### Workflow: "Trouver bâtiments près des routes et exporter"
+
+- [ ] **workflow-01**: Interface initiale (panel vide, couches chargées)
+- [ ] **workflow-02**: Sélection couche "bâtiments" (combobox ouvert)
+- [ ] **workflow-03**: Passage onglet "Geometric Filter" (tabs visibles)
+- [ ] **workflow-04**: Configuration filtre (référence layer + buffer 200m)
+- [ ] **workflow-05**: Application filtre (bouton cliqué, progress bar)
+- [ ] **workflow-06**: Résultats affichés (carte + feature count mis à jour)
+- [ ] **workflow-07**: Historique mis à jour (nouvelle entrée en tête)
+- [ ] **workflow-08**: Passage onglet Export (changement d'onglet)
+- [ ] **workflow-09**: Configuration export (format GeoPackage sélectionné)
+- [ ] **workflow-10**: Export réussi (notification + fichier créé)
+
+**Destination**: `website/static/img/workflow/`
+
+**Usage**: Ce workflow sera référencé dans TOUTES les pages concernées au lieu de dupliquer les captures.
+
+---
+
+### 🎨 Thèmes (1 capture composite)
+
+- [ ] **themes-overview**: Grille 2x4 montrant les 8 thèmes côte à côte (mosaïque)
+
+**Destination**: `website/static/img/themes/`
+
+---
+
+### 📊 Backends (2 captures + 1 diagramme)
+
+- [ ] **backend-comparison-table**: Tableau comparatif visuel (déjà fait avec Mermaid, optionnel en PNG)
+- [ ] **backend-perf-graph**: Graphique performances (1 seul, synthétique, générée avec Matplotlib)
+
+**Destination**: `website/static/img/backends/`
+
+---
+
+## 📝 Total: ~35 captures essentielles
+
+**Répartition**:
+- 20-25 composants UI uniques
+- 8-10 workflow complet
+- 3-4 divers (themes, backends)
+
+**Principe de réutilisation**:
+- `installation.md` ✅ (3 captures déjà faites)
+- `quick-start.md` → référence workflow-01 à 06
+- `first-filter.md` → référence workflow complet
+- `interface-overview.md` → référence tous les composants UI
+- `filtering-basics.md` → référence ui-expression-builder, ui-validation-*
+- `geometric-filtering.md` → référence ui-spatial-predicate, ui-buffer-*
+- `filter-history.md` → référence ui-history-*
+- `export-features.md` → référence workflow-08 à 10 + ui-export-*
+- `configuration.md` → référence ui-json-tree, ui-theme-selector
+
+**Avantage**: 
+- Maintenance facile (1 seul endroit à mettre à jour)
+- Cohérence visuelle garantie
+- Documentation concise
+
+### 📄 Intégration dans les pages
+
+**Toutes les pages référencent les composants UI et le workflow principal:**
+
+#### Pages utilisateur (référencement simple)
+- `interface-overview.md` → Galerie complète: tous les composants UI (Groupe A à G)
+- `filtering-basics.md` → Référence: ui-expression-builder, ui-validation-*
+- `geometric-filtering.md` → Référence: ui-spatial-predicate, ui-buffer-*, workflow-04
+- `buffer-operations.md` → Référence: ui-buffer-controls, ui-buffer-preview
+- `export-features.md` → Référence: ui-export-*, workflow-08 à 10
+- `filter-history.md` → Référence: ui-history-*, workflow-07
+- `advanced-features.md` → Référence: ui-favorites-panel, ui-context-menu
+- `configuration.md` → Référence: ui-json-tree, ui-theme-selector, ui-config-tabs
+
+#### Pages workflow (référencement étapes)
+- `quick-start.md` → Référence: workflow-01 à 06 (workflow simplifié)
+- `first-filter.md` → Référence: workflow complet (01 à 10)
+- `workflows.md` → Référence: workflow complet + diagramme Mermaid
+
+#### Pages techniques (diagrammes)
+- `backends/*.md` → backend-perf-graph (1 seul graphique synthétique)
+- `themes/*.md` → themes-overview (1 seule mosaïque)
+- `developer-guide/architecture*.md` → Diagrammes Mermaid (déjà dans markdown, pas de PNG nécessaire)
+
+---
+
+## 📝 Structure Docusaurus Existante
+
+##### 4. `user-guide/interface-overview.md` (déjà bien détaillé, ajouter images)
+
+**Section: Main Interface**
+- [ ] **interface-1**: Panel FilterMate ancré à droite
+- [ ] **interface-2**: Panel flottant
+- [ ] **interface-3**: Panel réduit/caché
+- [ ] **interface-4**: Réouverture depuis menu Vector
+
+**Section: Layer Selector**
+- [ ] **interface-5**: Dropdown couches (vide)
+- [ ] **interface-6**: Dropdown avec 5+ couches variées
+- [ ] **interface-7**: Icônes de type géométrie (point/ligne/polygon)
+- [ ] **interface-8**: Indicateur backend (PostgreSQL ⚡, Spatialite, OGR)
+
+**Section: Tab System**
+- [ ] **interface-9**: Onglet "Filtering" actif
+- [ ] **interface-10**: Onglet "Exploring"
+- [ ] **interface-11**: Onglet "Export"
+- [ ] **interface-12**: Onglet "Configuration"
+
+**Destination**: `website/static/img/user-guide/interface/`
+
+##### 5. `user-guide/filtering-basics.md` (placeholder actuel)
+
+### Section B: Interface Principale
+
+**Contenu à créer**: Expressions QGIS, opérateurs, validation syntaxe
+
+- [ ] **filtering-1**: Zone expression builder (vide)
+- [ ] **filtering-2**: Expression simple attributaire `"nom" LIKE 'Paris%'`
+- [ ] **filtering-3**: Expression numérique `"superficie" > 1000 AND "population" < 50000`
+- [ ] **filtering-4**: Expression avec NULL `"adresse" IS NOT NULL`
+- [ ] **filtering-5**: Liste déroulante champs disponibles
+- [ ] **filtering-6**: Autocomplétion de fonction
+- [ ] **filtering-7**: Validation succès (coche verte)
+- [ ] **filtering-8**: Validation erreur (croix rouge + message détaillé)
+- [ ] **filtering-9**: Bouton "Constructeur QGIS" pour aide avancée
+
+**Destination**: `website/static/img/user-guide/filtering/`
+
+##### 6. `user-guide/geometric-filtering.md` (placeholder)
+
+**Contenu à créer**: Prédicats géométriques, intersections, buffers
+
+- [ ] **geometric-1**: Menu déroulant prédicats spatiaux
+- [ ] **geometric-2**: Sélection "intersects" avec layer de référence
+- [ ] **geometric-3**: Prédicat "within" (points dans polygones)
+- [ ] **geometric-4**: Prédicat "contains" (polygones contenant points)
+- [ ] **geometric-5**: Prédicat "disjoint" (non-intersection)
+- [ ] **geometric-6**: Résultat visuel d'intersection sur carte (avant/après)
+- [ ] **geometric-7**: Expression combinée attribut + géométrie
+
+**Destination**: `website/static/img/user-guide/geometric/`
+
+##### 7. `user-guide/buffer-operations.md` (placeholder)
+
+**Contenu à créer**: Buffers géométriques, types, options
+
+- [ ] **buffer-1**: Section buffer dans interface
+- [ ] **buffer-2**: Saisie distance buffer (100m)
+- [ ] **buffer-3**: Choix type buffer (round/square/flat)
+- [ ] **buffer-4**: Aperçu buffer sur carte (overlay transparent)
+- [ ] **buffer-5**: Buffer appliqué + sélection entités intersectées
+- [ ] **buffer-6**: Options avancées (segments, endcap style)
+- [ ] **buffer-7**: Buffer négatif (retrait)
+
+**Destination**: `website/static/img/user-guide/buffer/`
+
+##### 8. `user-guide/export-features.md` (placeholder)
+
+**Contenu à créer**: Export formats, options, workflows
+
+- [ ] **export-1**: Onglet Export (vue d'ensemble)
+- [ ] **export-2**: Dropdown sélection format (Shapefile/GeoPackage/GeoJSON/CSV)
+- [ ] **export-3**: Options champs (sélection colonnes)
+- [ ] **export-4**: Transformation CRS (sélecteur EPSG)
+- [ ] **export-5**: Options géométriques (simplification, réparation)
+- [ ] **export-6**: Barre de progression export
+- [ ] **export-7**: Notification succès + lien vers fichier
+- [ ] **export-8**: Export PostGIS (nouvelle table)
+
+**Destination**: `website/static/img/user-guide/export/`
+
+##### 9. `user-guide/filter-history.md` (placeholder)
+
+**Contenu à créer**: Historique des filtres, réutilisation, favoris
+
+- [ ] **history-1**: Widget historique (premier usage, vide)
+- [ ] **history-2**: Liste historique avec 8-10 entrées variées
+- [ ] **history-3**: Détail entrée (date, couche, expression, résultats, temps)
+- [ ] **history-4**: Survol entrée (tooltip informatif)
+- [ ] **history-5**: Menu contextuel clic droit (Réappliquer/Favoris/Supprimer/Copier)
+- [ ] **history-6**: Réapplication d'un filtre historique (en action)
+- [ ] **history-7**: Codes couleur entrées (succès vert, erreur rouge)
+- [ ] **history-8**: Bouton "Ajouter aux favoris" depuis historique
+
+**Destination**: `website/static/img/user-guide/history/`
+
+##### 10. `user-guide/advanced-features.md` (placeholder)
+
+**Contenu à créer**: Features avancées (favoris, batch, expressions complexes)
+
+- [ ] **advanced-1**: Panel favoris (vue d'ensemble)
+- [ ] **advanced-2**: Création favori (dialogue avec nom/description/tags)
+- [ ] **advanced-3**: Liste favoris organisés par catégories
+- [ ] **advanced-4**: Application rapide d'un favori
+- [ ] **advanced-5**: Import/export favoris (dialogue fichier)
+- [ ] **advanced-6**: Expression complexe multi-lignes
+- [ ] **advanced-7**: Filtrage batch sur plusieurs couches
+- [ ] **advanced-8**: Variables QGIS utilisées dans expression
+
+**Destination**: `website/static/img/user-guide/advanced/`
+
+##### 11. `user-guide/user-stories.md` (placeholder)
+
+**Contenu à créer**: Cas d'usage réels, exemples métier
+
+- [ ] **stories-1**: Workflow urbanisme (sélection bâtiments par zone)
+- [ ] **stories-2**: Workflow environnement (analyse corridors écologiques)
+- [ ] **stories-3**: Workflow réseaux (infrastructure dans rayon)
+- [ ] **stories-4**: Workflow statistiques (agrégation par région)
+
+**Destination**: `website/static/img/user-guide/stories/`
+
+##### 12. `user-guide/workflows.md` (placeholder)
+
+**Contenu à créer**: Workflows types étape par étape
+
+- [ ] **workflow-1**: Diagramme workflow débutant (4 étapes)
+- [ ] **workflow-2**: Diagramme workflow intermédiaire (6-8 étapes)
+- [ ] **workflow-3**: Diagramme workflow avancé avec branches
+- [ ] **workflow-4**: Schéma intégration avec Processing QGIS
+
+**Destination**: `website/static/img/user-guide/workflows/`
+
+#### 🎨 Backends Section
+
+##### 13-19. `backends/*.md` (1 complet, 6 placeholders)
+
+**Section déjà complète**: `backends/overview.md` (contient diagramme Mermaid ✅)
+
+**À enrichir**:
+
+**13. `backends/visual-comparison.md`**
+- [ ] **backend-comp-1**: Tableau comparatif visuel (3 colonnes)
+- [ ] **backend-comp-2**: Graphique performances (temps exécution)
+- [ ] **backend-comp-3**: Graphique scalabilité (nb features vs temps)
+
+**14. `backends/postgresql.md`**
+- [ ] **backend-pg-1**: Logo/badge PostgreSQL + PostGIS
+- [ ] **backend-pg-2**: Exemple connexion PostgreSQL dans QGIS
+- [ ] **backend-pg-3**: Indicateur "PostgreSQL disponible" (vert)
+- [ ] **backend-pg-4**: Performance PostGIS sur 1M+ features
+- [ ] **backend-pg-5**: Vue matérialisée créée par FilterMate
+
+**15. `backends/spatialite.md`**
+- [ ] **backend-sl-1**: Logo Spatialite
+- [ ] **backend-sl-2**: Fichier .sqlite dans explorateur
+- [ ] **backend-sl-3**: Performance Spatialite sur 100k features
+- [ ] **backend-sl-4**: Tables temporaires créées
+
+**16. `backends/ogr.md`**
+- [ ] **backend-ogr-1**: Logos formats OGR (Shapefile, GeoPackage, GeoJSON)
+- [ ] **backend-ogr-2**: Performance OGR sur 10k features
+- [ ] **backend-ogr-3**: Avertissement gros volumes
+
+**17. `backends/performance-comparison.md`**
+- [ ] **backend-perf-1**: Graphique barres (temps par backend)
+- [ ] **backend-perf-2**: Graphique courbes (scalabilité)
+- [ ] **backend-perf-3**: Tableau récapitulatif performances
+
+**18. `backends/backend-selection.md`**
+- [ ] **backend-sel-1**: Arbre de décision (quel backend choisir)
+- [ ] **backend-sel-2**: Tableau recommandations par cas d'usage
+
+**Destination**: `website/static/img/backends/`
+
+#### ⚙️ Advanced Section
+
+##### 20-25. `advanced/*.md` (tous placeholders)
+
+**20. `advanced/configuration.md`**
+- [ ] **config-1**: Onglet Configuration dans FilterMate
+- [ ] **config-2**: JSON Tree View (qt_json_view)
+- [ ] **config-3**: Édition valeur dans JSON viewer
+- [ ] **config-4**: Fichier config.json dans éditeur externe
+- [ ] **config-5**: Schéma validation JSON
+
+**21. `advanced/configuration-reactivity.md`**
+- [ ] **config-react-1**: Modification config en direct (before/after)
+- [ ] **config-react-2**: Hot reload de thème
+- [ ] **config-react-3**: Synchronisation multi-fenêtres
+
+**22. `advanced/accessibility.md`**
+- [ ] **access-1**: Contraste élevé (thème accessibilité)
+- [ ] **access-2**: Taille police augmentée
+- [ ] **access-3**: Raccourcis clavier (liste)
+
+**23. `advanced/performance-tuning.md`**
+- [ ] **perf-1**: Panneau diagnostic performances
+- [ ] **perf-2**: Cache activé vs désactivé
+- [ ] **perf-3**: Paramètres optimisation PostgreSQL
+- [ ] **perf-4**: Index spatiaux créés
+
+**24. `advanced/troubleshooting.md`**
+- [ ] **trouble-1**: Message erreur "PostgreSQL non disponible"
+- [ ] **trouble-2**: Message erreur "Expression invalide"
+- [ ] **trouble-3**: Message erreur "Couche non supportée"
+- [ ] **trouble-4**: Logs FilterMate (QGIS console Python)
+- [ ] **trouble-5**: Panneau diagnostics complet
+
+**25. `advanced/known-issues.md`**
+- [ ] **issues-1**: Bandeau "Known limitations" avec exemples
+
+**Destination**: `website/static/img/advanced/`
+
+#### 👨‍💻 Developer Guide Section
+
+##### 26-32. `developer-guide/*.md` (tous placeholders sauf architecture)
+
+**26-27. `developer-guide/architecture*.md`** (déjà détaillés, ajouter diagrammes)
+- [ ] **arch-1**: Diagramme architecture globale (Mermaid/PlantUML)
+- [ ] **arch-2**: Diagramme flux de données
+- [ ] **arch-3**: Diagramme classes principales
+- [ ] **arch-4**: Diagramme séquence (filtrage)
+
+**28. `developer-guide/development-setup.md`**
+- [ ] **dev-1**: Structure dossiers projet
+- [ ] **dev-2**: Terminal avec commandes setup
+- [ ] **dev-3**: VS Code avec projet ouvert
+- [ ] **dev-4**: Tests en cours d'exécution
+
+**29. `developer-guide/contributing.md`**
+- [ ] **contrib-1**: Workflow Git (feature branch)
+- [ ] **contrib-2**: Pull Request template
+- [ ] **contrib-3**: CI/CD pipeline (GitHub Actions)
+
+**30. `developer-guide/code-style.md`**
+- [ ] **style-1**: Exemple code bien formaté vs mal formaté
+- [ ] **style-2**: Configuration Black/Flake8
+
+**31. `developer-guide/testing.md`**
+- [ ] **test-1**: Pytest en action (terminal)
+- [ ] **test-2**: Coverage report
+- [ ] **test-3**: Test explorer VS Code
+
+**32. `developer-guide/backend-development.md`**
+- [ ] **backend-dev-1**: Diagramme backend interface
+- [ ] **backend-dev-2**: Exemple implémentation backend
+
+**Destination**: `website/static/img/developer/`
+
+#### 📚 API Reference Section
+
+##### 33-36. `api/*.md` (tous placeholders)
+
+**Note**: Ces pages nécessitent surtout du contenu textuel (code examples) plus que des captures d'écran. Quelques diagrammes utiles:
+
+- [ ] **api-1**: Diagramme classes Backend API
+- [ ] **api-2**: Diagramme composants UI
+- [ ] **api-3**: Diagramme tâches asynchrones
+- [ ] **api-4**: Diagramme utilities helpers
+
+**Destination**: `website/static/img/api/`
+
+#### 🎨 Themes Section
+
+##### 37-40. `themes/*.md` (tous placeholders)
+
+**37. `themes/overview.md`**
+- [ ] **theme-1**: Aperçu tous les thèmes (grille 3x3)
+- [ ] **theme-2**: Sélecteur de thème dans interface
+
+**38. `themes/color-harmonization.md`**
+- [ ] **theme-3**: Exemple harmonisation couleurs (before/after)
+- [ ] **theme-4**: Roue chromatique avec palette active
+
+**39. `themes/available-themes.md`**
+- [ ] **theme-5-12**: Screenshot de chaque thème (8 thèmes)
+  - Default Light
+  - Default Dark
+  - Ocean
+  - Forest
+  - Sunset
+  - Monochrome
+  - High Contrast
+  - Custom
+
+**40. `themes/custom-themes.md`**
+- [ ] **theme-13**: Éditeur de thème personnalisé
+- [ ] **theme-14**: Export/import thème JSON
+
+**Destination**: `website/static/img/themes/`
+
+---
+
+## 📝 Structure Docusaurus Existante
+
+Le site suit déjà une excellente structure (conforme au sidebar.ts):
+
+```
+📄 intro.md ✅
+📄 installation.md ✅
+📂 Getting Started (✅ complet)
+   📄 index.md
+   📄 quick-start.md
+   📄 first-filter.md
+📂 User Guide (🔨 à enrichir)
+   📄 introduction.md
+   📄 interface-overview.md (détaillé, manque images)
+   📄 filtering-basics.md (placeholder)
+   📄 geometric-filtering.md (placeholder)
+   📄 buffer-operations.md (placeholder)
+   📄 export-features.md (placeholder)
+   📄 filter-history.md (placeholder)
+   📄 advanced-features.md (placeholder)
+   📄 user-stories.md (placeholder)
+   📄 workflows.md (placeholder)
+📂 Backends (✅ overview complet, 🔨 autres à enrichir)
+   📄 overview.md ✅
+   📄 visual-comparison.md
+   📄 postgresql.md
+   📄 spatialite.md
+   📄 ogr.md
+   📄 performance-comparison.md
+   📄 backend-selection.md
+📂 Advanced Topics (🔨 tous placeholders)
+   📄 configuration.md
+   📄 configuration-reactivity.md
+   📄 accessibility.md
+   📄 performance-tuning.md
+   📄 troubleshooting.md
+   📄 known-issues.md
+📂 Developer Guide (🔨 architecture OK, autres placeholders)
+   📄 architecture.md (détaillé)
+   📄 architecture-simplified.md (détaillé)
+   📄 development-setup.md
+   📄 contributing.md
+   📄 code-style.md
+   📄 testing.md
+   📄 backend-development.md
+📂 API Reference (🔨 tous placeholders)
+   📄 backend-api.md
+   📄 ui-components.md
+   📄 tasks.md
+   📄 utilities.md
+📂 Themes (🔨 tous placeholders)
+   📄 overview.md
+   📄 color-harmonization.md
+   📄 available-themes.md
+   📄 custom-themes.md
+📄 changelog.md ✅
+```
+
+**Avantage**: Pas besoin de créer la structure, juste enrichir le contenu!
+
+---
+
+## 🛠️ Outils et Technologies
+
+### Documentation (déjà configuré ✅)
+- **Docusaurus v3** (générateur de site statique)
+- **GitHub Pages** (hébergement automatique)
+- **Markdown/MDX** (rédaction)
+- **Mermaid** (diagrammes - déjà intégré)
+- **React** (composants interactifs)
+
+### Captures d'écran
+- **QGIS 3.28+ LTS** (version recommandée)
+- **Linux**: Flameshot, GNOME Screenshot, Spectacle
+- **Windows**: ShareX, Snipping Tool, Greenshot
+- **macOS**: Screenshot (Cmd+Shift+4), CleanShot X
+- **Annotations**: GIMP, Inkscape, Krita
+- **Batch processing**: ImageMagick, Python PIL
+
+### GIFs Animés
+- **Capture**: Peek (Linux), ScreenToGif (Windows), Gifox (macOS)
+- **Édition**: ezgif.com, GIMP, Photoshop
+- **Optimisation**: gifsicle, ffmpeg
+
+### Vidéos (optionnel)
+- **Enregistrement**: OBS Studio, SimpleScreenRecorder
+- **Montage**: Kdenlive, DaVinci Resolve
+- **Hébergement**: YouTube (intégration déjà dans intro.md ✅)
+
+---
+
+## 📅 Planning Optimisé (captures essentielles uniquement)
+
+### Sprint 1: ✅ COMPLÉTÉ
+- [x] Configuration Docusaurus
+- [x] Structure des pages (35+ fichiers)
+- [x] Pages complètes (intro, installation, getting-started, changelog)
+- [x] GitHub Actions deployment
+- [x] Homepage React personnalisée
+- [x] 9 captures initiales (installation + quickstart)
+
+### Sprint 2: UI Components Library (3-4 jours)
+**Priorité CRITIQUE** - Base réutilisable pour toutes les pages
+
+**Jour 1-2: Composants principaux (15 captures)**
+- [ ] Préparer 1 projet QGIS de test standardisé
+- [ ] Groupe A: Layer Selection (3 captures)
+- [ ] Groupe B: Filtering Interface (5 captures)
+- [ ] Groupe C: Geometric Filtering (4 captures)
+- [ ] Groupe D: History & Favorites (3 captures)
+
+**Jour 3-4: Composants secondaires (10 captures)**
+- [ ] Groupe E: Export Interface (3 captures)
+- [ ] Groupe F: Configuration (3 captures)
+- [ ] Groupe G: Progress & Feedback (3 captures)
+- [ ] Annotations et optimisation
+
+**Livrable**: 25 composants UI documentés et réutilisables
+
+### Sprint 3: Workflow Illustré Complet (2 jours)
+**Priorité HAUTE** - Démonstration end-to-end
+
+- [ ] Créer scénario de test (bâtiments + routes)
+- [ ] Capturer 10 étapes du workflow
+- [ ] Annoter chaque étape avec indications visuelles
+- [ ] Optimiser pour web (<150KB/image)
+
+**Livrable**: 1 workflow complet réutilisé dans 5+ pages
+
+### Sprint 4: Contenu Textuel (3-4 jours)
+**Priorité HAUTE** - Compléter les placeholders
+
+- [ ] Rédiger `filtering-basics.md` (réf. composants UI)
+- [ ] Rédiger `geometric-filtering.md` (réf. workflow-04)
+- [ ] Rédiger `buffer-operations.md` (réf. ui-buffer-*)
+- [ ] Rédiger `export-features.md` (réf. workflow-08 à 10)
+- [ ] Rédiger `filter-history.md` (réf. ui-history-*)
+- [ ] Rédiger `advanced-features.md` (réf. ui-favorites-*)
+- [ ] Rédiger `configuration.md` (réf. ui-config-*)
+
+**Livrable**: 7 pages User Guide complètes (texte + références images)
+
+### Sprint 5: Visuels Techniques (1-2 jours)
+**Priorité MOYENNE** - Différenciation
+
+- [ ] Générer graphique performances backends (Python/Matplotlib)
+- [ ] Créer mosaïque thèmes (montage 2x4)
+- [ ] Enrichir troubleshooting avec messages d'erreur types
+
+**Livrable**: Backends et Themes visuellement documentés
+
+### Sprint 6: Polish & Intégration (1-2 jours)
+- [ ] Vérifier tous les liens vers composants UI
+- [ ] Optimiser images (WebP conversion)
+- [ ] Ajouter textes alt descriptifs
+- [ ] Tests navigation et responsive
+- [ ] Mise à jour STATUS.md
+
+**Livrable**: Documentation complète et déployable
+
+---
+
+## 🎯 Gain de Temps
+
+**Avant**: 150+ captures → 6-8 semaines  
+**Après**: 35 captures → 10-14 jours
+
+**Avantages**:
+- ✅ Maintenance simplifiée (1 seul endroit par composant)
+- ✅ Cohérence visuelle garantie
+- ✅ Évolutivité facilitée (nouveau thème = 1 update)
+- ✅ Rédaction accélérée (focus sur le texte, pas les captures)
+
+---
+
+## 👥 Ressources Nécessaires
+
+### Humaines
+- **Rédacteur technique**: Rédaction et structure
+- **Graphiste**: Annotations et diagrammes
+- **Testeurs**: 3-5 utilisateurs de profils variés
+- **Traducteur** (optionnel): Versions multilingues
+
+### Techniques
+- **Serveur documentation**: Read the Docs (gratuit)
+- **Stockage images**: GitHub repository (inclus)
+- **Domaine web** (optionnel): docs.filtermate.io
+
+### Données de test
+- [ ] Couches PostgreSQL (grandes et petites)
+- [ ] GeoPackages variés
+- [ ] Shapefiles classiques
+- [ ] Données Spatialite
+
+---
+
+## ✅ Critères de Qualité
+
+### Contenu
+- ✅ Toutes les fonctionnalités documentées
+- ✅ Au moins 2 exemples par fonctionnalité
+- ✅ Captures d'écran claires et annotées
+- ✅ Explications adaptées au niveau utilisateur
+- ✅ Index et glossaire complets
+
+### Navigation
+- ✅ Table des matières interactive
+- ✅ Recherche plein texte
+- ✅ Liens internes cohérents
+- ✅ Breadcrumb navigation
+
+### Accessibilité
+- ✅ Texte alt pour toutes les images
+- ✅ Contraste suffisant
+- ✅ Version imprimable lisible
+- ✅ Compatible lecteurs d'écran
+
+### Maintenance
+- ✅ Sources versionnées (Git)
+- ✅ Processus de mise à jour défini
+- ✅ Changelog intégré
+- ✅ Feedback utilisateurs collecté
+
+---
+
+## 📧 Contact et Contribution
+
+- **Maintainer**: Simon Ducorneau
+- **Repository**: https://github.com/sducournau/filter_mate
+- **Issues**: Rapporter des erreurs de documentation
+- **Pull Requests**: Contributions bienvenues!
+
+---
+
+## 📚 Références
+
+### Documentation technique existante
+- `/docs/INDEX.md` - Documentation développeur
+- `/docs/UI_TESTING_GUIDE.md` - Tests d'interface
+- `/docs/BACKEND_API.md` - API backend
+
+### Standards suivis
+- [QGIS Documentation Guidelines](https://docs.qgis.org/testing/en/docs/documentation_guidelines/)
+- [Write the Docs Best Practices](https://www.writethedocs.org/guide/)
+- [Diátaxis Framework](https://diataxis.fr/) (structure documentation)
+
+---
+
+## 📝 Standards de Qualité
+
+### Captures d'écran
+1. **Résolution & Format**
+   - Résolution: 1920x1080 minimum (ou 2560x1440 pour Retina)
+   - Format: PNG pour interface, JPG pour photos, WebP pour web
+   - Compression: Outils recommandés (TinyPNG, Squoosh, ImageOptim)
+   - Poids cible: <200KB/image (important pour performance site)
+
+2. **Nommage standardisé**
+   ```
+   page-section-numero-description.png
+   
+   Exemples:
+   interface-overview-01-main-panel.png
+   filtering-basics-03-expression-valid.png
+   backend-postgresql-02-performance-graph.png
+   theme-ocean-preview.png
+   ```
+
+3. **Annotations**
+   - Flèches: Rouge #FF0000 ou accent du thème
+   - Cadres/highlight: Rectangle arrondi, épaisseur 3px
+   - Numéros: Cercles avec fond coloré
+   - Texte: Police sans-serif 14-16pt, contraste élevé
+   - Ombre portée: Légère (2px, 20% opacité) pour lisibilité
+
+4. **Organisation des fichiers**
+   ```
+   website/static/img/
+   ├── installation/       # install-*.png
+   ├── getting-started/    # quickstart-*.png, first-filter-*.png
+   ├── user-guide/
+   │   ├── interface/      # interface-*.png
+   │   ├── filtering/      # filtering-*.png
+   │   ├── geometric/      # geometric-*.png
+   │   ├── buffer/         # buffer-*.png
+   │   ├── export/         # export-*.png
+   │   ├── history/        # history-*.png
+   │   ├── advanced/       # advanced-*.png
+   │   ├── stories/        # stories-*.png
+   │   └── workflows/      # workflow-*.png, workflow-*.gif
+   ├── backends/           # backend-*.png, backend-perf-*.png
+   ├── advanced/           # config-*.png, perf-*.png, trouble-*.png
+   ├── developer/          # arch-*.png, dev-*.png, test-*.png
+   ├── api/                # api-*.png (diagrammes surtout)
+   └── themes/             # theme-*.png
+   ```
+
+### Environnement de capture standardisé
+
+#### Configuration QGIS
+- **Version**: QGIS 3.28 LTS minimum (3.34 LTS recommandé)
+- **Interface**: Français (ou langue cible de la doc)
+- **Thème QGIS**: "Blend of Gray" (neutre, contraste optimal)
+- **Taille fenêtre**: Maximisée sur 1920x1080
+- **Panel FilterMate**: Ancré à droite, largeur 380-420px
+- **Zoom carte**: Adapté au contenu (tout visible, pas de scroll)
+
+#### Configuration système
+- **OS recommandé**: Ubuntu 22.04+ (interface propre) ou Windows 11
+- **Curseur**: Caché ou pointeur standard (pas d'effet spécial)
+- **Notifications**: Désactivées pendant captures
+- **Fond d'écran**: Uni, sobre
+
+### Données de test recommandées
+
+#### Datasets par type
+1. **Petit volume** (<1000 features) - Tests rapides
+   - Points d'intérêt (restaurants, monuments)
+   - Zones administratives (quartiers)
+
+2. **Volume moyen** (1k-50k features) - Usage standard
+   - Bâtiments d'une ville moyenne
+   - Routes d'un département
+   - Parcelles cadastrales urbaines
+
+3. **Gros volume** (>50k features) - Tests performance
+   - Tous les bâtiments d'une région
+   - Parcelles nationales
+   - Points adresses France
+
+#### Sources de données ouvertes
+- **OpenStreetMap**: https://download.geofabrik.de/
+- **data.gouv.fr**: Base SIRENE, parcelles cadastrales
+- **Natural Earth**: Données mondiales (limites, villes)
+- **QGIS Sample Data**: Exemples pré-intégrés
+
+#### Configuration test recommandée
+```
+Projet QGIS: FilterMate_Doc_Screenshots.qgz
+
+Couches (ordre d'affichage):
+1. points_interet (500 pts) - PostgreSQL si possible
+2. batiments_ville (8000 polygones) - Spatialite
+3. routes_departement (3000 lignes) - Shapefile (OGR)
+4. communes_region (100 polygones) - GeoPackage
+5. fond_carte (OpenStreetMap XYZ) - Optionnel
+
+CRS projet: EPSG:2154 (Lambert-93) ou EPSG:3857 (Web Mercator)
+```
+
+### Checklist avant chaque session de capture
+
+#### Préparation
+- [ ] QGIS démarré avec projet de test chargé
+- [ ] FilterMate activé et configuré (thème par défaut)
+- [ ] Toutes les couches visibles et stylisées
+- [ ] Console Python QGIS fermée (sauf si nécessaire)
+- [ ] Panneaux inutiles fermés (Browser, Layers peut rester)
+- [ ] Zoom carte ajusté pour voir les données
+
+#### Pendant la capture
+- [ ] Interface propre (pas de tooltips fantômes)
+- [ ] Pas de messages d'erreur non pertinents
+- [ ] Focus sur l'élément à illustrer
+- [ ] Texte lisible (zoom si nécessaire)
+- [ ] Cohérence avec captures précédentes (même contexte)
+
+#### Après la capture
+- [ ] Image vérifiée (pas de crop involontaire)
+- [ ] Annotations claires et précises
+- [ ] Nom de fichier respectant la convention
+- [ ] Compression optimale (vérifier poids)
+- [ ] Placée dans bon dossier website/static/img/
+
+## 🎯 Intégration dans Docusaurus
+
+### Syntaxe Markdown pour images
+
+```markdown
+<!-- Image simple -->
+![Description alt](../../../static/img/user-guide/filtering/filtering-01-expression.png)
+
+<!-- Image avec légende -->
+import ThemedImage from '@theme/ThemedImage';
+
+<figure>
+  <img 
+    src={require('../../../static/img/interface/interface-01-main-panel.png').default}
+    alt="Panel principal FilterMate ancré à droite"
+  />
+  <figcaption>Panel principal ancré dans QGIS</figcaption>
+</figure>
+
+<!-- Image responsive avec zoom -->
+<img 
+  src="/img/backends/backend-perf-01-comparison.png"
+  alt="Comparaison performances backends"
+  style={{maxWidth: '800px', cursor: 'pointer'}}
+  onClick={(e) => window.open(e.target.src)}
+/>
+
+<!-- GIF animé -->
+<img 
+  src="/img/workflows/workflow-01-simple-filter.gif"
+  alt="Workflow: Application d'un filtre simple"
+  style={{border: '1px solid var(--ifm-color-emphasis-300)'}}
+/>
+```
+
+### Composants React personnalisés (optionnel)
+
+Créer `website/src/components/Screenshot.tsx`:
+```typescript
+import React from 'react';
+
+interface ScreenshotProps {
+  src: string;
+  alt: string;
+  caption?: string;
+}
+
+export default function Screenshot({src, alt, caption}: ScreenshotProps) {
+  return (
+    <figure className="screenshot">
+      <img src={src} alt={alt} loading="lazy" />
+      {caption && <figcaption>{caption}</figcaption>}
+    </figure>
+  );
+}
+```
+
+Usage:
+```markdown
+import Screenshot from '@site/src/components/Screenshot';
+
+<Screenshot 
+  src="/img/interface/interface-01-main-panel.png"
+  alt="Panel principal"
+  caption="Le panel FilterMate ancré à droite de QGIS"
+/>
+```
+
+## 📊 Métriques de Succès (optimisées)
+
+### Quantitatifs
+- [ ] 100% des pages placeholders complétées (contenu textuel)
+- [ ] 35 captures d'écran essentielles intégrées
+- [ ] 1 workflow complet illustré (10 étapes)
+- [ ] 25 composants UI documentés individuellement
+- [ ] 10+ diagrammes Mermaid (déjà dans markdown)
+- [ ] <2s temps de chargement page
+- [ ] Score Lighthouse >90/100
+- [ ] Total images: <5MB (vs >20MB avec approche exhaustive)
+
+### Qualitatifs
+- [ ] Chaque composant UI documenté 1 seule fois
+- [ ] Navigation intuitive testée par 3+ utilisateurs
+- [ ] Aucune redondance entre pages
+- [ ] Cohérence visuelle garantie (mêmes captures partout)
+- [ ] Maintenance facile (1 update = toutes pages concernées)
+- [ ] Accessibilité WCAG 2.1 AA
+- [ ] Feedback positif de 3+ utilisateurs tests
+
+## 🚀 Déploiement & Maintenance
+
+### Workflow de publication
+```bash
+# 1. Développement local
+cd website
+npm start  # http://localhost:3000
+
+# 2. Tests
+npm run build  # Vérifier erreurs build
+npm run serve  # Tester build production
+
+# 3. Commit & push
+git add website/
+git commit -m "docs: Add screenshots for User Guide section"
+git push origin main
+
+# 4. Déploiement automatique via GitHub Actions
+# Site live 2-3 min après push: https://sducournau.github.io/filter_mate/
+```
+
+### Maintenance continue
+- [ ] Mettre à jour captures à chaque version majeure
+- [ ] Ajouter changelog pour nouvelles features
+- [ ] Répondre aux issues documentation sur GitHub
+- [ ] Actualiser benchmarks performances
+- [ ] Traduire en anglais (internationalisation)
+
+---
+
+---
+
+**Date dernière mise à jour**: 9 décembre 2025  
+**Statut**: 🟢 Plan optimisé - Approche minimaliste  
+**Site existant**: https://sducournau.github.io/filter_mate/ (Sprint 1 ✅)  
+**Prochaine étape**: **Sprint 2 - UI Components Library** (3-4 jours, 25 captures)
+
+## 📋 Checklist Rapide Sprint 2
+
+### Préparation (30 min)
+- [ ] Créer projet QGIS test standard
+- [ ] Charger 3 couches variées (point/ligne/polygone)
+- [ ] Configurer FilterMate avec données pertinentes
+- [ ] Créer dossier `website/static/img/ui-components/`
+
+### Captures Jour 1 (3-4h)
+- [ ] Groupe A: ui-layer-selector, ui-layer-info, ui-backend-indicator
+- [ ] Groupe B: ui-expression-builder, ui-field-selector, ui-validation-success, ui-validation-error, ui-apply-button
+
+### Captures Jour 2 (3-4h)
+- [ ] Groupe C: ui-spatial-predicate, ui-reference-layer, ui-buffer-controls, ui-buffer-preview
+- [ ] Groupe D: ui-history-list, ui-history-entry, ui-favorites-panel, ui-context-menu
+
+### Captures Jour 3 (2-3h)
+- [ ] Groupe E: ui-export-format, ui-field-selector-export, ui-crs-transform
+- [ ] Groupe F: ui-json-tree, ui-theme-selector, ui-config-tabs
+
+### Captures Jour 4 (2h)
+- [ ] Groupe G: ui-progress-bar, ui-message-bar, ui-task-notification
+- [ ] Annotations + optimisation toutes les images
+- [ ] Création page `ui-components-gallery.md` (référence complète)

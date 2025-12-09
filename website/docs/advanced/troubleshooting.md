@@ -471,10 +471,6 @@ Include:
 - **QGIS Forum:** Tag with "filtermate"
 - **Email:** simon.ducournau+filter_mate@gmail.com
 
-## Known Issues
-
-See [Known Issues](./known-issues.md) for current limitations and workarounds.
-
 ## Further Reading
 
 - [Installation Guide](../installation.md)

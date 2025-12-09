@@ -25,9 +25,6 @@ const sidebars: SidebarsConfig = {
         'user-guide/buffer-operations',
         'user-guide/export-features',
         'user-guide/filter-history',
-        'user-guide/advanced-features',
-        'user-guide/user-stories',
-        'user-guide/workflows',
       ],
     },
     {
@@ -35,24 +32,20 @@ const sidebars: SidebarsConfig = {
       label: 'Backends',
       items: [
         'backends/overview',
-        'backends/visual-comparison',
+        'backends/backend-selection',
         'backends/postgresql',
         'backends/spatialite',
         'backends/ogr',
         'backends/performance-comparison',
-        'backends/backend-selection',
       ],
     },
     {
       type: 'category',
-      label: 'Advanced Topics',
+      label: 'Advanced',
       items: [
         'advanced/configuration',
-        'advanced/configuration-reactivity',
-        'advanced/accessibility',
         'advanced/performance-tuning',
         'advanced/troubleshooting',
-        'advanced/known-issues',
       ],
     },
     {
@@ -60,7 +53,6 @@ const sidebars: SidebarsConfig = {
       label: 'Developer Guide',
       items: [
         'developer-guide/architecture',
-        'developer-guide/architecture-simplified',
         'developer-guide/development-setup',
         'developer-guide/contributing',
         'developer-guide/code-style',
@@ -68,27 +60,8 @@ const sidebars: SidebarsConfig = {
         'developer-guide/backend-development',
       ],
     },
-    {
-      type: 'category',
-      label: 'API Reference',
-      items: [
-        'api/backend-api',
-        'api/ui-components',
-        'api/tasks',
-        'api/utilities',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Themes',
-      items: [
-        'themes/overview',
-        'themes/color-harmonization',
-        'themes/available-themes',
-        'themes/custom-themes',
-      ],
-    },
     'changelog',
+    'accessibility',
   ],
 };
 

@@ -115,7 +115,7 @@ FilterMate includes automatic optimizations for all backends:
 
 ### OGR Optimizations (v1.9+)
 - **Automatic spatial index creation**: 19.5× faster on large datasets
-- **Large dataset optimization**: 3× improvement for >50k features
+- **Large dataset optimization**: 3× improvement for datasets over 50k features
 - **Memory-efficient processing**: Reduced memory footprint
 
 ### Universal Optimizations
@@ -153,4 +153,4 @@ print(f"Backend: {backend.__class__.__name__}")
 - [Spatialite Backend Details](./spatialite.md)
 - [OGR Backend Details](./ogr.md)
 - [Performance Comparison](./performance-comparison.md)
-- [Backend Selection Guide](./backend-selection.md)
+- [Backend Selection Guide](./backend-selection)

@@ -49,6 +49,76 @@ slug: /
 - ✅ **Better Error Recovery** - Robust tab widget and theme handling
 - ✅ **Build Improvements** - Enhanced automation and version management
 
+## Why FilterMate?
+
+- **🚀 Fast**: Optimized backends for PostgreSQL, Spatialite, and OGR
+- **🎯 Precise**: Advanced spatial predicates and buffer operations
+- **💾 Export Ready**: Multiple formats (GeoPackage, Shapefile, GeoJSON, PostGIS)
+- **📜 History**: Full undo/redo with filter history tracking
+- **🎨 Beautiful**: WCAG-compliant UI with theme support
+- **🔧 Flexible**: Works with any vector data source
+
+## Quick Start
+
+1. **Install**: Open QGIS → Plugins → Manage and Install Plugins → Search "FilterMate"
+2. **Open**: Click the FilterMate icon in the toolbar
+3. **Filter**: Select a layer, write an expression, click Apply
+4. **Export**: Choose format and export your filtered data
+
+👉 **[Complete Installation Guide](./installation.md)**
+
+## Key Features
+
+### Advanced Filtering
+- Attribute filtering with QGIS expressions
+- Geometric filtering (intersects, contains, within, etc.)
+- Buffer operations with automatic CRS conversion
+- Multi-layer support
+
+### Multiple Backends
+- **PostgreSQL**: Best for large datasets (&gt;50k features) - 10-50× faster
+- **Spatialite**: Good for medium datasets (&lt;50k features)
+- **OGR**: Universal compatibility (Shapefiles, GeoPackage, etc.)
+
+### Export Capabilities
+- Multiple formats: GPKG, SHP, GeoJSON, KML, CSV, PostGIS
+- CRS transformation on export
+- Style export (QML, SLD, ArcGIS)
+- Batch export and ZIP compression
+
+## Prerequisites
+
+Before using FilterMate:
+
+- ✅ **QGIS 3.x** installed (any version)
+- ✅ **Vector layer** loaded in your project
+- ⚡ **Optional**: Install `psycopg2` for PostgreSQL support (recommended for large datasets)
+
+## Learning Path
+
+New to FilterMate? Follow this path:
+
+1. **[Installation](./installation.md)** - Install the plugin and optional dependencies
+2. **[Quick Start](./getting-started/quick-start.md)** - 5-minute tutorial
+3. **[Your First Filter](./getting-started/first-filter.md)** - Complete step-by-step example
+4. **[Interface Overview](./user-guide/interface-overview.md)** - Understand the UI
+5. **[Filtering Basics](./user-guide/filtering-basics.md)** - Master filtering techniques
+
+## Getting Help
+
+- 📖 **Documentation**: Browse the [User Guide](./user-guide/introduction.md)
+- 🐛 **Issues**: Report bugs on [GitHub Issues](https://github.com/sducournau/filter_mate/issues)
+- 💬 **Discussions**: Join [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
+- 🎥 **Video**: Watch our [YouTube tutorial](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+
+## Documentation Sections
+
+- **[Getting Started](./getting-started/index.md)** - Tutorials and quick start guides
+- **[User Guide](./user-guide/introduction.md)** - Complete feature documentation
+- **[Backends](./backends/overview.md)** - Understanding data source backends
+- **[Advanced](./advanced/configuration.md)** - Configuration and performance tuning
+- **[Developer Guide](./developer-guide/architecture.md)** - Contributing and development
+
 ### v2.2.0 & Earlier
 - ✅ **Complete Multi-Backend** - PostgreSQL, Spatialite, and OGR implementations
 - ✅ **Dynamic UI** - Adaptive interface that adjusts to screen resolution
@@ -104,11 +174,11 @@ flowchart TD
 ```
 
 **Key Takeaways:**
-- 🚀 **PostgreSQL**: Best for large datasets (>50k features) - requires psycopg2
+- 🚀 **PostgreSQL**: Best for large datasets (over 50k features) - requires psycopg2
 - 📊 **Spatialite**: Good balance for medium datasets (10k-50k features) - built-in
 - 🔄 **OGR**: Universal compatibility for all formats - works everywhere
 
-Learn more in the [Backend Selection Guide](./backends/backend-selection.md).
+Learn more in the [Backend Selection Guide](/docs/backends/backend-selection).
 
 ## Quick Links
 

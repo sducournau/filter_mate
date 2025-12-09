@@ -4,62 +4,298 @@ sidebar_position: 2
 
 # Interface Overview
 
-Complete guide to FilterMate's user interface and main components.
+Quick guide to FilterMate's main interface components and workflows.
 
-## Main Interface
-
-FilterMate provides a dockable panel that integrates seamlessly with QGIS.
-
-### Opening FilterMate
+## Opening FilterMate
 
 1. **Menu:** Vector → FilterMate
-2. **Toolbar:** Click FilterMate icon
-3. **Keyboard:** (customizable in QGIS settings)
+2. **Toolbar:** Click FilterMate icon 
 
-### Dockable Panel
+    <img src="../../static/icons/logo.png" alt="logo" width="50"/>
 
-The panel can be:
-- 🔒 **Docked** to any side of QGIS window
-- 💬 **Floating** as a separate window
-- ⏸️ **Hidden** when not in use (reopenable from menu)
+3. **Keyboard:** Configure in QGIS settings
+
+## Main Tabs
+
+FilterMate organizes features into 3 main tabs:
+
+### 🎯 FILTERING Tab
+
+
+  <img src="../../static/icons/filter.png" alt="filter" width="100"/>
+
+**Purpose:** Create filtered subsets of your data
+
+**Key Components:**
+
+  - **Reference Layer:**
+
+    <img src="../../static/icons/auto_layer_white.png" alt="layer" width="50"/>
+
+    Choose a comparison layer for spatial filtering / Sync active layer with plugin
+
+  - **Layer Selector:**
+
+    <img src="../../static/icons/layers.png" alt="layers" width="50"/>
+
+    Choose which layers to filter (multi-selection supported)
+  - **Expression Builder:** Write QGIS expressions for attribute filtering
+
+- **Combination settings:**
+
+    <img src="../../static/icons/add_multi.png" alt="add_multi" width="50"/>
+
+    Combine multiple filters with AND/OR operators
+
+- **Spatial Predicates:**
+
+    <img src="../../static/icons/geo_predicates.png" alt="geo_predicates" width="50"/>
+
+    Select geometric relationships (Intersects, Contains, Within, etc.)
+
+- **Buffer Settings:**
+
+    <img src="../../static/icons/geo_tampon.png" alt="buffer" width="50"/>
+
+    Add proximity zones (distance, unit, type)
+
+- **Buffer Type Settings:**
+
+    <img src="../../static/icons/buffer_type.png" alt="buffer_type" width="50"/>
+
+    Choose buffer geometry type (planar, geodesic, ellipsoidal)
+
+**Use Cases:**
+- Find features matching criteria (e.g., population > 100,000)
+- Select geometries within/near other features
+- Create temporary subsets for analysis
+
+**See:** [Filtering Basics](./filtering-basics.md), [Geometric Filtering](./geometric-filtering.md), [Buffer Operations](./buffer-operations.md)
+
+---
+
+### 🔍 EXPLORING Tab
+
+**Purpose:** Visualize and interact with features from the current active QGIS layer
+
+**Key Components:**
+- **Action Buttons:** 6 interactive buttons
+  - **Identify:** 
+  
+    <img src="../../static/icons/identify.png" alt="identify" width="50"/> 
+
+    Highlight features on map
+
+
+  - **Zoom:** 
+  
+    <img src="../../static/icons/zoom.png" alt="zoom" width="50"/> 
+  
+    Center map on features
+  - **Select:** 
+    
+    <img src="../../static/icons/select_black.png" alt="select" width="50"/> 
+  
+    Enable interactive selection mode
+  
+  - **Track:** 
+  
+    <img src="../../static/icons/track.png" alt="track" width="50"/> 
+    
+    Sync selections between widgets and map
+
+  - **Link:** 
+  
+    <img src="../../static/icons/link.png" alt="link" width="50"/> 
+  
+    Share configuration across widgets
+  
+  - **Reset parameters:** 
+  
+    <img src="../../static/icons/auto_save.png" alt="auto_save" width="50"/> 
+  
+    Restore layer defaults parameters
+
+- **Selection Widgets:**
+  - **Single Selection:** Pick one feature (dropdown)
+  - **Multiple Selection:** Select many features (checkboxes)
+  - **Custom Selection:** Use expressions to filter widget
+
+**Important:** EXPLORING always works on QGIS's **current active layer** only. To change layer, update it in QGIS Layer Panel.
+
+**Use Cases:**
+- Browse features interactively
+- Identify and zoom to specific features
+- View attribute details
+- Manual feature selection
+
+:::tip EXPLORING vs FILTERING
+- **EXPLORING:** Temporary visualization of current layer (no data modification)
+- **FILTERING:** Permanent filtered subsets on selected layers (can be multiple)
+:::
+
+---
+
+### 📤 EXPORTING Tab
+
+
+  <img src="../../static/icons/export.png" alt="export" width="100"/> 
+
+
+**Purpose:** Export layers (filtered or unfiltered) to various formats
+
+**Key Components:**
+- **Layer Selector:**
+
+  <img src="../../static/icons/layers.png" alt="layers" width="50"/>
+
+  Choose layers to export
+
+- **CRS Transformation:**
+
+  <img src="../../static/icons/projection_black.png" alt="projection_black" width="50"/>
+
+  Reproject to different coordinate system
+
+- **Style Export:**
+
+  <img src="../../static/icons/styles_white.png" alt="styles" width="50"/>
+ 
+  Save QGIS styles (QML, SLD, ArcGIS)
+
+- **Format:** 
+
+  <img src="../../static/icons/datatype.png" alt="datatype" width="50"/>
+
+  GPKG, Shapefile, GeoJSON, KML, CSV, PostGIS, Spatialite
+
+- **Batch Mode:** Export each layer to separate file
+- **Output Folder:**
+
+  <img src="../../static/icons/folder.png" alt="folder" width="50"/>
+
+  Select destination directory
+- **ZIP Compression:**
+
+  <img src="../../static/icons/zip.png" alt="zip" width="50"/>
+
+  Package outputs for delivery
+
+**Use Cases:**
+- Share filtered data with colleagues
+- Archive analysis snapshots
+- Convert between formats
+- Prepare data for web mapping
+
+**See:** [Export Features](./export-features.md)
+
+---
+
+### ⚙️ CONFIGURATION Tab
+
+**Purpose:** Customize FilterMate behavior and appearance
+
+**Key Components:**
+- **JSON Tree View:** Edit full configuration
+- **Theme Selector:** Choose UI theme (default/dark/light/auto)
+- **Advanced Options:** Plugin settings
+
+**See:** [Configuration](../advanced/configuration.md)
+
+---
+
+## Action Buttons (Top Bar)
+
+Always visible regardless of active tab:
+
+| Button | Icon | Action | Shortcut |
+|--------|------|--------|----------|
+| **FILTER** | ![Filter](/icons/filter.png) | Apply configured filters | F5 |
+| **UNDO** | ![Undo](/icons/undo.png) | Revert last filter | Ctrl+Z |
+| **REDO** | ![Redo](/icons/redo.png) | Reapply undone filter | Ctrl+Y |
+| **RESET** | ![Reset](/icons/reset.png) | Clear all filters | Ctrl+Shift+C |
+| **EXPORT** | ![Export](/icons/export.png) | Quick export | Ctrl+E |
+| **ABOUT** | ![Icon](/icons/icon.png) | Plugin information | - |
+
+---
+
+## Backend Indicators
+
+Visual badges show data source type:
+
+- **PostgreSQL ⚡:** Best performance (more than 50k features)
+- **Spatialite 📦:** Good performance (less than 50k features)
+- **OGR/Shapefile 📄:** Basic compatibility
+
+Backend detected automatically based on layer type.
+
+---
+
+## Quick Keyboard Shortcuts
+
+- **Ctrl+F:** Focus expression builder
+- **F5:** Execute filter
+- **Ctrl+Z / Ctrl+Y:** Undo / Redo
+- **Tab:** Navigate between fields
+- **Ctrl+Tab:** Switch between tabs
+
+---
+
+## Learn More
+
+- **Getting Started:** [Quick Start Guide](../getting-started/quick-start.md)
+- **Detailed Usage:** [Filtering Basics](./filtering-basics.md), [Geometric Filtering](./geometric-filtering.md)
+- **Export Options:** [Export Features](./export-features.md)
+- **Advanced:** [Configuration](../advanced/configuration.md), [Performance Tuning](../advanced/performance-tuning.md)
 
 ## Interface Layout
 
 ```mermaid
 graph TB
     subgraph "FilterMate Panel"
-        LS[Layer Selector]
+        LS[Layer Selector - Multi-selection]
+        AB[Action Buttons: Filter | Undo | Redo | Reset | Export | About]
         TB[Tab Bar]
         
-        subgraph "Filtering Tab"
-            EXP[Expression Builder]
-            PRED[Spatial Predicates]
-            BUF[Buffer Settings]
-            FBTN[Filter Button]
+        subgraph "FILTERING Tab"
+            LSF[Layer Selection + Auto Current]
+            EXP[Expression Builder - Attribute Filtering]
+            PRED[Spatial Predicates - Multi-selection]
+            REF[Reference Layer + Combine Operator]
+            BUF[Buffer Settings: Distance + Unit + Type]
+            IND[Status Indicators]
         end
         
-        subgraph "Exploring Tab"
-            FTREE[Feature Tree]
-            FINFO[Feature Info]
+        subgraph "EXPLORING Tab"
+            BTN[Push Buttons: Identify | Zoom | Select | Track | Link | Reset]
+            SS[Single Selection - Feature Picker]
+            MS[Multiple Selection - List Widget]
+            CS[Custom Selection - Expression]
+            FE[Field Expression Widget]
+            TBL[Feature Attribute Table]
         end
         
-        subgraph "Export Tab"
-            FMT[Format Selector]
-            FLDS[Field Selector]
-            CRS[CRS Transform]
-            EBTN[Export Button]
+        subgraph "EXPORTING Tab"
+            LYR[Layers to Export - Multi-selection]
+            FMT[Format Selector: GPKG | SHP | GeoJSON | etc.]
+            CRS[CRS Transformation]
+            STY[Style Export: QML | SLD | ArcGIS]
+            OUT[Output Folder + Batch Mode]
+            ZIP[ZIP Compression]
         end
         
-        subgraph "Configuration Tab"
-            JSON[JSON Tree View]
-            THEMES[Theme Selector]
+        subgraph "CONFIGURATION Tab"
+            JSON[JSON Tree View - Full Config]
+            THEMES[Theme Selector + Preview]
+            OPTS[Advanced Options]
         end
     end
     
-    LS --> TB
-    TB --> EXP
-    TB --> FTREE
-    TB --> FMT
+    LS --> AB
+    AB --> TB
+    TB --> LSF
+    TB --> BTN
+    TB --> LYR
     TB --> JSON
 ```
 
@@ -87,299 +323,48 @@ graph TB
 - 📦 Spatialite (medium performance)
 - 📄 OGR (universal compatibility)
 
-## Filtering Tab
-
-### 1. Expression Builder
-
-**Attribute Filtering:**
-```sql
-population > 100000
-name LIKE '%Park%'
-area BETWEEN 1000 AND 5000
-```
-
-**QGIS Expression Support:**
-- Standard SQL operators
-- QGIS expression functions
-- Field name completion
-
-### 2. Spatial Predicates
-
-**Available Predicates:**
-- ✅ **Intersects:** Geometries overlap
-- 📦 **Contains:** Source contains target
-- 🎯 **Within:** Target within source
-- ❌ **Disjoint:** No overlap
-- ♾️ **Touches:** Share boundary
-- ↔️ **Crosses:** Cross but don't overlap
-- 🔗 **Overlaps:** Partial overlap
-
-**Multi-Predicate Support:**
-Select multiple predicates for OR logic:
-```
-Intersects OR Contains → Features matching either condition
-```
-
-### 3. Buffer Settings
-
-**Buffer Distance:**
-- Unit: Layer's CRS units
-- Supports: Positive values only
-- Effect: Expands source geometry
-
-**Example:**
-```
-Buffer: 100 meters
-Predicate: Intersects
-→ Find features within 100m of source
-```
-
-### 4. Action Buttons
-
-- 🔍 **Filter:** Execute filtering
-- ↩️ **Undo:** Revert last filter
-- ↪️ **Redo:** Reapply filter
-- 🖾️ **Clear:** Remove all filters
-
-## Exploring Tab
-
-### Feature Tree
-
-**Displays:**
-- Feature ID
-- Selected attributes
-- Geometry type icon
-
-**Interactions:**
-- **Click:** Select feature on map
-- **Double-click:** Zoom to feature
-- **Right-click:** Context menu
-  - Copy attributes
-  - Export selection
-  - View geometry
-
-### Feature Information
-
-**Shows:**
-- All attributes
-- Geometry WKT
-- Feature statistics
-
-## Export Tab
-
-### 1. Format Selection
-
-**Supported Formats:**
-- 📦 **GeoPackage (.gpkg)** - Recommended
-- 📄 **Shapefile (.shp)** - Legacy
-- 🌍 **GeoJSON (.geojson)** - Web-friendly
-- 🗺️ **KML (.kml)** - Google Earth
-- 📏 **DXF (.dxf)** - CAD
-- 📊 **CSV (.csv)** - Tabular + WKT
-
-### 2. Field Selection
-
-- ☑ Select specific fields to export
-- 🔄 Reorder fields
-- 🔍 Quick search/filter
-
-### 3. CRS Transformation
-
-**Options:**
-- 🔄 Keep original CRS
-- 🌎 Transform to different CRS
-- Common presets (WGS84, Web Mercator, etc.)
-
-### 4. Style Export
-
-**Options:**
-- 🎨 **QML:** QGIS native style
-- 🖼️ **SLD:** OGC standard
-- ➖ **None:** Data only
-
-## Configuration Tab
-
-### JSON Tree View
-
-**Real-time Configuration:**
-- ✏️ Edit values directly
-- 🔽 Dropdown selectors for choices
-- 💾 Auto-save on changes
-- ⚡ No restart required
-
-### Key Settings
-
-#### UI Profile
-```json
-{
-  "UI_PROFILE": {
-    "value": "auto",
-    "choices": ["auto", "compact", "normal"]
-  }
-}
-```
-- **auto:** Adapt to screen resolution
-- **compact:** Small screen mode (< 1080p)
-- **normal:** Full UI (>= 1080p)
-
-#### Theme Selection
-```json
-{
-  "ACTIVE_THEME": {
-    "value": "auto",
-    "choices": ["auto", "default", "dark", "light"]
-  }
-}
-```
-- **auto:** Match QGIS theme
-- **default:** FilterMate default theme
-- **dark:** Dark mode
-- **light:** Light mode
-
-#### Export Defaults
-```json
-{
-  "DATATYPE_TO_EXPORT": {"value": "GPKG"},
-  "STYLES_TO_EXPORT": {"value": "QML"}
-}
-```
-
-## Toolbar Buttons
-
-### Main Actions
-
-| Icon | Action | Shortcut |
-|------|--------|----------|
-| 🔍 | Filter | F5 |
-| ↩️ | Undo | Ctrl+Z |
-| ↪️ | Redo | Ctrl+Y |
-| 🖾️ | Clear | Ctrl+Shift+C |
-| 💾 | Save | Ctrl+S |
-| 📄 | Export | Ctrl+E |
-
-### Context Menus
-
-**Right-click on:**
-- **Layer:** Show layer options
-- **Feature:** Feature operations
-- **Tab:** Tab management
-
-## UI Profiles
-
-### Compact Mode
-
-**Optimized for:**
-- Screens < 1080p
-- Laptop displays
-- Limited space
-
-**Features:**
-- Smaller fonts
-- Reduced padding
-- Compact widgets
-- Hidden labels
-
-### Normal Mode
-
-**Optimized for:**
-- Screens >= 1080p
-- Desktop displays
-- Ample space
-
-**Features:**
-- Standard fonts
-- Comfortable spacing
-- Full labels
-- Enhanced readability
-
-### Auto Mode
-
-**Behavior:**
-- Detects screen resolution
-- Switches automatically
-- Updates on window resize
-
-## Theme System
-
-### Available Themes
-
-#### Default Theme
-- Neutral colors
-- Good contrast
-- WCAG AA compliant
-
-#### Dark Theme
-- Dark background (#2b2b2b)
-- Reduced eye strain
-- Night-friendly
-
-#### Light Theme
-- Bright background (#f5f5f5)
-- Maximum readability
-- Day-optimized
-
-### Theme Synchronization
-
-**Auto Mode:**
-- Matches QGIS theme
-- Updates on QGIS theme change
-- Seamless integration
-
-## Keyboard Shortcuts
-
-### Global
-
-- **Ctrl+F:** Focus expression builder
-- **Ctrl+L:** Focus layer selector
-- **Escape:** Clear selection
-
-### Filtering
-
-- **F5:** Execute filter
-- **Ctrl+Z:** Undo last filter
-- **Ctrl+Y:** Redo filter
-- **Ctrl+Shift+C:** Clear all filters
-
-### Navigation
-
-- **Tab:** Next field
-- **Shift+Tab:** Previous field
-- **Ctrl+Tab:** Next tab
-- **Ctrl+Shift+Tab:** Previous tab
-
-## Tips & Tricks
-
-### Quick Filtering
-
-1. Select layer
-2. Type expression
-3. Press F5
-
-### Multi-Layer Filtering
-
-1. Check multiple layers
-2. Configure once
-3. Apply to all
-
-### Expression Templates
-
-Save frequent expressions:
-1. Write expression
-2. Right-click → Save template
-3. Reuse anytime
-
-### Keyboard-Only Workflow
-
-1. Ctrl+L (select layer)
-2. Tab (to expression)
-3. Type expression
-4. F5 (filter)
-
 ## Further Reading
 
-- [Filtering Basics](./filtering-basics.md)
-- [Geometric Filtering](./geometric-filtering.md)
-- [Export Features](./export-features.md)
-- [Advanced Features](./advanced-features.md)
+For detailed guides on each feature:
 
-For now, see the [Quick Start](../getting-started/quick-start.md) guide.
+- **[Filtering Basics](./filtering-basics.md)** - Complete guide to attribute filtering and QGIS expressions
+- **[Geometric Filtering](./geometric-filtering.md)** - Spatial predicates, buffer operations, and geometric workflows
+- **[Buffer Operations](./buffer-operations.md)** - Buffer configuration, types, and distance settings
+- **[Export Features](./export-features.md)** - Export formats, CRS transformation, and batch operations
+- **[Filter History](./filter-history.md)** - History management, undo/redo, and favorites
+
+For getting started:
+
+- **[Quick Start Guide](../getting-started/quick-start.md)** - 5-minute introduction
+- **[Your First Filter](../getting-started/first-filter.md)** - Step-by-step tutorial
+
+---
+
+## Icon Usage Guidelines
+
+### Accessibility
+- All icons have been designed with high contrast ratios
+- Theme-aware icons automatically adapt to light/dark modes
+- Icons are sized appropriately for 16px, 24px, and 32px displays
+
+### Consistency
+- Each icon represents a specific, consistent action across the interface
+- Workflow icons (selection_1-7, zoom_1-5, etc.) show process progression
+- Light/dark variants maintain visual consistency across themes
+
+### Context
+- Icons appear in buttons, status indicators, and documentation
+- Hover tooltips provide additional context for all interactive icons
+- Sequential icons guide users through multi-step operations
+
+---
+
+## Interface Customization
+
+You can customize the appearance of FilterMate icons and themes in the **CONFIGURATION** tab. See [Configuration Guide](../advanced/configuration.md) for details on:
+
+- Switching between light/dark/auto themes
+- Adjusting icon sizes (if supported by theme)
+- Creating custom theme configurations
+
+---

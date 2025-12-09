@@ -2,63 +2,66 @@
 sidebar_position: 1
 ---
 
-# User Guide Introduction
+# User Guide
 
-Welcome to the FilterMate User Guide! This comprehensive guide covers everything you need to know to use FilterMate effectively.
+Comprehensive documentation for all FilterMate features and workflows.
 
-## What is FilterMate?
+## What's in This Guide
 
-FilterMate is an advanced QGIS plugin designed to make filtering and exporting vector data simple, fast, and powerful. Whether you're working with small shapefiles or massive PostGIS databases with millions of features, FilterMate has you covered.
+This section provides detailed documentation for every aspect of FilterMate:
 
-## Who is This Guide For?
+### Interface & Basics
+- **[Interface Overview](./interface-overview.md)** - Complete UI tour and tab explanations
+- **[Filtering Basics](./filtering-basics.md)** - Attribute filtering with QGIS expressions
 
-This guide is designed for:
+### Spatial Operations
+- **[Geometric Filtering](./geometric-filtering.md)** - Spatial predicates and relationships
+- **[Buffer Operations](./buffer-operations.md)** - Buffer zones and proximity analysis
 
-- **GIS Analysts** working with spatial data in QGIS
-- **Data Scientists** needing to filter and export geospatial datasets
-- **Developers** integrating FilterMate into workflows
-- **Students** learning QGIS and spatial analysis
+### Data Management
+- **[Export Features](./export-features.md)** - Export formats, options, and batch processing
+- **[Filter History](./filter-history.md)** - Undo/redo, history tracking, and favorites
 
-## What You'll Learn
+## Who Should Read This
 
-This guide is organized into the following sections:
+This guide is for:
 
-### Basic Usage
-- **[Interface Overview](./interface-overview.md)** - Tour of the FilterMate UI
-- **[Filtering Basics](./filtering-basics.md)** - Attribute filters and expressions
-- **[Geometric Filtering](./geometric-filtering.md)** - Spatial predicates and operations
-
-### Advanced Features
-- **[Buffer Operations](./buffer-operations.md)** - Working with buffer zones
-- **[Export Features](./export-features.md)** - Exporting filtered data
-- **[Filter History](./filter-history.md)** - Undo/redo and history management
-- **[Advanced Features](./advanced-features.md)** - Power user tips and tricks
+- 🗺️ **GIS Analysts** - Working with spatial data daily
+- 📊 **Data Scientists** - Filtering and analyzing geospatial datasets
+- 🔧 **Developers** - Integrating FilterMate into automated workflows
+- 🎓 **Students & Educators** - Learning QGIS and spatial analysis
 
 ## Prerequisites
 
-Before using this guide, you should have:
+To use this guide effectively:
 
-- ✅ QGIS 3.x installed
-- ✅ FilterMate plugin installed (see [Installation](../installation.md))
-- ✅ Basic familiarity with QGIS interface
-- ✅ A vector layer loaded in QGIS
-
-## Getting Help
-
-If you need help:
-
-- 📖 Check the [Troubleshooting](../advanced/troubleshooting.md) guide
-- 🐛 Report issues on [GitHub](https://github.com/sducournau/filter_mate/issues)
-- 💬 Join discussions on [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
+- ✅ **QGIS 3.x** installed and running
+- ✅ **FilterMate plugin** installed ([Installation Guide](../installation.md))
+- ✅ **Basic QGIS knowledge** - Familiar with loading layers and basic navigation
+- ✅ **Sample data** - A vector layer loaded in your project
 
 ## Quick Navigation
 
-**New to FilterMate?** → Start with [Interface Overview](./interface-overview.md)
+**New Users?** Start with:
+1. [Interface Overview](./interface-overview.md) - Understand the UI
+2. [Filtering Basics](./filtering-basics.md) - Learn core filtering
+3. [Export Features](./export-features.md) - Save your results
 
-**Need to filter data?** → See [Filtering Basics](./filtering-basics.md)
+**Experienced Users?** Jump to:
+- [Geometric Filtering](./geometric-filtering.md) - Advanced spatial operations
+- [Buffer Operations](./buffer-operations.md) - Proximity analysis
+- [Filter History](./filter-history.md) - Power user features
 
-**Working with spatial data?** → Check [Geometric Filtering](./geometric-filtering.md)
+## Related Documentation
 
-**Ready to export?** → Read [Export Features](./export-features.md)
+- **[Getting Started](../getting-started/index.md)** - Tutorials for beginners
+- **[Backends](../backends/overview.md)** - Performance optimization
+- **[Advanced](../advanced/configuration.md)** - Configuration and tuning
+- **[Troubleshooting](../advanced/troubleshooting.md)** - Common issues and solutions
 
-Let's get started!
+:::tip Need Help?
+If you encounter issues:
+- 📖 Check the [Troubleshooting Guide](../advanced/troubleshooting.md)
+- 🐛 Report bugs on [GitHub Issues](https://github.com/sducournau/filter_mate/issues)
+- 💬 Ask questions in [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
+:::

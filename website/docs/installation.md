@@ -10,8 +10,19 @@ FilterMate is available through the QGIS Plugin Repository and works out of the 
 
 1. Open QGIS
 2. Go to **Plugins** → **Manage and Install Plugins**
+
+<!-- ![QGIS Plugin Manager](/img/install-1.png -->
+*QGIS Plugin Manager - Search for FilterMate*
+
 3. Search for **"FilterMate"**
+
+<!-- ![Search FilterMate](/img/install-2.png -->
+*Search results showing FilterMate plugin*
+
 4. Click **Install Plugin**
+
+<!-- ![FilterMate Installed](/img/install-4.png -->
+*FilterMate successfully installed and ready to use*
 
 That's it! FilterMate is now ready to use with OGR and Spatialite backends.
 
@@ -20,7 +31,7 @@ That's it! FilterMate is now ready to use with OGR and Spatialite backends.
 For optimal performance with PostgreSQL/PostGIS layers, install the `psycopg2` package.
 
 :::tip Performance Boost
-PostgreSQL backend provides **10-50× faster filtering** on large datasets (>50,000 features) compared to other backends.
+PostgreSQL backend provides **10-50× faster filtering** on large datasets (&>;50,000 features) compared to other backends.
 :::
 
 ### Method 1: pip (Recommended)

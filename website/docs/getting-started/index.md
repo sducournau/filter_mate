@@ -4,41 +4,59 @@ sidebar_position: 1
 
 # Getting Started
 
-Welcome to FilterMate! This guide will help you get up and running with advanced filtering and export capabilities in QGIS.
+Welcome to FilterMate! These tutorials will help you become productive quickly.
 
-## What You'll Learn
+## Tutorials in This Section
 
-In this section, you'll discover:
+### [Quick Start](./quick-start.md)
+**Time: 5 minutes**
 
-- **[Quick Start](./quick-start.md)** - A 5-minute introduction to FilterMate's core features
-- **[First Filter](./first-filter.md)** - Step-by-step tutorial for creating your first filter
+Learn the essential workflow:
+- Opening FilterMate and selecting layers
+- Creating your first attribute filter
+- Understanding backend selection
+- Exporting filtered results
 
-## Prerequisites
+### [Your First Filter](./first-filter.md)
+**Time: 10-15 minutes**
 
-Before starting, make sure you have:
+Complete step-by-step tutorial:
+- Setting up a geometric filter
+- Using buffer operations
+- Working with spatial predicates
+- Reviewing and exporting results
 
-- ✅ QGIS 3.x installed (any version)
-- ✅ FilterMate plugin installed (see [Installation](../installation.md))
-- ✅ A vector layer loaded in your QGIS project
+## Before You Start
 
-## Recommended Setup
+Make sure you have:
 
-For the best experience, especially with large datasets:
+- ✅ **QGIS 3.x** installed
+- ✅ **FilterMate plugin** installed ([Installation Guide](../installation.md))
+- ✅ **Vector layer** loaded in your project
 
-1. **Install psycopg2** for PostgreSQL support (optional but recommended)
-2. **Use PostGIS layers** for datasets >50,000 features
-3. **Enable automatic theme synchronization** in QGIS settings
+## Performance Tips
 
-:::tip Getting Help
-If you run into issues, check the [Troubleshooting](../advanced/troubleshooting.md) guide or visit our [GitHub Issues](https://github.com/sducournau/filter_mate/issues) page.
-:::
+For best results with large datasets:
+
+- 📦 **Medium datasets** (&lt;50k features): Spatialite/OGR work well
+- ⚡ **Large datasets** (&gt;50k features): Install `psycopg2` for PostgreSQL support
+- 🗄️ **Very large datasets** (&gt;1M features): Use PostGIS layers
 
 ## Video Tutorial
 
-Prefer to watch? Check out our complete video tutorial:
+Prefer video learning? Watch our complete walkthrough:
 
 [![FilterMate Demo](https://img.youtube.com/vi/2gOEPrdl2Bo/0.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
 
 ## Next Steps
 
-Ready to dive in? Start with the [Quick Start](./quick-start.md) tutorial!
+After completing these tutorials:
+
+1. **[Interface Overview](../user-guide/interface-overview.md)** - Explore all UI components
+2. **[Filtering Basics](../user-guide/filtering-basics.md)** - Master attribute filtering
+3. **[Geometric Filtering](../user-guide/geometric-filtering.md)** - Advanced spatial operations
+4. **[Backends Overview](../backends/overview.md)** - Understand performance optimization
+
+:::tip Need Help?
+Check the [Troubleshooting Guide](../advanced/troubleshooting.md) or visit [GitHub Issues](https://github.com/sducournau/filter_mate/issues).
+:::

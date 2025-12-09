@@ -232,8 +232,6 @@ def detect_theme():
 | **dark** | Dark gray (#1E1E1E) | Light gray (#EFF0F1) | Night work |
 | **auto** | Detected | Detected | QGIS synchronization |
 
-See [Themes Documentation](../themes/overview.md) for complete theme customization.
-
 ## Configuration Sections
 
 ### APP Section
@@ -665,8 +663,6 @@ Place icons in `icons/` folder.
 
 ## See Also
 
-- [Themes Overview](../themes/overview.md) - Complete theme documentation
-- [Configuration Reactivity](./configuration-reactivity.md) - How reactive system works
 - [Backend Configuration](../backends/backend-selection.md) - Backend-specific settings
 - [Performance Tuning](./performance-tuning.md) - Optimize your setup
 

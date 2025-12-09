@@ -483,12 +483,4 @@ Tags: "planning", "development", "quarterly-report"
 ## Related Topics
 
 - [Filtering Basics](filtering-basics.md) - Create filters to add to history
-- [Advanced Features](advanced-features.md) - Complex filter patterns
-- [Workflows](workflows.md) - Common analysis workflows
 - [Interface Overview](interface-overview.md) - Navigate the UI
-
-## Next Steps
-
-- **[Advanced Features](advanced-features.md)** - Complex filtering techniques
-- **[Workflows](workflows.md)** - Common analysis patterns
-- **[User Stories](user-stories.md)** - Real-world examples

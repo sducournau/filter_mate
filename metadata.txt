@@ -14,7 +14,7 @@ about=FilterMate v2.2.5 - Automatic Geographic CRS Handling!
 
  NEW in v2.2.5:
  - FEATURE: Automatic EPSG:3857 conversion for geographic CRS (EPSG:4326, etc.)
- - ACCURACY: 50m buffer is always 50 meters (no more 30-50% errors at high latitudes)
+ - ACCURACY: 50m buffer is always 50 meters (no more 30-50%% errors at high latitudes)
  - IMPROVEMENT: Consistent metric-based operations across all backends
  - FIX: Geographic coordinates zoom & flash flickering resolved
  - PERFORMANCE: Minimal overhead (~1ms per feature transformation)

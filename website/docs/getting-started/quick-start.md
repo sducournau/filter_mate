@@ -9,8 +9,19 @@ Get started with FilterMate in 5 minutes! This guide covers the essential workfl
 ## Step 1: Open FilterMate
 
 1. In QGIS, load a vector layer (any format: Shapefile, GeoPackage, PostGIS, etc.)
+
+<!-- ![QGIS with layer loaded](/img/quickstart-1.png -->
+*QGIS with a vector layer loaded and ready for filtering*
+
 2. Click the **FilterMate** icon in the toolbar, or go to **Plugins** → **FilterMate**
+
+<!-- ![Open FilterMate](/img/quickstart-2.png -->
+*Opening FilterMate from the toolbar*
+
 3. The FilterMate dockable panel will appear
+
+<!-- ![FilterMate panel](/img/quickstart-3.png -->
+*FilterMate panel docked on the right side of QGIS*
 
 :::tip First Time?
 FilterMate will automatically detect your layer type and select the optimal backend (PostgreSQL, Spatialite, or OGR).
@@ -21,6 +32,9 @@ FilterMate will automatically detect your layer type and select the optimal back
 1. From the **Layer Selection** dropdown at the top of the panel
 2. Choose the layer you want to filter
 3. FilterMate will load layer-specific settings and display relevant fields
+
+<!-- ![Layer selection and filter applied](/img/quickstart-4.png -->
+*Layer selected with filter expression ready to apply*
 
 ## Step 3: Create a Filter
 
@@ -98,7 +112,7 @@ FilterMate automatically saves settings per layer:
 
 ## Performance Tips
 
-### For Large Datasets (>50,000 features)
+### For Large Datasets (&>;50,000 features)
 
 :::tip Use PostgreSQL
 Install psycopg2 and use PostGIS layers for **10-50× faster filtering**:

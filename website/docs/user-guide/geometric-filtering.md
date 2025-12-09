@@ -4,22 +4,49 @@ sidebar_position: 4
 
 # Geometric Filtering
 
-Filter features based on their spatial relationships with other geometries using geometric predicates.
+Filter features based on their spatial relationships with other geometries using the **FILTERING** tab's geometric predicates and reference layer selector.
 
 ## Overview
 
-Geometric filtering allows you to select features based on their **spatial relationships** with:
-- Other features in the same layer
-- Features from a different layer
-- A manually drawn geometry
-- A buffered geometry
+Geometric filtering in FilterMate allows you to select features based on their **spatial relationships** with a reference layer. This is configured in the same **FILTERING tab** where you set up attribute filters.
+
+**Key Components in FILTERING Tab**:
+- **Spatial Predicates**: Multi-selection of geometric relationships (Intersects, Contains, Within, etc.)
+- **Reference Layer**: Choose which layer to compare against
+- **Combine Operator**: Use AND/OR when multiple predicates are selected
+- **Buffer Integration**: Combine with buffer zones for proximity analysis
+
+<!-- <!-- ![Spatial Predicates Selector](/img/ui-components/ui-filtering-spatial-predicates.png --> -->
+*Multi-selection of spatial predicates in FILTERING tab*
+
+<!-- <!-- ![Reference Layer Selector](/img/ui-components/ui-filtering-reference-layer.png --> -->
+*Select reference layer for spatial comparison*
+
+<!-- <!-- ![Combine Operator](/img/ui-components/ui-filtering-combine-operator.png --> -->
+*Choose AND/OR to combine multiple predicates*
 
 ### Common Use Cases
 
 - **Containment**: Find parcels within a municipality
 - **Intersection**: Identify roads crossing a floodplain
-- **Proximity**: Select buildings near a transit station
+- **Proximity**: Select buildings near a transit station (with buffer)
 - **Adjacency**: Find neighboring polygons
+
+:::tip Location
+All geometric filtering is configured in the **FILTERING** tab, alongside attribute filters. Don't confuse this with the **EXPLORING** tab, which is for visualizing and selecting features from the current layer.
+:::
+
+## Status Indicators
+
+When geometric filters are configured, FilterMate displays visual indicators:
+
+<!-- <!-- ![Geometric Predicates Indicator](/img/ui-components/ui-filtering-has-predicates-indicator.png --> -->
+*"Has Geometric Predicates" indicator (geo_predicates.png)*
+
+<!-- <!-- ![Combine Operator Indicator](/img/ui-components/ui-filtering-has-combine-indicator.png --> -->
+*"Has Combine Operator" indicator (add_multi.png) - shown when multiple predicates selected*
+
+These badges provide quick visual feedback of active geometric filters.
 
 ## Spatial Predicates
 
@@ -262,27 +289,114 @@ AND NOT within($geometry, geometry(get_feature('floodplain', 'risk', 'high')))
 AND property_type = 'residential'
 ```
 
-## Workflow Example
+## Workflow Example: Geometric Filtering
+
+**Complete workflow for finding buildings near roads with buffer:**
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant FM as FilterMate
+    participant FM as FilterMate (FILTERING Tab)
     participant Q as QGIS
-    participant DB as Database
+    participant DB as Backend (PostgreSQL/Spatialite)
     
-    U->>FM: Select reference layer
-    FM->>U: Show available features
-    U->>FM: Choose feature + predicate
-    FM->>FM: Build spatial expression
-    FM->>Q: Convert to backend SQL
-    Q->>DB: Execute spatial query
-    DB->>Q: Return matching features
-    Q->>FM: Filtered feature count
-    FM->>U: Update UI (1,234 features)
-    U->>FM: Apply filter
-    FM->>Q: Apply subset string
-    Q->>U: Display filtered features
+    U->>FM: 1. Select source layer "buildings"
+    FM->>U: Show layer info (15,234 features)
+    
+    U->>FM: 2. Select spatial predicate "Intersects"
+    FM->>U: Enable predicate indicator
+    
+    U->>FM: 3. Select reference layer "roads"
+    FM->>U: Load reference layer
+    
+    U->>FM: 4. Configure buffer: 200m, Standard type
+    FM->>U: Show buffer indicators
+    
+    U->>FM: 5. Click FILTER button
+    FM->>Q: Build spatial query
+    Q->>DB: Execute: ST_Intersects(buildings.geom, ST_Buffer(roads.geom, 200))
+    DB->>Q: Return matching feature IDs
+    Q->>FM: Filtered features (3,847 matched)
+    FM->>U: Update feature count + map display
+    
+    U->>FM: 6. Optionally switch to EXPORTING tab
+    FM->>U: Export filtered results
+```
+
+### Step-by-Step: Complete Geometric Filter
+
+**Scenario**: Find buildings within 200m of roads
+
+<!-- <!-- ![Step 1 - FILTERING Tab](/img/workflows/workflow-filtering-01.png --> -->
+*1. Open FILTERING tab, interface ready*
+
+<!-- <!-- ![Step 2 - Select Source](/img/workflows/workflow-filtering-02.png --> -->
+*2. Select "buildings" layer in layer selector*
+
+<!-- <!-- ![Step 3 - Layer Info](/img/workflows/workflow-filtering-03.png --> -->
+*3. Verify layer info: Spatialite, 15,234 features, EPSG:4326*
+
+<!-- <!-- ![Step 4 - Spatial Predicate](/img/workflows/workflow-filtering-04.png --> -->
+*4. Select "Intersects" in spatial predicates multi-selector*
+
+<!-- <!-- ![Step 5 - Reference Layer](/img/workflows/workflow-filtering-05.png --> -->
+*5. Select "roads" as reference layer (distant layer)*
+
+<!-- <!-- ![Step 6 - Buffer Distance](/img/workflows/workflow-filtering-06.png --> -->
+*6. Set buffer: Distance=200, Unit=meters*
+
+<!-- <!-- ![Step 7 - Buffer Type](/img/workflows/workflow-filtering-07.png --> -->
+*7. Choose buffer type: Standard*
+
+<!-- <!-- ![Step 8 - Indicators](/img/workflows/workflow-filtering-08.png --> -->
+*8. View active indicators: geo_predicates, buffer_value, buffer_type*
+
+<!-- <!-- ![Step 9 - Apply](/img/workflows/workflow-filtering-09.png --> -->
+*9. Click FILTER button (filter.png icon)*
+
+<!-- <!-- ![Step 10 - Progress](/img/workflows/workflow-filtering-10.png --> -->
+*10. Progress bar shows backend processing (PostgreSQL⚡ or Spatialite)*
+
+<!-- <!-- ![Step 11 - Results](/img/workflows/workflow-filtering-11.png --> -->
+*11. Map displays filtered features: 3,847 buildings within 200m of roads*
+
+## Combining Multiple Predicates
+
+When you select multiple spatial predicates, use the **Combine Operator** to specify how they should be combined:
+
+<!-- <!-- ![Combine Operator](/img/workflows/workflow-combine-02.png --> -->
+*Select AND or OR to combine predicates*
+
+**Example - Parcels that Intersect OR Touch a Protected Zone:**
+
+<!-- <!-- ![Step 1 - Multi-Predicates](/img/workflows/workflow-combine-01.png --> -->
+*1. Select both "Intersects" AND "Touches" predicates*
+
+<!-- <!-- ![Step 2 - OR Operator](/img/workflows/workflow-combine-02.png --> -->
+*2. Choose "OR" in combine operator dropdown*
+
+<!-- <!-- ![Step 3 - Indicator](/img/workflows/workflow-combine-03.png --> -->
+*3. "Has Combine Operator" indicator activates (add_multi.png)*
+
+<!-- <!-- ![Step 4 - Reference](/img/workflows/workflow-combine-04.png --> -->
+*4. Select "protected_zones" as reference layer*
+
+<!-- <!-- ![Step 5 - Results](/img/workflows/workflow-combine-05.png --> -->
+*5. Apply filter: 1,834 parcels found*
+
+<!-- <!-- ![Step 6 - Map View](/img/workflows/workflow-combine-06.png --> -->
+*6. Parcels highlighted on map (intersecting OR touching zone)*
+
+**Combine Operator Logic**:
+- **AND**: Feature must satisfy ALL selected predicates
+- **OR**: Feature must satisfy AT LEAST ONE predicate
+
+```sql
+-- AND example: Must intersect AND touch
+ST_Intersects(geom, ref) AND ST_Touches(geom, ref)
+
+-- OR example: Can intersect OR touch
+ST_Intersects(geom, ref) OR ST_Touches(geom, ref)
 ```
 
 ## Backend-Specific Behavior
@@ -372,7 +486,7 @@ AND distance($geometry, geometry(get_feature('rivers', 'id', 1))) < 100
 
 #### Coverage Analysis
 ```sql
--- Areas NOT covered by fire stations (>5km)
+-- Areas NOT covered by fire stations (&>;5km)
 distance(
     centroid($geometry),
     aggregate('fire_stations', 'collect', $geometry)
@@ -463,13 +577,23 @@ make_valid($geometry)
 
 ## Related Topics
 
-- [Buffer Operations](buffer-operations.md) - Proximity analysis
-- [Filtering Basics](filtering-basics.md) - Attribute filtering
-- [Backend Performance](../backends/performance-comparison.md) - Optimization strategies
-- [Advanced Features](advanced-features.md) - Complex spatial operations
+- [Buffer Operations](buffer-operations.md) - Configure buffer zones in FILTERING tab for proximity analysis
+- [Filtering Basics](filtering-basics.md) - Combine geometric filters with attribute filters
+- [Interface Overview](interface-overview.md) - Complete FILTERING tab component guide
+- [Export Features](export-features.md) - Export filtered results from EXPORTING tab
+
+:::info FILTERING Tab Components
+The FILTERING tab combines three types of filters:
+1. **Attribute filters** - Expression builder (see [Filtering Basics](filtering-basics.md))
+2. **Geometric filters** - Spatial predicates + reference layer (this page)
+3. **Buffer operations** - Distance zones (see [Buffer Operations](buffer-operations.md))
+
+All three can be used together in a single filter operation.
+:::
 
 ## Next Steps
 
-- **[Buffer Operations](buffer-operations.md)** - Create and filter with buffers
-- **[Export Features](export-features.md)** - Save filtered results
-- **[Backend Selection](../backends/backend-selection.md)** - Optimize spatial queries
+- **[Buffer Operations](buffer-operations.md)** - Add distance-based proximity zones to geometric filters
+- **[Export Features](export-features.md)** - Save filtered results in various formats
+
+**Complete Workflow**: See [First Filter Guide](../getting-started/first-filter.md) for a comprehensive example combining attribute, geometric, and buffer filters.

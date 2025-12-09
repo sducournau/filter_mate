@@ -36,6 +36,9 @@ If you don't have sample data, you can use OpenStreetMap data:
 2. Or go to **Plugins** → **FilterMate**
 3. The dockable panel appears on the right side
 
+<!-- ![First Filter Setup](/img/first-filter-1.png -->
+*FilterMate panel ready for your first geometric filter*
+
 ### 3. Select the Target Layer
 
 1. In the **Layer Selection** dropdown at the top

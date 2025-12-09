@@ -726,8 +726,6 @@ tests/
 
 ## Further Reading
 
-- [Backend API Reference](../api/backend-api.md)
-- [Tasks API Reference](../api/tasks.md)
 - [Backend Development Guide](./backend-development.md)
 - [Code Style Guide](./code-style.md)
 - [Contributing Guide](./contributing.md)
