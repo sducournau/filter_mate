@@ -2,6 +2,9 @@
 sidebar_position: 8
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Common Mistakes & Solutions
 
 Avoid frequent pitfalls and resolve issues quickly with this troubleshooting guide.
@@ -46,9 +49,6 @@ Layer 2: EPSG:2154 (Lambert 93) - France only
 **Prevention**:
 - Use layers from same geographic region
 - Check layer extent in Properties → Information
-
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 ---
 

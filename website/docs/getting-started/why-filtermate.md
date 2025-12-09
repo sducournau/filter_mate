@@ -75,10 +75,10 @@ Understand when to use FilterMate vs native QGIS tools for your filtering workfl
 
 ### Case 1: One-Time Simple Selection
 
-**Task**: Select cities with population > 100,000
-
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+
+**Task**: Select cities with population > 100,000
 
 <Tabs>
   <TabItem value="qgis" label="QGIS Native" default>

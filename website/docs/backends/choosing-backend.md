@@ -1,6 +1,9 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 ---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Choosing the Right Backend
 
@@ -369,9 +372,6 @@ See: [PostgreSQL Setup Guide](../backends/postgresql.md)
 ## Installation Guides
 
 ### Install psycopg2 for PostgreSQL Backend
-
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 <Tabs>
   <TabItem value="windows" label="Windows" default>

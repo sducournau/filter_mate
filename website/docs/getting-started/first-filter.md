@@ -78,10 +78,10 @@ FilterMate automatically reprojects layers if they have different CRS. No manual
    - Highlight matching features on the map
    - Update the feature count in the panel
 
-**What happens behind the scenes:**
-
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+
+**What happens behind the scenes:**
 
 <Tabs>
   <TabItem value="postgresql" label="PostgreSQL Backend" default>
