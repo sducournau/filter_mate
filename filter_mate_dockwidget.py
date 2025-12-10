@@ -1191,11 +1191,217 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Note: Changes are NOT applied immediately
             # They will be applied when user clicks OK button
+    
+    def _apply_theme_change(self, change, changes_summary):
+        """
+        Apply ACTIVE_THEME configuration change.
+        
+        Detects theme from config change and applies it using StyleLoader.
+        Supports 'auto', 'default', 'dark', and 'light' themes.
+        """
+        items_keys_values_path = change['path']
+        index = change['index']
+        
+        if 'ACTIVE_THEME' not in items_keys_values_path:
+            return
+        
+        try:
+            # Get the new theme value from the edited item
+            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_data = value_item.data(QtCore.Qt.UserRole)
+            
+            # Handle ChoicesType format (dict with 'value' and 'choices')
+            if isinstance(value_data, dict) and 'value' in value_data:
+                new_theme_value = value_data['value']
+            else:
+                # Fallback for string format (backward compatibility)
+                new_theme_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+            
+            if new_theme_value:
+                logger.info(f"ACTIVE_THEME changed to: {new_theme_value}")
+                
+                # Apply new theme
+                from .modules.ui_styles import StyleLoader
+                
+                if new_theme_value == 'auto':
+                    # Auto-detect theme from QGIS
+                    detected_theme = StyleLoader.detect_qgis_theme()
+                    logger.info(f"Auto-detected QGIS theme: {detected_theme}")
+                    StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected_theme)
+                else:
+                    # Apply specified theme (default, dark, light)
+                    StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme_value)
+                
+                changes_summary.append(f"Theme: {new_theme_value}")
+                
+        except Exception as e:
+            logger.error(f"Error applying ACTIVE_THEME change: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _apply_ui_profile_change(self, change, changes_summary):
+        """
+        Apply UI_PROFILE configuration change.
+        
+        Updates UIConfig with new profile (compact/normal/auto) and re-applies
+        dynamic dimensions. Shows confirmation message to user.
+        """
+        items_keys_values_path = change['path']
+        index = change['index']
+        
+        if 'UI_PROFILE' not in items_keys_values_path:
+            return
+        
+        try:
+            # Get the new profile value from the edited item
+            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_data = value_item.data(QtCore.Qt.UserRole)
+            
+            # Handle ChoicesType format (dict with 'value' and 'choices')
+            if isinstance(value_data, dict) and 'value' in value_data:
+                new_profile_value = value_data['value']
+            else:
+                # Fallback for string format (backward compatibility)
+                new_profile_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+            
+            if new_profile_value:
+                logger.info(f"UI_PROFILE changed to: {new_profile_value}")
+                
+                # Update UIConfig with new profile
+                if UI_CONFIG_AVAILABLE:
+                    from .modules.ui_config import UIConfig, DisplayProfile
+                    
+                    if new_profile_value == 'compact':
+                        UIConfig.set_profile(DisplayProfile.COMPACT)
+                        logger.info("Switched to COMPACT profile")
+                    elif new_profile_value == 'normal':
+                        UIConfig.set_profile(DisplayProfile.NORMAL)
+                        logger.info("Switched to NORMAL profile")
+                    elif new_profile_value == 'auto':
+                        # Detect optimal profile based on screen size
+                        detected_profile = UIConfig.detect_optimal_profile()
+                        UIConfig.set_profile(detected_profile)
+                        logger.info(f"Auto-detected profile: {detected_profile.value}")
+                    
+                    # Re-apply dynamic dimensions with new profile
+                    self.apply_dynamic_dimensions()
+                    
+                    # Show confirmation message to user
+                    profile_display = UIConfig.get_profile_name().upper()
+                    iface.messageBar().pushSuccess(
+                        "FilterMate",
+                        f"UI profile changed to {profile_display} mode. Dimensions updated."
+                    )
+                    
+                    changes_summary.append(f"Profile: {new_profile_value}")
+                else:
+                    logger.warning("UI_CONFIG not available - cannot apply profile changes")
+                    
+        except Exception as e:
+            logger.error(f"Error applying UI_PROFILE change: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _apply_export_style_change(self, change, changes_summary):
+        """
+        Apply STYLES_TO_EXPORT configuration change.
+        
+        Updates the export style combobox with new value.
+        """
+        items_keys_values_path = change['path']
+        index = change['index']
+        
+        if 'STYLES_TO_EXPORT' not in items_keys_values_path:
+            return
+        
+        try:
+            # Get the new style value from the edited item
+            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_data = value_item.data(QtCore.Qt.UserRole)
+            
+            # Handle ChoicesType format (dict with 'value' and 'choices')
+            if isinstance(value_data, dict) and 'value' in value_data:
+                new_style_value = value_data['value']
+            else:
+                # Fallback for string format (backward compatibility)
+                new_style_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+            
+            if new_style_value and 'STYLES_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
+                logger.info(f"STYLES_TO_EXPORT changed to: {new_style_value}")
+                
+                # Update the combobox selection
+                style_combo = self.widgets["EXPORTING"]["STYLES_TO_EXPORT"]["WIDGET"]
+                index_to_set = style_combo.findText(new_style_value)
+                if index_to_set >= 0:
+                    style_combo.setCurrentIndex(index_to_set)
+                    logger.info(f"Export style updated to: {new_style_value}")
+                    
+                    iface.messageBar().pushInfo(
+                        "FilterMate",
+                        f"Export style changed to {new_style_value}"
+                    )
+                    
+                    changes_summary.append(f"Style: {new_style_value}")
+                
+        except Exception as e:
+            logger.error(f"Error applying STYLES_TO_EXPORT change: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _apply_export_format_change(self, change, changes_summary):
+        """
+        Apply DATATYPE_TO_EXPORT configuration change.
+        
+        Updates the export format combobox with new value.
+        """
+        items_keys_values_path = change['path']
+        index = change['index']
+        
+        if 'DATATYPE_TO_EXPORT' not in items_keys_values_path:
+            return
+        
+        try:
+            # Get the new format value from the edited item
+            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_data = value_item.data(QtCore.Qt.UserRole)
+            
+            # Handle ChoicesType format (dict with 'value' and 'choices')
+            if isinstance(value_data, dict) and 'value' in value_data:
+                new_format_value = value_data['value']
+            else:
+                # Fallback for string format (backward compatibility)
+                new_format_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+            
+            if new_format_value and 'DATATYPE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
+                logger.info(f"DATATYPE_TO_EXPORT changed to: {new_format_value}")
+                
+                # Update the combobox selection
+                format_combo = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
+                index_to_set = format_combo.findText(new_format_value)
+                if index_to_set >= 0:
+                    format_combo.setCurrentIndex(index_to_set)
+                    logger.info(f"Export format updated to: {new_format_value}")
+                    
+                    iface.messageBar().pushInfo(
+                        "FilterMate",
+                        f"Export format changed to {new_format_value}"
+                    )
+                    
+                    changes_summary.append(f"Format: {new_format_value}")
+                
+        except Exception as e:
+            logger.error(f"Error applying DATATYPE_TO_EXPORT change: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
 
     def apply_pending_config_changes(self):
-        """Apply all pending configuration changes when OK button is clicked"""
+        """
+        Apply all pending configuration changes when OK button is clicked.
         
+        Orchestrates the application of different config change types by delegating
+        to specialized methods.
+        """
         if not self.config_changes_pending or not self.pending_config_changes:
             logger.info("No pending configuration changes to apply")
             return
@@ -1206,171 +1412,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         for change in self.pending_config_changes:
             items_keys_values_path = change['path']
-            index = change['index']
-            item = change['item']
             
             # Handle ICONS changes
             if 'ICONS' in items_keys_values_path:
                 self.set_widget_icon(items_keys_values_path)
                 changes_summary.append(f"Icon: {' → '.join(items_keys_values_path[-2:])}")
             
-            # Handle ACTIVE_THEME changes - apply new theme
-            if 'ACTIVE_THEME' in items_keys_values_path:
-                try:
-                    # Get the new theme value from the edited item
-                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
-                    value_data = value_item.data(QtCore.Qt.UserRole)
-                    
-                    # Handle ChoicesType format (dict with 'value' and 'choices')
-                    if isinstance(value_data, dict) and 'value' in value_data:
-                        new_theme_value = value_data['value']
-                    else:
-                        # Fallback for string format (backward compatibility)
-                        new_theme_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-                    
-                    if new_theme_value:
-                        logger.info(f"ACTIVE_THEME changed to: {new_theme_value}")
-                        
-                        # Apply new theme
-                        from .modules.ui_styles import StyleLoader
-                        
-                        if new_theme_value == 'auto':
-                            # Auto-detect theme from QGIS
-                            detected_theme = StyleLoader.detect_qgis_theme()
-                            logger.info(f"Auto-detected QGIS theme: {detected_theme}")
-                            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected_theme)
-                        else:
-                            # Apply specified theme (default, dark, light)
-                            StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme_value)
-                        
-                        changes_summary.append(f"Theme: {new_theme_value}")
-                        
-                except Exception as e:
-                    logger.error(f"Error applying ACTIVE_THEME change: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
+            # Apply specialized change handlers
+            self._apply_theme_change(change, changes_summary)
+            self._apply_ui_profile_change(change, changes_summary)
+            self._apply_export_style_change(change, changes_summary)
+            self._apply_export_format_change(change, changes_summary)
             
-            # Handle UI_PROFILE changes - apply new dimensions immediately
-            if 'UI_PROFILE' in items_keys_values_path:
-                try:
-                    # Get the new profile value from the edited item
-                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
-                    value_data = value_item.data(QtCore.Qt.UserRole)
-                    
-                    # Handle ChoicesType format (dict with 'value' and 'choices')
-                    if isinstance(value_data, dict) and 'value' in value_data:
-                        new_profile_value = value_data['value']
-                    else:
-                        # Fallback for string format (backward compatibility)
-                        new_profile_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-                    
-                    if new_profile_value:
-                        logger.info(f"UI_PROFILE changed to: {new_profile_value}")
-                        
-                        # Update UIConfig with new profile
-                        if UI_CONFIG_AVAILABLE:
-                            from .modules.ui_config import UIConfig, DisplayProfile
-                            
-                            if new_profile_value == 'compact':
-                                UIConfig.set_profile(DisplayProfile.COMPACT)
-                                logger.info("Switched to COMPACT profile")
-                            elif new_profile_value == 'normal':
-                                UIConfig.set_profile(DisplayProfile.NORMAL)
-                                logger.info("Switched to NORMAL profile")
-                            elif new_profile_value == 'auto':
-                                # Detect optimal profile based on screen size
-                                detected_profile = UIConfig.detect_optimal_profile()
-                                UIConfig.set_profile(detected_profile)
-                                logger.info(f"Auto-detected profile: {detected_profile.value}")
-                            
-                            # Re-apply dynamic dimensions with new profile
-                            self.apply_dynamic_dimensions()
-                            
-                            # Show confirmation message to user
-                            profile_display = UIConfig.get_profile_name().upper()
-                            iface.messageBar().pushSuccess(
-                                "FilterMate",
-                                f"UI profile changed to {profile_display} mode. Dimensions updated.",
-                                3
-                            )
-                        else:
-                            logger.warning("UI_CONFIG not available - cannot apply profile changes")
-                            
-                except Exception as e:
-                    logger.error(f"Error applying UI_PROFILE change: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            
-            # Handle STYLES_TO_EXPORT changes - update export style combobox
-            if 'STYLES_TO_EXPORT' in items_keys_values_path:
-                try:
-                    # Get the new style value from the edited item
-                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
-                    value_data = value_item.data(QtCore.Qt.UserRole)
-                    
-                    # Handle ChoicesType format (dict with 'value' and 'choices')
-                    if isinstance(value_data, dict) and 'value' in value_data:
-                        new_style_value = value_data['value']
-                    else:
-                        # Fallback for string format (backward compatibility)
-                        new_style_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-                    
-                    if new_style_value and 'STYLE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
-                        logger.info(f"STYLES_TO_EXPORT changed to: {new_style_value}")
-                        
-                        # Update the combobox selection
-                        style_combo = self.widgets["EXPORTING"]["STYLE_TO_EXPORT"]["WIDGET"]
-                        index_to_set = style_combo.findText(new_style_value)
-                        if index_to_set >= 0:
-                            style_combo.setCurrentIndex(index_to_set)
-                            logger.info(f"Export style updated to: {new_style_value}")
-                            
-                            iface.messageBar().pushInfo(
-                                "FilterMate",
-                                f"Export style changed to {new_style_value}",
-                                3
-                            )
-                        
-                except Exception as e:
-                    logger.error(f"Error applying STYLES_TO_EXPORT change: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            
-            # Handle DATATYPE_TO_EXPORT changes - update export format combobox
-            if 'DATATYPE_TO_EXPORT' in items_keys_values_path:
-                try:
-                    # Get the new format value from the edited item
-                    value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
-                    value_data = value_item.data(QtCore.Qt.UserRole)
-                    
-                    # Handle ChoicesType format (dict with 'value' and 'choices')
-                    if isinstance(value_data, dict) and 'value' in value_data:
-                        new_format_value = value_data['value']
-                    else:
-                        # Fallback for string format (backward compatibility)
-                        new_format_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
-                    
-                    if new_format_value and 'DATATYPE_TO_EXPORT' in self.widgets.get('EXPORTING', {}):
-                        logger.info(f"DATATYPE_TO_EXPORT changed to: {new_format_value}")
-                        
-                        # Update the combobox selection
-                        format_combo = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
-                        index_to_set = format_combo.findText(new_format_value)
-                        if index_to_set >= 0:
-                            format_combo.setCurrentIndex(index_to_set)
-                            logger.info(f"Export format updated to: {new_format_value}")
-                            
-                            iface.messageBar().pushInfo(
-                                "FilterMate",
-                                f"Export format changed to {new_format_value}",
-                                3
-                            )
-                        
-                except Exception as e:
-                    logger.error(f"Error applying DATATYPE_TO_EXPORT change: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-
+            # Save configuration after each change
             self.save_configuration_model()
         
         # Clear pending changes after applying them
