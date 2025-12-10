@@ -34,6 +34,7 @@ from qgis.core import (
     QgsVectorLayer,
     QgsWkbTypes
 )
+from qgis.PyQt.QtCore import QMetaType
 from qgis.PyQt.QtCore import QThread
 
 # Import constants
@@ -89,13 +90,13 @@ def get_primary_key_name(layer):
     
     # Strategy 3: First integer field (often the primary key)
     for field in fields:
-        if field.type() in [QVariant.Int, QVariant.LongLong]:
+        if field.type() in [QMetaType.Type.Int, QMetaType.Type.LongLong]:
             logger.debug(f"Using first integer field as primary key: {field.name()}")
             return field.name()
     
     # Strategy 4: First string field that might be an ID
     for field in fields:
-        if field.type() == QVariant.String:
+        if field.type() == QMetaType.Type.QString:
             # Check if field name suggests it's an ID
             field_lower = field.name().lower()
             if any(keyword in field_lower for keyword in ['id', 'key', 'code', 'num']):

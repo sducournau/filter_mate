@@ -503,15 +503,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if hasattr(self, 'frame_filtering'):
             self.frame_filtering.setMinimumHeight(frame_filtering_min)
         
-        logger.debug(f\"Applied frame dimensions: widget_keys={widget_keys_min_width}-{widget_keys_max_width}px\")
+        logger.debug(f"Applied frame dimensions: widget_keys={widget_keys_min_width}-{widget_keys_max_width}px")
     
     def _harmonize_checkable_pushbuttons(self):
-        \"\"\"
+        """
         Harmonize dimensions of all checkable pushbuttons across tabs.
         
         Applies consistent sizing to exploring, filtering, and exporting pushbuttons
         based on the active UI profile (compact/normal).
-        \"\"\"
+        """
         try:
             from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
             from qgis.PyQt.QtCore import QSize

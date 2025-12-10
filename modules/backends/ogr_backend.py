@@ -365,7 +365,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     new_subset_expression = f"$id IN ({id_list})"
                 else:
                     # Get actual field values and check field type
-                    from qgis.PyQt.QtCore import QVariant
+                    from qgis.PyQt.QtCore import QMetaType
                     field_idx = layer.fields().indexFromName(pk_field)
                     
                     if field_idx < 0:
@@ -378,7 +378,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     selected_values = [f.attribute(pk_field) for f in layer.selectedFeatures()]
                     
                     # Quote string values, keep numeric values unquoted
-                    if field_type == QVariant.String:
+                    if field_type == QMetaType.Type.QString:
                         # String field - quote values and escape single quotes
                         id_list = ','.join(f"'{str(val).replace(chr(39), chr(39)+chr(39))}'" for val in selected_values)
                     else:
@@ -469,9 +469,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
             else:
                 # Add field
                 from qgis.core import QgsField
-                from qgis.PyQt.QtCore import QVariant
+                from qgis.PyQt.QtCore import QMetaType
                 
-                layer.dataProvider().addAttributes([QgsField(temp_field, QVariant.Int)])
+                layer.dataProvider().addAttributes([QgsField(temp_field, QMetaType.Type.Int)])
                 layer.updateFields()
                 self.log_debug(f"Added temp field '{temp_field}'")
             

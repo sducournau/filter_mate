@@ -25,10 +25,9 @@ from qgis.core import (
     QgsMessageLog,
     QgsProject,
     QgsTask,
-    QgsVectorLayer,
-    QVariant
+    QgsVectorLayer
 )
-from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal, QMetaType
 from qgis.utils import iface
 from qgis import processing
 import logging
@@ -702,7 +701,7 @@ class LayersManagementEngineTask(QgsTask):
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 
         # No unique field found - create virtual ID
-        new_field = QgsField('virtual_id', QVariant.LongLong)
+        new_field = QgsField('virtual_id', QMetaType.Type.LongLong)
         layer.addExpressionField('@row_number', new_field)
         return ('virtual_id', layer.fields().indexFromName('virtual_id'), new_field.typeName(), True)
 
