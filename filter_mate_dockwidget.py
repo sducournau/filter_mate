@@ -2240,158 +2240,189 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.exploring_groupbox_changed(exploring_groupbox)
 
-    def exploring_groupbox_changed(self, groupbox):
+    def _configure_single_selection_groupbox(self):
+        """
+        Configure UI for single feature selection mode.
         
+        Sets groupbox states (expand single, collapse others), persists to PROJECT_LAYERS,
+        disconnects signals, updates widgets with current layer, reconnects signals,
+        and triggers feature update.
+        
+        Returns:
+            bool: True if configuration succeeded, False if layer not in PROJECT_LAYERS
+        """
+        self.current_exploring_groupbox = "single_selection"
+        
+        # Save to PROJECT_LAYERS for persistence
+        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
+
+        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
+        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
+
+        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+
+        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+        
+
+        if self.current_layer is not None:
+            # CRITICAL: Use safe getter to validate layer exists in PROJECT_LAYERS
+            layer_props = self._safe_get_layer_props(self.current_layer)
+            if layer_props is None:
+                logger.warning(f"Cannot initialize single_selection exploring - layer not in PROJECT_LAYERS. Skipping.")
+                return False
+            
+            # CRITICAL: Disconnect signals BEFORE updating widgets
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
+            
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+            
+            # CRITICAL FIX: Update widget to use current layer
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+            
+            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            
+            # CRITICAL: Reconnect signals AFTER updating widgets
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+
+            # Trigger features update and link widgets
+            self.exploring_link_widgets()
+            self.exploring_features_changed(self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature())
+        else:
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        
+        return True
+
+    def _configure_multiple_selection_groupbox(self):
+        """
+        Configure UI for multiple features selection mode.
+        
+        Sets groupbox states (expand multiple, collapse others), persists to PROJECT_LAYERS,
+        disconnects signals, updates widgets with current layer, reconnects signals,
+        and triggers features update.
+        
+        Returns:
+            bool: True if configuration succeeded
+        """
+        self.current_exploring_groupbox = "multiple_selection"
+        
+        # Save to PROJECT_LAYERS for persistence
+        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
+
+        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
+        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
+
+        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
+
+        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+
+        if self.current_layer is not None:
+            # CRITICAL: Disconnect ALL signals BEFORE updating widgets
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+            
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+            
+            # CRITICAL: Reconnect signals AFTER updating widgets
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+
+            # Trigger features update and link widgets
+            self.exploring_link_widgets()
+            self.exploring_features_changed(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+        else:
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        
+        return True
+
+    def _configure_custom_selection_groupbox(self):
+        """
+        Configure UI for custom expression-based selection mode.
+        
+        Sets groupbox states (expand custom, collapse others), persists to PROJECT_LAYERS,
+        disconnects signals, updates expression widget with current layer, reconnects signals,
+        and triggers custom selection.
+        
+        Returns:
+            bool: True if configuration succeeded
+        """
+        self.current_exploring_groupbox = "custom_selection"
+        
+        # Save to PROJECT_LAYERS for persistence
+        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
+        
+        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
+        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
+
+        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+
+        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
+
+        if self.current_layer is not None:
+            # CRITICAL: Disconnect ALL signals BEFORE updating widgets
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
+
+            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            
+            # CRITICAL: Reconnect signals AFTER updating widgets
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+            
+            # Trigger link and custom selection
+            self.exploring_link_widgets()
+            self.exploring_custom_selection()
+        else:
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+        
+        return True
+
+    def exploring_groupbox_changed(self, groupbox):
+        """
+        Handle exploring groupbox selection change.
+        
+        Delegates to specialized configuration methods based on groupbox type.
+        Each mode (single/multiple/custom) has distinct widget configurations
+        and signal management requirements.
+        
+        Args:
+            groupbox (str): Selected groupbox ('single_selection', 'multiple_selection', or 'custom_selection')
+        """
         if self.widgets_initialized is True:
-
             if groupbox == "single_selection":
-    
-  
-
-                self.current_exploring_groupbox = "single_selection"
-                
-                # Save to PROJECT_LAYERS for persistence
-                if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
-
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
-
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
-                
-
-                if self.current_layer is not None:
-                    # CRITICAL: Use safe getter to validate layer exists in PROJECT_LAYERS
-                    layer_props = self._safe_get_layer_props(self.current_layer)
-                    if layer_props is None:
-                        logger.warning(f"Cannot initialize single_selection exploring - layer not in PROJECT_LAYERS. Skipping.")
-                        return
-                    
-                    # CRITICAL: Disconnect signals BEFORE updating widgets to prevent unwanted triggers
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
-                    
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    
-                    # CRITICAL FIX: Update SINGLE_SELECTION_FEATURES widget to use current layer
-                    # This ensures the QgsFeaturePickerWidget displays features from the correct layer
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-                    
-                    # Ensure mFieldExpressionWidget is linked to current layer
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                    
-                    # CRITICAL: Reconnect signals AFTER updating widgets
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-
-                    # Trigger features update and link widgets
-                    self.exploring_link_widgets()
-                    self.exploring_features_changed(self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature())
-                else:
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-
-
-
+                self._configure_single_selection_groupbox()
             elif groupbox == "multiple_selection":
-
-     
-                    
-                self.current_exploring_groupbox = "multiple_selection"
-                
-                # Save to PROJECT_LAYERS for persistence
-                if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
-
-
-
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
-
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
-
-
-
-                if self.current_layer is not None:
-                    # CRITICAL: Disconnect ALL signals BEFORE updating widgets
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
-
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    # Ensure mFieldExpressionWidget is linked to current layer
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-
-                    layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                    
-                    # CRITICAL: Reconnect signals AFTER updating widgets
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-
-                    # Trigger features update and link widgets
-                    self.exploring_link_widgets()
-                    self.exploring_features_changed(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
-                else:
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-
+                self._configure_multiple_selection_groupbox()
             elif groupbox == "custom_selection":
-
-
-                    
-                self.current_exploring_groupbox = "custom_selection"
-                
-                # Save to PROJECT_LAYERS for persistence
-                if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
-                
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
-                self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
-
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
-                self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-
-
-                if self.current_layer is not None:
-                    # CRITICAL: Disconnect ALL signals BEFORE updating widgets
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
-
-                    self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    # Ensure mFieldExpressionWidget is linked to current layer
-                    self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                    
-                    # CRITICAL: Reconnect signals AFTER updating widgets
-                    self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-                    
-                    # Trigger link and custom selection
-                    self.exploring_link_widgets()
-                    self.exploring_custom_selection()
-                else:
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+                self._configure_custom_selection_groupbox()
 
 
     def exploring_identify_clicked(self):
