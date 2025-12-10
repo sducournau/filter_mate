@@ -301,7 +301,53 @@ class FilterMateApp:
         # 
         # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
         # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
-
+    
+    def _handle_remove_all_layers(self):
+        """Handle remove all layers task."""
+        self._safe_cancel_all_tasks()
+        self.dockwidget.disconnect_widgets_signals()
+        self.dockwidget.reset_multiple_checkable_combobox()
+        self.layer_management_engine_task_completed({}, 'remove_all_layers')
+    
+    def _handle_project_initialization(self, task_name):
+        """Handle project read/new project initialization.
+        
+        Args:
+            task_name: 'project_read' or 'new_project'
+        """
+        # Verify project is valid
+        project = QgsProject.instance()
+        if not project:
+            logger.warning(f"Project not available for {task_name}, skipping")
+            return
+        
+        self.app_postgresql_temp_schema_setted = False
+        self._safe_cancel_all_tasks()
+        
+        # Reset project datasources
+        self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
+        self._loading_new_project = True
+        
+        init_env_vars()
+        global ENV_VARS
+        self.PROJECT = ENV_VARS["PROJECT"]
+        
+        # Verify project is still valid after init
+        if not self.PROJECT:
+            logger.warning(f"Project became invalid during {task_name}, skipping")
+            return
+        
+        self.MapLayerStore = self.PROJECT.layerStore()
+        init_layers = list(self.PROJECT.mapLayers().values())
+        self.init_filterMate_db()
+        
+        if len(init_layers) > 0:
+            self.manage_task('add_layers', init_layers)
+        else:
+            self.dockwidget.disconnect_widgets_signals()
+            self.dockwidget.reset_multiple_checkable_combobox()
+            self.layer_management_engine_task_completed({}, 'remove_all_layers')
+            self._loading_new_project = False
 
     def manage_task(self, task_name, data=None):
         """
@@ -348,49 +394,11 @@ class FilterMateApp:
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
 
         if task_name == 'remove_all_layers':
-           self._safe_cancel_all_tasks()
-           self.dockwidget.disconnect_widgets_signals()
-           self.dockwidget.reset_multiple_checkable_combobox()
-           self.layer_management_engine_task_completed({}, task_name)
-           return
+            self._handle_remove_all_layers()
+            return
         
         if task_name in ('project_read', 'new_project'):
-            # Verify project is valid before processing
-            project = QgsProject.instance()
-            if not project:
-                logger.warning(f"Project not available for {task_name}, skipping")
-                return
-            
-            self.app_postgresql_temp_schema_setted = False
-            self._safe_cancel_all_tasks()
-            
-            # Reset project datasources when loading new project
-            self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
-            
-            # Set flag to indicate we're loading a new project
-            # This will trigger UI refresh after add_layers completes
-            self._loading_new_project = True
-            
-            init_env_vars()
-
-            global ENV_VARS
-            self.PROJECT = ENV_VARS["PROJECT"]
-            
-            # Verify project is still valid after init
-            if not self.PROJECT:
-                logger.warning(f"Project became invalid during {task_name}, skipping")
-                return
-                
-            self.MapLayerStore = self.PROJECT.layerStore()
-            init_layers = list(self.PROJECT.mapLayers().values())
-            self.init_filterMate_db()
-            if len(init_layers) > 0:
-                self.manage_task('add_layers', init_layers)
-            else:
-                self.dockwidget.disconnect_widgets_signals()
-                self.dockwidget.reset_multiple_checkable_combobox()
-                self.layer_management_engine_task_completed({}, 'remove_all_layers')
-                self._loading_new_project = False
+            self._handle_project_initialization(task_name)
             return
 
         task_parameters = self.get_task_parameters(task_name, data)
@@ -500,6 +508,86 @@ class FilterMateApp:
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
     
+    def _build_layers_to_filter(self, current_layer):
+        """Build list of layers to filter with validation.
+        
+        Args:
+            current_layer: Source layer for filtering
+            
+        Returns:
+            list: List of validated layer info dictionaries
+        """
+        layers_to_filter = []
+        for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
+            if key in self.PROJECT_LAYERS:
+                layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+                
+                # Validate required keys exist for geometric filtering
+                required_keys = [
+                    'layer_name', 'layer_id', 'layer_provider_type',
+                    'primary_key_name', 'layer_geometry_field', 'layer_schema'
+                ]
+                
+                missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                if missing_keys:
+                    logger.warning(f"Layer {key} missing required keys: {missing_keys}")
+                    # Try to fill in missing keys if possible
+                    layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
+                    if layer_obj:
+                        layer = layer_obj[0]
+                        if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
+                            layer_info['layer_name'] = layer.name()
+                        if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
+                            layer_info['layer_id'] = layer.id()
+                        # Log what couldn't be filled
+                        still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                        if still_missing:
+                            logger.error(f"Cannot filter layer {key}: still missing {still_missing}")
+                            continue
+                
+                layers_to_filter.append(layer_info)
+        
+        return layers_to_filter
+    
+    def _initialize_filter_history(self, current_layer, layers_to_filter, task_parameters):
+        """Initialize filter history for source and associated layers.
+        
+        Args:
+            current_layer: Source layer
+            layers_to_filter: List of layers to be filtered
+            task_parameters: Task parameters with layer info
+        """
+        history = self.history_manager.get_or_create_history(current_layer.id())
+        if len(history._states) == 0:
+            # Push initial unfiltered state for source layer
+            current_filter = current_layer.subsetString()
+            current_count = current_layer.featureCount()
+            history.push_state(
+                expression=current_filter,
+                feature_count=current_count,
+                description="Initial state (before first filter)",
+                metadata={"operation": "initial", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
+            )
+            logger.info(f"FilterMate: Initialized history with current state for source layer {current_layer.id()}")
+        
+        # Initialize history for associated layers
+        for layer_info in layers_to_filter:
+            layer_id = layer_info.get("layer_id")
+            if layer_id and layer_id in self.PROJECT_LAYERS:
+                assoc_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
+                if len(assoc_layers) == 1:
+                    assoc_layer = assoc_layers[0]
+                    assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
+                    if len(assoc_history._states) == 0:
+                        assoc_filter = assoc_layer.subsetString()
+                        assoc_count = assoc_layer.featureCount()
+                        assoc_history.push_state(
+                            expression=assoc_filter,
+                            feature_count=assoc_count,
+                            description="Initial state (before first filter)",
+                            metadata={"operation": "initial", "backend": layer_info.get("layer_provider_type", "unknown")}
+                        )
+                        logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
 
     def get_task_parameters(self, task_name, data=None):
         """
@@ -549,92 +637,44 @@ class FilterMateApp:
             features, expression = self.dockwidget.get_current_features()
 
             if task_name in ('filter','unfilter','reset'):
-                layers_to_filter = []
-                for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
-                    if key in self.PROJECT_LAYERS:
-                        layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
-                        
-                        # Validate required keys exist for geometric filtering
-                        required_keys = [
-                            'layer_name', 'layer_id', 'layer_provider_type',
-                            'primary_key_name', 'layer_geometry_field', 'layer_schema'
-                        ]
-                        
-                        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                        if missing_keys:
-                            logger.warning(f"Layer {key} missing required keys: {missing_keys}")
-                            # Try to fill in missing keys if possible
-                            layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
-                            if layer_obj:
-                                layer = layer_obj[0]
-                                if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
-                                    layer_info['layer_name'] = layer.name()
-                                if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
-                                    layer_info['layer_id'] = layer.id()
-                                # Log what couldn't be filled
-                                still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                                if still_missing:
-                                    logger.error(f"Cannot filter layer {key}: still missing {still_missing}")
-                                    continue
-                        
-                        layers_to_filter.append(layer_info)
-
+                # Build validated list of layers to filter
+                layers_to_filter = self._build_layers_to_filter(current_layer)
 
                 if task_name == 'filter':
-
-                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
-                                                "layers": layers_to_filter,
-                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                    task_parameters["task"] = {
+                        "features": features,
+                        "expression": expression,
+                        "options": self.dockwidget.project_props["OPTIONS"],
+                        "layers": layers_to_filter,
+                        "db_file_path": self.db_file_path,
+                        "project_uuid": self.project_uuid
+                    }
                     
-                    # Initialize history with current state if this is the first filter
-                    history = self.history_manager.get_or_create_history(current_layer.id())
-                    if len(history._states) == 0:
-                        # Push initial unfiltered state for source layer
-                        current_filter = current_layer.subsetString()
-                        current_count = current_layer.featureCount()
-                        history.push_state(
-                            expression=current_filter,
-                            feature_count=current_count,
-                            description="Initial state (before first filter)",
-                            metadata={"operation": "initial", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
-                        )
-                        logger.info(f"FilterMate: Initialized history with current state for source layer {current_layer.id()}")
-                    
-                    # Initialize history for associated layers if this is their first filter
-                    for layer_info in layers_to_filter:
-                        layer_id = layer_info.get("layer_id")
-                        if layer_id and layer_id in self.PROJECT_LAYERS:
-                            assoc_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
-                            if len(assoc_layers) == 1:
-                                assoc_layer = assoc_layers[0]
-                                assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
-                                if len(assoc_history._states) == 0:
-                                    # Push initial unfiltered state for associated layer
-                                    assoc_filter = assoc_layer.subsetString()
-                                    assoc_count = assoc_layer.featureCount()
-                                    assoc_history.push_state(
-                                        expression=assoc_filter,
-                                        feature_count=assoc_count,
-                                        description="Initial state (before first filter)",
-                                        metadata={"operation": "initial", "backend": layer_info.get("layer_provider_type", "unknown")}
-                                    )
-                                    logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
-                    
+                    # Initialize filter history
+                    self._initialize_filter_history(current_layer, layers_to_filter, task_parameters)
                     return task_parameters
 
                 elif task_name == 'unfilter':
-
-                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
-                                                "layers": layers_to_filter,
-                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid,
-                                                "history_manager": self.history_manager }  # Pass history manager for undo
+                    task_parameters["task"] = {
+                        "features": features,
+                        "expression": expression,
+                        "options": self.dockwidget.project_props["OPTIONS"],
+                        "layers": layers_to_filter,
+                        "db_file_path": self.db_file_path,
+                        "project_uuid": self.project_uuid,
+                        "history_manager": self.history_manager
+                    }
                     return task_parameters
                 
                 elif task_name == 'reset':
-
-                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
-                                                "layers": layers_to_filter,
-                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
+                    task_parameters["task"] = {
+                        "features": features,
+                        "expression": expression,
+                        "options": self.dockwidget.project_props["OPTIONS"],
+                        "layers": layers_to_filter,
+                        "db_file_path": self.db_file_path,
+                        "project_uuid": self.project_uuid
+                    }
                     return task_parameters
 
             elif task_name == 'export':
@@ -642,62 +682,45 @@ class FilterMateApp:
                 for key in self.dockwidget.project_props["EXPORTING"]["LAYERS_TO_EXPORT"]:
                     if key in self.PROJECT_LAYERS:
                         layers_to_export.append(self.PROJECT_LAYERS[key]["infos"])
+                
                 task_parameters["task"] = self.dockwidget.project_props
                 task_parameters["task"]["layers"] = layers_to_export
-                                            
                 return task_parameters
             
         else:
+            # Layer management tasks
             if data is not None:
-                reset_all_layers_variables_flag = False
-                task_parameters = {}
-
                 if task_name == 'add_layers':
-
-                    new_layers = []
-
-                    if isinstance(data, list):
-                        layers = data
-                    else:
-                        layers = [data]
-
-                    if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
-                        reset_all_layers_variables_flag = True
-
-                    # for layer in layers:
-                    #     layer_total_features_count = None
-                    #     layer_features_source = 0
-
-                    #     subset_string_init = layer.subsetString()
-                    #     if subset_string_init != '':
-                    #         layer.setSubsetString('')
-
-                    #     data_provider_layer = layer.dataProvider()
-                    #     if data_provider_layer:
-                    #         layer_total_features_count = data_provider_layer.featureCount()
-                    #         layer_features_source = data_provider_layer.featureSource()
-
-                    #     if subset_string_init != '':
-                    #         layer.setSubsetString(subset_string_init)
-                        
-                    #     new_layers.append((layer, layer_features_source, layer_total_features_count))
-
-                    task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag":reset_all_layers_variables_flag,
-                                               "config_data": self.CONFIG_DATA, "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
-                    return task_parameters
+                    layers = data if isinstance(data, list) else [data]
+                    reset_flag = (self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and 
+                                 self.dockwidget.has_loaded_layers is False)
+                    
+                    return {
+                        "task": {
+                            "layers": layers,
+                            "project_layers": self.PROJECT_LAYERS,
+                            "reset_all_layers_variables_flag": reset_flag,
+                            "config_data": self.CONFIG_DATA,
+                            "db_file_path": self.db_file_path,
+                            "project_uuid": self.project_uuid
+                        }
+                    }
 
                 elif task_name == 'remove_layers':
-                    if isinstance(data, list):
-                        layers = data
-                    else:
-                        layers = [data]
-
-                    if self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and self.dockwidget.has_loaded_layers is False:
-                        reset_all_layers_variables_flag = True
-
-                    task_parameters["task"] = {"layers": layers, "project_layers": self.PROJECT_LAYERS, "reset_all_layers_variables_flag": reset_all_layers_variables_flag,
-                                               "config_data": self.CONFIG_DATA, "db_file_path": self.db_file_path, "project_uuid": self.project_uuid }
-                    return task_parameters
+                    layers = data if isinstance(data, list) else [data]
+                    reset_flag = (self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and 
+                                 self.dockwidget.has_loaded_layers is False)
+                    
+                    return {
+                        "task": {
+                            "layers": layers,
+                            "project_layers": self.PROJECT_LAYERS,
+                            "reset_all_layers_variables_flag": reset_flag,
+                            "config_data": self.CONFIG_DATA,
+                            "db_file_path": self.db_file_path,
+                            "project_uuid": self.project_uuid
+                        }
+                    }
 
 
     def filter_engine_task_completed(self, task_name, source_layer, task_parameters):
@@ -1098,6 +1121,180 @@ class FilterMateApp:
         }
         processing.run('qgis:createspatialindex', alg_params_createspatialindex)
     
+    def _ensure_db_directory(self):
+        """
+        Ensure database directory exists, create if missing.
+        
+        Returns:
+            bool: True if directory exists or was created, False on error
+        """
+        db_dir = os.path.dirname(self.db_file_path)
+        if not os.path.exists(db_dir):
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"Created database directory: {db_dir}")
+                return True
+            except OSError as error:
+                error_msg = f"Could not create database directory {db_dir}: {error}"
+                logger.error(error_msg)
+                iface.messageBar().pushCritical("FilterMate", error_msg)
+                return False
+        return True
+    
+    def _create_db_file(self, crs):
+        """
+        Create Spatialite database file if it doesn't exist.
+        
+        Args:
+            crs: QgsCoordinateReferenceSystem for database creation
+            
+        Returns:
+            bool: True if file exists or was created, False on error
+        """
+        if os.path.exists(self.db_file_path):
+            return True
+            
+        memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
+        layer_name = 'filterMate_db'
+        layer = QgsVectorLayer(memory_uri, layer_name, "memory")
+        
+        try:
+            QgsVectorFileWriter.writeAsVectorFormat(
+                layer, 
+                self.db_file_path, 
+                "utf-8", 
+                crs, 
+                driverName="SQLite", 
+                datasourceOptions=["SPATIALITE=YES", "SQLITE_MAX_LENGTH=100000000"]
+            )
+            return True
+        except Exception as error:
+            error_msg = f"Failed to create database file {self.db_file_path}: {error}"
+            logger.error(error_msg)
+            iface.messageBar().pushCritical("FilterMate", error_msg)
+            return False
+    
+    def _initialize_schema(self, cursor, project_settings):
+        """
+        Initialize database schema with fresh tables and project entry.
+        
+        Args:
+            cursor: Database cursor
+            project_settings: Project configuration dictionary
+        """
+        cursor.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
+            plugin_name='FilterMate',
+            version='1.6'
+        ))
+
+        cursor.execute("""CREATE TABLE fm_projects (
+                        project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                        _created_at DATETIME NOT NULL,
+                        _updated_at DATETIME NOT NULL,
+                        project_name VARYING CHARACTER(255) NOT NULL,
+                        project_path VARYING CHARACTER(255) NOT NULL,
+                        project_settings TEXT NOT NULL);
+                        """)
+
+        cursor.execute("""CREATE TABLE fm_subset_history (
+                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                        _updated_at DATETIME NOT NULL,
+                        fk_project VARYING CHARACTER(255) NOT NULL,
+                        layer_id VARYING CHARACTER(255) NOT NULL,
+                        layer_source_id VARYING CHARACTER(255) NOT NULL,
+                        seq_order INTEGER NOT NULL,
+                        subset_string TEXT NOT NULL,
+                        FOREIGN KEY (fk_project)  
+                        REFERENCES fm_projects(project_id));
+                        """)
+        
+        cursor.execute("""CREATE TABLE fm_project_layers_properties (
+                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                        _updated_at DATETIME NOT NULL,
+                        fk_project VARYING CHARACTER(255) NOT NULL,
+                        layer_id VARYING CHARACTER(255) NOT NULL,
+                        meta_type VARYING CHARACTER(255) NOT NULL,
+                        meta_key VARYING CHARACTER(255) NOT NULL,
+                        meta_value TEXT NOT NULL,
+                        FOREIGN KEY (fk_project)  
+                        REFERENCES fm_projects(project_id),
+                        CONSTRAINT property_unicity
+                        UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
+                        """)
+        
+        self.project_uuid = uuid.uuid4()
+    
+        cursor.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+            project_id=self.project_uuid,
+            project_name=self.project_file_name,
+            project_path=self.project_file_path,
+            project_settings=json.dumps(project_settings).replace("'", "''")
+        ))
+
+        # Set the project UUID for newly initialized database
+        QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+    
+    def _migrate_schema_if_needed(self, cursor):
+        """
+        Migrate database schema if needed (add fm_subset_history table for v1.6+).
+        
+        Args:
+            cursor: Database cursor
+            
+        Returns:
+            bool: True if subset history table exists
+        """
+        cursor.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_subset_history';""")
+        subset_history_exists = cursor.fetchone()[0] > 0
+        
+        if not subset_history_exists:
+            logger.info("Migrating database: creating fm_subset_history table")
+            cursor.execute("""CREATE TABLE fm_subset_history (
+                            id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                            _updated_at DATETIME NOT NULL,
+                            fk_project VARYING CHARACTER(255) NOT NULL,
+                            layer_id VARYING CHARACTER(255) NOT NULL,
+                            layer_source_id VARYING CHARACTER(255) NOT NULL,
+                            seq_order INTEGER NOT NULL,
+                            subset_string TEXT NOT NULL,
+                            FOREIGN KEY (fk_project)  
+                            REFERENCES fm_projects(project_id));
+                            """)
+            logger.info("Migration completed: fm_subset_history table created")
+            
+        return subset_history_exists
+    
+    def _load_or_create_project(self, cursor, project_settings):
+        """
+        Load existing project from database or create new entry.
+        
+        Args:
+            cursor: Database cursor
+            project_settings: Project configuration dictionary
+        """
+        # Check if this project exists
+        cursor.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
+            project_name=self.project_file_name,
+            project_path=self.project_file_path
+        ))
+
+        results = cursor.fetchall()
+
+        if len(results) == 1:
+            result = results[0]
+            project_settings_str = result[-1].replace("''", "'")
+            self.project_uuid = result[0]
+            self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings_str)
+            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
+        else:
+            self.project_uuid = uuid.uuid4()
+            cursor.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
+                project_id=self.project_uuid,
+                project_name=self.project_file_name,
+                project_path=self.project_file_path,
+                project_settings=json.dumps(project_settings).replace("'", "''")
+            ))
+            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
 
     def init_filterMate_db(self):
         """
@@ -1125,16 +1322,8 @@ class FilterMateApp:
             self.project_file_path = self.PROJECT.absolutePath()
             
             # Ensure database directory exists
-            db_dir = os.path.dirname(self.db_file_path)
-            if not os.path.exists(db_dir):
-                try:
-                    os.makedirs(db_dir, exist_ok=True)
-                    logger.info(f"Created database directory: {db_dir}")
-                except OSError as error:
-                    error_msg = f"Could not create database directory {db_dir}: {error}"
-                    logger.error(error_msg)
-                    iface.messageBar().pushCritical("FilterMate", error_msg)
-                    return
+            if not self._ensure_db_directory():
+                return
 
             logger.debug(f"Database file path: {self.db_file_path}")
 
@@ -1150,20 +1339,10 @@ class FilterMateApp:
             project_settings = self.CONFIG_DATA["CURRENT_PROJECT"]
             logger.debug(f"Project settings: {project_settings}")
 
-            if not os.path.exists(self.db_file_path):
-                memory_uri = 'NoGeometry?field=plugin_name:string(255,0)&field=_created_at:date(0,0)&field=_updated_at:date(0,0)&field=_version:string(255,0)'
-                layer_name = 'filterMate_db'
-                layer = QgsVectorLayer(memory_uri, layer_name, "memory")
-
-                crs = QgsCoordinateReferenceSystem("epsg:4326")
-                
-                try:
-                    QgsVectorFileWriter.writeAsVectorFormat(layer, self.db_file_path, "utf-8", crs, driverName="SQLite", datasourceOptions=["SPATIALITE=YES","SQLITE_MAX_LENGTH=100000000",])
-                except Exception as error:
-                    error_msg = f"Failed to create database file {self.db_file_path}: {error}"
-                    logger.error(error_msg)
-                    iface.messageBar().pushCritical("FilterMate", error_msg)
-                    return
+            # Create database file if missing
+            crs = QgsCoordinateReferenceSystem("epsg:4326")
+            if not self._create_db_file(crs):
+                return
             
             try:
                 conn = self.get_spatialite_connection()
@@ -1187,123 +1366,16 @@ class FilterMateApp:
                     cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_projects';""")
                     tables_exist = cur.fetchone()[0] > 0
                     
-                    # Migration: Check if fm_subset_history table exists (added in v1.6+)
-                    cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_subset_history';""")
-                    subset_history_exists = cur.fetchone()[0] > 0
-                    
                     if not tables_exist:
-                        # Initialize database only if tables don't exist
-                        cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
-                                                                                                                                        plugin_name='FilterMate',
-                                                                                                                                        version='1.6'
-                                                                                                                                        )
-                        )
-
-                        cur.execute("""CREATE TABLE fm_projects (
-                                        project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                        _created_at DATETIME NOT NULL,
-                                        _updated_at DATETIME NOT NULL,
-                                        project_name VARYING CHARACTER(255) NOT NULL,
-                                        project_path VARYING CHARACTER(255) NOT NULL,
-                                        project_settings TEXT NOT NULL);
-                                        """)
-
-                        cur.execute("""CREATE TABLE fm_subset_history (
-                                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                        _updated_at DATETIME NOT NULL,
-                                        fk_project VARYING CHARACTER(255) NOT NULL,
-                                        layer_id VARYING CHARACTER(255) NOT NULL,
-                                        layer_source_id VARYING CHARACTER(255) NOT NULL,
-                                        seq_order INTEGER NOT NULL,
-                                        subset_string TEXT NOT NULL,
-                                        FOREIGN KEY (fk_project)  
-                                        REFERENCES fm_projects(project_id));
-                                        """)
-                        
-                        cur.execute("""CREATE TABLE fm_project_layers_properties (
-                                        id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                        _updated_at DATETIME NOT NULL,
-                                        fk_project VARYING CHARACTER(255) NOT NULL,
-                                        layer_id VARYING CHARACTER(255) NOT NULL,
-                                        meta_type VARYING CHARACTER(255) NOT NULL,
-                                        meta_key VARYING CHARACTER(255) NOT NULL,
-                                        meta_value TEXT NOT NULL,
-                                        FOREIGN KEY (fk_project)  
-                                        REFERENCES fm_projects(project_id),
-                                        CONSTRAINT property_unicity
-                                        UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                                        """)
-                        
-                        self.project_uuid = uuid.uuid4()
-                    
-                        cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
-                                                                                                                                                                            project_id=self.project_uuid,
-                                                                                                                                                                            project_name=self.project_file_name,
-                                                                                                                                                                            project_path=self.project_file_path,
-                                                                                                                                                                            project_settings=json.dumps(project_settings).replace("\'","\'\'")
-                                                                                                                                                                            )
-                        )
-
+                        # Initialize fresh schema
+                        self._initialize_schema(cur, project_settings)
                         conn.commit()
-                        
-                        # Set the project UUID for newly initialized database
-                        QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
                     else:
-                        # Database already initialized
+                        # Database already initialized - migrate if needed
+                        self._migrate_schema_if_needed(cur)
                         
-                        # Migration: Create fm_subset_history table if it doesn't exist (for databases created before v1.6)
-                        if not subset_history_exists:
-                            logger.info("Migrating database: creating fm_subset_history table")
-                            cur.execute("""CREATE TABLE fm_subset_history (
-                                            id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                                            _updated_at DATETIME NOT NULL,
-                                            fk_project VARYING CHARACTER(255) NOT NULL,
-                                            layer_id VARYING CHARACTER(255) NOT NULL,
-                                            layer_source_id VARYING CHARACTER(255) NOT NULL,
-                                            seq_order INTEGER NOT NULL,
-                                            subset_string TEXT NOT NULL,
-                                            FOREIGN KEY (fk_project)  
-                                            REFERENCES fm_projects(project_id));
-                                            """)
-                            conn.commit()
-                            logger.info("Migration completed: fm_subset_history table created")
-                        
-                        # Check if this project exists
-                        cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
-                                                                                                                                                        project_name=self.project_file_name,
-                                                                                                                                                        project_path=self.project_file_path
-                                                                                                                                                        )
-                        )
-
-                        results = cur.fetchall()
-
-                        if len(results) == 1:
-                            result = results[0]
-                            project_settings = result[-1].replace("\'\'", "\'")
-                            self.project_uuid = result[0]
-                            self.CONFIG_DATA["CURRENT_PROJECT"] = json.loads(project_settings)
-                            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-
-                            # cur.execute("""UPDATE fm_projects 
-                            #                 SET _updated_at = datetime(),
-                            #                     project_settings = '{project_settings}' 
-                            #                 WHERE project_id = '{project_id}'""".format(
-                            #                                                             project_settings=project_settings,
-                            #                                                             project_id=project_id
-                            #                                                             )
-                            # )
-
-                        else:
-                            self.project_uuid = uuid.uuid4()
-                            cur.execute("""INSERT INTO fm_projects VALUES('{project_id}', datetime(), datetime(), '{project_name}', '{project_path}', '{project_settings}');""".format(
-                                                                                                                                                                                project_id=self.project_uuid,
-                                                                                                                                                                                project_name=self.project_file_name,
-                                                                                                                                                                                project_path=self.project_file_path,
-                                                                                                                                                                                project_settings=json.dumps(project_settings).replace("\'","\'\'")
-                                                                                                                                                                                )
-                            )
-                            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
-
+                        # Load or create project entry
+                        self._load_or_create_project(cur, project_settings)
                         conn.commit()
 
             except Exception as e:
