@@ -66,6 +66,7 @@ from qgis.core import (
     QgsFeature,
     QgsFeatureRequest,
     QgsGeometry,
+    QgsLayerItem,
     QgsProject,
     QgsProperty,
     QgsPropertyDefinition,
@@ -169,6 +170,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._updating_layers = False
         self._updating_current_layer = False
         self._signals_connected = False
+        self._pending_layers_update = False  # Flag to track if layers were updated before widgets_initialized
         
         # Initialize layer state
         self._initialize_layer_state()
@@ -371,83 +373,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Apply dynamic dimensions based on active profile
         self.apply_dynamic_dimensions()
 
-        # Create backend indicator label with horizontal layout for right alignment
-        self.backend_indicator_label = QtWidgets.QLabel(self)
-        self.backend_indicator_label.setObjectName("label_backend_indicator")
-        self.backend_indicator_label.setText("Backend: Detecting...")
-        self.backend_indicator_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        # Setup backend indicator (right-aligned label showing current backend)
+        self._setup_backend_indicator()
         
-        # Create horizontal layout for backend indicator (right-aligned)
-        backend_indicator_layout = QtWidgets.QHBoxLayout()
-        backend_indicator_layout.setContentsMargins(2, 0, 2, 0)
-        backend_indicator_layout.setSpacing(0)
-        backend_indicator_layout.addStretch()  # Push label to the right
-        backend_indicator_layout.addWidget(self.backend_indicator_label)
-        
-        # Add to the main layout (top of the widget)
-        if hasattr(self, 'verticalLayout_main_root'):
-            self.verticalLayout_main_root.insertLayout(0, backend_indicator_layout)
-
-        layout = self.verticalLayout_exploring_multiple_selection
-        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
-
-        # Filter comboBox_filtering_current_layer to show only vector layers
-        self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
-        
-        # Configure QgsFieldExpressionWidget to allow all field types (except geometry)
-        # QgsFieldProxyModel.AllTypes includes all field types
-        # We exclude only geometry fields using ~SkipGeometry filter
-        field_filters = QgsFieldProxyModel.AllTypes
-        self.mFieldExpressionWidget_exploring_single_selection.setFilters(field_filters)
-        self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
-        self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
-        
-        # Initialize QgsFieldExpressionWidget with init layer if available
-        if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
-            # Synchronize comboBox_filtering_current_layer with init_layer
-            self.comboBox_filtering_current_layer.setLayer(self.init_layer)
-            # Initialize all mFieldExpressionWidget with init_layer
-            self.mFieldExpressionWidget_exploring_single_selection.setLayer(self.init_layer)
-            self.mFieldExpressionWidget_exploring_multiple_selection.setLayer(self.init_layer)
-            self.mFieldExpressionWidget_exploring_custom_selection.setLayer(self.init_layer)
-            
-            # Update backend indicator with initial layer
-            if self.init_layer.id() in self.PROJECT_LAYERS:
-                layer_props = self.PROJECT_LAYERS[self.init_layer.id()]
-                if 'layer_provider_type' in layer_props.get('infos', {}):
-                    self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
-            else:
-                # PROJECT_LAYERS not populated yet, detect directly from layer
-                provider_type = self.init_layer.providerType()
-                if provider_type == 'postgres':
-                    self._update_backend_indicator(PROVIDER_POSTGRES)
-                elif provider_type == 'spatialite':
-                    self._update_backend_indicator(PROVIDER_SPATIALITE)
-                elif provider_type == 'ogr':
-                    self._update_backend_indicator(PROVIDER_OGR)
-                else:
-                    self._update_backend_indicator(provider_type)
-
-        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self)
-        #self.checkableComboBoxLayer_filtering_layers_to_filter.contextMenuEvent()
-
-        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self)
-
-        #self.checkableComboBoxLayer_exporting_layers.contextMenuEvent()
-        
-        # Apply height constraints to custom checkable comboboxes
-        # These widgets are created before apply_dynamic_dimensions() is called
-        from .modules.ui_config import UIConfig
-        try:
-            combobox_height = UIConfig.get_config('combobox', 'height')
-            for custom_combo in [self.checkableComboBoxLayer_filtering_layers_to_filter, 
-                                 self.checkableComboBoxLayer_exporting_layers]:
-                custom_combo.setMinimumHeight(combobox_height)
-                custom_combo.setMaximumHeight(combobox_height)
-                custom_combo.setSizePolicy(custom_combo.sizePolicy().horizontalPolicy(), 
-                                          QtWidgets.QSizePolicy.Fixed)
-        except Exception as e:
-            logger.debug(f"Could not set height for custom checkable comboboxes: {e}")
+        # Setup tab-specific widgets
+        self._setup_exploring_tab_widgets()
+        self._setup_filtering_tab_widgets()
+        self._setup_exporting_tab_widgets()
 
         # Continue setupUiCustom after widget creation
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
@@ -458,22 +390,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Setup anti-truncation tooltips for widgets with potentially long text
         self._setup_truncation_tooltips()
-
-        layout = self.verticalLayout_filtering_values
-        layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
-
-        # Find the layout that contains verticalSpacer_exporting_values_top
-        # This layout is the second child of horizontalLayout_3 in the exporting tab
-        exporting_tab_layout = self.findChild(QHBoxLayout, 'horizontalLayout_3')
-        if exporting_tab_layout:
-            # The verticalLayout is the layout at index 1 (second item) of horizontalLayout_3
-            exporting_values_layout = exporting_tab_layout.itemAt(1)
-            if exporting_values_layout:
-                # Insert the combobox right after the top spacer (index 1)
-                exporting_values_layout.insertWidget(1, self.checkableComboBoxLayer_exporting_layers)
-
-        #self.custom_identify_tool = CustomIdentifyTool(self.iface)
-        self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
 
 
     def apply_dynamic_dimensions(self):
@@ -943,6 +859,143 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             import traceback
             traceback.print_exc()
 
+    def _setup_backend_indicator(self):
+        """
+        Create and configure backend indicator label.
+        
+        Sets up the label displaying the current backend type (PostgreSQL/Spatialite/OGR)
+        with right alignment in the main layout.
+        """
+        # Create backend indicator label with horizontal layout for right alignment
+        self.backend_indicator_label = QtWidgets.QLabel(self)
+        self.backend_indicator_label.setObjectName("label_backend_indicator")
+        self.backend_indicator_label.setText("Backend: Detecting...")
+        self.backend_indicator_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        # Create horizontal layout for backend indicator (right-aligned)
+        backend_indicator_layout = QtWidgets.QHBoxLayout()
+        backend_indicator_layout.setContentsMargins(2, 0, 2, 0)
+        backend_indicator_layout.setSpacing(0)
+        backend_indicator_layout.addStretch()  # Push label to the right
+        backend_indicator_layout.addWidget(self.backend_indicator_label)
+        
+        # Add to the main layout (top of the widget)
+        if hasattr(self, 'verticalLayout_main_root'):
+            self.verticalLayout_main_root.insertLayout(0, backend_indicator_layout)
+
+    def _setup_exploring_tab_widgets(self):
+        """
+        Configure widgets for the Exploring tab.
+        
+        Sets up checkableComboBox for feature selection and configures mFieldExpressionWidget
+        for single/multiple/custom selection modes. Synchronizes with init_layer if available.
+        """
+        layout = self.verticalLayout_exploring_multiple_selection
+        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
+
+        # Configure QgsFieldExpressionWidget to allow all field types (except geometry)
+        # QgsFieldProxyModel.AllTypes includes all field types
+        # We exclude only geometry fields using ~SkipGeometry filter
+        field_filters = QgsFieldProxyModel.AllTypes
+        self.mFieldExpressionWidget_exploring_single_selection.setFilters(field_filters)
+        self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
+        self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
+        
+        # Initialize QgsFieldExpressionWidget with init layer if available
+        if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
+            # Initialize all mFieldExpressionWidget with init_layer
+            self.mFieldExpressionWidget_exploring_single_selection.setLayer(self.init_layer)
+            self.mFieldExpressionWidget_exploring_multiple_selection.setLayer(self.init_layer)
+            self.mFieldExpressionWidget_exploring_custom_selection.setLayer(self.init_layer)
+
+    def _setup_filtering_tab_widgets(self):
+        """
+        Configure widgets for the Filtering tab.
+        
+        Sets up comboBox_filtering_current_layer (VectorLayer filter), creates and configures
+        checkableComboBoxLayer_filtering_layers_to_filter, and synchronizes with init_layer.
+        Updates backend indicator based on current layer's provider type.
+        """
+        # Filter comboBox_filtering_current_layer to show only vector layers
+        self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        
+        # Synchronize comboBox_filtering_current_layer with init_layer if available
+        if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
+            self.comboBox_filtering_current_layer.setLayer(self.init_layer)
+            
+            # Update backend indicator with initial layer
+            if self.init_layer.id() in self.PROJECT_LAYERS:
+                layer_props = self.PROJECT_LAYERS[self.init_layer.id()]
+                if 'layer_provider_type' in layer_props.get('infos', {}):
+                    self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+            else:
+                # PROJECT_LAYERS not populated yet, detect directly from layer
+                provider_type = self.init_layer.providerType()
+                if provider_type == 'postgres':
+                    self._update_backend_indicator(PROVIDER_POSTGRES)
+                elif provider_type == 'spatialite':
+                    self._update_backend_indicator(PROVIDER_SPATIALITE)
+                elif provider_type == 'ogr':
+                    self._update_backend_indicator(PROVIDER_OGR)
+                else:
+                    self._update_backend_indicator(provider_type)
+
+        # Create custom checkable combobox for layers to filter
+        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self)
+        
+        # Insert into layout
+        layout = self.verticalLayout_filtering_values
+        layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
+        
+        # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
+        from .modules.ui_config import UIConfig
+        try:
+            combobox_height = UIConfig.get_config('combobox', 'height')
+            self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(combobox_height)
+            self.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(combobox_height)
+            self.checkableComboBoxLayer_filtering_layers_to_filter.setSizePolicy(
+                self.checkableComboBoxLayer_filtering_layers_to_filter.sizePolicy().horizontalPolicy(),
+                QtWidgets.QSizePolicy.Fixed
+            )
+        except Exception as e:
+            logger.debug(f"Could not set height for filtering checkable combobox: {e}")
+
+    def _setup_exporting_tab_widgets(self):
+        """
+        Configure widgets for the Exporting tab.
+        
+        Creates and configures checkableComboBoxLayer_exporting_layers, inserts it into layout,
+        and sets up map canvas selection color.
+        """
+        # Create custom checkable combobox for exporting layers
+        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self)
+        
+        # Find the layout that contains verticalSpacer_exporting_values_top
+        # This layout is the second child of horizontalLayout_3 in the exporting tab
+        exporting_tab_layout = self.findChild(QHBoxLayout, 'horizontalLayout_3')
+        if exporting_tab_layout:
+            # The verticalLayout is the layout at index 1 (second item) of horizontalLayout_3
+            exporting_values_layout = exporting_tab_layout.itemAt(1)
+            if exporting_values_layout:
+                # Insert the combobox right after the top spacer (index 1)
+                exporting_values_layout.insertWidget(1, self.checkableComboBoxLayer_exporting_layers)
+        
+        # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
+        from .modules.ui_config import UIConfig
+        try:
+            combobox_height = UIConfig.get_config('combobox', 'height')
+            self.checkableComboBoxLayer_exporting_layers.setMinimumHeight(combobox_height)
+            self.checkableComboBoxLayer_exporting_layers.setMaximumHeight(combobox_height)
+            self.checkableComboBoxLayer_exporting_layers.setSizePolicy(
+                self.checkableComboBoxLayer_exporting_layers.sizePolicy().horizontalPolicy(),
+                QtWidgets.QSizePolicy.Fixed
+            )
+        except Exception as e:
+            logger.debug(f"Could not set height for exporting checkable combobox: {e}")
+        
+        # Configure map canvas selection color
+        self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
+
     def dockwidget_widgets_configuration(self):
 
         self.layer_properties_tuples_dict =   {
@@ -1047,6 +1100,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 }
         
         self.widgets_initialized = True
+        print(f"FilterMate: === WIDGETS INITIALIZED === PROJECT_LAYERS count at init: {len(self.PROJECT_LAYERS)}")
+        logger.info(f"=== WIDGETS INITIALIZED === PROJECT_LAYERS count at init: {len(self.PROJECT_LAYERS)}")
+        
+        # CRITICAL: If layers were updated before widgets_initialized, refresh UI now
+        if self._pending_layers_update:
+            print(f"FilterMate: Pending layers update detected - refreshing UI with {len(self.PROJECT_LAYERS)} layers")
+            logger.info(f"Pending layers update detected - refreshing UI with {len(self.PROJECT_LAYERS)} layers")
+            self._pending_layers_update = False
+            # Use QTimer to ensure the event loop has processed widgets_initialized
+            from qgis.PyQt.QtCore import QTimer
+            QTimer.singleShot(50, lambda: self.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT))
 
     def data_changed_configuration_model(self, input_data=None):
         """Track configuration changes without applying them immediately"""
@@ -3530,10 +3594,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         # CRITICAL: Prevent recursive/multiple simultaneous calls
         if self._updating_layers:
-            logger.debug("Blocking recursive call to get_project_layers_from_app")
+            logger.warning("Blocking recursive call to get_project_layers_from_app")
             return
             
         self._updating_layers = True
+        
+        logger.info(f"get_project_layers_from_app called: widgets_initialized={self.widgets_initialized}, PROJECT_LAYERS count={len(project_layers)}")
         
         try:
             layer = None
@@ -3551,8 +3617,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             else:
                 self.has_loaded_layers = False
 
+            logger.info(f"has_loaded_layers={self.has_loaded_layers}, widgets_initialized={self.widgets_initialized}")
+
             # Only update UI if widgets are initialized
             if self.widgets_initialized is True:
+                logger.info(f"Updating UI: PROJECT is not None={self.PROJECT is not None}, PROJECT_LAYERS count={len(list(self.PROJECT_LAYERS))}")
 
                 if self.PROJECT is not None and len(list(self.PROJECT_LAYERS)) > 0:
 
@@ -3567,16 +3636,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         else:
                             if self.iface.activeLayer():
                                 layer = self.iface.activeLayer()
+                        
+                        # CRITICAL: If no active layer found but PROJECT_LAYERS has layers,
+                        # use the first available layer to enable the UI
+                        if layer is None and len(self.PROJECT_LAYERS) > 0:
+                            first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
+                            layer = self.PROJECT.mapLayer(first_layer_id)
+                            logger.info(f"No active layer - using first available layer: {layer.name() if layer else 'None'}")
+                            
                     except (AttributeError, KeyError, RuntimeError) as e:
                         logger.debug(f"Layer lookup failed, falling back to active layer: {e}")
                         if self.iface.activeLayer():
                             layer = self.iface.activeLayer()
+                        # Fallback to first layer in PROJECT_LAYERS
+                        elif len(self.PROJECT_LAYERS) > 0:
+                            first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
+                            layer = self.PROJECT.mapLayer(first_layer_id)
+                            logger.info(f"Exception occurred - using first available layer: {layer.name() if layer else 'None'}")
 
 
                     if self.has_loaded_layers is False:
                         self.has_loaded_layers = True
                         
+                    # CRITICAL: Always enable widgets if PROJECT_LAYERS has layers, even without active layer
+                    logger.info(f"About to enable UI: PROJECT_LAYERS count={len(self.PROJECT_LAYERS)}, layer={layer.name() if layer else 'None'}")
+                    logger.info(f"Calling set_widgets_enabled_state(True) with layer={layer.name() if layer else 'None'}")
                     self.set_widgets_enabled_state(True)
+                    logger.info(f"set_widgets_enabled_state(True) completed - UI should now be enabled")
                     
                     # Always populate export combobox when layers exist
                     self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
@@ -3627,22 +3713,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             self.filtering_populate_layers_chekableCombobox(self.current_layer)
                             self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
                     else:
-                        # If no layer or layer is not vector, still update filtering combobox
-                        # to show newly added layers when current layer stays the same
-                        if self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
-                            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-                            self.filtering_populate_layers_chekableCombobox(self.current_layer)
-                            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                        # No active layer found - widgets are enabled but show message to user
+                        logger.info(f"UI enabled with {len(self.PROJECT_LAYERS)} layers but no active layer selected")
+                        logger.info("User can click on a layer in the QGIS layer panel to activate it")
                     
                     return
 
                         
                 else:
+                    logger.warning(f"Cannot update UI: PROJECT is None={self.PROJECT is None}, PROJECT_LAYERS empty={len(list(self.PROJECT_LAYERS)) == 0}")
                     self.has_loaded_layers = False
                     self.disconnect_widgets_signals()
                     self._signals_connected = False
                     self.set_widgets_enabled_state(False)
                     return
+            else:
+                # Widgets not initialized yet - set flag to refresh later
+                print(f"FilterMate: Widgets not initialized yet, setting pending flag. PROJECT_LAYERS count: {len(self.PROJECT_LAYERS)}")
+                logger.warning(f"Widgets not initialized yet, setting pending flag. PROJECT_LAYERS count: {len(self.PROJECT_LAYERS)}")
+                self._pending_layers_update = True
         finally:
             # CRITICAL: Always release the lock, even if an error occurred
             self._updating_layers = False
