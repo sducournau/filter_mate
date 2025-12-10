@@ -175,6 +175,7 @@ class FilterMateApp:
         self.project_datasources = {}
         self.app_postgresql_temp_schema_setted = False
         self._signals_connected = False
+        self._loading_new_project = False  # Flag to track when loading a new project
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
@@ -239,6 +240,15 @@ class FilterMateApp:
             if init_layers is not None and len(init_layers) > 0:
                 # Increased delay to 500ms to ensure complete initialization
                 QTimer.singleShot(500, lambda: self.manage_task('add_layers', init_layers))
+                
+                # SAFETY: Force UI update after 2 seconds if task hasn't completed
+                # This ensures UI is never left in disabled state on startup
+                def ensure_ui_enabled():
+                    if self.dockwidget and len(self.PROJECT_LAYERS) > 0:
+                        logger.info("Safety timer: Forcing UI update after initial layer load")
+                        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+                
+                QTimer.singleShot(2000, ensure_ui_enabled)
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
@@ -353,6 +363,14 @@ class FilterMateApp:
             
             self.app_postgresql_temp_schema_setted = False
             self._safe_cancel_all_tasks()
+            
+            # Reset project datasources when loading new project
+            self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
+            
+            # Set flag to indicate we're loading a new project
+            # This will trigger UI refresh after add_layers completes
+            self._loading_new_project = True
+            
             init_env_vars()
 
             global ENV_VARS
@@ -372,6 +390,7 @@ class FilterMateApp:
                 self.dockwidget.disconnect_widgets_signals()
                 self.dockwidget.reset_multiple_checkable_combobox()
                 self.layer_management_engine_task_completed({}, 'remove_all_layers')
+                self._loading_new_project = False
             return
 
         task_parameters = self.get_task_parameters(task_name, data)
@@ -1168,6 +1187,10 @@ class FilterMateApp:
                     cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_projects';""")
                     tables_exist = cur.fetchone()[0] > 0
                     
+                    # Migration: Check if fm_subset_history table exists (added in v1.6+)
+                    cur.execute("""SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fm_subset_history';""")
+                    subset_history_exists = cur.fetchone()[0] > 0
+                    
                     if not tables_exist:
                         # Initialize database only if tables don't exist
                         cur.execute("""INSERT INTO filterMate_db VALUES(1, '{plugin_name}', datetime(), datetime(), '{version}');""".format(
@@ -1226,7 +1249,26 @@ class FilterMateApp:
                         # Set the project UUID for newly initialized database
                         QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', self.project_uuid)
                     else:
-                        # Database already initialized, check if this project exists
+                        # Database already initialized
+                        
+                        # Migration: Create fm_subset_history table if it doesn't exist (for databases created before v1.6)
+                        if not subset_history_exists:
+                            logger.info("Migrating database: creating fm_subset_history table")
+                            cur.execute("""CREATE TABLE fm_subset_history (
+                                            id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                                            _updated_at DATETIME NOT NULL,
+                                            fk_project VARYING CHARACTER(255) NOT NULL,
+                                            layer_id VARYING CHARACTER(255) NOT NULL,
+                                            layer_source_id VARYING CHARACTER(255) NOT NULL,
+                                            seq_order INTEGER NOT NULL,
+                                            subset_string TEXT NOT NULL,
+                                            FOREIGN KEY (fk_project)  
+                                            REFERENCES fm_projects(project_id));
+                                            """)
+                            conn.commit()
+                            logger.info("Migration completed: fm_subset_history table created")
+                        
+                        # Check if this project exists
                         cur.execute("""SELECT * FROM fm_projects WHERE project_name = '{project_name}' AND project_path = '{project_path}' LIMIT 1;""".format(
                                                                                                                                                         project_name=self.project_file_name,
                                                                                                                                                         project_path=self.project_file_path
@@ -1360,7 +1402,8 @@ class FilterMateApp:
             - Updates layer comboboxes and enables/disables controls
             - Reconnects widget signals after changes
         """
-
+        logger.info(f"layer_management_engine_task_completed called: task_name={task_name}, result_project_layers count={len(result_project_layers) if result_project_layers else 0}")
+        
         init_env_vars()
 
         global ENV_VARS
@@ -1523,6 +1566,36 @@ class FilterMateApp:
             logger.debug(f"Project datasources: {self.project_datasources}")
             cur.close()
             conn.close()
+            
+            # If we're loading a new project, force UI refresh after add_layers completes
+            if task_name == 'add_layers' and hasattr(self, '_loading_new_project') and self._loading_new_project:
+                logger.info("New project loaded - forcing UI refresh")
+                self._loading_new_project = False
+                # Force refresh of UI with a slight delay to ensure all signals are processed
+                if self.dockwidget is not None and self.dockwidget.widgets_initialized:
+                    QTimer.singleShot(100, lambda: self._refresh_ui_after_project_load())
+    
+    def _refresh_ui_after_project_load(self):
+        """
+        Force complete UI refresh after project load.
+        
+        Called when a new project is loaded while the plugin was already active.
+        Ensures all widgets and comboboxes are properly updated with new project layers.
+        """
+        if self.dockwidget is None or not self.dockwidget.widgets_initialized:
+            return
+            
+        logger.info("Forcing complete UI refresh after project load")
+        
+        # Ensure PROJECT_LAYERS is up to date
+        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+        
+        # If there's an active layer, trigger current_layer_changed to refresh everything
+        if self.iface.activeLayer() is not None:
+            active_layer = self.iface.activeLayer()
+            if isinstance(active_layer, QgsVectorLayer) and active_layer.id() in self.PROJECT_LAYERS:
+                self.dockwidget.current_layer_changed(active_layer)
+                logger.info(f"UI refreshed with active layer: {active_layer.name()}")
             
     def update_datasource(self):
         # POSTGRESQL_AVAILABLE est maintenant importé au niveau du module

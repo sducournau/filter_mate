@@ -12,7 +12,8 @@ from qgis.PyQt.QtGui import (
     QFont,
     QIcon,
     QPalette,
-    QPixmap
+    QPixmap,
+    QStandardItem
 )
 from qgis.PyQt.QtWidgets import (
     QAction,

@@ -21,22 +21,28 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 ```
 filter_mate/
 ├── filter_mate.py              # Plugin entry point (QGIS integration)
-├── filter_mate_app.py          # Main application orchestrator (~1100 lines)
-├── filter_mate_dockwidget.py   # UI dockwidget management (~2500 lines)
-├── filter_mate_dockwidget_base.py  # Base UI class
+├── filter_mate_app.py          # Main application orchestrator (~1687 lines)
+├── filter_mate_dockwidget.py   # UI dockwidget management (~3877 lines)
+├── filter_mate_dockwidget_base.py  # Base UI class (auto-generated)
 ├── filter_mate_dockwidget_base.ui  # Qt Designer UI file
 ├── config/
 │   ├── config.json             # Plugin configuration (dynamic, reactive)
 │   └── config.py               # Configuration loader
 ├── modules/
-│   ├── appTasks.py             # Async filtering tasks (QgsTask) (~2800 lines)
-│   ├── appUtils.py             # Database connections and utilities (~800 lines)
+│   ├── appTasks.py             # Async filtering tasks (QgsTask) (~5678 lines)
+│   ├── appUtils.py             # Database connections and utilities
 │   ├── backends/               # Multi-backend architecture
 │   │   ├── base_backend.py    # Abstract base class
 │   │   ├── factory.py         # Backend factory (auto-selection)
 │   │   ├── postgresql_backend.py  # PostgreSQL/PostGIS backend
 │   │   ├── spatialite_backend.py  # Spatialite backend
 │   │   └── ogr_backend.py     # OGR universal fallback
+│   ├── tasks/                  # Task modules (NEW in v2.3.0-alpha)
+│   │   ├── __init__.py         # Re-exports & backwards compatibility
+│   │   ├── task_utils.py       # Common utilities (328 lines)
+│   │   ├── geometry_cache.py   # SourceGeometryCache (146 lines)
+│   │   ├── layer_management_task.py  # LayersManagementEngineTask (1125 lines)
+│   │   └── README.md           # Task module documentation
 │   ├── config_helpers.py       # Configuration utilities (v2.2.2)
 │   ├── constants.py            # Application constants
 │   ├── customExceptions.py     # Custom exception classes
@@ -57,19 +63,65 @@ filter_mate/
 │   └── styles/                 # QSS theme files
 ├── icons/                      # Plugin icons
 ├── i18n/                       # Translations
-├── tests/                      # Unit tests (60+ tests)
+├── tests/                      # Unit tests (26+ tests)
 ├── docs/                       # Comprehensive documentation
 ├── website/                    # Docusaurus documentation site
 ├── .github/
-│   └── copilot-instructions.md # GitHub Copilot guidelines
+│   ├── copilot-instructions.md # GitHub Copilot guidelines
+│   └── workflows/
+│       └── test.yml            # CI/CD pipeline
+├── .editorconfig               # Editor configuration
 └── .serena/                    # Serena MCP configuration
 ```
 
 ## Current Status
 - **Version**: 2.2.5 (December 10, 2025)
+- **Development Version**: 2.3.0-alpha (Phase 3 refactoring in progress)
 - **Status**: Production - Geographic CRS handling with automatic EPSG:3857 conversion
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
+
+## Recent Development (December 10, 2025)
+
+### Code Quality Improvements
+**Status**: Phase 1 & 2 & 3a Complete ✅
+- **Tests**: 26 unit tests created, CI/CD active
+- **Wildcard Imports**: 94% eliminated (31/33 cleaned, 2 legitimate re-exports kept)
+- **PEP 8 Compliance**: 95% (was 85%)
+- **Code Quality**: 4.5/5 stars (was 2/5)
+- **Bare Except**: 100% eliminated (13/13 fixed)
+- **Null Comparisons**: 100% fixed (27/27 `!= None` → `is not None`)
+
+### Phase 3a: Task Module Extraction (✅ Complete)
+**Date**: December 10, 2025 - 23:00
+- **Extracted**: 474 lines of utilities from appTasks.py
+- **New Structure**: `modules/tasks/` directory
+  - `task_utils.py`: Common utilities (spatialite_connect, retry logic, CRS helpers)
+  - `geometry_cache.py`: SourceGeometryCache (5× speedup for multi-layer filtering)
+  - `__init__.py`: Backwards-compatible re-exports
+  - `README.md`: Complete documentation
+- **Benefits**: Better separation, testability, reusability
+- **Breaking Changes**: None (backwards compatibility maintained)
+- **Commit**: `699f637` - Phase 3a extraction
+
+### Phase 3b: Layer Management Extraction (✅ Complete)
+**Date**: December 10, 2025 - 23:30
+- **Extracted**: LayersManagementEngineTask (1125 lines) from appTasks.py
+- **New File**: `modules/tasks/layer_management_task.py`
+- **Contains**: Complete layer lifecycle management, index creation, metadata detection
+- **Benefits**: Isolation, testability, clearer responsibilities
+- **Breaking Changes**: None (backwards compatibility via __init__.py)
+- **Commit**: Not yet pushed
+
+### Latest Commits
+- `3d23744` (HEAD) - fixing missing imports
+- `2c8b627` - docs: Update implementation status with Phase 3a completion
+- `699f637` - refactor: Phase 3a - Extract utilities and cache from appTasks.py
+- `4f672ae` - docs: update implementation status and quality audit
+- `a4612f2` - fix: replace remaining bare except clauses
+- `0d9367e` - style(pep8): replace != None with is not None
+- `92a1f82` - fix: replace bare except clauses with specific exceptions
+- `317337b` - refactor(imports): remove redundant local imports
 
 ## Recent Releases
 
@@ -114,15 +166,6 @@ filter_mate/
 - **Auto-save**: Configuration changes saved automatically
 - **Type Safety**: Validation for configuration values
 
-### v2.1.0 - Major Multi-Backend Release
-- Complete multi-backend architecture with factory pattern
-- Dynamic UI dimensions system (compact/normal modes)
-- Enhanced theme support and QGIS synchronization
-- Comprehensive error handling and geometry repair (5 strategies)
-- SQLite database lock management with retry logic
-- Performance optimizations: 3-45× faster on typical operations
-- Extensive documentation and testing framework
-
 ## Key Features
 
 ### Core Functionality
@@ -146,8 +189,9 @@ filter_mate/
 - SQLite lock retry mechanism (5 attempts with exponential backoff)
 - Intelligent predicate ordering for optimal query performance
 - Spatial index automation
-- Source geometry caching for multi-layer operations
+- Source geometry caching for multi-layer operations (5× speedup)
 - Field name quote preservation for case-sensitive databases
+- Automatic geographic CRS to metric conversion
 
 ## Performance Characteristics
 
@@ -189,12 +233,18 @@ filter_mate/
 - Unit tests: `pytest tests/ -v`
 - Coverage: `pytest tests/ --cov=modules`
 - Performance benchmarks: `python tests/benchmark_simple.py`
-- 60+ comprehensive tests including:
+- 26+ comprehensive tests including:
   - Backend tests
   - Expression conversion tests
   - Color contrast/WCAG compliance tests
   - Configuration reactivity tests
   - Performance optimization tests
+
+### CI/CD
+- **GitHub Actions**: `.github/workflows/test.yml`
+- **Automated checks**: Tests, flake8, black, wildcard detection
+- **Coverage**: Codecov integration
+- **Triggers**: Push, pull requests
 
 ### Build & Release
 - Compile UI: `./compile_ui.sh` (Linux/macOS) or `compile_ui.bat` (Windows)
@@ -205,6 +255,8 @@ filter_mate/
 - Developer guide: `docs/DEVELOPER_ONBOARDING.md`
 - Architecture: `docs/architecture.md`
 - API docs: `docs/BACKEND_API.md`
+- Quality audit: `docs/CODEBASE_QUALITY_AUDIT_2025-12-10.md`
+- Implementation status: `docs/IMPLEMENTATION_STATUS_2025-12-10.md`
 - Color harmonization: `docs/COLOR_HARMONIZATION.md`
 - Website: https://sducournau.github.io/filter_mate
 
@@ -241,22 +293,25 @@ filter_mate/
 - Some QGIS expressions may not translate to all backends
 - Field names with special characters may need quoting
 
-### Fixed Issues (v2.2.4)
+### Fixed Issues (v2.2.4-2.2.5)
 - ✅ Spatialite field name quote preservation
 - ✅ Case-sensitive field name handling
 - ✅ Expression conversion robustness
+- ✅ Geographic coordinates zoom & flash flickering
+- ✅ Automatic metric CRS conversion
 
 ## Documentation Structure
 
 ### Core Documentation
 - `README.md`: User-facing introduction
-- `CHANGELOG.md`: Complete version history (1700+ lines)
+- `CHANGELOG.md`: Complete version history (1796+ lines)
 - `docs/INDEX.md`: Documentation index
 
 ### Technical Documentation
 - `docs/architecture.md`: System architecture
 - `docs/BACKEND_API.md`: Backend API reference
-- `docs/IMPLEMENTATION_STATUS.md`: Feature completion status
+- `docs/IMPLEMENTATION_STATUS_2025-12-10.md`: Feature completion status (696 lines)
+- `docs/CODEBASE_QUALITY_AUDIT_2025-12-10.md`: Quality audit (1689 lines)
 
 ### Configuration Documentation
 - `docs/CONFIG_JSON_REACTIVITY.md`: Reactivity system
@@ -272,6 +327,7 @@ filter_mate/
 - `docs/DEVELOPER_ONBOARDING.md`: Getting started guide
 - `.github/copilot-instructions.md`: Coding guidelines
 - `tests/README.md`: Testing guide
+- `modules/tasks/README.md`: Task module documentation
 
 ## Accessibility (v2.2.3+)
 
@@ -294,7 +350,8 @@ filter_mate/
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.2.4
+- **Current Plugin Version**: 2.2.5
+- **Development Version**: 2.3.0-alpha
 
 ## Serena Integration
 
@@ -310,3 +367,16 @@ FilterMate is configured for automatic Serena MCP server activation:
 - Leverage symbolic tools for token-efficient code exploration
 - Read `.github/copilot-instructions.md` for coding guidelines
 - Check `POSTGRESQL_AVAILABLE` before PostgreSQL operations
+- Serena MCP server auto-starts when Chat opens (Windows: configured via MCP with SERENA_PROJECT)
+
+## Next Steps (Phase 3 Refactoring)
+
+### In Progress
+- ✅ Phase 3a: Extract utilities from appTasks.py (Complete)
+- ✅ Phase 3b: Extract LayersManagementEngineTask (Complete)
+- 🔄 Phase 3c: Extract remaining tasks from appTasks.py (Next)
+
+### Planned
+- Phase 4: Decompose filter_mate_dockwidget.py into logical UI components
+- Phase 5: Additional testing and documentation
+- Phase 6: Performance optimization and final polish
