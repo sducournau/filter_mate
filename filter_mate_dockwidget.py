@@ -517,398 +517,388 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from qgis.PyQt.QtCore import QSize
             from .modules.ui_config import UIConfig, DisplayProfile
             
-            # Harmonize all checkable pushbuttons in exploring/filtering/exporting sections
-            try:
-                from qgis.PyQt.QtWidgets import QPushButton
-                from .modules.ui_config import DisplayProfile
-                
-                # Get dynamic dimensions based on active profile (compact/normal)
-                is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-                
-                if is_compact:
-                    # Compact mode - smaller pushbuttons
-                    pushbutton_min_width = 18
-                    pushbutton_max_width = 20
-                    pushbutton_min_height = 18
-                    pushbutton_max_height = 25
-                    pushbutton_icon_size = 16
-                else:
-                    # Normal mode - larger pushbuttons (ratio ~1.5x)
-                    pushbutton_min_width = 27
-                    pushbutton_max_width = 30
-                    pushbutton_min_height = 27
-                    pushbutton_max_height = 38
-                    pushbutton_icon_size = 24
-                
-                # Get all checkable pushbuttons with consistent naming pattern
-                checkable_buttons = []
-                
-                # Exploring buttons
-                exploring_button_names = [
-                    'pushButton_checkable_exploring_selecting',
-                    'pushButton_checkable_exploring_tracking',
-                    'pushButton_checkable_exploring_linking_widgets'
-                ]
-                
-                # Filtering buttons
-                filtering_button_names = [
-                    'pushButton_checkable_filtering_auto_current_layer',
-                    'pushButton_checkable_filtering_layers_to_filter',
-                    'pushButton_checkable_filtering_current_layer_combine_operator',
-                    'pushButton_checkable_filtering_geometric_predicates',
-                    'pushButton_checkable_filtering_buffer_value',
-                    'pushButton_checkable_filtering_buffer_type'
-                ]
-                
-                # Exporting buttons
-                exporting_button_names = [
-                    'pushButton_checkable_exporting_layers',
-                    'pushButton_checkable_exporting_projection',
-                    'pushButton_checkable_exporting_styles',
-                    'pushButton_checkable_exporting_datatype',
-                    'pushButton_checkable_exporting_output_folder',
-                    'pushButton_checkable_exporting_zip'
-                ]
-                
-                all_button_names = exploring_button_names + filtering_button_names + exporting_button_names
-                
-                # Apply consistent dimensions to all checkable pushbuttons
-                for button_name in all_button_names:
-                    if hasattr(self, button_name):
-                        button = getattr(self, button_name)
-                        if isinstance(button, QPushButton):
-                            # Set consistent size constraints
-                            button.setMinimumSize(pushbutton_min_width, pushbutton_min_height)
-                            button.setMaximumSize(pushbutton_max_width, pushbutton_max_height)
-                            
-                            # Set consistent icon size
-                            from qgis.PyQt.QtCore import QSize
-                            button.setIconSize(QSize(pushbutton_icon_size, pushbutton_icon_size))
-                            
-                            # Ensure consistent style properties
-                            button.setFlat(True)
-                            button.setCheckable(True)
-                            
-                            # Set consistent size policy
-                            from qgis.PyQt.QtWidgets import QSizePolicy
-                            button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-                            
-                            checkable_buttons.append(button_name)
-                
-                mode_name = 'COMPACT' if is_compact else 'NORMAL'
-                logger.info(f"Harmonized {len(checkable_buttons)} checkable pushbuttons in {mode_name} mode with dynamic dimensions: {pushbutton_min_width}-{pushbutton_max_width}x{pushbutton_min_height}-{pushbutton_max_height}px, icon={pushbutton_icon_size}px")
-                
-            except Exception as e:
-                logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
-                import traceback
-                traceback.print_exc()
+            # Get dynamic dimensions based on active profile (compact/normal)
+            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
             
-            # Apply to main frames
-            if hasattr(self, 'frame_exploring'):
-                self.frame_exploring.setMinimumHeight(frame_exploring_min)
-                self.frame_exploring.setMaximumHeight(frame_exploring_max)
+            if is_compact:
+                # Compact mode - smaller pushbuttons
+                pushbutton_min_width = 18
+                pushbutton_max_width = 20
+                pushbutton_min_height = 18
+                pushbutton_max_height = 25
+                pushbutton_icon_size = 16
+            else:
+                # Normal mode - larger pushbuttons (ratio ~1.5x)
+                pushbutton_min_width = 27
+                pushbutton_max_width = 30
+                pushbutton_min_height = 27
+                pushbutton_max_height = 38
+                pushbutton_icon_size = 24
             
-            if hasattr(self, 'frame_filtering'):
-                self.frame_filtering.setMinimumHeight(frame_filtering_min)
+            # Get all checkable pushbuttons with consistent naming pattern
+            checkable_buttons = []
             
-            # Apply spacing to exploring layouts to prevent widget overlap
-            try:
-                layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 6
-                
-                if hasattr(self, 'verticalLayout_exploring_single_selection'):
-                    self.verticalLayout_exploring_single_selection.setSpacing(layout_spacing)
-                
-                if hasattr(self, 'verticalLayout_exploring_multiple_selection'):
-                    self.verticalLayout_exploring_multiple_selection.setSpacing(layout_spacing)
-                
-                if hasattr(self, 'verticalLayout_exploring_custom_selection'):
-                    self.verticalLayout_exploring_custom_selection.setSpacing(layout_spacing)
-                    
-                logger.debug(f"Applied exploring layout spacing: {layout_spacing}px")
-            except Exception as e:
-                logger.debug(f"Could not apply exploring layout spacing: {e}")
+            # Exploring buttons
+            exploring_button_names = [
+                'pushButton_checkable_exploring_selecting',
+                'pushButton_checkable_exploring_tracking',
+                'pushButton_checkable_exploring_linking_widgets'
+            ]
             
-            # Apply dynamic margins to groupbox layouts
-            try:
-                margins_frame = UIConfig.get_config('layout', 'margins_frame')
-                if margins_frame and isinstance(margins_frame, dict):
-                    left = margins_frame.get('left', 4)
-                    top = margins_frame.get('top', 6)
-                    right = margins_frame.get('right', 4)
-                    bottom = margins_frame.get('bottom', 6)
-                    
-                    # Exploring groupbox layouts
-                    groupbox_layouts = [
-                        'gridLayout_exploring_single_content',
-                        'gridLayout_exploring_multiple_content',
-                        'verticalLayout_exploring_custom_container'
-                    ]
-                    
-                    for layout_name in groupbox_layouts:
-                        if hasattr(self, layout_name):
-                            layout = getattr(self, layout_name)
-                            layout.setContentsMargins(left, top, right, bottom)
-                    
-                    logger.debug(f"Applied groupbox margins: {left}-{top}-{right}-{bottom}")
-            except Exception as e:
-                logger.debug(f"Could not apply groupbox margins: {e}")
+            # Filtering buttons
+            filtering_button_names = [
+                'pushButton_checkable_filtering_auto_current_layer',
+                'pushButton_checkable_filtering_layers_to_filter',
+                'pushButton_checkable_filtering_current_layer_combine_operator',
+                'pushButton_checkable_filtering_geometric_predicates',
+                'pushButton_checkable_filtering_buffer_value',
+                'pushButton_checkable_filtering_buffer_type'
+            ]
             
-            # Apply to QGIS custom widgets
-            try:
-                from qgis.PyQt.QtWidgets import QSizePolicy
-                
-                # QgsFeaturePickerWidget
-                for widget in self.findChildren(QgsFeaturePickerWidget):
-                    widget.setMinimumHeight(combobox_height)
-                    widget.setMaximumHeight(combobox_height)
-                    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                
-                # QgsFieldExpressionWidget
-                for widget in self.findChildren(QgsFieldExpressionWidget):
-                    widget.setMinimumHeight(input_height)
-                    widget.setMaximumHeight(input_height)
-                    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                
-                # QgsProjectionSelectionWidget
-                for widget in self.findChildren(QgsProjectionSelectionWidget):
-                    widget.setMinimumHeight(combobox_height)
-                    widget.setMaximumHeight(combobox_height)
-                    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                
-                # QgsMapLayerComboBox
-                for widget in self.findChildren(QgsMapLayerComboBox):
-                    widget.setMinimumHeight(combobox_height)
-                    widget.setMaximumHeight(combobox_height)
-                    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                
-                # QgsFieldComboBox
-                for widget in self.findChildren(QgsFieldComboBox):
-                    widget.setMinimumHeight(combobox_height)
-                    widget.setMaximumHeight(combobox_height)
-                    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                
-                # QgsCheckableComboBox (QGIS native)
-                for widget in self.findChildren(QgsCheckableComboBox):
-                    widget.setMinimumHeight(combobox_height)
-                    widget.setMaximumHeight(combobox_height)
-                    widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                
-                # QgsPropertyOverrideButton - FORCE to exact 22px (smaller than inputs)
-                from qgis.gui import QgsPropertyOverrideButton
-                for widget in self.findChildren(QgsPropertyOverrideButton):
-                    # Force to 22px (slightly smaller than 24px inputs for visual hierarchy)
-                    button_size = 22
-                    widget.setMinimumHeight(button_size)
-                    widget.setMaximumHeight(button_size)
-                    widget.setMinimumWidth(button_size)
-                    widget.setMaximumWidth(button_size)
-                    widget.setFixedSize(button_size, button_size)
-                    widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-                    logger.debug(f"Forced QgsPropertyOverrideButton to {button_size}x{button_size}px")
-                    
-            except Exception as e:
-                # QGIS widgets may not support all size constraints
-                logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
+            # Exporting buttons
+            exporting_button_names = [
+                'pushButton_checkable_exporting_layers',
+                'pushButton_checkable_exporting_projection',
+                'pushButton_checkable_exporting_styles',
+                'pushButton_checkable_exporting_datatype',
+                'pushButton_checkable_exporting_output_folder',
+                'pushButton_checkable_exporting_zip'
+            ]
             
-            # Apply to spacers between buttons (for proper alignment)
-            # Harmonize vertical spacers across all three sections
-            try:
-                from qgis.PyQt.QtWidgets import QSpacerItem
-                from .modules.ui_elements import get_spacer_size
-                from .modules.ui_config import DisplayProfile
-                
-                # Initialize with default values to avoid UnboundLocalError
-                spacer_sizes = {
-                    'exploring': 4,
-                    'filtering': 4,
-                    'exporting': 4
-                }
-                
-                # Get consistent spacing from config
-                layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
-                
-                # Get compact mode status from UIConfig
-                is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-                
-                # Get dynamic spacer sizes based on active profile
-                # Use section-specific sizes from ui_elements configuration
-                spacer_sizes = {
-                    'exploring': get_spacer_size('verticalSpacer_exploring_tab_top', is_compact),
-                    'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
-                    'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
-                }
-                
-                spacer_width = 20  # Standard width for vertical spacers
-                
-                logger.info(f"Applying dynamic spacer sizes ({'COMPACT' if is_compact else 'NORMAL'} mode): exploring={spacer_sizes['exploring']}px, filtering={spacer_sizes['filtering']}px, exporting={spacer_sizes['exporting']}px")
-                
-                # Harmonize spacers in all three key widgets
-                sections = {
-                    'exploring': 'widget_exploring_keys',
-                    'filtering': 'widget_filtering_keys', 
-                    'exporting': 'widget_exporting_keys'
-                }
-                
-                for section_name, widget_name in sections.items():
-                    # Get section-specific spacer height
-                    target_spacer_height = spacer_sizes.get(section_name, 4)
-                    
-                    if hasattr(self, widget_name):
-                        widget = getattr(self, widget_name)
-                        layout = widget.layout()
-                        if layout:
-                            spacer_count = 0
-                            # Find the nested verticalLayout (e.g., verticalLayout_filtering_keys)
-                            for i in range(layout.count()):
-                                item = layout.itemAt(i)
-                                if item and hasattr(item, 'layout') and item.layout():
-                                    nested_layout = item.layout()
-                                    # Iterate through nested layout items to find spacers
-                                    for j in range(nested_layout.count()):
-                                        nested_item = nested_layout.itemAt(j)
-                                        if nested_item and isinstance(nested_item, QSpacerItem):
-                                            # Set section-specific spacer dimensions
-                                            nested_item.changeSize(
-                                                spacer_width,
-                                                target_spacer_height,
-                                                nested_item.sizePolicy().horizontalPolicy(),
-                                                nested_item.sizePolicy().verticalPolicy()
-                                            )
-                                            spacer_count += 1
-                            
-                            if spacer_count > 0:
-                                logger.debug(f"Harmonized {spacer_count} spacers in {section_name} section to {target_spacer_height}px")
-                
-                logger.info(f"Successfully applied dynamic spacer dimensions based on active UI profile")
-                
-            except Exception as e:
-                logger.warning(f"Could not harmonize spacers: {e}")
-                import traceback
-                traceback.print_exc()
+            all_button_names = exploring_button_names + filtering_button_names + exporting_button_names
             
-            # Apply spacing to filtering/exporting keys layouts for better alignment
-            # Also harmonize exploring keys layout for consistency
-            try:
-                layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
-                
-                # Apply consistent spacing and alignment to ALL key layouts (exploring/filtering/exporting)
-                key_layouts = [
-                    ('verticalLayout_exploring_keys', 'exploring keys'),
-                    ('verticalLayout_filtering_keys', 'filtering keys'),
-                    ('verticalLayout_exporting_keys', 'exporting keys')
-                ]
-                
-                for layout_name, description in key_layouts:
-                    if hasattr(self, layout_name):
-                        layout = getattr(self, layout_name)
-                        # Set consistent spacing between items
-                        layout.setSpacing(layout_spacing)
-                        # Remove content margins for alignment
-                        layout.setContentsMargins(0, 0, 0, 0)
-                        # Center buttons vertically within their space
-                        layout.setAlignment(Qt.AlignVCenter)
-                        logger.debug(f"Applied spacing {layout_spacing}px to {description}")
-                
-                # Also apply consistent styling to parent container layouts
-                parent_widgets = [
-                    ('widget_exploring_keys', 'exploring'),
-                    ('widget_filtering_keys', 'filtering'),
-                    ('widget_exporting_keys', 'exporting')
-                ]
-                
-                for widget_name, section in parent_widgets:
-                    if hasattr(self, widget_name):
-                        parent_layout = getattr(self, widget_name).layout()
-                        if parent_layout:
-                            # Minimal horizontal margins, no vertical margins
-                            parent_layout.setContentsMargins(2, 0, 2, 0)
-                            # Center content
-                            parent_layout.setAlignment(Qt.AlignCenter)
-                            logger.debug(f"Aligned {section} parent layout")
-                    
-                logger.info(f"Harmonized all key layouts with {layout_spacing}px spacing and center alignment")
-                
-            except Exception as e:
-                logger.warning(f"Could not harmonize key layouts: {e}")
-                import traceback
-                traceback.print_exc()
+            # Apply consistent dimensions to all checkable pushbuttons
+            for button_name in all_button_names:
+                if hasattr(self, button_name):
+                    button = getattr(self, button_name)
+                    if isinstance(button, QPushButton):
+                        # Set consistent size constraints
+                        button.setMinimumSize(pushbutton_min_width, pushbutton_min_height)
+                        button.setMaximumSize(pushbutton_max_width, pushbutton_max_height)
+                        
+                        # Set consistent icon size
+                        button.setIconSize(QSize(pushbutton_icon_size, pushbutton_icon_size))
+                        
+                        # Ensure consistent style properties
+                        button.setFlat(True)
+                        button.setCheckable(True)
+                        
+                        # Set consistent size policy
+                        button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                        
+                        checkable_buttons.append(button_name)
             
-            # Adjust spacing between tool buttons and their associated widgets
-            try:
-                from qgis.PyQt.QtWidgets import QSpacerItem, QHBoxLayout
-                
-                # Get widget dimensions for proper alignment
-                combobox_height = UIConfig.get_config('combobox', 'height') or 24
-                pushbutton_height = 25  # From UI file max height
-                
-                # Calculate the vertical offset needed to center pushbuttons with widgets
-                # When a row has a horizontalLayout with tools, we need consistent spacing
-                vertical_center_offset = 0  # Start with no offset
-                
-                # Adjust spacers in filtering values layout to match keys layout
-                if hasattr(self, 'verticalLayout_filtering_values'):
-                    values_layout = self.verticalLayout_filtering_values
-                    
-                    # Get dynamic spacer height for filtering section
-                    spacer_target_height = spacer_sizes.get('filtering', 4)
-                    
-                    for i in range(values_layout.count()):
-                        item = values_layout.itemAt(i)
-                        if item and isinstance(item, QSpacerItem):
-                            # Get current spacer dimensions
-                            current_height = item.sizeHint().height()
-                            
-                            # Adjust spacer to target height for alignment
-                            item.changeSize(
-                                item.sizeHint().width(),
-                                spacer_target_height,
-                                item.sizePolicy().horizontalPolicy(),
-                                item.sizePolicy().verticalPolicy()
-                            )
-                            logger.debug(f"Adjusted filtering spacer from {current_height}px to {spacer_target_height}px")
-                
-                # Adjust spacers in exporting values layout to match keys layout
-                if hasattr(self, 'verticalLayout_exporting_values'):
-                    values_layout = self.verticalLayout_exporting_values
-                    
-                    # Get dynamic spacer height for exporting section
-                    spacer_target_height = spacer_sizes.get('exporting', 4)
-                    
-                    for i in range(values_layout.count()):
-                        item = values_layout.itemAt(i)
-                        if item and isinstance(item, QSpacerItem):
-                            # Get current spacer dimensions
-                            current_height = item.sizeHint().height()
-                            
-                            # Adjust spacer to target height for alignment
-                            item.changeSize(
-                                item.sizeHint().width(),
-                                spacer_target_height,
-                                item.sizePolicy().horizontalPolicy(),
-                                item.sizePolicy().verticalPolicy()
-                            )
-                            logger.debug(f"Adjusted exporting spacer from {current_height}px to {spacer_target_height}px")
-                
-                # Set spacing on values layouts to match keys layouts
-                if hasattr(self, 'verticalLayout_filtering_values'):
-                    self.verticalLayout_filtering_values.setSpacing(layout_spacing)
-                    logger.debug(f"Set filtering values spacing to {layout_spacing}px")
-                
-                if hasattr(self, 'verticalLayout_exporting_values'):
-                    self.verticalLayout_exporting_values.setSpacing(layout_spacing)
-                    logger.debug(f"Set exporting values spacing to {layout_spacing}px")
-                
-                logger.info(f"Aligned filtering/exporting rows with {layout_spacing}px spacing")
-                
-            except Exception as e:
-                logger.warning(f"Could not adjust filtering/exporting row spacing: {e}")
-                import traceback
-                traceback.print_exc()
-            
-            logger.info(f"Applied dynamic dimensions: ComboBox={combobox_height}px, Input={input_height}px, ToolButton={tool_button_height if 'tool_button_height' in locals() else 'N/A'}px")
+            mode_name = 'COMPACT' if is_compact else 'NORMAL'
+            logger.debug(f"Harmonized {len(checkable_buttons)} checkable pushbuttons in {mode_name} mode: {pushbutton_min_width}-{pushbutton_max_width}x{pushbutton_min_height}-{pushbutton_max_height}px")
             
         except Exception as e:
-            logger.error(f"Error applying dynamic dimensions: {e}")
+            logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _apply_layout_spacing(self):
+        """
+        Apply consistent spacing to layouts across all tabs.
+        
+        Sets spacing for exploring groupbox layouts and margins for groupbox content areas.
+        """
+        try:
+            from .modules.ui_config import UIConfig
+            
+            # Get layout spacing from config
+            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 6
+            
+            # Apply spacing to exploring layouts to prevent widget overlap
+            if hasattr(self, 'verticalLayout_exploring_single_selection'):
+                self.verticalLayout_exploring_single_selection.setSpacing(layout_spacing)
+            
+            if hasattr(self, 'verticalLayout_exploring_multiple_selection'):
+                self.verticalLayout_exploring_multiple_selection.setSpacing(layout_spacing)
+            
+            if hasattr(self, 'verticalLayout_exploring_custom_selection'):
+                self.verticalLayout_exploring_custom_selection.setSpacing(layout_spacing)
+            
+            # Apply dynamic margins to groupbox layouts
+            margins_frame = UIConfig.get_config('layout', 'margins_frame')
+            if margins_frame and isinstance(margins_frame, dict):
+                left = margins_frame.get('left', 4)
+                top = margins_frame.get('top', 6)
+                right = margins_frame.get('right', 4)
+                bottom = margins_frame.get('bottom', 6)
+                
+                # Exploring groupbox layouts
+                groupbox_layouts = [
+                    'gridLayout_exploring_single_content',
+                    'gridLayout_exploring_multiple_content',
+                    'verticalLayout_exploring_custom_container'
+                ]
+                
+                for layout_name in groupbox_layouts:
+                    if hasattr(self, layout_name):
+                        layout = getattr(self, layout_name)
+                        layout.setContentsMargins(left, top, right, bottom)
+                
+                logger.debug(f"Applied groupbox margins: {left}-{top}-{right}-{bottom}")
+            
+            logger.debug(f"Applied layout spacing: {layout_spacing}px")
+            
+        except Exception as e:
+            logger.debug(f"Could not apply layout spacing: {e}")
+    
+    def _harmonize_spacers(self):
+        """
+        Harmonize vertical spacers across all key widget sections.
+        
+        Applies consistent spacer dimensions to exploring/filtering/exporting key widgets
+        based on section-specific sizes from UI config.
+        """
+        try:
+            from qgis.PyQt.QtWidgets import QSpacerItem
+            from .modules.ui_elements import get_spacer_size
+            from .modules.ui_config import UIConfig, DisplayProfile
+            
+            # Get compact mode status from UIConfig
+            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
+            
+            # Get dynamic spacer sizes based on active profile
+            spacer_sizes = {
+                'exploring': get_spacer_size('verticalSpacer_exploring_tab_top', is_compact),
+                'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
+                'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
+            }
+            
+            spacer_width = 20  # Standard width for vertical spacers
+            
+            # Harmonize spacers in all three key widgets
+            sections = {
+                'exploring': 'widget_exploring_keys',
+                'filtering': 'widget_filtering_keys',
+                'exporting': 'widget_exporting_keys'
+            }
+            
+            for section_name, widget_name in sections.items():
+                # Get section-specific spacer height
+                target_spacer_height = spacer_sizes.get(section_name, 4)
+                
+                if hasattr(self, widget_name):
+                    widget = getattr(self, widget_name)
+                    layout = widget.layout()
+                    if layout:
+                        spacer_count = 0
+                        # Find the nested verticalLayout (e.g., verticalLayout_filtering_keys)
+                        for i in range(layout.count()):
+                            item = layout.itemAt(i)
+                            if item and hasattr(item, 'layout') and item.layout():
+                                nested_layout = item.layout()
+                                # Iterate through nested layout items to find spacers
+                                for j in range(nested_layout.count()):
+                                    nested_item = nested_layout.itemAt(j)
+                                    if nested_item and isinstance(nested_item, QSpacerItem):
+                                        # Set section-specific spacer dimensions
+                                        nested_item.changeSize(
+                                            spacer_width,
+                                            target_spacer_height,
+                                            nested_item.sizePolicy().horizontalPolicy(),
+                                            nested_item.sizePolicy().verticalPolicy()
+                                        )
+                                        spacer_count += 1
+                        
+                        if spacer_count > 0:
+                            logger.debug(f"Harmonized {spacer_count} spacers in {section_name} to {target_spacer_height}px")
+            
+            mode_name = 'COMPACT' if is_compact else 'NORMAL'
+            logger.debug(f"Applied spacer dimensions ({mode_name} mode): {spacer_sizes}")
+            
+        except Exception as e:
+            logger.warning(f"Could not harmonize spacers: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _apply_qgis_widget_dimensions(self):
+        """
+        Apply dimensions to QGIS custom widgets.
+        
+        Sets heights for QgsFeaturePickerWidget, QgsFieldExpressionWidget, 
+        QgsProjectionSelectionWidget, and forces QgsPropertyOverrideButton to exact 22px.
+        """
+        try:
+            from qgis.PyQt.QtWidgets import QSizePolicy
+            from .modules.ui_config import UIConfig
+            
+            # Get dimensions from config
+            combobox_height = UIConfig.get_config('combobox', 'height') or 24
+            input_height = UIConfig.get_config('input', 'height') or 24
+            
+            # QgsFeaturePickerWidget
+            for widget in self.findChildren(QgsFeaturePickerWidget):
+                widget.setMinimumHeight(combobox_height)
+                widget.setMaximumHeight(combobox_height)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # QgsFieldExpressionWidget
+            for widget in self.findChildren(QgsFieldExpressionWidget):
+                widget.setMinimumHeight(input_height)
+                widget.setMaximumHeight(input_height)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # QgsProjectionSelectionWidget
+            for widget in self.findChildren(QgsProjectionSelectionWidget):
+                widget.setMinimumHeight(combobox_height)
+                widget.setMaximumHeight(combobox_height)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # QgsMapLayerComboBox
+            for widget in self.findChildren(QgsMapLayerComboBox):
+                widget.setMinimumHeight(combobox_height)
+                widget.setMaximumHeight(combobox_height)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # QgsFieldComboBox
+            for widget in self.findChildren(QgsFieldComboBox):
+                widget.setMinimumHeight(combobox_height)
+                widget.setMaximumHeight(combobox_height)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # QgsCheckableComboBox (QGIS native)
+            for widget in self.findChildren(QgsCheckableComboBox):
+                widget.setMinimumHeight(combobox_height)
+                widget.setMaximumHeight(combobox_height)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # QgsPropertyOverrideButton - FORCE to exact 22px (smaller than inputs)
+            from qgis.gui import QgsPropertyOverrideButton
+            for widget in self.findChildren(QgsPropertyOverrideButton):
+                # Force to 22px (slightly smaller than 24px inputs for visual hierarchy)
+                button_size = 22
+                widget.setMinimumHeight(button_size)
+                widget.setMaximumHeight(button_size)
+                widget.setMinimumWidth(button_size)
+                widget.setMaximumWidth(button_size)
+                widget.setFixedSize(button_size, button_size)
+                widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            
+            logger.debug(f"Applied QGIS widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
+            
+        except Exception as e:
+            # QGIS widgets may not support all size constraints
+            logger.debug(f"Could not apply dimensions to QGIS widgets: {e}")
+    
+    def _align_key_layouts(self):
+        """
+        Align key layouts (exploring/filtering/exporting) for visual consistency.
+        
+        Sets consistent spacing, margins, and alignment for all key widget layouts
+        and their parent containers.
+        """
+        try:
+            from .modules.ui_config import UIConfig
+            
+            # Get layout spacing from config
+            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            
+            # Apply consistent spacing and alignment to ALL key layouts
+            key_layouts = [
+                ('verticalLayout_exploring_keys', 'exploring keys'),
+                ('verticalLayout_filtering_keys', 'filtering keys'),
+                ('verticalLayout_exporting_keys', 'exporting keys')
+            ]
+            
+            for layout_name, description in key_layouts:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    # Set consistent spacing between items
+                    layout.setSpacing(layout_spacing)
+                    # Remove content margins for alignment
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    # Center buttons vertically within their space
+                    layout.setAlignment(Qt.AlignVCenter)
+            
+            # Apply consistent styling to parent container layouts
+            parent_widgets = [
+                ('widget_exploring_keys', 'exploring'),
+                ('widget_filtering_keys', 'filtering'),
+                ('widget_exporting_keys', 'exporting')
+            ]
+            
+            for widget_name, section in parent_widgets:
+                if hasattr(self, widget_name):
+                    parent_layout = getattr(self, widget_name).layout()
+                    if parent_layout:
+                        # Minimal horizontal margins, no vertical margins
+                        parent_layout.setContentsMargins(2, 0, 2, 0)
+                        # Center content
+                        parent_layout.setAlignment(Qt.AlignCenter)
+            
+            logger.debug(f"Aligned key layouts with {layout_spacing}px spacing")
+            
+        except Exception as e:
+            logger.warning(f"Could not align key layouts: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _adjust_row_spacing(self):
+        """
+        Adjust row spacing in filtering and exporting value layouts.
+        
+        Synchronizes spacer heights between key and value layouts for proper
+        horizontal alignment of widgets across columns.
+        """
+        try:
+            from qgis.PyQt.QtWidgets import QSpacerItem
+            from .modules.ui_elements import get_spacer_size
+            from .modules.ui_config import UIConfig, DisplayProfile
+            
+            # Get compact mode status and spacer sizes
+            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
+            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            
+            spacer_sizes = {
+                'filtering': get_spacer_size('verticalSpacer_filtering_keys_field_top', is_compact),
+                'exporting': get_spacer_size('verticalSpacer_exporting_keys_field_top', is_compact)
+            }
+            
+            # Adjust spacers in filtering values layout to match keys layout
+            if hasattr(self, 'verticalLayout_filtering_values'):
+                values_layout = self.verticalLayout_filtering_values
+                spacer_target_height = spacer_sizes.get('filtering', 4)
+                
+                for i in range(values_layout.count()):
+                    item = values_layout.itemAt(i)
+                    if item and isinstance(item, QSpacerItem):
+                        # Adjust spacer to target height for alignment
+                        item.changeSize(
+                            item.sizeHint().width(),
+                            spacer_target_height,
+                            item.sizePolicy().horizontalPolicy(),
+                            item.sizePolicy().verticalPolicy()
+                        )
+                
+                # Set spacing to match keys layout
+                self.verticalLayout_filtering_values.setSpacing(layout_spacing)
+            
+            # Adjust spacers in exporting values layout to match keys layout
+            if hasattr(self, 'verticalLayout_exporting_values'):
+                values_layout = self.verticalLayout_exporting_values
+                spacer_target_height = spacer_sizes.get('exporting', 4)
+                
+                for i in range(values_layout.count()):
+                    item = values_layout.itemAt(i)
+                    if item and isinstance(item, QSpacerItem):
+                        # Adjust spacer to target height for alignment
+                        item.changeSize(
+                            item.sizeHint().width(),
+                            spacer_target_height,
+                            item.sizePolicy().horizontalPolicy(),
+                            item.sizePolicy().verticalPolicy()
+                        )
+                
+                # Set spacing to match keys layout
+                self.verticalLayout_exporting_values.setSpacing(layout_spacing)
+            
+            logger.debug(f"Adjusted row spacing: filtering/exporting aligned with {layout_spacing}px spacing")
+            
+        except Exception as e:
+            logger.warning(f"Could not adjust row spacing: {e}")
             import traceback
             traceback.print_exc()
 
