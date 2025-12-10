@@ -682,14 +682,16 @@ def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
 | **appTasks.py Size** | **5,727** | **58** ✅ | ~500 |
 | **setupUiCustom() Size** | **578** | **25** ✅ | <50 |
 | **apply_dynamic_dimensions() Size** | **467** | **25** ✅ | ~25 |
+| **current_layer_changed() Size** | **276** | **38** ✅ | ~40 |
 | **Fichiers > 1000 lignes** | **5** | **3** ✅ | 3 |
 | **modules/tasks/ Files** | **0** | **6** ✅ | 6 |
 | **FilterEngineTask** | **In appTasks.py** | **Extracted** ✅ | Extracted |
 | **LayersManagementEngineTask** | **In appTasks.py** | **Extracted** ✅ | Extracted |
 | **Tab Setup Methods** | **In setupUiCustom()** | **Extracted (4)** ✅ | Extracted |
 | **Dynamic Dimensions Methods** | **In apply_dynamic_dimensions()** | **Extracted (8)** ✅ | Extracted (8) |
+| **Layer Change Methods** | **In current_layer_changed()** | **Extracted (6)** ✅ | Extracted (6) |
 
-**Commits totaux (10 déc. 2025 - Phase 4b COMPLETE):** 14 (12 précédents + 2 Phase 4b)
+**Commits totaux (10 déc. 2025 - Phase 4c COMPLETE):** 15 (14 précédents + 1 Phase 4c)
 - Phase 1: `0b84ebd` (tests infrastructure)
 - Phase 2: `4beedae`, `eab68ac` (wildcard imports)
 - Cleanup: `00f3c02`, `317337b` (refactoring)
@@ -699,6 +701,7 @@ def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
 - Phase 3c: `8c11267` (FilterEngineTask extraction)
 - Phase 4a: (setupUiCustom tab methods extraction)
 - Phase 4b: `0fb8690` (WIP - partial), `06e5b47` (COMPLETE - 8/8 methods) ✅
+- Phase 4c: `2c036f3` (COMPLETE - current_layer_changed 6/6 methods) ✅
 
 **Fichiers à décomposer:**
 
@@ -709,10 +712,11 @@ def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
    - ✅ Geometry cache dans geometry_cache.py
    - ✅ Shim de compatibilité maintenu (58 lignes)
 
-2. ✅ **filter_mate_dockwidget.py** (4,038 lignes) → méthodes spécialisées **PHASES 4a/4b COMPLÈTES**
-   - ✅ Phase 4a: setupUiCustom() (578 → 25 lignes) - 4 méthodes extraites
+2. ✅ **filter_mate_dockwidget.py** (4,076 lignes) → méthodes spécialisées **PHASES 4a/4b/4c COMPLÈTES**
+   - ✅ Phase 4a: setupUiCustom() (578 → 25 lignes) - 4 méthodes extraites ✅
    - ✅ Phase 4b: apply_dynamic_dimensions() (467 → 25 lignes) - 8 méthodes extraites ✅
-   - ⏳ Phase 4c: Autres grandes méthodes à identifier
+   - ✅ Phase 4c: current_layer_changed() (276 → 38 lignes) - 6 méthodes extraites ✅
+   - ⏳ Phase 4d: Autres grandes méthodes à refactoriser
    - ⏳ Extraction gestionnaires de signaux (potentiel)
 
 3. ⏳ **filter_mate_app.py** (1,687 lignes) → orchestrateur + services **À PLANIFIER**
