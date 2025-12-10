@@ -235,7 +235,7 @@ class FilterMateApp:
             
             # Process existing layers AFTER dockwidget is shown and fully initialized
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
-            if init_layers != None and len(init_layers) > 0:
+            if init_layers is not None and len(init_layers) > 0:
                 # Increased delay to 500ms to ensure complete initialization
                 QTimer.singleShot(500, lambda: self.manage_task('add_layers', init_layers))
 
@@ -331,7 +331,7 @@ class FilterMateApp:
                 QTimer.singleShot(300, lambda: self.manage_task(task_name, data))
                 return
 
-        if self.dockwidget != None:
+        if self.dockwidget is not None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
 
@@ -614,7 +614,7 @@ class FilterMateApp:
                 return task_parameters
             
         else:
-            if data != None:
+            if data is not None:
                 reset_all_layers_variables_flag = False
                 task_parameters = {}
 
@@ -1085,7 +1085,7 @@ class FilterMateApp:
             - Creates directory structure if missing
         """
 
-        if self.PROJECT != None and len(list(self.PROJECT.mapLayers().values())) > 0:
+        if self.PROJECT is not None and len(list(self.PROJECT.mapLayers().values())) > 0:
 
             self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
             self.project_file_path = self.PROJECT.absolutePath()
@@ -1289,7 +1289,7 @@ class FilterMateApp:
         
         global ENV_VARS
 
-        if self.dockwidget != None:
+        if self.dockwidget is not None:
             self.CONFIG_DATA = self.dockwidget.CONFIG_DATA
             conn = None
             cur = None
@@ -1299,7 +1299,7 @@ class FilterMateApp:
                     return
                 cur = conn.cursor()
 
-                if name != None:
+                if name is not None:
                     self.project_file_name = name
                     self.project_file_path = self.PROJECT.absolutePath()    
 
@@ -1368,7 +1368,7 @@ class FilterMateApp:
             else:
                 ENV_VARS["PATH_ABSOLUTE_PROJECT"] =  os.path.normpath(os.environ['HOME'])
 
-        if self.dockwidget != None:
+        if self.dockwidget is not None:
 
             conn = self.get_spatialite_connection()
             if conn is None:
@@ -1417,7 +1417,7 @@ class FilterMateApp:
                         
                         source_uri, authcfg_id = get_data_source_uri(layer)
 
-                        if authcfg_id != None:
+                        if authcfg_id is not None:
                             if authcfg_id not in self.project_datasources[layer_source_type].keys():
                                 connexion, source_uri = get_datasource_connexion_from_layer(layer)
                                 self.project_datasources[layer_source_type][authcfg_id] = connexion
@@ -1482,7 +1482,7 @@ class FilterMateApp:
                         
                             source_uri, authcfg_id = get_data_source_uri(layer)
 
-                            if authcfg_id != None:
+                            if authcfg_id is not None:
 
                                 if authcfg_id not in self.project_datasources[layer_source_type].keys():
                                     connexion, source_uri = get_datasource_connexion_from_layer(layer)
