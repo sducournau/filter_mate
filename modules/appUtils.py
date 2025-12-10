@@ -26,8 +26,14 @@ except ImportError:
         "For better performance with large datasets, consider installing psycopg2."
     )
 
-from qgis.core import *
-from qgis.utils import *
+from qgis.core import (
+    QgsApplication,
+    QgsAuthMethodConfig,
+    QgsDataSourceUri,
+    QgsTask,
+    QgsVectorLayer,
+    QgsWkbTypes
+)
 from qgis.PyQt.QtCore import QThread
 
 # Import constants
@@ -360,8 +366,8 @@ def get_datasource_connexion_from_layer(layer):
     else:
         return connexion, source_uri
 
-    if password is not None and len(password) > 0:
-        if ssl_mode is not None:
+    if password != None and len(password) > 0:
+        if ssl_mode != None:
             connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
         else:
             connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
