@@ -681,15 +681,15 @@ def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
 | .editorconfig | ❌ | ✅ | ✅ |
 | **appTasks.py Size** | **5,727** | **58** ✅ | ~500 |
 | **setupUiCustom() Size** | **578** | **25** ✅ | <50 |
-| **apply_dynamic_dimensions() Size** | **467** | **467 (WIP)** 🔄 | **~25** 🎯 |
+| **apply_dynamic_dimensions() Size** | **467** | **25** ✅ | ~25 |
 | **Fichiers > 1000 lignes** | **5** | **3** ✅ | 3 |
 | **modules/tasks/ Files** | **0** | **6** ✅ | 6 |
 | **FilterEngineTask** | **In appTasks.py** | **Extracted** ✅ | Extracted |
 | **LayersManagementEngineTask** | **In appTasks.py** | **Extracted** ✅ | Extracted |
 | **Tab Setup Methods** | **In setupUiCustom()** | **Extracted (4)** ✅ | Extracted |
-| **Dynamic Dimensions Methods** | **In apply_dynamic_dimensions()** | **Extracting (3/8)** 🔄 | **Extracted (8)** 🎯 |
+| **Dynamic Dimensions Methods** | **In apply_dynamic_dimensions()** | **Extracted (8)** ✅ | Extracted (8) |
 
-**Commits totaux (10 déc. 2025 - Phase 4b WIP):** 13 (12 précédents + 1 WIP)
+**Commits totaux (10 déc. 2025 - Phase 4b COMPLETE):** 14 (12 précédents + 2 Phase 4b)
 - Phase 1: `0b84ebd` (tests infrastructure)
 - Phase 2: `4beedae`, `eab68ac` (wildcard imports)
 - Cleanup: `00f3c02`, `317337b` (refactoring)
@@ -697,7 +697,8 @@ def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
 - Phase 3a: `699f637` (utilities extraction)
 - Phase 3b: (LayersManagementEngineTask extraction)
 - Phase 3c: `8c11267` (FilterEngineTask extraction)
-- Phase 4b WIP: `0fb8690` (apply_dynamic_dimensions partial refactoring)
+- Phase 4a: (setupUiCustom tab methods extraction)
+- Phase 4b: `0fb8690` (WIP - partial), `06e5b47` (COMPLETE - 8/8 methods) ✅
 
 **Fichiers à décomposer:**
 
@@ -708,9 +709,9 @@ def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
    - ✅ Geometry cache dans geometry_cache.py
    - ✅ Shim de compatibilité maintenu (58 lignes)
 
-2. 🔄 **filter_mate_dockwidget.py** (4,048 lignes) → méthodes spécialisées **EN COURS**
+2. ✅ **filter_mate_dockwidget.py** (4,038 lignes) → méthodes spécialisées **PHASES 4a/4b COMPLÈTES**
    - ✅ Phase 4a: setupUiCustom() (578 → 25 lignes) - 4 méthodes extraites
-   - 🔄 Phase 4b: apply_dynamic_dimensions() (467 lignes) - 3/8 méthodes extraites (WIP)
+   - ✅ Phase 4b: apply_dynamic_dimensions() (467 → 25 lignes) - 8 méthodes extraites ✅
    - ⏳ Phase 4c: Autres grandes méthodes à identifier
    - ⏳ Extraction gestionnaires de signaux (potentiel)
 
