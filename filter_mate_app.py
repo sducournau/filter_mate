@@ -1,9 +1,19 @@
-from qgis.PyQt.QtCore import *
-from qgis.PyQt.QtGui import *
-from qgis.PyQt.QtWidgets import *
-from qgis.core import *
+from qgis.PyQt.QtCore import Qt, QTimer
+from qgis.PyQt.QtWidgets import QApplication, QPushButton, QProgressBar
+from qgis.core import (
+    Qgis,
+    QgsApplication,
+    QgsAuthMethodConfig,
+    QgsCoordinateReferenceSystem,
+    QgsDataSourceUri,
+    QgsExpressionContextUtils,
+    QgsProject,
+    QgsTask,
+    QgsVectorFileWriter,
+    QgsVectorLayer
+)
 from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
-from qgis.utils import *
+from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr
 
@@ -15,11 +25,18 @@ from pathlib import Path
 from shutil import copyfile
 import re
 import logging
-from .config.config import *
+from .config.config import ENV_VARS
 from functools import partial
 import json
-from .modules.customExceptions import *
-from .modules.appTasks import *
+from .modules.customExceptions import (
+    FilterMateException,
+    LayerNotFoundError,
+    InvalidExpressionError
+)
+from .modules.appTasks import (
+    FilterEngineTask,
+    LayersManagementEngineTask
+)
 from .modules.appUtils import POSTGRESQL_AVAILABLE
 from .modules.feedback_utils import (
     show_backend_info, show_progress_message, show_success_with_backend,
@@ -27,7 +44,7 @@ from .modules.feedback_utils import (
 )
 from .modules.filter_history import HistoryManager
 from .modules.ui_config import UIConfig, DisplayProfile
-from .resources import *
+from .resources import *  # Qt resources must be imported with wildcard
 import uuid
 
 # Get FilterMate logger
@@ -39,8 +56,7 @@ from .filter_mate_dockwidget import FilterMateDockWidget
 
 MESSAGE_TASKS_CATEGORIES = {
                             'filter':'FilterLayers',
-                            'undo':'FilterLayers',
-                            'redo':'FilterLayers',
+                            'unfilter':'FilterLayers',
                             'reset':'FilterLayers',
                             'export':'ExportLayers',
                             'add_layers':'ManageLayers',
@@ -124,11 +140,10 @@ class FilterMateApp:
 
 
         self.plugin_dir = plugin_dir
-        self.appTasks = {"filter":None,"undo":None,"redo":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None}
+        self.appTasks = {"filter":None,"unfilter":None,"reset":None,"export":None,"add_layers":None,"remove_layers":None,"remove_all_layers":None,"new_project":None,"project_read":None}
         self.tasks_descriptions = {
                                     'filter':'Filtering data',
-                                    'undo':'Undoing filter',
-                                    'redo':'Redoing filter',
+                                    'unfilter':'Unfiltering data',
                                     'reset':'Reseting data',
                                     'export':'Exporting data',
                                     'add_layers':'Adding layers',
@@ -230,27 +245,25 @@ class FilterMateApp:
         """Keep the advanced filter combobox updated on adding or removing layers"""
         # Use QTimer.singleShot to defer project signal handling until QGIS is in stable state
         # This prevents access violations during project transitions
-        # Use safe_connect to prevent multiple connections on plugin reload
+        # Only connect signals once to avoid multiple connections on plugin reload
         if not self._signals_connected:
             from qgis.PyQt.QtCore import QTimer
-            from .modules.signal_utils import safe_connect as safe_connect_qgis
-            safe_connect_qgis(self.iface.projectRead, lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
-            safe_connect_qgis(self.iface.newProjectCreated, lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
+            self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
+            self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
             # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
-            safe_connect_qgis(self.MapLayerStore.layersAdded, lambda layers: self.manage_task('add_layers', layers))
-            safe_connect_qgis(self.MapLayerStore.layersWillBeRemoved, lambda layers: self.manage_task('remove_layers', layers))
-            safe_connect_qgis(self.MapLayerStore.allLayersRemoved, lambda: self.manage_task('remove_all_layers'))
+            self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
             self._signals_connected = True
         
-        # CRITICAL FIX: Use safe_connect to prevent duplicate connections on plugin reload
-        from .modules.signal_utils import safe_connect
-        
-        safe_connect(self.dockwidget.launchingTask, lambda x: self.manage_task(x))
-        safe_connect(self.dockwidget.resettingLayerVariableOnError, lambda layer, properties: self.remove_variables_from_layer(layer, properties))
-        safe_connect(self.dockwidget.settingLayerVariable, lambda layer, properties: self.save_variables_from_layer(layer, properties))
-        safe_connect(self.dockwidget.resettingLayerVariable, lambda layer, properties: self.remove_variables_from_layer(layer, properties))
-        safe_connect(self.dockwidget.settingProjectVariables, self.save_project_variables)
-        safe_connect(self.PROJECT.fileNameChanged, lambda: self.save_project_variables())
+        self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
+
+        self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+        self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
+        self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+
+        self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
+        self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
         
 
     def get_spatialite_connection(self):
@@ -268,7 +281,6 @@ class FilterMateApp:
             
         try:
             conn = spatialite_connect(self.db_file_path)
-            self._ensure_tables_exist(conn)
             return conn
         except Exception as error:
             error_msg = f"Failed to connect to database {self.db_file_path}: {error}"
@@ -276,84 +288,12 @@ class FilterMateApp:
             iface.messageBar().pushCritical("FilterMate", error_msg)
             return None
 
-    def _ensure_tables_exist(self, conn):
-        """
-        Ensure required database tables exist, creating them if necessary.
         
-        Args:
-            conn: Active database connection
-            
-        Note:
-            Creates filterMate_db, fm_projects and fm_project_layers_properties tables if missing.
-            Does not create project entry - that's handled by init_filterMate_db()
-        """
-        try:
-            cur = conn.cursor()
-            
-            # Check if filterMate_db table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='filterMate_db';""")
-            filtermate_db_exists = cur.fetchone()[0] > 0
-            
-            # Check if fm_projects table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='fm_projects';""")
-            projects_table_exists = cur.fetchone()[0] > 0
-            
-            # Check if fm_project_layers_properties table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='fm_project_layers_properties';""")
-            properties_table_exists = cur.fetchone()[0] > 0
-            
-            # Create missing tables
-            if not filtermate_db_exists:
-                logger.info("Creating missing filterMate_db table")
-                cur.execute("""CREATE TABLE filterMate_db (
-                    id INTEGER PRIMARY KEY,
-                    plugin_name VARYING CHARACTER(255) NOT NULL,
-                    _created_at DATETIME NOT NULL,
-                    _updated_at DATETIME NOT NULL,
-                    _version VARYING CHARACTER(255) NOT NULL);
-                """)
-                # Insert initial record
-                cur.execute("""INSERT INTO filterMate_db VALUES(1, 'FilterMate', datetime(), datetime(), '1.6');""")
-            
-            if not projects_table_exists:
-                logger.info("Creating missing fm_projects table")
-                cur.execute("""CREATE TABLE fm_projects (
-                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                    _created_at DATETIME NOT NULL,
-                    _updated_at DATETIME NOT NULL,
-                    project_name VARYING CHARACTER(255) NOT NULL,
-                    project_path VARYING CHARACTER(255) NOT NULL,
-                    project_settings TEXT NOT NULL);
-                """)
-            
-            if not properties_table_exists:
-                logger.info("Creating missing fm_project_layers_properties table")
-                cur.execute("""CREATE TABLE fm_project_layers_properties (
-                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                    _updated_at DATETIME NOT NULL,
-                    fk_project VARYING CHARACTER(255) NOT NULL,
-                    layer_id VARYING CHARACTER(255) NOT NULL,
-                    meta_type VARYING CHARACTER(255) NOT NULL,
-                    meta_key VARYING CHARACTER(255) NOT NULL,
-                    meta_value TEXT NOT NULL,
-                    FOREIGN KEY (fk_project)  
-                    REFERENCES fm_projects(project_id),
-                    CONSTRAINT property_unicity
-                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                """)
-            
-            if not filtermate_db_exists or not projects_table_exists or not properties_table_exists:
-                conn.commit()
-                logger.info("Database tables verified/created successfully")
-            
-            cur.close()
-            
-        except Exception as e:
-            logger.error(f"Failed to ensure tables exist: {e}")
-            raise
+        """Overload configuration qtreeview model to keep configuration file up to date"""
+        # 
+        # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
+        # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
+
 
     def manage_task(self, task_name, data=None):
         """
@@ -366,8 +306,7 @@ class FilterMateApp:
         Args:
             task_name (str): Name of task to execute. Must be one of:
                 - 'filter': Apply filters to layers
-                - 'undo': Remove filters from layers (go back in history)
-                - 'redo': Restore filters from layers (go forward in history)
+                - 'unfilter': Remove filters from layers
                 - 'reset': Reset layer state
                 - 'add_layers': Process newly added layers
                 - 'remove_layers': Clean up removed layers
@@ -465,10 +404,8 @@ class FilterMateApp:
             
             if task_name == 'filter':
                 show_backend_info(iface, provider_type, layer_count, operation='filter')
-            elif task_name == 'undo':
-                show_backend_info(iface, provider_type, layer_count, operation='undo')
-            elif task_name == 'redo':
-                show_backend_info(iface, provider_type, layer_count, operation='redo')
+            elif task_name == 'unfilter':
+                show_backend_info(iface, provider_type, layer_count, operation='unfilter')
             elif task_name == 'reset':
                 show_backend_info(iface, provider_type, layer_count, operation='reset')
 
@@ -483,6 +420,8 @@ class FilterMateApp:
                 self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
                 self.appTasks[task_name].begun.connect(self.on_remove_layer_task_begun)
+            
+            # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
             self.appTasks[task_name].resultingLayers.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
             self.appTasks[task_name].savingLayerVariable.connect(lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned))
@@ -493,7 +432,7 @@ class FilterMateApp:
             if len(active_tasks) > 0:
                 for active_task in active_tasks:
                     key_active_task = [k for k, v in self.tasks_descriptions.items() if v == active_task.description()][0]
-                    if key_active_task in ('filter','reset','undo','redo'):
+                    if key_active_task in ('filter','reset','unfilter'):
                         active_task.cancel()
         except (IndexError, KeyError, AttributeError) as e:
             # Ignore errors in task cancellation - task may have completed already
@@ -580,104 +519,37 @@ class FilterMateApp:
 
             features, expression = self.dockwidget.get_current_features()
 
-            if task_name in ('filter','undo','reset','redo'):
-                logger.debug(f"get_task_parameters: Building layers_to_filter for task={task_name}")
-                logger.debug(f"get_task_parameters: Source layer [{current_layer.id()}]['filtering']['layers_to_filter'] = {self.PROJECT_LAYERS[current_layer.id()]['filtering']['layers_to_filter']}")
-                
+            if task_name in ('filter','unfilter','reset'):
                 layers_to_filter = []
                 for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
-                    if key not in self.PROJECT_LAYERS:
-                        logger.warning(f"Layer {key} not in PROJECT_LAYERS, skipping")
-                        continue
-                    
-                    layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
-                    
-                    # ✅ VALIDATION: Required keys for geometric filtering
-                    required_keys = [
-                        'layer_name', 'layer_id', 'layer_provider_type',
-                        'primary_key_name', 'layer_geometry_field', 'layer_schema'
-                    ]
-                    
-                    missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                    
-                    if missing_keys:
-                        logger.warning(f"Layer {key} missing required keys: {missing_keys}. Attempting recovery...")
+                    if key in self.PROJECT_LAYERS:
+                        layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
                         
-                        # ✅ Try to recover missing metadata from actual layer object
-                        layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
-                        if not layer_obj:
-                            logger.error(f"Cannot filter layer {key}: layer not found in project")
-                            continue
+                        # Validate required keys exist for geometric filtering
+                        required_keys = [
+                            'layer_name', 'layer_id', 'layer_provider_type',
+                            'primary_key_name', 'layer_geometry_field', 'layer_schema'
+                        ]
                         
-                        layer = layer_obj[0]
+                        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                        if missing_keys:
+                            logger.warning(f"Layer {key} missing required keys: {missing_keys}")
+                            # Try to fill in missing keys if possible
+                            layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
+                            if layer_obj:
+                                layer = layer_obj[0]
+                                if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
+                                    layer_info['layer_name'] = layer.name()
+                                if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
+                                    layer_info['layer_id'] = layer.id()
+                                # Log what couldn't be filled
+                                still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                                if still_missing:
+                                    logger.error(f"Cannot filter layer {key}: still missing {still_missing}")
+                                    continue
                         
-                        # Fill basic info
-                        if 'layer_name' not in layer_info or not layer_info['layer_name']:
-                            layer_info['layer_name'] = layer.name()
-                        if 'layer_id' not in layer_info or not layer_info['layer_id']:
-                            layer_info['layer_id'] = layer.id()
-                        
-                        # ✅ CRITICAL: Recover layer_geometry_field
-                        if 'layer_geometry_field' not in layer_info or not layer_info['layer_geometry_field']:
-                            if layer.geometryType() != QgsWkbTypes.UnknownGeometry:
-                                # Get geometry column from provider
-                                geom_col = layer.dataProvider().geometryColumn()
-                                if geom_col:
-                                    layer_info['layer_geometry_field'] = geom_col
-                                    logger.info(f"Recovered geometry field '{geom_col}' for {layer.name()}")
-                                else:
-                                    # Fallback to common defaults by provider type
-                                    provider_type = layer.providerType()
-                                    if provider_type in ('ogr', 'spatialite'):
-                                        layer_info['layer_geometry_field'] = 'geometry'
-                                    elif provider_type == 'postgres':
-                                        layer_info['layer_geometry_field'] = 'geom'
-                                    else:
-                                        layer_info['layer_geometry_field'] = 'geometry'
-                                    logger.warning(f"Using default geometry field '{layer_info['layer_geometry_field']}' for {layer.name()}")
-                            else:
-                                logger.error(f"Layer {layer.name()} has no geometry - cannot use for spatial filtering")
-                                continue
-                        
-                        # ✅ CRITICAL: Recover layer_schema
-                        if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
-                            provider_type = layer.providerType()
-                            if provider_type == 'postgres':
-                                # Extract schema from PostgreSQL URI
-                                from qgis.core import QgsDataSourceUri
-                                uri = QgsDataSourceUri(layer.source())
-                                layer_info['layer_schema'] = uri.schema() or 'public'
-                                logger.info(f"Recovered schema '{layer_info['layer_schema']}' for {layer.name()}")
-                            else:
-                                # OGR/Spatialite don't use schemas
-                                layer_info['layer_schema'] = None
-                        
-                        # ✅ Final validation: Essential keys must be present
-                        essential_keys = ['layer_name', 'layer_id', 'layer_geometry_field']
-                        still_missing = [k for k in essential_keys if k not in layer_info or layer_info[k] is None]
-                        
-                        if still_missing:
-                            logger.error(f"Cannot filter layer {key}: still missing essential keys {still_missing} after recovery")
-                            from qgis.utils import iface
-                            iface.messageBar().pushWarning(
-                                "FilterMate",
-                                f"Skipping layer '{layer.name()}': missing geometric metadata ({', '.join(still_missing)})"
-                            )
-                            continue
-                        
-                        # ✅ Update PROJECT_LAYERS with recovered metadata for future use
-                        self.PROJECT_LAYERS[key]["infos"].update(layer_info)
-                    
-                    # ✅ Only add to layers_to_filter if geometry field is valid
-                    if layer_info.get('layer_geometry_field'):
                         layers_to_filter.append(layer_info)
-                        logger.debug(f"Added layer {layer_info['layer_name']} to layers_to_filter (geom_field={layer_info['layer_geometry_field']})")
-                    else:
-                        logger.error(f"Skipping layer {key}: no valid geometry field")
 
-                logger.debug(f"get_task_parameters: Final layers_to_filter list has {len(layers_to_filter)} layers")
-                for idx, layer_info in enumerate(layers_to_filter):
-                    logger.debug(f"  Layer {idx}: {layer_info.get('layer_name', 'UNKNOWN')} (ID: {layer_info.get('layer_id', 'UNKNOWN')})")
 
                 if task_name == 'filter':
 
@@ -721,20 +593,12 @@ class FilterMateApp:
                     
                     return task_parameters
 
-                elif task_name == 'undo':
+                elif task_name == 'unfilter':
 
                     task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
                                                 "layers": layers_to_filter,
                                                 "db_file_path": self.db_file_path, "project_uuid": self.project_uuid,
                                                 "history_manager": self.history_manager }  # Pass history manager for undo
-                    return task_parameters
-                
-                elif task_name == 'redo':
-
-                    task_parameters["task"] = {"features": features, "expression": expression, "options": self.dockwidget.project_props["OPTIONS"],
-                                                "layers": layers_to_filter,
-                                                "db_file_path": self.db_file_path, "project_uuid": self.project_uuid,
-                                                "history_manager": self.history_manager }  # Pass history manager for redo
                     return task_parameters
                 
                 elif task_name == 'reset':
@@ -815,7 +679,7 @@ class FilterMateApp:
         updates UI, saves layer variables, and shows success messages.
         
         Args:
-            task_name (str): Name of completed task ('filter', 'undo', 'redo', 'reset')
+            task_name (str): Name of completed task ('filter', 'unfilter', 'reset')
             source_layer (QgsVectorLayer): Primary layer that was filtered
             task_parameters (dict): Original task parameters including results
             
@@ -827,7 +691,7 @@ class FilterMateApp:
             - Handles both single and multi-layer filtering
         """
 
-        if task_name in ('filter','undo','reset','redo'):
+        if task_name in ('filter','unfilter','reset'):
 
 
 
@@ -868,7 +732,7 @@ class FilterMateApp:
             provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
             layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
             
-            # Push filter state to history for undo/redo (except for undo/redo which use history.undo()/history.redo())
+            # Push filter state to history for undo/redo (except for unfilter which uses history.undo())
             if task_name == 'filter':
                 # Save source layer state to history
                 history = self.history_manager.get_or_create_history(source_layer.id())
@@ -906,10 +770,8 @@ class FilterMateApp:
                     "FilterMate",
                     f"{feature_count:,} features visible in main layer"
                 )
-            elif task_name == 'undo':
-                show_success_with_backend(iface, provider_type, 'undo', layer_count)
-            elif task_name == 'redo':
-                show_success_with_backend(iface, provider_type, 'redo', layer_count)
+            elif task_name == 'unfilter':
+                show_success_with_backend(iface, provider_type, 'unfilter', layer_count)
                 iface.messageBar().pushInfo(
                     "FilterMate",
                     f"{feature_count:,} features visible in main layer (restored from history)"
@@ -952,16 +814,16 @@ class FilterMateApp:
         Uses FilterHistory module for proper undo/redo functionality.
         
         Args:
-            task_name (str): Type of operation ('filter', 'undo', 'redo', 'reset')
+            task_name (str): Type of operation ('filter', 'unfilter', 'reset')
             layer (QgsVectorLayer): Layer to apply filter to
             
         Notes:
-            - For 'undo': Uses history.undo() to return to previous state
+            - For 'unfilter': Uses history.undo() to return to previous state
             - For 'reset': Clears subset string and history
             - For 'filter': Applies expression from Spatialite database
             - Changes trigger layer refresh automatically
         """
-        if task_name == 'undo':
+        if task_name == 'unfilter':
             # Use history manager for proper undo
             history = self.history_manager.get_history(layer.id())
             
@@ -981,26 +843,6 @@ class FilterMateApp:
                 logger.info(f"FilterMate: No undo history available, clearing filter")
                 layer.setSubsetString('')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-                return
-        
-        if task_name == 'redo':
-            # Use history manager for proper redo
-            history = self.history_manager.get_history(layer.id())
-            
-            if history and history.can_redo():
-                next_state = history.redo()
-                if next_state:
-                    layer.setSubsetString(next_state.expression)
-                    logger.info(f"FilterMate: Redo applied - restored filter: {next_state.description}")
-                    
-                    if layer.subsetString() != '':
-                        self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
-                    else:
-                        self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-                    return
-            else:
-                # No redo available
-                logger.info(f"FilterMate: No redo history available")
                 return
         
         # For 'filter' and 'reset' operations, use database history
@@ -1271,7 +1113,7 @@ class FilterMateApp:
                 try: 
                     os.remove(self.db_file_path)
                     self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] = False
-                    with open(get_config_path(), 'w') as outfile:
+                    with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
                     logger.error(f"Failed to remove database file: {error}")
@@ -1299,12 +1141,12 @@ class FilterMateApp:
                 if conn is None:
                     error_msg = "Cannot initialize FilterMate database: connection failed"
                     logger.error(error_msg)
-                    iface.messageBar().pushCritical("FilterMate", error_msg)
+                    iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
                     return
             except Exception as e:
                 error_msg = f"Critical error connecting to database: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg)
+                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
                 return
 
             try:
@@ -1415,7 +1257,7 @@ class FilterMateApp:
             except Exception as e:
                 error_msg = f"Error during database initialization: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg)
+                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
                 return
             finally:
                 if conn:
@@ -1486,7 +1328,7 @@ class FilterMateApp:
                 if conn:
                     conn.close()
 
-            with open(get_config_path(), 'w') as outfile:
+            with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
 
 

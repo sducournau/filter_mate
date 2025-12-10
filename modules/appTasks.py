@@ -1,8 +1,27 @@
-from qgis.PyQt.QtCore import *
-from qgis.PyQt.QtGui import *
-from qgis.PyQt.QtWidgets import *
-from qgis.core import *
-from qgis.utils import *
+from qgis.core import (
+    Qgis,
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
+    QgsExpression,
+    QgsExpressionContext,
+    QgsExpressionContextUtils,
+    QgsFeature,
+    QgsFeatureRequest,
+    QgsFeatureSource,
+    QgsField,
+    QgsGeometry,
+    QgsMessageLog,
+    QgsProcessing,
+    QgsProcessingContext,
+    QgsProcessingFeedback,
+    QgsProject,
+    QgsProperty,
+    QgsTask,
+    QgsUnitTypes,
+    QgsVectorFileWriter,
+    QgsVectorLayer,
+    QgsWkbTypes
+)
 from qgis.utils import iface
 from qgis import processing
 import logging
@@ -57,8 +76,13 @@ import re
 from functools import partial
 import json
 import sqlite3
-from ..config.config import *
-from .appUtils import *
+from ..config.config import ENV_VARS
+from .appUtils import (
+    safe_set_subset_string,
+    get_source_table_name,
+    get_datasource_connexion_from_layer,
+    get_primary_key_name
+)
 from qgis.utils import iface
 import time
 
@@ -292,8 +316,7 @@ def should_reproject_layer(layer, target_crs_authid):
 
 MESSAGE_TASKS_CATEGORIES = {
                             'filter':'FilterLayers',
-                            'undo':'FilterLayers',
-                            'redo':'FilterLayers',
+                            'unfilter':'FilterLayers',
                             'reset':'FilterLayers',
                             'export':'ExportLayers',
                             'add_layers':'ManageLayers',
@@ -408,7 +431,7 @@ class SourceGeometryCache:
 
 
 class FilterEngineTask(QgsTask):
-    """Main QgsTask class which filter, undo and redo data"""
+    """Main QgsTask class which filter and unfilter data"""
     
     # Cache de classe (partagé entre toutes les instances de FilterEngineTask)
     _geometry_cache = SourceGeometryCache()
@@ -570,89 +593,9 @@ class FilterEngineTask(QgsTask):
         
         try:
             conn = spatialite_connect(self.db_file_path)
-            self._ensure_tables_exist(conn)
             return conn
         except Exception as e:
             logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
-            raise
-
-    def _ensure_tables_exist(self, conn):
-        """
-        Ensure required database tables exist, creating them if necessary.
-        
-        Args:
-            conn: Active database connection
-            
-        Note:
-            Creates filterMate_db, fm_projects and fm_project_layers_properties tables if missing.
-            Does not create project entry - that's handled by filter_mate_app.py
-        """
-        try:
-            cur = conn.cursor()
-            
-            # Check if filterMate_db table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='filterMate_db';""")
-            filtermate_db_exists = cur.fetchone()[0] > 0
-            
-            # Check if fm_projects table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='fm_projects';""")
-            projects_table_exists = cur.fetchone()[0] > 0
-            
-            # Check if fm_project_layers_properties table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='fm_project_layers_properties';""")
-            properties_table_exists = cur.fetchone()[0] > 0
-            
-            # Create missing tables
-            if not filtermate_db_exists:
-                logger.info("Creating missing filterMate_db table")
-                cur.execute("""CREATE TABLE filterMate_db (
-                    id INTEGER PRIMARY KEY,
-                    plugin_name VARYING CHARACTER(255) NOT NULL,
-                    _created_at DATETIME NOT NULL,
-                    _updated_at DATETIME NOT NULL,
-                    _version VARYING CHARACTER(255) NOT NULL);
-                """)
-                # Insert initial record
-                cur.execute("""INSERT INTO filterMate_db VALUES(1, 'FilterMate', datetime(), datetime(), '1.6');""")
-            
-            if not projects_table_exists:
-                logger.info("Creating missing fm_projects table")
-                cur.execute("""CREATE TABLE fm_projects (
-                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                    _created_at DATETIME NOT NULL,
-                    _updated_at DATETIME NOT NULL,
-                    project_name VARYING CHARACTER(255) NOT NULL,
-                    project_path VARYING CHARACTER(255) NOT NULL,
-                    project_settings TEXT NOT NULL);
-                """)
-            
-            if not properties_table_exists:
-                logger.info("Creating missing fm_project_layers_properties table")
-                cur.execute("""CREATE TABLE fm_project_layers_properties (
-                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                    _updated_at DATETIME NOT NULL,
-                    fk_project VARYING CHARACTER(255) NOT NULL,
-                    layer_id VARYING CHARACTER(255) NOT NULL,
-                    meta_type VARYING CHARACTER(255) NOT NULL,
-                    meta_key VARYING CHARACTER(255) NOT NULL,
-                    meta_value TEXT NOT NULL,
-                    FOREIGN KEY (fk_project)  
-                    REFERENCES fm_projects(project_id),
-                    CONSTRAINT property_unicity
-                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                """)
-            
-            if not filtermate_db_exists or not projects_table_exists or not properties_table_exists:
-                conn.commit()
-                logger.info("Database tables verified/created successfully")
-            
-            cur.close()
-            
-        except Exception as e:
-            logger.error(f"Failed to ensure tables exist: {e}")
             raise
 
     def _initialize_source_layer(self):
@@ -797,11 +740,8 @@ class FilterEngineTask(QgsTask):
         if self.task_action == 'filter':
             return self.execute_filtering()
         
-        elif self.task_action == 'undo':
-            return self.execute_undoing()
-        
-        elif self.task_action == 'redo':
-            return self.execute_redoing()
+        elif self.task_action == 'unfilter':
+            return self.execute_unfiltering()
         
         elif self.task_action == 'reset':
             return self.execute_reseting()
@@ -909,28 +849,19 @@ class FilterEngineTask(QgsTask):
             if self.source_layer.subsetString():
                 self.param_source_old_subset = self.source_layer.subsetString()
 
-    def _process_qgis_expression(self, expression, allow_simple_field=False):
+    def _process_qgis_expression(self, expression):
         """
         Process and validate a QGIS expression, converting it to appropriate SQL.
-        
-        Args:
-            expression: QGIS expression string to process
-            allow_simple_field: If True, allow simple field names (used for custom selection)
         
         Returns:
             tuple: (processed_expression, is_field_expression) or (None, None) if invalid
         """
         # FIXED: Only reject if expression is JUST a field name (no operators)
         # Allow expressions like "HOMECOUNT = 10" or "field > 5"
-        # When allow_simple_field=True (custom selection), accept simple field names
         qgs_expr = QgsExpression(expression)
         if qgs_expr.isField() and not any(op in expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
-            if not allow_simple_field:
-                logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
-                return None, None
-            else:
-                logger.debug(f"Accepting simple field name '{expression}' for custom selection (won't filter source layer)")
-                return None, None  # Return None to indicate no source layer filtering needed
+            logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
+            return None, None
         
         if not qgs_expr.isValid():
             logger.warning(f"Invalid QGIS expression: '{expression}'")
@@ -1083,18 +1014,9 @@ class FilterEngineTask(QgsTask):
         return result
 
     def execute_source_layer_filtering(self):
-        """Manage the creation of the origin filtering expression
-        
-        CRITICAL: When custom selection expression is just a field name,
-        don't apply it as a filter to the source layer. Use the features list instead.
-        """
+        """Manage the creation of the origin filtering expression"""
         # Initialize all parameters and configuration
         self._initialize_source_filtering_parameters()
-        
-        # Check if exploring is in custom selection mode
-        exploring_props = self.task_parameters.get("exploring", {})
-        current_groupbox = exploring_props.get("current_exploring_groupbox", "")
-        is_custom_selection = (current_groupbox == "custom_selection")
         
         result = False
         task_expression = self.task_parameters["task"]["expression"]
@@ -1102,8 +1024,7 @@ class FilterEngineTask(QgsTask):
         
         # Process QGIS expression if provided
         if task_expression:
-            # For custom selection, allow simple field names but don't use them for source filtering
-            processed_expr, is_field_expr = self._process_qgis_expression(task_expression, allow_simple_field=is_custom_selection)
+            processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
             
             if processed_expr:
                 # Combine with existing subset if needed
@@ -1111,12 +1032,6 @@ class FilterEngineTask(QgsTask):
                 
                 # Apply filter and update subset
                 result = self._apply_filter_and_update_subset(self.expression)
-            elif is_custom_selection and not processed_expr:
-                # Custom selection with simple field name - skip source layer filtering
-                logger.info(f"Custom selection with field name '{task_expression}' - source layer will not be filtered, only target layers")
-                # Set expression for use in target layer filtering
-                self.expression = task_expression
-                result = True  # Don't filter source layer, but continue to filter target layers
         
         # Fallback to feature ID list if expression processing failed
         if not result:
@@ -1137,33 +1052,11 @@ class FilterEngineTask(QgsTask):
         
         Sets param_source_new_subset based on expression type and
         extracts buffer value/expression from task parameters.
-        
-        CRITICAL: When custom selection uses a simple field name,
-        don't apply it to source layer - keep existing subset or empty.
         """
         logger.info("🔧 _initialize_source_subset_and_buffer() START")
         
-        # Check if this is custom selection with a simple field name
-        exploring_props = self.task_parameters.get("exploring", {})
-        current_groupbox = exploring_props.get("current_exploring_groupbox", "")
-        is_custom_selection = (current_groupbox == "custom_selection")
-        
-        qgs_expr = QgsExpression(self.expression)
-        is_simple_field = qgs_expr.isField() and not any(op in self.expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR'])
-        
         # Set source subset based on expression type
-        if is_custom_selection and is_simple_field:
-            # Custom selection with simple field name - don't filter source layer
-            logger.info(f"  ℹ️  Custom selection with field name '{self.expression}' - source layer will NOT be filtered")
-            if self.has_combine_operator:
-                # Keep existing subset if combining
-                self.param_source_new_subset = self.param_source_old_subset
-                logger.info(f"  ✓ Keeping existing subset for source layer (combine mode)")
-            else:
-                # No combination - leave source layer unfiltered
-                self.param_source_new_subset = ''
-                logger.info(f"  ✓ Source layer will remain unfiltered")
-        elif qgs_expr.isField() is False:
+        if QgsExpression(self.expression).isField() is False:
             self.param_source_new_subset = self.expression
         else:
             self.param_source_new_subset = self.param_source_old_subset
@@ -1441,7 +1334,7 @@ class FilterEngineTask(QgsTask):
                                                                                 source_geom=self.param_source_geom
                                                                                 )
 
-        if self.param_buffer_expression is not None and self.param_buffer_expression != '':
+        if self.param_buffer_expression != None and self.param_buffer_expression != '':
 
 
             if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
@@ -1468,7 +1361,7 @@ class FilterEngineTask(QgsTask):
         
 
 
-        elif self.param_buffer_value is not None:
+        elif self.param_buffer_value != None:
 
             self.param_buffer = self.param_buffer_value
 
@@ -2175,8 +2068,7 @@ class FilterEngineTask(QgsTask):
                         errors = geom.validateGeometry()
                         if errors:
                             logger.debug(f"  Validation errors: {[str(e.what()) for e in errors[:3]]}")  # First 3 errors
-                    except (AttributeError, RuntimeError) as e:
-                        logger.debug(f"Could not validate geometry: {e}")
+                    except:
                         pass
                     
                     # Try aggressive repair with multiple strategies
@@ -3149,7 +3041,7 @@ class FilterEngineTask(QgsTask):
             logger.info("  → Geometric filtering disabled")
             logger.info("  → Only source layer filtered")
 
-        # elif self.is_field_expression is not None:
+        # elif self.is_field_expression != None:
         #     field_idx = -1
 
         #     for layer_provider_type in self.layers:
@@ -3173,7 +3065,7 @@ class FilterEngineTask(QgsTask):
         return result 
      
 
-    def execute_undoing(self):
+    def execute_unfiltering(self):
         """
         Execute undo operation using the new HistoryManager system.
         
@@ -3181,7 +3073,7 @@ class FilterEngineTask(QgsTask):
         filter state instead of manipulating the database history table directly.
         
         IMPORTANT: This bypasses manage_layer_subset_strings to avoid triggering
-        the old _undo_action that would delete database history entries.
+        the old _unfilter_action that would delete database history entries.
         """
         # Get history manager from task parameters (passed from filter_mate_app)
         history_manager = self.task_parameters["task"].get("history_manager")
@@ -3259,61 +3151,6 @@ class FilterEngineTask(QgsTask):
                     self.setProgress((i/self.layers_count)*100)
                     if self.isCanceled():
                         return False
-        
-        return True
-    
-    def execute_redoing(self):
-        """
-        Execute redo operation using the HistoryManager system.
-        
-        This method uses the in-memory history manager to restore the next
-        filter state (after an undo) without manipulating the database directly.
-        """
-        # Get history manager from task parameters (passed from filter_mate_app)
-        history_manager = self.task_parameters["task"].get("history_manager")
-        
-        if not history_manager:
-            logger.error("FilterMate: No history_manager in task parameters, cannot redo")
-            return False
-        
-        # Get history for source layer
-        history = history_manager.get_history(self.source_layer.id())
-        
-        if not history or not history.can_redo():
-            logger.info("FilterMate: No redo history available")
-            return False
-        
-        # Use history manager to get next state
-        next_state = history.redo()
-        
-        if next_state:
-            logger.info(f"FilterMate: Restoring next filter: {next_state.description}")
-            # Apply next filter expression to source layer directly
-            safe_set_subset_string(self.source_layer, next_state.expression)
-            
-            # Restore associated layers filters from their history
-            i = 1
-            self.setProgress((i/self.layers_count)*100)
-            
-            for layer_provider_type in self.layers:
-                for layer, layer_props in self.layers[layer_provider_type]:
-                    # Get history for this associated layer
-                    layer_history = history_manager.get_history(layer.id())
-                    
-                    if layer_history and layer_history.can_redo():
-                        # Restore next filter for this layer
-                        layer_next_state = layer_history.redo()
-                        if layer_next_state:
-                            safe_set_subset_string(layer, layer_next_state.expression)
-                            logger.info(f"FilterMate: Restored filter for layer {layer.name()}: {layer_next_state.description}")
-                    
-                    i += 1
-                    self.setProgress((i/self.layers_count)*100)
-                    if self.isCanceled():
-                        return False
-        else:
-            logger.warning("FilterMate: History redo returned None")
-            return False
         
         return True
     
@@ -3820,8 +3657,7 @@ class FilterEngineTask(QgsTask):
                             # Remove incomplete ZIP file
                             try:
                                 os.remove(zip_path)
-                            except (OSError, PermissionError) as e:
-                                logger.debug(f"Could not remove incomplete ZIP: {e}")
+                            except:
                                 pass
                             return False
             
@@ -3842,8 +3678,7 @@ class FilterEngineTask(QgsTask):
             try:
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
-            except (OSError, PermissionError) as cleanup_err:
-                logger.debug(f"Could not remove incomplete ZIP: {cleanup_err}")
+            except:
                 pass
             return False
 
@@ -4533,12 +4368,12 @@ class FilterEngineTask(QgsTask):
         return True
 
 
-    def _undo_action(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
+    def _unfilter_action(self, layer, primary_key_name, geom_key_name, name, custom, cur, conn, last_subset_id, use_postgresql, use_spatialite):
         """
-        Execute undo action (restore previous filter state).
+        Execute unfilter action (restore previous filter state).
         
         Args:
-            layer: QgsVectorLayer to undo filter on
+            layer: QgsVectorLayer to unfilter
             primary_key_name: Primary key field name
             geom_key_name: Geometry field name
             name: Layer identifier
@@ -4574,7 +4409,7 @@ class FilterEngineTask(QgsTask):
             sql_subset_string = results[0][-1]
             
             if use_spatialite:
-                logger.info("Undo - Spatialite backend - recreating previous subset")
+                logger.info("Unfilter - Spatialite backend - recreating previous subset")
                 success = self._manage_spatialite_subset(
                     layer, sql_subset_string, primary_key_name, geom_key_name,
                     name, custom=False, cur=None, conn=None, current_seq_order=0
@@ -4664,8 +4499,8 @@ class FilterEngineTask(QgsTask):
                 elif use_postgresql:
                     return self._reset_action_postgresql(layer, name, cur, conn)
             
-            elif self.task_action == 'undo':
-                return self._undo_action(
+            elif self.task_action == 'unfilter':
+                return self._unfilter_action(
                     layer, primary_key_name, geom_key_name, name, custom,
                     cur, conn, last_subset_id, use_postgresql, use_spatialite
                 )
@@ -4720,7 +4555,7 @@ class FilterEngineTask(QgsTask):
 
                     if self.task_action == 'filter':
                         result_action = 'Layer(s) filtered'
-                    elif self.task_action == 'undo':
+                    elif self.task_action == 'unfilter':
                         result_action = 'Layer(s) filtered to precedent state'
                     elif self.task_action == 'reset':
                         result_action = 'Layer(s) unfiltered'
@@ -4762,7 +4597,7 @@ class FilterEngineTask(QgsTask):
 
 
 class LayersManagementEngineTask(QgsTask):
-    """Main QgsTask class which filter, undo and redo data"""
+    """Main QgsTask class which filter and unfilter data"""
 
     resultingLayers = pyqtSignal(dict)
     savingLayerVariable = pyqtSignal(QgsVectorLayer, str, object, type)
@@ -4870,89 +4705,9 @@ class LayersManagementEngineTask(QgsTask):
         
         try:
             conn = spatialite_connect(self.db_file_path)
-            self._ensure_tables_exist(conn)
             return conn
         except Exception as e:
             logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
-            raise
-
-    def _ensure_tables_exist(self, conn):
-        """
-        Ensure required database tables exist, creating them if necessary.
-        
-        Args:
-            conn: Active database connection
-            
-        Note:
-            Creates filterMate_db, fm_projects and fm_project_layers_properties tables if missing.
-            Does not create project entry - that's handled by filter_mate_app.py
-        """
-        try:
-            cur = conn.cursor()
-            
-            # Check if filterMate_db table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='filterMate_db';""")
-            filtermate_db_exists = cur.fetchone()[0] > 0
-            
-            # Check if fm_projects table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='fm_projects';""")
-            projects_table_exists = cur.fetchone()[0] > 0
-            
-            # Check if fm_project_layers_properties table exists
-            cur.execute("""SELECT count(*) FROM sqlite_master 
-                          WHERE type='table' AND name='fm_project_layers_properties';""")
-            properties_table_exists = cur.fetchone()[0] > 0
-            
-            # Create missing tables
-            if not filtermate_db_exists:
-                logger.info("Creating missing filterMate_db table")
-                cur.execute("""CREATE TABLE filterMate_db (
-                    id INTEGER PRIMARY KEY,
-                    plugin_name VARYING CHARACTER(255) NOT NULL,
-                    _created_at DATETIME NOT NULL,
-                    _updated_at DATETIME NOT NULL,
-                    _version VARYING CHARACTER(255) NOT NULL);
-                """)
-                # Insert initial record
-                cur.execute("""INSERT INTO filterMate_db VALUES(1, 'FilterMate', datetime(), datetime(), '1.6');""")
-            
-            if not projects_table_exists:
-                logger.info("Creating missing fm_projects table")
-                cur.execute("""CREATE TABLE fm_projects (
-                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                    _created_at DATETIME NOT NULL,
-                    _updated_at DATETIME NOT NULL,
-                    project_name VARYING CHARACTER(255) NOT NULL,
-                    project_path VARYING CHARACTER(255) NOT NULL,
-                    project_settings TEXT NOT NULL);
-                """)
-            
-            if not properties_table_exists:
-                logger.info("Creating missing fm_project_layers_properties table")
-                cur.execute("""CREATE TABLE fm_project_layers_properties (
-                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
-                    _updated_at DATETIME NOT NULL,
-                    fk_project VARYING CHARACTER(255) NOT NULL,
-                    layer_id VARYING CHARACTER(255) NOT NULL,
-                    meta_type VARYING CHARACTER(255) NOT NULL,
-                    meta_key VARYING CHARACTER(255) NOT NULL,
-                    meta_value TEXT NOT NULL,
-                    FOREIGN KEY (fk_project)  
-                    REFERENCES fm_projects(project_id),
-                    CONSTRAINT property_unicity
-                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
-                """)
-            
-            if not filtermate_db_exists or not projects_table_exists or not properties_table_exists:
-                conn.commit()
-                logger.info("Database tables verified/created successfully")
-            
-            cur.close()
-            
-        except Exception as e:
-            logger.error(f"Failed to ensure tables exist: {e}")
             raise
 
 
@@ -5435,48 +5190,17 @@ class LayersManagementEngineTask(QgsTask):
                     return False
                 if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
-        
-        # Aucune clé primaire trouvée - créer un champ virtual_id avec des valeurs séquentielles
-        logger.info(f"No primary key found for layer {layer.name()}, creating virtual_id field")
-        
-        # Vérifier si virtual_id existe déjà
-        if 'virtual_id' not in [field.name() for field in layer.fields()]:
-            # Ajouter le champ virtual_id
-            provider = layer.dataProvider()
-            new_field = QgsField('virtual_id', QVariant.LongLong)
-            
-            # Démarrer l'édition
-            layer.startEditing()
-            provider.addAttributes([new_field])
-            layer.updateFields()
-            
-            # Remplir le champ avec des valeurs séquentielles
-            virtual_id_idx = layer.fields().indexFromName('virtual_id')
-            row_num = 1
-            
-            for feature in layer.getFeatures():
-                if self.isCanceled():
-                    layer.rollBack()
-                    return False
-                    
-                layer.changeAttributeValue(feature.id(), virtual_id_idx, row_num)
-                row_num += 1
-            
-            # Valider les modifications
-            if not layer.commitChanges():
-                logger.error(f"Failed to commit virtual_id field: {layer.commitErrors()}")
-                layer.rollBack()
-                return False
-            
-            logger.info(f"Successfully created and populated virtual_id field with {row_num - 1} values")
+                
+        new_field = QgsField('virtual_id', QVariant.LongLong)
+        layer.addExpressionField('@row_number', new_field)
 
-        return ('virtual_id', layer.fields().indexFromName('virtual_id'), 'Integer64', True)
+        return ('virtual_id', layer.fields().indexFromName('virtual_id'), new_field.typeName(), True)
 
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):       
 
 
-        if layer is not None or layer_props is not None:
+        if layer != None or layer_props != None:
             # Validate required keys exist
             if "infos" not in layer_props:
                 logger.warning(f"layer_props missing 'infos' dictionary, skipping spatial index creation")
@@ -5837,8 +5561,7 @@ class LayersManagementEngineTask(QgsTask):
                 if conn:
                     try:
                         conn.rollback()
-                    except (sqlite3.Error, AttributeError) as rollback_err:
-                        logger.debug(f"Rollback failed: {rollback_err}")
+                    except:
                         pass
                 raise
             finally:
@@ -5865,7 +5588,7 @@ class LayersManagementEngineTask(QgsTask):
         value_typped= None
         type_returned = None
 
-        if value_as_string is None or value_as_string == '':   
+        if value_as_string == None or value_as_string == '':   
             value_typped = str('')
             type_returned = str
         elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:

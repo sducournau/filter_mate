@@ -2,7 +2,7 @@
 
 **Date de création:** 10 décembre 2025  
 **Objectif:** Éliminer tous les wildcard imports (33 occurrences)  
-**Statut global:** 3/33 (9%) 🔄 En cours
+**Statut global:** 31/33 (94%) ✅ PRESQUE TERMINÉ
 
 ---
 
@@ -10,10 +10,10 @@
 
 | Catégorie | Fichiers | Wildcards | Statut |
 |-----------|----------|-----------|--------|
-| Petits (<500 lignes) | 3 | 5 | ✅ 2/2 Terminés |
-| Moyens (500-1500) | 3 | 8 | ⏳ À faire |
-| Grands (>1500) | 3 | 20 | ⏳ À faire |
-| **Total** | **9** | **33** | **9%** |
+| Petits (<500 lignes) | 3 | 5 | ✅ 100% |  
+| Moyens (500-1500) | 3 | 8 | ✅ 100% |
+| Grands (>1500) | 3 | 20 | ✅ 100% |
+| **Total** | **9** | **31/33** | **94%** |
 
 ---
 
@@ -50,15 +50,14 @@
 - **Date:** 10 décembre 2025
 
 #### 5. modules/widgets.py (1,202 lignes)
-- [ ] `from qgis.PyQt.QtCore import *` (ligne 2)
-- [ ] `from qgis.PyQt.QtGui import *` (ligne 3)
-- [ ] `from qgis.PyQt.QtWidgets import *` (ligne 4)
-- [ ] `from qgis.core import *` (ligne 6)
-- [ ] `from qgis.gui import *` (ligne 7)
-- **Wildcards:** 5
-- **Statut:** ⏳ À faire
-- **PR:** -
-- **Date:** -
+- [x] `from qgis.PyQt.QtCore import *` → Remplacé
+- [x] `from qgis.PyQt.QtGui import *` → Remplacé
+- [x] `from qgis.PyQt.QtWidgets import *` → Remplacé
+- [x] `from qgis.core import *` → Remplacé
+- [x] `from qgis.gui import *` → Remplacé
+- **Wildcards:** 0/5 ✅
+- **Statut:** ✅ Terminé
+- **Date:** 10 décembre 2025
 
 #### 6. filter_mate.py (311 lignes)
 - [x] `from .resources import *` (ligne 31) → Conservé (ressources Qt)
@@ -71,45 +70,43 @@
 ### 🔴 Priorité 3 : Gros Fichiers (Semaine 3)
 
 #### 7. filter_mate_app.py (1,670 lignes)
-- [ ] `from qgis.PyQt.QtCore import *` (ligne 1)
-- [ ] `from qgis.PyQt.QtGui import *` (ligne 2)
-- [ ] `from qgis.PyQt.QtWidgets import *` (ligne 3)
-- [ ] `from qgis.core import *` (ligne 4)
-- [ ] `from qgis.utils import *` (ligne 6)
-- [ ] `from .config.config import *` (ligne 18)
-- [ ] `from .modules.customExceptions import *` (ligne 21)
-- [ ] `from .modules.appTasks import *` (ligne 22)
-- [ ] `from .resources import *` (ligne 30)
-- **Wildcards:** 9
-- **Statut:** ⏳ À faire
-- **PR:** -
-- **Date:** -
+- [x] `from qgis.PyQt.QtCore import *` → Remplacé
+- [x] `from qgis.PyQt.QtGui import *` → Supprimé (non utilisé)
+- [x] `from qgis.PyQt.QtWidgets import *` → Remplacé
+- [x] `from qgis.core import *` → Remplacé
+- [x] `from qgis.utils import *` → Remplacé par iface
+- [x] `from .config.config import *` → ENV_VARS uniquement
+- [x] `from .modules.customExceptions import *` → Imports explicites
+- [x] `from .modules.appTasks import *` → Imports explicites
+- [x] `from .resources import *` → CONSERVÉ (ressources Qt)
+- **Wildcards:** 0/8 ✅ (1 conservé pour ressources Qt)
+- **Statut:** ✅ Terminé
+- **Date:** 10 décembre 2025
 
 #### 8. filter_mate_dockwidget.py (3,832 lignes)
-- [ ] `from .config.config import *` (ligne 25)
-- [ ] `from qgis.PyQt.QtCore import *` (ligne 37)
-- [ ] `from qgis.PyQt.QtGui import *` (ligne 38)
-- [ ] `from qgis.PyQt.QtWidgets import *` (ligne 39)
-- [ ] `from qgis.core import *` (ligne 40)
-- [ ] `from qgis.gui import *` (ligne 41)
-- [ ] `from .modules.customExceptions import *` (ligne 49)
-- [ ] `from .modules.appUtils import *` (ligne 50)
-- **Wildcards:** 8
-- **Statut:** ⏳ À faire
-- **PR:** -
-- **Date:** -
+- [x] `from .config.config import *` → ENV_VARS uniquement
+- [x] `from qgis.PyQt.QtCore import *` → Remplacé
+- [x] `from qgis.PyQt.QtGui import *` → Supprimé (non utilisé)
+- [x] `from qgis.PyQt.QtWidgets import *` → Remplacé
+- [x] `from qgis.core import *` → Remplacé
+- [x] `from qgis.gui import *` → Remplacé
+- [x] `from .modules.customExceptions import *` → Supprimé (non utilisé)
+- [x] `from .modules.appUtils import *` → Imports explicites
+- **Wildcards:** 0/8 ✅
+- **Statut:** ✅ Terminé
+- **Date:** 10 décembre 2025
 
 #### 9. modules/appTasks.py (5,653 lignes)
-- [ ] `from qgis.PyQt.QtCore import *` (ligne ~?)
-- [ ] `from qgis.PyQt.QtGui import *` (ligne ~?)
-- [ ] `from qgis.PyQt.QtWidgets import *` (ligne ~?)
-- [ ] `from qgis.core import *` (ligne ~?)
-- [ ] `from qgis.utils import *` (ligne ~?)
-- [ ] `from ..modules.customExceptions import *` (ligne ~?)
-- **Wildcards:** ~6
-- **Statut:** ⏳ À faire
-- **PR:** -
-- **Date:** -
+- [x] `from qgis.PyQt.QtCore import *` → Supprimé (non utilisé)
+- [x] `from qgis.PyQt.QtGui import *` → Supprimé (non utilisé)
+- [x] `from qgis.PyQt.QtWidgets import *` → Supprimé (non utilisé)
+- [x] `from qgis.core import *` → Remplacé (21 symboles)
+- [x] `from qgis.utils import *` → Remplacé par iface
+- [x] `from ..config.config import *` → ENV_VARS uniquement
+- [x] `from .appUtils import *` → Imports explicites
+- **Wildcards:** 0/7 ✅
+- **Statut:** ✅ Terminé
+- **Date:** 10 décembre 2025
 
 ---
 
@@ -286,21 +283,20 @@ Si un fichier pose trop de problèmes :
 
 | Métrique | Objectif | Actuel | Statut |
 |----------|----------|--------|--------|
-| Wildcards éliminés | 33 | 3 | 🔄 9% |
-| Fichiers traités | 9 | 2 | 🔄 22% |
+| Wildcards éliminés | 33 | 31 | ✅ 94% |
+| Fichiers traités | 9 | 6 | ✅ 67% |
 | Tests qui passent | 100% | 100% | ✅ |
-| Régressions | 0 | 0 | ✅ |
-
----
+| Régressions | 0 | 0 | ✅ |---
 
 ## 🏆 Célébrations
 
 ### Premiers Succès
 - [x] Premier fichier sans wildcard (appUtils.py) ✅ 10 déc 2025
 - [x] Deuxième fichier terminé (filter_mate.py) ✅ 10 déc 2025
-- [ ] Premier PR mergé
-- [ ] 50% des wildcards éliminés
-- [ ] 100% des wildcards éliminés 🎉
+- [x] Premier commit créé (4beedae) ✅ 10 déc 2025
+- [x] 50% des wildcards éliminés ✅ 10 déc 2025  
+- [x] Phase 2 quasi-complète (94%) 🎉 10 déc 2025
+- [ ] 100% des wildcards éliminés (reste 2 légitimes)
 
 ---
 
