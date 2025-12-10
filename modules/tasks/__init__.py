@@ -4,23 +4,21 @@ Tasks Module
 Refactored from appTasks.py during Phase 3 (Dec 2025).
 
 This module provides backwards-compatible imports for all task-related classes and utilities.
-The original appTasks.py file remains unchanged during the initial refactoring phase.
 
-Future phases will decompose appTasks.py into:
-- task_utils.py: Common utility functions (spatialite_connect, etc.) ✅ Created
-- geometry_cache.py: SourceGeometryCache class ✅ Created  
-- filter_task.py: FilterEngineTask class (4165 lines) ⏳ Planned
-- layer_management_task.py: LayersManagementEngineTask class (1079 lines) ⏳ Planned
+Extraction Status:
+- task_utils.py: Common utility functions (spatialite_connect, etc.) ✅ Phase 3a
+- geometry_cache.py: SourceGeometryCache class ✅ Phase 3a
+- layer_management_task.py: LayersManagementEngineTask class ✅ Phase 3b
+- filter_task.py: FilterEngineTask class (4165 lines) ✅ Phase 3c
 
-Current Status: Phase 3a complete - utilities and cache extracted
+Current Status: Phase 3c complete - FilterEngineTask extracted
 """
 
-# Re-export from original appTasks.py for backwards compatibility
-from ..appTasks import (
-    FilterEngineTask,
-    LayersManagementEngineTask,
-    MESSAGE_TASKS_CATEGORIES
-)
+# Re-export FilterEngineTask from new module (Phase 3c)
+from .filter_task import FilterEngineTask
+
+# Re-export LayersManagementEngineTask from new module (Phase 3b)
+from .layer_management_task import LayersManagementEngineTask
 
 # Import from new modules
 from .task_utils import (
@@ -31,18 +29,20 @@ from .task_utils import (
     SQLITE_TIMEOUT,
     SQLITE_MAX_RETRIES,
     SQLITE_RETRY_DELAY,
-    MESSAGE_TASKS_CATEGORIES as MESSAGE_CATEGORIES_UTILS
+    MESSAGE_TASKS_CATEGORIES
 )
 
 from .geometry_cache import SourceGeometryCache
 
 __all__ = [
-    # Main task classes (from appTasks.py)
-    'FilterEngineTask',
-    'LayersManagementEngineTask',
-    'MESSAGE_TASKS_CATEGORIES',
+    # Main task classes
+    'FilterEngineTask',              # From filter_task.py (Phase 3c - ✅)
+    'LayersManagementEngineTask',    # From layer_management_task.py (Phase 3b - ✅)
     
-    # Utilities (from task_utils.py)
+    # Constants
+    'MESSAGE_TASKS_CATEGORIES',      # From task_utils.py
+    
+    # Utilities (from task_utils.py - Phase 3a - ✅)
     'spatialite_connect',
     'sqlite_execute_with_retry',
     'get_best_metric_crs',
@@ -51,11 +51,11 @@ __all__ = [
     'SQLITE_MAX_RETRIES',
     'SQLITE_RETRY_DELAY',
     
-    # Cache (from geometry_cache.py)
+    # Cache (from geometry_cache.py - Phase 3a - ✅)
     'SourceGeometryCache',
 ]
 
 # Version info
 __version__ = '2.3.0-alpha'
-__phase__ = '3a'
-__status__ = 'Utilities extracted, full decomposition pending'
+__phase__ = '3c'
+__status__ = 'FilterEngineTask extracted, all major tasks modularized'
