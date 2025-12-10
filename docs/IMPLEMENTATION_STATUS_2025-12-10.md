@@ -2,7 +2,7 @@
 
 **Date d'implémentation:** 10 décembre 2025  
 **Version:** 2.2.5 → 2.3.0-alpha (en cours)  
-**Statut:** Phase 1 & 2 & 3 complétées ✅ | Phase 4 (a/b/c/d) complète ✅ | PEP 8: 95% ✅
+**Statut:** Phase 1 & 2 & 3 complétées ✅ | Phase 4 (a/b/c/d) complète ✅ | Phase 5a complète ✅ | PEP 8: 95% ✅
 
 ---
 
