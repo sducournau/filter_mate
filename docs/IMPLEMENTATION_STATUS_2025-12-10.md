@@ -2,7 +2,7 @@
 
 **Date d'implémentation:** 10 décembre 2025  
 **Version:** 2.2.5 → 2.3.0-alpha (en cours)  
-**Statut:** Phase 1 & 2 & 3a & 3b & 3c complétées ✅ | PEP 8 Compliance 95% ✅
+**Statut:** Phase 1 & 2 & 3 complétées ✅ | Phase 4a complète ✅ | Phase 4b en cours 🔄 | PEP 8: 95% ✅
 
 ---
 
@@ -545,71 +545,200 @@ def setupUiCustom(self):  # 25 lignes (orchestration)
 
 **Commits totaux (10 déc. 2025 - 01:00+):** 12 (11 précédents + 1 nouveau)
 
+---
+
+## 🔄 Réalisations - Phase 4b En Cours (10 déc. 2025 - WIP)
+
+### Objectif Phase 4b
+Refactoriser `apply_dynamic_dimensions()` en extrayant les sections logiques dans des méthodes spécialisées (467 lignes → ~25 lignes d'orchestration).
+
+### Progression Actuelle
+
+**Avant Phase 4b:**
+```python
+def apply_dynamic_dimensions(self):  # 467 lignes monolithiques
+    # Widget dimensions (ComboBox, LineEdit, SpinBox, GroupBox)
+    # Frame dimensions (widget_keys, frames)
+    # Checkable pushbuttons harmonization
+    # Layout spacing configuration
+    # Spacer harmonization
+    # QGIS widget dimensions
+    # Key layouts alignment
+    # Row spacing adjustments
+```
+
+**Après Phase 4b (WIP):**
+```python
+def apply_dynamic_dimensions(self):  # ~25 lignes (orchestration)
+    self._apply_widget_dimensions()
+    self._apply_frame_dimensions()
+    self._harmonize_checkable_pushbuttons()  # En cours
+    self._apply_layout_spacing()  # À faire
+    self._harmonize_spacers()  # À faire
+    self._apply_qgis_widget_dimensions()  # À faire
+    self._align_key_layouts()  # À faire
+    self._adjust_row_spacing()  # À faire
+```
+
+### Méthodes Extraites (3/8)
+
+1. ✅ **`_apply_widget_dimensions()`** (~50 lignes)
+   - Applique dimensions aux widgets Qt standards
+   - ComboBox, LineEdit, SpinBox, GroupBox
+   - Lecture config depuis UIConfig
+   - Batch processing avec findChildren()
+
+2. ✅ **`_apply_frame_dimensions()`** (~40 lignes)
+   - Configure widget_keys containers (min/max width)
+   - Configure frames (min/max height)
+   - frame_exploring, frame_filtering
+
+3. 🔄 **`_harmonize_checkable_pushbuttons()`** (~100 lignes, en cours)
+   - Harmonisation des boutons checkables
+   - Dimensions dynamiques selon profile (compact/normal)
+   - Exploring, filtering, exporting buttons
+   - **Statut:** Duplication partielle à nettoyer
+
+### Méthodes Restantes (5/8)
+
+4. ⏳ **`_apply_layout_spacing()`** (~50 lignes estimées)
+   - Configuration espacement layouts
+   - Margins pour groupbox layouts
+   - Spacing pour exploring/filtering/exporting
+
+5. ⏳ **`_harmonize_spacers()`** (~80 lignes estimées)
+   - Harmonisation spacers verticaux
+   - Section-specific spacer heights
+   - Dynamic sizing selon profile
+
+6. ⏳ **`_apply_qgis_widget_dimensions()`** (~90 lignes estimées)
+   - QgsFeaturePickerWidget
+   - QgsFieldExpressionWidget
+   - QgsProjectionSelectionWidget
+   - QgsMapLayerComboBox, QgsFieldComboBox
+   - QgsCheckableComboBox
+   - QgsPropertyOverrideButton (force 22px)
+
+7. ⏳ **`_align_key_layouts()`** (~60 lignes estimées)
+   - Alignement layouts de clés
+   - Exploring/filtering/exporting keys
+   - Consistent spacing et alignment
+
+8. ⏳ **`_adjust_row_spacing()`** (~50 lignes estimées)
+   - Ajustement espacement lignes
+   - Filtering/exporting values layouts
+   - Spacer adjustments pour alignment
+
+### Métriques Phase 4b (WIP)
+
+| Métrique | Avant | Après Phase 4b (WIP) | Objectif Phase 4b |
+|----------|-------|----------------------|-------------------|
+| **apply_dynamic_dimensions() Size** | **467 lignes** | **467 lignes** (WIP) | **~25 lignes** 🎯 |
+| **Méthodes extraites** | 0 | 3 (partiel) | 8 |
+| **Total file size** | 3,995 lignes | 4,048 lignes | ~4,100 lignes |
+| **Code changements** | - | +114 insertions, -61 suppressions | TBD |
+
+### Validation (WIP)
+
+- ✅ Compilation Python réussie (`python -m py_compile`)
+- 🟡 Duplication partielle dans `_harmonize_checkable_pushbuttons()`
+- ⏳ Tests de non-régression à faire après completion
+- ⏳ Docstrings ajoutées (3/8 méthodes)
+
+### Commit Git
+
+- Commit: `0fb8690` - **WIP: Phase 4b - Partial refactoring of apply_dynamic_dimensions()**
+- **Statut:** Travail sauvegardé, à continuer dans prochaine session
+- **Progression:** 3/8 méthodes extraites (37.5%)
+
+### Prochaines Actions
+
+1. Nettoyer duplication dans `_harmonize_checkable_pushbuttons()`
+2. Extraire `_apply_layout_spacing()` 
+3. Extraire `_harmonize_spacers()`
+4. Extraire `_apply_qgis_widget_dimensions()`
+5. Extraire `_align_key_layouts()`
+6. Extraire `_adjust_row_spacing()`
+7. Finaliser `apply_dynamic_dimensions()` en orchestration pure
+8. Tester en QGIS et valider aucune régression UI
+9. Commit final Phase 4b
+
+---
+
+## 📊 Métriques Actuelles (Mise à jour 10 déc. 2025 - Phase 4b WIP)
+
+| Métrique | Avant | Après Phase 4b (WIP) | Objectif Final |
+|----------|-------|----------------------|----------------|
+| Tests | 0 | 26 | 100+ |
+| Couverture de code | 0% | ~5% (estimation) | 70%+ |
+| CI/CD | ❌ | ✅ | ✅ |
+| Wildcard imports | 33 | **2** ✅ | 2 (légitimes) |
+| Import redondants | 10+ | **0** ✅ | 0 |
+| Bare except | 13 | **0** ✅ | 0 |
+| != None comparisons | 27 | **0** ✅ | 0 |
+| PEP 8 Compliance | ~85% | **95%** ✅ | 98%+ |
+| Qualité Code | 2/5 ⭐⭐ | **4.5/5** ⭐⭐⭐⭐½ | 5/5 |
+| .editorconfig | ❌ | ✅ | ✅ |
+| **appTasks.py Size** | **5,727** | **58** ✅ | ~500 |
+| **setupUiCustom() Size** | **578** | **25** ✅ | <50 |
+| **apply_dynamic_dimensions() Size** | **467** | **467 (WIP)** 🔄 | **~25** 🎯 |
+| **Fichiers > 1000 lignes** | **5** | **3** ✅ | 3 |
+| **modules/tasks/ Files** | **0** | **6** ✅ | 6 |
+| **FilterEngineTask** | **In appTasks.py** | **Extracted** ✅ | Extracted |
+| **LayersManagementEngineTask** | **In appTasks.py** | **Extracted** ✅ | Extracted |
+| **Tab Setup Methods** | **In setupUiCustom()** | **Extracted (4)** ✅ | Extracted |
+| **Dynamic Dimensions Methods** | **In apply_dynamic_dimensions()** | **Extracting (3/8)** 🔄 | **Extracted (8)** 🎯 |
+
+**Commits totaux (10 déc. 2025 - Phase 4b WIP):** 13 (12 précédents + 1 WIP)
+- Phase 1: `0b84ebd` (tests infrastructure)
+- Phase 2: `4beedae`, `eab68ac` (wildcard imports)
+- Cleanup: `00f3c02`, `317337b` (refactoring)
+- PEP 8: `92a1f82`, `0d9367e`, `a4612f2` (compliance)
+- Phase 3a: `699f637` (utilities extraction)
+- Phase 3b: (LayersManagementEngineTask extraction)
+- Phase 3c: `8c11267` (FilterEngineTask extraction)
+- Phase 4b WIP: `0fb8690` (apply_dynamic_dimensions partial refactoring)
+
 **Fichiers à décomposer:**
 
-1. **modules/appTasks.py** (5,678 lignes) → modules/tasks/
-   - Découper en classes spécialisées par type de tâche
-   - Extraire la logique commune dans des helpers
+1. ✅ **modules/appTasks.py** (5,678 lignes) → modules/tasks/ **COMPLET**
+   - ✅ Découpé en 6 fichiers spécialisés (Phase 3a/3b/3c)
+   - ✅ FilterEngineTask, LayersManagementEngineTask extraits
+   - ✅ Utilitaires communs dans task_utils.py
+   - ✅ Geometry cache dans geometry_cache.py
+   - ✅ Shim de compatibilité maintenu (58 lignes)
 
-2. **filter_mate_dockwidget.py** (3,877 lignes) → classes UI distinctes
-   - Séparer les onglets en composants
-   - Extraire les gestionnaires de signaux
+2. 🔄 **filter_mate_dockwidget.py** (4,048 lignes) → méthodes spécialisées **EN COURS**
+   - ✅ Phase 4a: setupUiCustom() (578 → 25 lignes) - 4 méthodes extraites
+   - 🔄 Phase 4b: apply_dynamic_dimensions() (467 lignes) - 3/8 méthodes extraites (WIP)
+   - ⏳ Phase 4c: Autres grandes méthodes à identifier
+   - ⏳ Extraction gestionnaires de signaux (potentiel)
 
-3. **filter_mate_app.py** (1,687 lignes) → orchestrateur + services
+3. ⏳ **filter_mate_app.py** (1,687 lignes) → orchestrateur + services **À PLANIFIER**
    - Service Layer pour logique métier
    - Gestionnaire de configuration séparé
+   - **Note:** À démarrer après completion Phase 4b/4c
 
-**À faire immédiatement:**
+### Prochaines Phases Recommandées
 
-```bash
-# 1. Installer pytest dans l'environnement QGIS
-pip install pytest pytest-cov pytest-mock
+#### Phase 5: Tests et Documentation (Semaines 3-4)
+- Compléter couverture tests à 30%+
+- Ajouter tests backend PostgreSQL
+- Tests filter operations
+- Tests UI components
+- Documentation inline améliorée
 
-# 2. Exécuter les tests
-cd /path/to/filter_mate
-pytest tests/ -v
+#### Phase 6: Optimisation et Polish (Semaines 5-6)
+- Profiling performance
+- Optimisations cache
+- Amélioration logs
+- Finalisation documentation
 
-# 3. Vérifier la couverture
-pytest tests/ --cov=. --cov-report=html
-```
+---
 
-**Attendu:**
-- Plusieurs tests devraient passer (imports, instantiation)
-- Certains tests pourraient échouer (méthodes manquantes dans backends)
-- Obtenir un rapport de couverture initial
+## Phase 2.3: Nettoyage des Imports Wildcards ✅ COMPLET
 
-### Phase 2.2: Compléter les Tests Manquants
-
-**Tests à ajouter:**
-
-1. **test_postgresql_backend.py** (si PostgreSQL disponible)
-```python
-# Tests similaires à Spatialite mais pour PostgreSQL
-- test_postgresql_backend_instantiation
-- test_postgresql_materialized_views
-- test_postgresql_spatial_index
-```
-
-2. **test_filter_operations.py**
-```python
-# Tests de la logique de filtrage
-- test_attribute_filter_building
-- test_spatial_filter_building
-- test_combined_filters
-- test_buffer_distance_calculation
-```
-
-3. **test_ui_components.py**
-```python
-# Tests des widgets UI
-- test_checkable_combobox
-- test_feature_picker
-- test_signal_connections
-```
-
-### Phase 2.3: Nettoyage des Imports Wildcards
-
-**Plan d'attaque pour éliminer les 33 wildcards:**
+**Statut:** 94% éliminé (31/33), 2 légitimes conservés
 
 #### Semaine 1: Petits Fichiers
 ```python
