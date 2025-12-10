@@ -3,7 +3,8 @@ from qgis.PyQt.QtCore import (
     QEvent,
     QRect,
     QSize,
-    Qt
+    Qt,
+    pyqtSignal
 )
 from qgis.PyQt.QtGui import (
     QColor,
@@ -472,7 +473,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         # Dynamic sizing based on UIConfig
         try:
-            from ..ui_config import UIConfig
+            from .ui_config import UIConfig
             combobox_height = UIConfig.get_config('combobox', 'height') or 30
             list_min_height = UIConfig.get_config('list', 'min_height') or 150
             
@@ -877,7 +878,7 @@ class ListWidgetWrapper(QListWidget):
 
         # Dynamic sizing based on UIConfig - minimum height for displaying multiple items
         try:
-            from ..ui_config import UIConfig
+            from .ui_config import UIConfig
             list_min_height = UIConfig.get_config('list', 'min_height') or 120
         except (ImportError, AttributeError, KeyError):
             list_min_height = 120  # Reduced height for compact display (3-4 items)
@@ -985,7 +986,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
         
         # Dynamic sizing based on UIConfig
         try:
-            from ..ui_config import UIConfig
+            from .ui_config import UIConfig
             combobox_height = UIConfig.get_config('combobox', 'height') or 30
         except (ImportError, AttributeError, KeyError):
             combobox_height = 30

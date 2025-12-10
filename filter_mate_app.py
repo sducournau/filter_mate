@@ -25,7 +25,7 @@ from pathlib import Path
 from shutil import copyfile
 import re
 import logging
-from .config.config import ENV_VARS
+from .config.config import ENV_VARS, init_env_vars
 from functools import partial
 import json
 from .modules.customExceptions import (
@@ -35,7 +35,8 @@ from .modules.customExceptions import (
 )
 from .modules.appTasks import (
     FilterEngineTask,
-    LayersManagementEngineTask
+    LayersManagementEngineTask,
+    spatialite_connect
 )
 from .modules.appUtils import POSTGRESQL_AVAILABLE
 from .modules.feedback_utils import (
@@ -324,8 +325,9 @@ class FilterMateApp:
         assert task_name in list(self.tasks_descriptions.keys())
         
         # Guard: Ensure dockwidget is fully initialized before processing tasks
-        # Exception: remove_all_layers, project_read, new_project can run without full initialization
-        if task_name not in ('remove_all_layers', 'project_read', 'new_project'):
+        # Exception: remove_all_layers, project_read, new_project, add_layers can run without full initialization
+        # add_layers is allowed to run early to handle existing layers at startup
+        if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
                 logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 300ms...")
                 QTimer.singleShot(300, lambda: self.manage_task(task_name, data))
@@ -418,9 +420,22 @@ class FilterMateApp:
             
             # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
-            self.appTasks[task_name].resultingLayers.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
-            self.appTasks[task_name].savingLayerVariable.connect(lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned))
-            self.appTasks[task_name].removingLayerVariable.connect(lambda layer, variable_key: self.removing_layer_variable(layer, variable_key))
+            # CRITICAL: Use Qt.QueuedConnection to defer signal handling and avoid accessing deleted C++ objects
+            # The QgsTask object is destroyed by Qt immediately after finished() returns, so direct connections
+            # could try to access the deleted object. Queued connections process after event loop returns,
+            # by which time the signal has already been emitted and disconnected.
+            self.appTasks[task_name].resultingLayers.connect(
+                lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name),
+                Qt.QueuedConnection
+            )
+            self.appTasks[task_name].savingLayerVariable.connect(
+                lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned),
+                Qt.QueuedConnection
+            )
+            self.appTasks[task_name].removingLayerVariable.connect(
+                lambda layer, variable_key: self.removing_layer_variable(layer, variable_key),
+                Qt.QueuedConnection
+            )
 
         try:
             active_tasks = QgsApplication.taskManager().activeTasks()
@@ -1136,12 +1151,12 @@ class FilterMateApp:
                 if conn is None:
                     error_msg = "Cannot initialize FilterMate database: connection failed"
                     logger.error(error_msg)
-                    iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                    iface.messageBar().pushCritical("FilterMate", error_msg)
                     return
             except Exception as e:
                 error_msg = f"Critical error connecting to database: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                iface.messageBar().pushCritical("FilterMate", error_msg)
                 return
 
             try:
@@ -1252,7 +1267,7 @@ class FilterMateApp:
             except Exception as e:
                 error_msg = f"Error during database initialization: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                iface.messageBar().pushCritical("FilterMate", error_msg)
                 return
             finally:
                 if conn:

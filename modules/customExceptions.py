@@ -1,3 +1,18 @@
+class FilterMateException(Exception):
+    """Base exception class for FilterMate plugin."""
+    pass
+
+
+class LayerNotFoundError(FilterMateException):
+    """Exception raised when a layer cannot be found."""
+    pass
+
+
+class InvalidExpressionError(FilterMateException):
+    """Exception raised when an expression is invalid."""
+    pass
+
+
 class SignalStateChangeError(Exception):
     """Exception raised for errors when changing a widget's signal state.
 

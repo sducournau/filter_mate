@@ -38,9 +38,11 @@ from qgis.PyQt.QtCore import (
     Qt,
     QCoreApplication,
     QMetaMethod,
+    QObject,
     pyqtSignal,
     QTimer
 )
+from qgis.PyQt.QtGui import QColor, QFont
 from qgis.PyQt.QtWidgets import (
     QApplication,
     QComboBox,
@@ -48,6 +50,7 @@ from qgis.PyQt.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
+    QHBoxLayout,
     QLineEdit,
     QPushButton,
     QSizePolicy,
@@ -64,6 +67,8 @@ from qgis.core import (
     QgsFeatureRequest,
     QgsGeometry,
     QgsProject,
+    QgsProperty,
+    QgsPropertyDefinition,
     QgsVectorLayer
 )
 from qgis.gui import (
@@ -73,14 +78,38 @@ from qgis.gui import (
     QgsFeaturePickerWidget,
     QgsFieldComboBox,
     QgsFieldExpressionWidget,
-    QgsFieldProxyModel,
     QgsMapLayerComboBox,
-    QgsMapLayerProxyModel,
     QgsProjectionSelectionWidget,
-    QgsProperty,
-    QgsPropertyDefinition,
     QgsPropertyOverrideButton
 )
+
+# Compatibility layer for proxy model classes that may be in different modules
+# depending on QGIS version. These classes moved from qgis.core to qgis.gui
+# in newer QGIS versions (3.30+)
+
+# QgsMapLayerProxyModel: Used for filtering layer types (e.g., VectorLayer only)
+try:
+    from qgis.gui import QgsMapLayerProxyModel
+except ImportError:
+    try:
+        from qgis.core import QgsMapLayerProxyModel
+    except ImportError:
+        # Fallback for versions where QgsMapLayerProxyModel is not available
+        class QgsMapLayerProxyModel:
+            """Fallback class for QGIS versions without QgsMapLayerProxyModel"""
+            VectorLayer = 1  # Filter to show only vector layers
+
+# QgsFieldProxyModel: Used for filtering field types in QgsFieldExpressionWidget
+try:
+    from qgis.gui import QgsFieldProxyModel
+except ImportError:
+    try:
+        from qgis.core import QgsFieldProxyModel
+    except ImportError:
+        # Fallback for versions where QgsFieldProxyModel is not available
+        class QgsFieldProxyModel:
+            """Fallback class for QGIS versions without QgsFieldProxyModel"""
+            AllTypes = 0  # No filtering (all field types accepted)
 from qgis.utils import iface
 
 import webbrowser
@@ -92,6 +121,7 @@ from .modules.appUtils import (
     get_primary_key_name,
     POSTGRESQL_AVAILABLE
 )
+from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 from .modules.ui_styles import StyleLoader
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase

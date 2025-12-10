@@ -22,6 +22,7 @@ from qgis.core import (
     QgsVectorLayer,
     QgsWkbTypes
 )
+from qgis.PyQt.QtCore import pyqtSignal
 from qgis.utils import iface
 from qgis import processing
 import logging
@@ -81,7 +82,9 @@ from .appUtils import (
     safe_set_subset_string,
     get_source_table_name,
     get_datasource_connexion_from_layer,
-    get_primary_key_name
+    get_primary_key_name,
+    detect_layer_provider_type,
+    geometry_type_to_string
 )
 from qgis.utils import iface
 import time
@@ -5630,15 +5633,44 @@ class LayersManagementEngineTask(QgsTask):
 
 
     def finished(self, result):
+        """Handle task completion and emit results before object destruction.
+        
+        CRITICAL: Signals must be emitted and disconnected BEFORE displaying messages
+        to avoid "wrapped C/C++ object has been deleted" errors. Qt destroys the C++
+        object after finished() returns, so any deferred signal handlers would access
+        a deleted object.
+        """
         result_action = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
 
         if self.exception is None:
             if result is None:
+                # Emit signal immediately before any UI operations
+                try:
+                    if self.project_layers is not None:
+                        self.resultingLayers.emit(self.project_layers)
+                except RuntimeError:
+                    # Object already being deleted, ignore
+                    pass
+                finally:
+                    # Disconnect signals to prevent access after deletion
+                    try:
+                        self.resultingLayers.disconnect()
+                    except (RuntimeError, TypeError):
+                        pass
+                
                 iface.messageBar().pushMessage(
                     'Completed with no exception and no result (probably manually canceled by the user).',
                     MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Warning)
             else:
+                # CRITICAL: Emit signal BEFORE showing message bar to avoid object deletion race
+                try:
+                    if self.project_layers is not None:
+                        self.resultingLayers.emit(self.project_layers)
+                except RuntimeError:
+                    # Object already being deleted, ignore
+                    pass
+                
                 if message_category == 'ManageLayers':
                     
                     
@@ -5668,9 +5700,20 @@ class LayersManagementEngineTask(QgsTask):
                         iface.messageBar().pushMessage(
                             'Layers list has been updated : {}'.format(result_action),
                             MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success)
-                    
-                self.resultingLayers.emit(self.project_layers)
+                
+                # Disconnect signals to prevent access after deletion
+                try:
+                    self.resultingLayers.disconnect()
+                except (RuntimeError, TypeError):
+                    # Already disconnected or object being deleted
+                    pass
         else:
+            # Even on exception, try to disconnect signals
+            try:
+                self.resultingLayers.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            
             iface.messageBar().pushMessage(
                 "Exception: {}".format(self.exception),
                 MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Critical)
