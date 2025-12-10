@@ -3231,147 +3231,205 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.setProjectVariablesEvent()
 
 
-    def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
+    def _parse_property_data(self, input_data):
+        """
+        Parse and validate input data for property updates.
         
-        if self.widgets_initialized is True and self.current_layer is not None:
-
-
-            if self.current_layer == None:
-                return
+        Args:
+            input_data: Property value (dict, list, str, int, float, bool, or None)
             
-            widgets_to_stop =   [
-                        ["EXPLORING","SINGLE_SELECTION_FEATURES"],
-                        ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
-                        ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
-                        ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
-                        ["EXPLORING","CUSTOM_SELECTION_EXPRESSION"]
-                    ]
+        Returns:
+            tuple: (parsed_data, state) where state indicates if data is valid/enabled
+        """
+        state = None
         
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'disconnect')
-
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            properties_group_key = None
-            property_path = None
-            index = None
-            state = None
-            group_state = True
-            flag_value_changed = False
-
-            if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
-                if len(input_data) >= 0:
-                    state = True
-                else:
-                    state = False
-            elif isinstance(input_data, int) or isinstance(input_data, float):
-                if int(input_data) >= 0:
-                    state = True
-                else:
-                    state = False
-                if isinstance(input_data, float):
-                    input_data = truncate(input_data, 2)
-            elif isinstance(input_data, bool):
-                state = input_data
-            elif input_data is None:
-                state = False
+        if isinstance(input_data, dict) or isinstance(input_data, list) or isinstance(input_data, str):
+            state = len(input_data) >= 0
+        elif isinstance(input_data, int) or isinstance(input_data, float):
+            state = int(input_data) >= 0
+            if isinstance(input_data, float):
+                input_data = truncate(input_data, 2)
+        elif isinstance(input_data, bool):
+            state = input_data
+        elif input_data is None:
+            state = False
             
+        return input_data, state
 
-            for properties_tuples_key in self.layer_properties_tuples_dict:
-                if input_property.find(properties_tuples_key) >= 0:
-                    properties_group_key = properties_tuples_key
-                    properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
-                    for i, property_tuple in enumerate(properties_tuples):
-                        if property_tuple[1] == input_property:
-                            property_path = property_tuple
-                            index = i
-                            break
-                    break
+    def _find_property_path(self, input_property):
+        """
+        Find property path and group key from input property name.
+        
+        Args:
+            input_property: Property identifier string
+            
+        Returns:
+            tuple: (properties_group_key, property_path, properties_tuples, index)
+        """
+        for properties_tuples_key in self.layer_properties_tuples_dict:
+            if input_property.find(properties_tuples_key) >= 0:
+                properties_group_key = properties_tuples_key
+                properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
+                for i, property_tuple in enumerate(properties_tuples):
+                    if property_tuple[1] == input_property:
+                        return properties_group_key, property_tuple, properties_tuples, i
+        return None, None, None, None
 
+    def _update_is_property(self, property_path, layer_props, input_data, custom_functions):
+        """
+        Update 'is' type properties (boolean toggles).
+        
+        Args:
+            property_path: Property path tuple
+            layer_props: Layer properties dict
+            input_data: New value
+            custom_functions: Callbacks dict
+            
+        Returns:
+            bool: True if value changed
+        """
+        flag_value_changed = False
+        
+        if property_path[1] == "is_changing_all_layer_properties":
+            if layer_props[property_path[0]][property_path[1]] is True:
+                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = False
+                flag_value_changed = True
+                if "ON_TRUE" in custom_functions:
+                    custom_functions["ON_TRUE"](0)
+                self.switch_widget_icon(property_path, False)
+            elif layer_props[property_path[0]][property_path[1]] is False:
+                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = True
+                flag_value_changed = True
+                if "ON_FALSE" in custom_functions:
+                    custom_functions["ON_FALSE"](0)
+                self.switch_widget_icon(property_path, True)
+        else:
+            if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
+                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                flag_value_changed = True
+                if "ON_TRUE" in custom_functions:
+                    custom_functions["ON_TRUE"](0)
+            elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
+                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                flag_value_changed = True
+                if "ON_FALSE" in custom_functions:
+                    custom_functions["ON_FALSE"](0)
+                    
+        return flag_value_changed
 
-            if properties_group_key == 'is':
+    def _update_selection_expression_property(self, property_path, layer_props, input_data, custom_functions):
+        """
+        Update selection expression properties.
+        
+        Args:
+            property_path: Property path tuple
+            layer_props: Layer properties dict
+            input_data: New expression value
+            custom_functions: Callbacks dict
+            
+        Returns:
+            bool: True if value changed
+        """
+        if str(layer_props[property_path[0]][property_path[1]]) != input_data:
+            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+            if "ON_TRUE" in custom_functions:
+                custom_functions["ON_TRUE"](0)
+            return True
+        return False
 
-                if property_path[1] == "is_changing_all_layer_properties":
+    def _update_other_property(self, property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions):
+        """
+        Update other property types (filtering, exporting, etc.).
+        
+        Args:
+            property_path: Property path tuple
+            properties_tuples: Property tuples list
+            properties_group_key: Group key
+            layer_props: Layer properties dict
+            input_data: New value
+            custom_functions: Callbacks dict
+            
+        Returns:
+            bool: True if value changed
+        """
+        flag_value_changed = False
+        group_enabled_property = properties_tuples[0]
+        group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
 
-                    if layer_props[property_path[0]][property_path[1]] is True:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = False
-                        flag_value_changed = True
-                        if "ON_TRUE" in custom_functions:
-                            custom_functions["ON_TRUE"](0)
-                        self.switch_widget_icon(property_path, False)
-
-                    elif layer_props[property_path[0]][property_path[1]] is False:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = True
-                        flag_value_changed = True
-                        if "ON_FALSE" in custom_functions:
-                            custom_functions["ON_FALSE"](0)
-                        self.switch_widget_icon(property_path, True)
-
-                else:
-
-                    if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                        flag_value_changed = True
-                        if "ON_TRUE" in custom_functions:
-                            custom_functions["ON_TRUE"](0)
-
-                    elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                        flag_value_changed = True
-                        if "ON_FALSE" in custom_functions:
-                            custom_functions["ON_FALSE"](0) 
-
-
-            elif properties_group_key == 'selection_expression':
-                
-                if str(layer_props[property_path[0]][property_path[1]]) != input_data:
+        if group_state is False:
+            self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
+            flag_value_changed = True
+        else:
+            self.properties_group_state_enabler(properties_tuples)
+            widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
+            
+            if widget_type == 'PushButton':
+                if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
                     if "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)
-
-            else:
-                group_enabled_property = properties_tuples[0]
-                group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
-
-                if group_state is False:
-                    self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
+                    
+                    # Refresh layers list when has_layers_to_filter is activated
+                    if property_path[1] == 'has_layers_to_filter':
+                        self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
+                        self.filtering_populate_layers_chekableCombobox()
+                        self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                        
+                elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
+                    self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
+                    if "ON_FALSE" in custom_functions:
+                        custom_functions["ON_FALSE"](0)
+            else:
+                self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
+                flag_value_changed = True
+                if "ON_TRUE" in custom_functions:
+                    custom_functions["ON_TRUE"](0)
+                    
+        return flag_value_changed
 
-                else:
-                    self.properties_group_state_enabler(properties_tuples)
-                    widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
-                    if widget_type == 'PushButton':
-                        if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                            flag_value_changed = True
-                            if "ON_TRUE" in custom_functions:
-                                custom_functions["ON_TRUE"](0)
-                            
-                            # When has_layers_to_filter is activated, refresh the layers list
-                            if property_path[1] == 'has_layers_to_filter':
-                                self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-                                self.filtering_populate_layers_chekableCombobox()
-                                self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+    def layer_property_changed(self, input_property, input_data=None, custom_functions={}):
+        """
+        Handle property changes for the current layer.
+        Orchestrates property updates by type (is/selection_expression/other).
+        """
+        if self.widgets_initialized is True and self.current_layer is not None:
+            if self.current_layer == None:
+                return
+            
+            # Disconnect exploring widgets
+            widgets_to_stop = [
+                ["EXPLORING","SINGLE_SELECTION_FEATURES"],
+                ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
+                ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
+                ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
+                ["EXPLORING","CUSTOM_SELECTION_EXPRESSION"]
+            ]
+            for widget_path in widgets_to_stop:
+                self.manageSignal(widget_path, 'disconnect')
 
-                        elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
-                            self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                            flag_value_changed = True
-                            if "ON_FALSE" in custom_functions:
-                                custom_functions["ON_FALSE"](0)
+            # Parse and find property
+            input_data, state = self._parse_property_data(input_data)
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            properties_group_key, property_path, properties_tuples, index = self._find_property_path(input_property)
 
-                    else:
-                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
-                        flag_value_changed = True
-                        if "ON_TRUE" in custom_functions:
-                            custom_functions["ON_TRUE"](0)
+            # Update by property type
+            flag_value_changed = False
+            if properties_group_key == 'is':
+                flag_value_changed = self._update_is_property(property_path, layer_props, input_data, custom_functions)
+            elif properties_group_key == 'selection_expression':
+                flag_value_changed = self._update_selection_expression_property(property_path, layer_props, input_data, custom_functions)
+            else:
+                flag_value_changed = self._update_other_property(property_path, properties_tuples, properties_group_key, layer_props, input_data, custom_functions)
 
-
+            # Trigger change callbacks
             if flag_value_changed is True:
                 if "ON_CHANGE" in custom_functions:
                     custom_functions["ON_CHANGE"](0)
-
                 self.setLayerVariableEvent(self.current_layer, [property_path])
 
+            # Reconnect widgets
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'connect')
 
