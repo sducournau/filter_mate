@@ -129,8 +129,8 @@ def toggle_display_mode(widget: QWidget, set_compact: bool) -> None:
     try:
         profile = DisplayProfile.COMPACT if set_compact else DisplayProfile.NORMAL
         UIConfig.set_profile(profile)
-    except:
-        pass
+    except (ImportError, AttributeError) as e:
+        print(f"⚠️  Could not update UIConfig profile: {e}")
     
     # Apply spacer dimensions
     count = apply_spacer_dimensions(widget, compact_mode=set_compact)
