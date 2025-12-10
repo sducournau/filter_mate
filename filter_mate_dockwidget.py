@@ -1816,95 +1816,78 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].setCurrentIndex(self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].findText('GPKG'))
 
 
-    def manage_ui_style(self):
+    def _apply_auto_configuration(self):
         """
-        Load and apply plugin stylesheet using StyleLoader with auto-detection.
+        Auto-detect and apply UI profile and theme based on environment.
         
-        This method:
-        1. Auto-detects UI profile from screen resolution (if UI_PROFILE="auto")
-        2. Auto-detects color theme from QGIS (if ACTIVE_THEME="auto")
-        3. Uses StyleLoader to load stylesheet from resources/styles/default.qss
-        4. Applies config.json colors dynamically via StyleLoader
-        5. Sets widget-specific properties (sizes, fonts, icons, cursors)
+        Detects UI profile from screen resolution and theme from QGIS settings.
+        Logs configuration results for debugging.
         
-        The StyleLoader handles:
-        - Loading QSS file with error handling
-        - Replacing color placeholders with config values
-        - Replacing dimension placeholders with UI profile values
-        - Caching for performance
-        - Theme management (auto-detects from config)
-        
-        Benefits:
-        - Centralized style management
-        - Automatic adaptation to screen size and QGIS theme
-        - Proper error handling and fallbacks
-        - Easy theme customization via config.json
-        - Testable and maintainable
+        Returns:
+            dict: Auto-configuration results with detected profile and theme
         """
-        # Auto-configure UI profile and theme based on environment
-        if UI_CONFIG_AVAILABLE:
-            auto_config_result = ui_utils.auto_configure_from_environment(self.CONFIG_DATA)
-            
-            # Log auto-configuration results
-            logger.info(f"FilterMate auto-configuration completed:")
-            logger.info(f"  - Profile: {auto_config_result.get('profile_detected')} "
-                       f"({auto_config_result.get('profile_source')})")
-            logger.info(f"  - Theme: {auto_config_result.get('theme_detected')} "
-                       f"({auto_config_result.get('theme_source')})")
-            logger.info(f"  - Resolution: {auto_config_result.get('screen_resolution')}")
+        if not UI_CONFIG_AVAILABLE:
+            return {}
         
-        # Apply stylesheet using StyleLoader with config colors
-        # Theme is automatically detected from config.json ACTIVE_THEME or QGIS
+        auto_config_result = ui_utils.auto_configure_from_environment(self.CONFIG_DATA)
+        
+        # Log auto-configuration results
+        logger.info(f"FilterMate auto-configuration completed:")
+        logger.info(f"  - Profile: {auto_config_result.get('profile_detected')} "
+                   f"({auto_config_result.get('profile_source')})")
+        logger.info(f"  - Theme: {auto_config_result.get('theme_detected')} "
+                   f"({auto_config_result.get('theme_source')})")
+        logger.info(f"  - Resolution: {auto_config_result.get('screen_resolution')}")
+        
+        return auto_config_result
+
+    def _apply_stylesheet(self):
+        """
+        Apply stylesheet using StyleLoader with config colors.
+        
+        Theme is automatically detected from config.json ACTIVE_THEME or QGIS.
+        StyleLoader handles QSS loading, color replacement, and caching.
+        """
         StyleLoader.set_theme_from_config(
             self.dockWidgetContents, 
             self.CONFIG_DATA
         )
+
+    def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
+        """
+        Configure all push button widgets with icons, sizes, and cursors.
         
-        # Configure push buttons, comboboxes, and other widgets
+        Applies dynamic dimensions based on button type (action/tool/default).
+        Sets proper size policies and icon sizes from UIConfig or fallback values.
+        
+        Args:
+            pushButton_config (dict): Push button configuration from config.json
+            icons_sizes (dict): Icon size dictionary with ACTION and OTHERS keys
+            font (QFont): Font to apply to buttons
+        """
         pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
-        pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]][pushButton_config_path[2]]
         
-        # Get icon sizes from config
-        icons_sizes = {
-            "ACTION": pushButton_config.get("ICONS_SIZES", {}).get("ACTION", 20),
-            "OTHERS": pushButton_config.get("ICONS_SIZES", {}).get("OTHERS", 20),
-        }
-        
-        # Set font for widgets
-        font = QFont("Segoe UI Semibold", 8)
-        font.setBold(True)
-        
-        # Apply widget-specific configurations
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
                 widget_type = self.widgets[widget_group][widget_name]["TYPE"]
                 widget_obj = self.widgets[widget_group][widget_name]["WIDGET"]
                 
-                # Skip certain widget types
-                if widget_type in ("JsonTreeView", "LayerTreeView", "JsonModel", "ToolBox"):
-                    continue
-                
-                # Configure push buttons
                 if widget_type == "PushButton":
                     self.set_widget_icon(pushButton_config_path + ["ICONS", widget_group, widget_name])
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     
-                    # Determine icon size from config (will be overridden by UIConfig if available)
                     icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
                     
                     # Apply dynamic dimensions based on button type
                     if UI_CONFIG_AVAILABLE:
                         # Determine button type for dynamic sizing
                         if widget_group == "ACTION":
-                            # Main action buttons (filter, export, etc.)
                             button_height = UIConfig.get_button_height("action_button")
                             button_icon_size = UIConfig.get_icon_size("action_button")
                         elif widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
-                            # Tool/sidebar buttons
                             button_height = UIConfig.get_button_height("tool_button")
                             button_icon_size = UIConfig.get_icon_size("tool_button")
                         else:
-                            # Default buttons
                             button_height = UIConfig.get_button_height("button")
                             button_icon_size = UIConfig.get_icon_size("button")
                         
@@ -1914,23 +1897,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         widget_obj.setMaximumWidth(button_height)
                         widget_obj.setIconSize(QtCore.QSize(button_icon_size, button_icon_size))
                         
-                        # CRITICAL: Force Fixed size policy for sidebar buttons to prevent stretching
+                        # CRITICAL: Force Fixed size policy for sidebar buttons
                         if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
                             widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
                     else:
-                        # Fallback: use default normal profile values if UIConfig not available
+                        # Fallback to normal profile defaults
                         widget_obj.setIconSize(QtCore.QSize(icon_size, icon_size))
                         
-                        # Set button size based on group using normal profile defaults
                         if widget_group in ["EXPLORING", "FILTERING", "EXPORTING"]:
-                            # Sidebar tool buttons - use normal profile default (36px)
                             fallback_size = 36
                             widget_obj.setMinimumHeight(fallback_size)
                             widget_obj.setMaximumHeight(fallback_size)
                             widget_obj.setMinimumWidth(fallback_size)
                             widget_obj.setMaximumWidth(fallback_size)
                         else:
-                            # Action buttons - double icon size
                             widget_obj.setMinimumHeight(icon_size * 2)
                             widget_obj.setMaximumHeight(icon_size * 2)
                             widget_obj.setMinimumWidth(icon_size * 2)
@@ -1938,9 +1918,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     widget_obj.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
                     widget_obj.setFont(font)
+
+    def _configure_other_widgets(self, font):
+        """
+        Configure non-button widgets (comboboxes, text inputs, etc.).
+        
+        Sets cursors and fonts for ComboBox, LineEdit, QgsFieldExpressionWidget,
+        PropertyOverrideButton, and other widget types.
+        
+        Args:
+            font (QFont): Font to apply to widgets
+        """
+        for widget_group in self.widgets:
+            for widget_name in self.widgets[widget_group]:
+                widget_type = self.widgets[widget_group][widget_name]["TYPE"]
+                widget_obj = self.widgets[widget_group][widget_name]["WIDGET"]
+                
+                # Skip certain widget types
+                if widget_type in ("JsonTreeView", "LayerTreeView", "JsonModel", "ToolBox", "PushButton"):
+                    continue
                 
                 # Configure comboboxes and field widgets
-                elif any(keyword in widget_type for keyword in ["ComboBox", "QgsFieldExpressionWidget", "QgsProjectionSelectionWidget"]):
+                if any(keyword in widget_type for keyword in ["ComboBox", "QgsFieldExpressionWidget", "QgsProjectionSelectionWidget"]):
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     widget_obj.setFont(font)
                 
@@ -1953,9 +1952,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 elif "PropertyOverrideButton" in widget_type:
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     widget_obj.setFont(font)
+
+    def _configure_key_widgets_sizes(self, icons_sizes):
+        """
+        Configure sizes for key widgets (widget_keys and frame_actions).
         
-        # Set sizes for key widgets - accommodate buttons with padding
-        # Use dynamic dimensions if available
+        Uses UIConfig for dynamic dimensions or falls back to hardcoded values.
+        Sets fixed size policies for widget_keys to prevent unwanted resizing.
+        
+        Args:
+            icons_sizes (dict): Icon size dictionary with ACTION and OTHERS keys
+        """
         if UI_CONFIG_AVAILABLE:
             # Get widget_keys width directly from config
             widget_keys_width = UIConfig.get_config('widget_keys', 'max_width') or 56
@@ -1982,6 +1989,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             icon_size = icons_sizes["ACTION"]
             self.frame_actions.setMinimumHeight(icon_size * 3)
             self.frame_actions.setMaximumHeight(icon_size * 3)
+
+    def manage_ui_style(self):
+        """
+        Load and apply plugin stylesheet using StyleLoader with auto-detection.
+        
+        Orchestrates UI styling by:
+        1. Auto-detecting UI profile and theme
+        2. Applying stylesheet via StyleLoader
+        3. Configuring push buttons
+        4. Configuring other widgets
+        5. Setting key widget sizes
+        
+        Benefits:
+        - Centralized style management
+        - Automatic adaptation to screen size and QGIS theme
+        - Proper error handling and fallbacks
+        - Easy theme customization via config.json
+        """
+        # Auto-configure UI profile and theme
+        self._apply_auto_configuration()
+        
+        # Apply stylesheet
+        self._apply_stylesheet()
+        
+        # Get configuration
+        pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
+        pushButton_config = self.CONFIG_DATA[pushButton_config_path[0]][pushButton_config_path[1]][pushButton_config_path[2]]
+        
+        icons_sizes = {
+            "ACTION": pushButton_config.get("ICONS_SIZES", {}).get("ACTION", 20),
+            "OTHERS": pushButton_config.get("ICONS_SIZES", {}).get("OTHERS", 20),
+        }
+        
+        font = QFont("Segoe UI Semibold", 8)
+        font.setBold(True)
+        
+        # Configure widgets
+        self._configure_pushbuttons(pushButton_config, icons_sizes, font)
+        self._configure_other_widgets(font)
+        self._configure_key_widgets_sizes(icons_sizes)
         
         logger.debug("UI stylesheet loaded and applied successfully")
 
