@@ -1513,121 +1513,35 @@ class FilterMateApp:
                         if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
                             try:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                            except (KeyError, AttributeError, RuntimeError) as e:
-                                # Widget may not exist or already removed
+                            except (KeyError, AttributeError, RuntimeError):
                                 pass
 
-                        # CRITICAL: Verify layer structure before accessing nested properties
-                        if "infos" not in self.PROJECT_LAYERS[layer_key]:
-                            logger.warning(f"Layer {layer_key} missing required 'infos' in PROJECT_LAYERS")
-                            continue
-                        
-                        layer_info = self.PROJECT_LAYERS[layer_key]["infos"]
-                        required_keys = ["layer_provider_type", "layer_name", "layer_id"]
-                        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                        
-                        if missing_keys:
-                            logger.warning(f"Layer {layer_key} missing required keys in infos: {missing_keys}")
-                            continue
-                            
-                        layer_source_type = layer_info["layer_provider_type"]                    
-                        if layer_source_type not in self.project_datasources:
-                            self.project_datasources[layer_source_type] = {}
-
-                    
-                        layer_props = self.PROJECT_LAYERS[layer_key]
-                        layer = None
-                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_info["layer_name"]) if layer.id() == layer_info["layer_id"]]
-                        if len(layers) == 1:
-                            layer = layers[0]
-                        
-                        # Skip if layer not found
-                        if layer is None:
-                            continue
-                        
-                        source_uri, authcfg_id = get_data_source_uri(layer)
-
-                        if authcfg_id is not None:
-                            if authcfg_id not in self.project_datasources[layer_source_type].keys():
-                                connexion, source_uri = get_datasource_connexion_from_layer(layer)
-                                self.project_datasources[layer_source_type][authcfg_id] = connexion
-                        
-                        else:
-                            uri = source_uri.uri().strip()
-                            relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
-                            layer_name = uri.split('|')[1] if len(uri.split('|')) == 2 else None
-                            absolute_path = os.path.join(os.path.normpath(ENV_VARS["PATH_ABSOLUTE_PROJECT"]), os.path.normpath(relative_path))
-                            if absolute_path not in self.project_datasources[layer_source_type].keys():
-                                self.project_datasources[layer_source_type][absolute_path] = []
-                            
-                            if uri not in self.project_datasources[layer_source_type][absolute_path]:
-                                self.project_datasources[layer_source_type][absolute_path].append(absolute_path + ('|' + layer_name if layer_name is not None else ''))
+                        # Validate and update datasource
+                        layer_info = self._validate_layer_info(layer_key)
+                        if layer_info:
+                            self._update_datasource_for_layer(layer_info)
                             
 
                 else:
-                                       
+                    # Handle layer removal
                     for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
                         if layer_key not in self.PROJECT_LAYERS.keys():
+                            # Layer removed - clean up database
                             cur.execute("""DELETE FROM fm_project_layers_properties 
                                             WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
-                                                                                                                project_id=self.project_uuid,
-                                                                                                                layer_id=layer_key
-                                                                                                                )
-                            )
+                                                project_id=self.project_uuid,
+                                                layer_id=layer_key
+                                            ))
                             conn.commit()
                             try:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                            except (KeyError, AttributeError, RuntimeError) as e:
-                                # Widget may not exist or already removed
+                            except (KeyError, AttributeError, RuntimeError):
                                 pass
                         else:
-                            # CRITICAL: Only process layers that still exist in PROJECT_LAYERS
-                            # Verify layer structure before accessing nested properties
-                            if "infos" not in self.PROJECT_LAYERS[layer_key]:
-                                logger.warning(f"Layer {layer_key} missing required 'infos' in PROJECT_LAYERS")
-                                continue
-                            
-                            layer_info = self.PROJECT_LAYERS[layer_key]["infos"]
-                            required_keys = ["layer_provider_type", "layer_name", "layer_id"]
-                            missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                            
-                            if missing_keys:
-                                logger.warning(f"Layer {layer_key} missing required keys in infos: {missing_keys}")
-                                continue
-
-                            layer_source_type = layer_info["layer_provider_type"]                    
-                            if layer_source_type not in self.project_datasources:
-                                self.project_datasources[layer_source_type] = {}
-
-                        
-                            layer_props = self.PROJECT_LAYERS[layer_key]
-                            layer = None
-                            layers = [layer for layer in self.PROJECT.mapLayersByName(layer_info["layer_name"]) if layer.id() == layer_info["layer_id"]]
-                            if len(layers) == 1:
-                                layer = layers[0]
-                            
-                            # Skip if layer not found
-                            if layer is None:
-                                continue
-                        
-                            source_uri, authcfg_id = get_data_source_uri(layer)
-
-                            if authcfg_id is not None:
-
-                                if authcfg_id not in self.project_datasources[layer_source_type].keys():
-                                    connexion, source_uri = get_datasource_connexion_from_layer(layer)
-                                    self.project_datasources[layer_source_type][authcfg_id] = connexion
-                                
-                            
-                            else:
-
-                                uri = source_uri.uri().strip()
-                                relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
-                                absolute_path = os.path.normpath(os.path.join(ENV_VARS["PATH_ABSOLUTE_PROJECT"], relative_path))
-                                if absolute_path in self.project_datasources[layer_source_type].keys():
-                                    self.project_datasources[layer_source_type][absolute_path].remove(uri)
-                                if uri in self.project_datasources[layer_source_type][absolute_path]:
-                                    self.project_datasources[layer_source_type][absolute_path].remove(uri)
+                            # Update datasource for remaining layers
+                            layer_info = self._validate_layer_info(layer_key)
+                            if layer_info:
+                                self._remove_datasource_for_layer(layer_info)
                 
                 
                 self.save_project_variables()                    
@@ -1643,9 +1557,100 @@ class FilterMateApp:
             if task_name == 'add_layers' and hasattr(self, '_loading_new_project') and self._loading_new_project:
                 logger.info("New project loaded - forcing UI refresh")
                 self._loading_new_project = False
-                # Force refresh of UI with a slight delay to ensure all signals are processed
                 if self.dockwidget is not None and self.dockwidget.widgets_initialized:
                     QTimer.singleShot(100, lambda: self._refresh_ui_after_project_load())
+    
+    def _validate_layer_info(self, layer_key):
+        """Validate layer structure and return layer info if valid.
+        
+        Args:
+            layer_key: Layer ID to validate
+            
+        Returns:
+            dict: Layer info or None if invalid
+        """
+        if "infos" not in self.PROJECT_LAYERS[layer_key]:
+            logger.warning(f"Layer {layer_key} missing required 'infos' in PROJECT_LAYERS")
+            return None
+        
+        layer_info = self.PROJECT_LAYERS[layer_key]["infos"]
+        required_keys = ["layer_provider_type", "layer_name", "layer_id"]
+        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+        
+        if missing_keys:
+            logger.warning(f"Layer {layer_key} missing required keys in infos: {missing_keys}")
+            return None
+        
+        return layer_info
+    
+    def _update_datasource_for_layer(self, layer_info):
+        """Update project datasources for a given layer.
+        
+        Args:
+            layer_info: Layer info dictionary
+        """
+        layer_source_type = layer_info["layer_provider_type"]
+        if layer_source_type not in self.project_datasources:
+            self.project_datasources[layer_source_type] = {}
+        
+        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_info["layer_name"]) 
+                 if layer.id() == layer_info["layer_id"]]
+        
+        if len(layers) != 1:
+            return
+        
+        layer = layers[0]
+        source_uri, authcfg_id = get_data_source_uri(layer)
+        
+        if authcfg_id is not None:
+            if authcfg_id not in self.project_datasources[layer_source_type].keys():
+                connexion, source_uri = get_datasource_connexion_from_layer(layer)
+                self.project_datasources[layer_source_type][authcfg_id] = connexion
+        else:
+            uri = source_uri.uri().strip()
+            relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
+            layer_name = uri.split('|')[1] if len(uri.split('|')) == 2 else None
+            absolute_path = os.path.join(os.path.normpath(ENV_VARS["PATH_ABSOLUTE_PROJECT"]), 
+                                        os.path.normpath(relative_path))
+            
+            if absolute_path not in self.project_datasources[layer_source_type].keys():
+                self.project_datasources[layer_source_type][absolute_path] = []
+            
+            if uri not in self.project_datasources[layer_source_type][absolute_path]:
+                full_uri = absolute_path + ('|' + layer_name if layer_name is not None else '')
+                self.project_datasources[layer_source_type][absolute_path].append(full_uri)
+    
+    def _remove_datasource_for_layer(self, layer_info):
+        """Remove project datasources for a given layer.
+        
+        Args:
+            layer_info: Layer info dictionary
+        """
+        layer_source_type = layer_info["layer_provider_type"]
+        if layer_source_type not in self.project_datasources:
+            self.project_datasources[layer_source_type] = {}
+        
+        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_info["layer_name"]) 
+                 if layer.id() == layer_info["layer_id"]]
+        
+        if len(layers) != 1:
+            return
+        
+        layer = layers[0]
+        source_uri, authcfg_id = get_data_source_uri(layer)
+        
+        if authcfg_id is not None:
+            if authcfg_id not in self.project_datasources[layer_source_type].keys():
+                connexion, source_uri = get_datasource_connexion_from_layer(layer)
+                self.project_datasources[layer_source_type][authcfg_id] = connexion
+        else:
+            uri = source_uri.uri().strip()
+            relative_path = uri.split('|')[0] if len(uri.split('|')) == 2 else uri
+            absolute_path = os.path.normpath(os.path.join(ENV_VARS["PATH_ABSOLUTE_PROJECT"], relative_path))
+            
+            if absolute_path in self.project_datasources[layer_source_type].keys():
+                if uri in self.project_datasources[layer_source_type][absolute_path]:
+                    self.project_datasources[layer_source_type][absolute_path].remove(uri)
     
     def _refresh_ui_after_project_load(self):
         """
