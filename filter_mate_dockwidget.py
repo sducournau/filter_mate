@@ -3698,35 +3698,176 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
             self.setProjectVariablesEvent()
 
+    def _update_project_layers_data(self, project_layers, project=None):
+        """
+        Update internal PROJECT and PROJECT_LAYERS references.
+        
+        Updates project reference if provided and stores layer data.
+        Sets has_loaded_layers flag based on layer count.
+        
+        Args:
+            project_layers (dict): Updated PROJECT_LAYERS dictionary
+            project (QgsProject, optional): QGIS project instance
+        """
+        if project is not None:    
+            self.PROJECT = project
+
+        self.PROJECT_LAYERS = project_layers
+        
+        # Update has_loaded_layers flag based on PROJECT_LAYERS
+        if len(list(self.PROJECT_LAYERS)) > 0:
+            self.has_loaded_layers = True
+        else:
+            self.has_loaded_layers = False
+
+        logger.info(f"has_loaded_layers={self.has_loaded_layers}, widgets_initialized={self.widgets_initialized}")
+
+    def _determine_active_layer(self):
+        """
+        Determine which layer should be active for UI update.
+        
+        Attempts to find active layer in this priority order:
+        1. Current layer from current_layer attribute
+        2. QGIS active layer from iface
+        3. First available layer in PROJECT_LAYERS
+        
+        Returns:
+            QgsVectorLayer or None: Active layer to use for UI updates
+        """
+        layer = None
+        
+        try:
+            if self.current_layer is not None:
+                layers = [layer for layer in self.PROJECT.mapLayersByName(
+                    self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]
+                ) if layer.id() == self.current_layer.id()]
+                
+                if len(layers) == 0:
+                    if self.iface.activeLayer():
+                        layer = self.iface.activeLayer()
+                elif len(layers) > 0:
+                    layer = layers[0]
+            else:
+                if self.iface.activeLayer():
+                    layer = self.iface.activeLayer()
+            
+            # CRITICAL: If no active layer found but PROJECT_LAYERS has layers,
+            # use the first available layer to enable the UI
+            if layer is None and len(self.PROJECT_LAYERS) > 0:
+                first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
+                layer = self.PROJECT.mapLayer(first_layer_id)
+                logger.info(f"No active layer - using first available layer: {layer.name() if layer else 'None'}")
+                
+        except (AttributeError, KeyError, RuntimeError) as e:
+            logger.debug(f"Layer lookup failed, falling back to active layer: {e}")
+            if self.iface.activeLayer():
+                layer = self.iface.activeLayer()
+            # Fallback to first layer in PROJECT_LAYERS
+            elif len(self.PROJECT_LAYERS) > 0:
+                first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
+                layer = self.PROJECT.mapLayer(first_layer_id)
+                logger.info(f"Exception occurred - using first available layer: {layer.name() if layer else 'None'}")
+        
+        return layer
+
+    def _activate_layer_ui(self):
+        """
+        Enable UI widgets and configure basic export functionality.
+        
+        Enables all widgets, populates export combobox, sets export properties,
+        and connects widget signals (only once to avoid duplicates).
+        
+        Also updates backend indicator based on first available layer type.
+        """
+        # Ensure flag is set
+        if self.has_loaded_layers is False:
+            self.has_loaded_layers = True
+        
+        # CRITICAL: Always enable widgets if PROJECT_LAYERS has layers
+        logger.info(f"About to enable UI: PROJECT_LAYERS count={len(self.PROJECT_LAYERS)}")
+        logger.info(f"Calling set_widgets_enabled_state(True)")
+        self.set_widgets_enabled_state(True)
+        logger.info(f"set_widgets_enabled_state(True) completed - UI should now be enabled")
+        
+        # Always populate export combobox when layers exist
+        self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
+        self.exporting_populate_combobox()
+        self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+        self.set_exporting_properties()
+        
+        # Connect signals only once to avoid duplicate connections
+        if not self._signals_connected:
+            self.connect_widgets_signals()
+            self._signals_connected = True
+        
+        # Update backend indicator even if no specific layer is selected
+        if len(self.PROJECT_LAYERS) > 0:
+            first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
+            if first_layer_id in self.PROJECT_LAYERS:
+                layer_props = self.PROJECT_LAYERS[first_layer_id]
+                if 'layer_provider_type' in layer_props.get('infos', {}):
+                    self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+
+    def _refresh_layer_specific_widgets(self, layer):
+        """
+        Refresh UI widgets specific to the active layer.
+        
+        Updates output name, backend indicator, triggers layer change event,
+        initializes exploring groupbox, and refreshes filtering combobox.
+        
+        Args:
+            layer (QgsVectorLayer): Active layer for widget refresh
+        """
+        if layer is None or not isinstance(layer, QgsVectorLayer):
+            return
+        
+        # Layer-specific initialization
+        if layer.id() in self.PROJECT_LAYERS:
+            layer_props = self.PROJECT_LAYERS[layer.id()]
+            if 'layer_provider_type' in layer_props.get('infos', {}):
+                self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+        
+        self.manage_output_name()
+        self.select_tabTools_index()
+        self.current_layer_changed(layer)
+        
+        # CRITICAL: Only initialize exploring groupbox if layer exists in PROJECT_LAYERS
+        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+            self.exploring_groupbox_init()
+        else:
+            logger.warning(f"Skipping exploring_groupbox_init for layer {layer.name()} - not yet in PROJECT_LAYERS")
+        
+        self.filtering_auto_current_layer_changed()
+        
+        # CRITICAL: Always refresh filtering combobox after layer changes
+        if self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
+            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
+            self.filtering_populate_layers_chekableCombobox(self.current_layer)
+            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+
     def get_project_layers_from_app(self, project_layers, project=None):
         """
         Update dockwidget with latest layer information from FilterMateApp.
         
-        Called when layer management tasks complete. Refreshes internal state,
-        updates UI widgets, and re-establishes signal connections.
+        Called when layer management tasks complete. Orchestrates UI refresh
+        by delegating to specialized methods for each concern.
         
         Args:
             project_layers (dict): Updated PROJECT_LAYERS dictionary from app
             project (QgsProject, optional): QGIS project instance
             
         Workflow:
-        1. Update PROJECT reference if provided
-        2. Store new PROJECT_LAYERS
-        3. Determine active layer (current or fallback to active)
-        4. Set has_loaded_layers flag
-        5. Enable widgets
-        6. Refresh UI (output name, export combobox, etc.)
-        7. Reconnect signals
-        8. Initialize exploring groupbox
+        1. Update PROJECT_LAYERS data
+        2. Determine active layer
+        3. Activate UI widgets
+        4. Refresh layer-specific widgets
         
         Notes:
             - Always updates PROJECT_LAYERS even if widgets not initialized yet
             - Only updates UI if widgets_initialized is True
             - Handles cases with no layers gracefully
-            - Always reconnects signals even without active layer
             - Called from FilterMateApp.layer_management_engine_task_completed()
         """
-
         # CRITICAL: Prevent recursive/multiple simultaneous calls
         if self._updating_layers:
             logger.warning("Blocking recursive call to get_project_layers_from_app")
@@ -3737,125 +3878,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.info(f"get_project_layers_from_app called: widgets_initialized={self.widgets_initialized}, PROJECT_LAYERS count={len(project_layers)}")
         
         try:
-            layer = None
-
-            # Always update PROJECT and PROJECT_LAYERS, even if widgets not initialized yet
-            # This fixes the issue where layers loaded at startup aren't tracked
-            if project is not None:    
-                self.PROJECT = project
-
-            self.PROJECT_LAYERS = project_layers
-            
-            # Update has_loaded_layers flag based on PROJECT_LAYERS, even if widgets not initialized
-            if len(list(self.PROJECT_LAYERS)) > 0:
-                self.has_loaded_layers = True
-            else:
-                self.has_loaded_layers = False
-
-            logger.info(f"has_loaded_layers={self.has_loaded_layers}, widgets_initialized={self.widgets_initialized}")
+            # Always update data, even if widgets not initialized yet
+            self._update_project_layers_data(project_layers, project)
 
             # Only update UI if widgets are initialized
             if self.widgets_initialized is True:
                 logger.info(f"Updating UI: PROJECT is not None={self.PROJECT is not None}, PROJECT_LAYERS count={len(list(self.PROJECT_LAYERS))}")
 
                 if self.PROJECT is not None and len(list(self.PROJECT_LAYERS)) > 0:
-
-                    try:
-                        if self.current_layer is not None:
-                            layers = [layer for layer in self.PROJECT.mapLayersByName(self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]) if layer.id() == self.current_layer.id()]
-                            if len(layers) == 0:
-                                if self.iface.activeLayer():
-                                    layer = self.iface.activeLayer()
-                            elif len(layers) > 0:
-                                layer = layers[0]
-                        else:
-                            if self.iface.activeLayer():
-                                layer = self.iface.activeLayer()
-                        
-                        # CRITICAL: If no active layer found but PROJECT_LAYERS has layers,
-                        # use the first available layer to enable the UI
-                        if layer is None and len(self.PROJECT_LAYERS) > 0:
-                            first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
-                            layer = self.PROJECT.mapLayer(first_layer_id)
-                            logger.info(f"No active layer - using first available layer: {layer.name() if layer else 'None'}")
-                            
-                    except (AttributeError, KeyError, RuntimeError) as e:
-                        logger.debug(f"Layer lookup failed, falling back to active layer: {e}")
-                        if self.iface.activeLayer():
-                            layer = self.iface.activeLayer()
-                        # Fallback to first layer in PROJECT_LAYERS
-                        elif len(self.PROJECT_LAYERS) > 0:
-                            first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
-                            layer = self.PROJECT.mapLayer(first_layer_id)
-                            logger.info(f"Exception occurred - using first available layer: {layer.name() if layer else 'None'}")
-
-
-                    if self.has_loaded_layers is False:
-                        self.has_loaded_layers = True
-                        
-                    # CRITICAL: Always enable widgets if PROJECT_LAYERS has layers, even without active layer
-                    logger.info(f"About to enable UI: PROJECT_LAYERS count={len(self.PROJECT_LAYERS)}, layer={layer.name() if layer else 'None'}")
-                    logger.info(f"Calling set_widgets_enabled_state(True) with layer={layer.name() if layer else 'None'}")
-                    self.set_widgets_enabled_state(True)
-                    logger.info(f"set_widgets_enabled_state(True) completed - UI should now be enabled")
+                    # Determine which layer to use for UI
+                    layer = self._determine_active_layer()
                     
-                    # Always populate export combobox when layers exist
-                    self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
-                    self.exporting_populate_combobox()
-                    self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
-                    self.set_exporting_properties()
+                    # Enable UI and configure basic functionality
+                    self._activate_layer_ui()
                     
-                    # Connect signals only once to avoid duplicate connections
-                    if not self._signals_connected:
-                        self.connect_widgets_signals()
-                        self._signals_connected = True
-                    
-                    # Update backend indicator even if no specific layer is selected
-                    # This ensures the indicator is updated when layers are added
-                    if len(self.PROJECT_LAYERS) > 0:
-                        # Get first available layer to determine backend
-                        first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
-                        if first_layer_id in self.PROJECT_LAYERS:
-                            layer_props = self.PROJECT_LAYERS[first_layer_id]
-                            if 'layer_provider_type' in layer_props.get('infos', {}):
-                                self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
-                    
-                    if layer is not None and isinstance(layer, QgsVectorLayer):
-                        # Layer-specific initialization
-                        if layer.id() in self.PROJECT_LAYERS:
-                            layer_props = self.PROJECT_LAYERS[layer.id()]
-                            if 'layer_provider_type' in layer_props.get('infos', {}):
-                                self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
-                        
-                        self.manage_output_name()
-                        self.select_tabTools_index()
-                        self.current_layer_changed(layer)
-                        
-                        # CRITICAL: Only initialize exploring groupbox if layer exists in PROJECT_LAYERS
-                        # This prevents KeyError when layers are being added/removed
-                        if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-                            self.exploring_groupbox_init()
-                        else:
-                            logger.warning(f"Skipping exploring_groupbox_init for layer {layer.name()} - not yet in PROJECT_LAYERS")
-                        
-                        self.filtering_auto_current_layer_changed()
-                        
-                        # CRITICAL: Always refresh filtering combobox after layer changes
-                        # This ensures newly added layers appear in the filtering list
-                        # even when current_layer_changed() has already been called
-                        if self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
-                            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
-                            self.filtering_populate_layers_chekableCombobox(self.current_layer)
-                            self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                    # Refresh layer-specific widgets if layer is available
+                    if layer is not None:
+                        self._refresh_layer_specific_widgets(layer)
                     else:
-                        # No active layer found - widgets are enabled but show message to user
+                        # No active layer - widgets enabled but awaiting user selection
                         logger.info(f"UI enabled with {len(self.PROJECT_LAYERS)} layers but no active layer selected")
                         logger.info("User can click on a layer in the QGIS layer panel to activate it")
                     
                     return
-
-                        
                 else:
+                    # No project or no layers - disable UI
                     logger.warning(f"Cannot update UI: PROJECT is None={self.PROJECT is None}, PROJECT_LAYERS empty={len(list(self.PROJECT_LAYERS)) == 0}")
                     self.has_loaded_layers = False
                     self.disconnect_widgets_signals()
