@@ -9,14 +9,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>506</width>
+    <width>365</width>
     <height>796</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>506</width>
-    <height>600</height>
+    <width>365</width>
+    <height>760</height>
    </size>
   </property>
   <property name="baseSize">
@@ -236,9 +236,6 @@
     <kerning>true</kerning>
    </font>
   </property>
-  <property name="cursor">
-   <cursorShape>PointingHandCursor</cursorShape>
-  </property>
   <property name="acceptDrops">
    <bool>true</bool>
   </property>
@@ -351,7 +348,7 @@
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>480</width>
+              <width>339</width>
               <height>327</height>
              </rect>
             </property>
@@ -429,9 +426,6 @@
                       <property name="cursor">
                        <cursorShape>PointingHandCursor</cursorShape>
                       </property>
-                      <property name="toolTip">
-                       <string>Identify</string>
-                      </property>
                       <property name="text">
                        <string/>
                       </property>
@@ -503,9 +497,6 @@
                       </property>
                       <property name="cursor">
                        <cursorShape>PointingHandCursor</cursorShape>
-                      </property>
-                      <property name="toolTip">
-                       <string>Zoom</string>
                       </property>
                       <property name="text">
                        <string/>
@@ -584,9 +575,6 @@
                       </property>
                       <property name="focusPolicy">
                        <enum>Qt::ClickFocus</enum>
-                      </property>
-                      <property name="toolTip">
-                       <string>Select</string>
                       </property>
                       <property name="layoutDirection">
                        <enum>Qt::LeftToRight</enum>
@@ -672,9 +660,6 @@
                       <property name="focusPolicy">
                        <enum>Qt::ClickFocus</enum>
                       </property>
-                      <property name="toolTip">
-                       <string>Track</string>
-                      </property>
                       <property name="layoutDirection">
                        <enum>Qt::LeftToRight</enum>
                       </property>
@@ -759,9 +744,6 @@
                       <property name="focusPolicy">
                        <enum>Qt::ClickFocus</enum>
                       </property>
-                      <property name="toolTip">
-                       <string>Link</string>
-                      </property>
                       <property name="layoutDirection">
                        <enum>Qt::LeftToRight</enum>
                       </property>
@@ -842,9 +824,6 @@
                       </property>
                       <property name="mouseTracking">
                        <bool>true</bool>
-                      </property>
-                      <property name="toolTip">
-                       <string>Reset parameters</string>
                       </property>
                       <property name="text">
                        <string/>
@@ -972,9 +951,6 @@
                         <property name="cursor">
                          <cursorShape>IBeamCursor</cursorShape>
                         </property>
-                        <property name="toolTip">
-                         <string>Single feature picker</string>
-                        </property>
                         <property name="fetchLimit">
                          <number>10000</number>
                         </property>
@@ -1006,9 +982,6 @@
                         </property>
                         <property name="cursor">
                          <cursorShape>IBeamCursor</cursorShape>
-                        </property>
-                        <property name="toolTip">
-                         <string>Display expression/field</string>
                         </property>
                        </widget>
                       </item>
@@ -1148,9 +1121,6 @@
                       <property name="cursor">
                        <cursorShape>PointingHandCursor</cursorShape>
                       </property>
-                      <property name="toolTip">
-                       <string>Display expression/field</string>
-                      </property>
                      </widget>
                     </item>
                    </layout>
@@ -1264,9 +1234,6 @@
                         </property>
                         <property name="cursor">
                          <cursorShape>IBeamCursor</cursorShape>
-                        </property>
-                        <property name="statusTip">
-                         <string>Display expression/field</string>
                         </property>
                        </widget>
                       </item>
@@ -1405,7 +1372,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>478</width>
+                <width>337</width>
                 <height>270</height>
                </rect>
               </property>
@@ -1496,9 +1463,6 @@
                         <property name="focusPolicy">
                          <enum>Qt::ClickFocus</enum>
                         </property>
-                        <property name="toolTip">
-                         <string>Sync source layer and active layer</string>
-                        </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
@@ -1584,7 +1548,7 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Enable distant layers to filter</string>
+                         <string>Filtrage multicouche</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
@@ -1671,7 +1635,7 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Additive filtering for source layer and distant layers</string>
+                         <string>Filtrage additif pour la couche sélectionnée</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
@@ -1957,7 +1921,7 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Enable geometric predicates</string>
+                         <string>Filtrage géospatial</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
@@ -2047,7 +2011,7 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Enable buffer</string>
+                         <string>Tampon</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
@@ -2087,9 +2051,6 @@
                       </item>
                       <item>
                        <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type">
-                        <property name="toolTip">
-                         <string>Change buffer type</string>
-                        </property>
                         <property name="text">
                          <string/>
                         </property>
@@ -2153,9 +2114,6 @@
                      </property>
                      <property name="cursor">
                       <cursorShape>PointingHandCursor</cursorShape>
-                     </property>
-                     <property name="toolTip">
-                      <string>Source layer to filter</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -2239,7 +2197,7 @@
                         <bool>true</bool>
                        </property>
                        <property name="toolTip">
-                        <string>Source layer</string>
+                        <string>Couche de l'expression</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -2292,9 +2250,6 @@
                        </property>
                        <property name="tabletTracking">
                         <bool>true</bool>
-                       </property>
-                       <property name="toolTip">
-                        <string>Distant layers</string>
                        </property>
                        <item>
                         <property name="text">
@@ -2364,7 +2319,7 @@
                       <bool>true</bool>
                      </property>
                      <property name="toolTip">
-                      <string>Geometric predicates</string>
+                      <string>Prédicat géométrique</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -2485,7 +2440,7 @@
                         <cursorShape>IBeamCursor</cursorShape>
                        </property>
                        <property name="toolTip">
-                        <string>Value in meters</string>
+                        <string>Valeur en mètres</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -2509,9 +2464,35 @@
                         <double>0.100000000000000</double>
                        </property>
                        <property name="stepType">
-                        <enum>QAbstractSpinBox::DefaultStepType</enum>
+                        <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
                        </property>
                        <property name="clearValue">
+                        <bool>true</bool>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QLineEdit" name="lineEdit_filtering_buffer_value_expression">
+                       <property name="enabled">
+                        <bool>true</bool>
+                       </property>
+                       <property name="font">
+                        <font>
+                         <family>Segoe UI Semibold</family>
+                         <pointsize>10</pointsize>
+                         <weight>75</weight>
+                         <italic>false</italic>
+                         <bold>true</bold>
+                         <underline>false</underline>
+                         <strikeout>false</strikeout>
+                         <stylestrategy>PreferAntialias</stylestrategy>
+                         <kerning>true</kerning>
+                        </font>
+                       </property>
+                       <property name="readOnly">
+                        <bool>false</bool>
+                       </property>
+                       <property name="clearButtonEnabled">
                         <bool>true</bool>
                        </property>
                       </widget>
@@ -2541,9 +2522,6 @@
                        <horstretch>0</horstretch>
                        <verstretch>0</verstretch>
                       </sizepolicy>
-                     </property>
-                     <property name="toolTip">
-                      <string>Buffer type</string>
                      </property>
                      <property name="editable">
                       <bool>true</bool>
@@ -2583,7 +2561,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>478</width>
+                <width>337</width>
                 <height>292</height>
                </rect>
               </property>
@@ -2666,7 +2644,7 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Has layers to export</string>
+                         <string>Layers to export</string>
                         </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
@@ -2753,7 +2731,7 @@
                          <enum>Qt::ClickFocus</enum>
                         </property>
                         <property name="toolTip">
-                         <string>Change layers projection</string>
+                         <string>Layers projection</string>
                         </property>
                         <property name="statusTip">
                          <string/>
@@ -3103,9 +3081,6 @@
                         <property name="focusPolicy">
                          <enum>Qt::ClickFocus</enum>
                         </property>
-                        <property name="toolTip">
-                         <string>Name of zipfile</string>
-                        </property>
                         <property name="layoutDirection">
                          <enum>Qt::LeftToRight</enum>
                         </property>
@@ -3190,7 +3165,7 @@
                       <cursorShape>PointingHandCursor</cursorShape>
                      </property>
                      <property name="toolTip">
-                      <string>Select layers projection</string>
+                      <string>Sélectionnez le CRS pour l'export</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -3230,9 +3205,6 @@
                      </property>
                      <property name="cursor">
                       <cursorShape>PointingHandCursor</cursorShape>
-                     </property>
-                     <property name="toolTip">
-                      <string>Select style format</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -3293,7 +3265,7 @@
                       <cursorShape>PointingHandCursor</cursorShape>
                      </property>
                      <property name="toolTip">
-                      <string>Output format</string>
+                      <string>Format de sortie</string>
                      </property>
                      <property name="layoutDirection">
                       <enum>Qt::LeftToRight</enum>
@@ -3448,7 +3420,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>478</width>
+                <width>337</width>
                 <height>173</height>
                </rect>
               </property>
@@ -3554,13 +3526,13 @@
               <enum>Qt::DefaultContextMenu</enum>
              </property>
              <property name="toolTip">
-              <string>Filter</string>
+              <string>Filtrer</string>
              </property>
              <property name="statusTip">
-              <string>Filter</string>
+              <string>Filtrer</string>
              </property>
              <property name="whatsThis">
-              <string>Filter</string>
+              <string>Filtrer</string>
              </property>
              <property name="layoutDirection">
               <enum>Qt::LeftToRight</enum>
@@ -3616,13 +3588,13 @@
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
-              <string>Undo</string>
+              <string>Réinitialiser</string>
              </property>
              <property name="statusTip">
-              <string>Undo</string>
+              <string>Réinitialiser</string>
              </property>
              <property name="whatsThis">
-              <string>Undo</string>
+              <string>Réinitialiser</string>
              </property>
              <property name="autoFillBackground">
               <bool>false</bool>
@@ -3652,56 +3624,6 @@
             </spacer>
            </item>
            <item>
-            <widget class="QPushButton" name="pushButton_action_redo_filter">
-             <property name="font">
-              <font>
-               <family>Segoe UI</family>
-               <pointsize>12</pointsize>
-               <weight>50</weight>
-               <italic>false</italic>
-               <bold>false</bold>
-               <underline>false</underline>
-               <strikeout>false</strikeout>
-               <kerning>true</kerning>
-              </font>
-             </property>
-             <property name="cursor">
-              <cursorShape>PointingHandCursor</cursorShape>
-             </property>
-             <property name="toolTip">
-              <string>Redo</string>
-             </property>
-             <property name="statusTip">
-              <string>Redo</string>
-             </property>
-             <property name="whatsThis">
-              <string>Redo</string>
-             </property>
-             <property name="autoFillBackground">
-              <bool>false</bool>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-             <property name="flat">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacer">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>4</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item>
             <widget class="QPushButton" name="pushButton_action_reset">
              <property name="font">
               <font>
@@ -3717,15 +3639,6 @@
              </property>
              <property name="cursor">
               <cursorShape>PointingHandCursor</cursorShape>
-             </property>
-             <property name="toolTip">
-              <string>Unfilter</string>
-             </property>
-             <property name="statusTip">
-              <string>Unfilter</string>
-             </property>
-             <property name="whatsThis">
-              <string>Unfilter</string>
              </property>
              <property name="text">
               <string/>
@@ -3757,12 +3670,6 @@
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
-              <string>Export</string>
-             </property>
-             <property name="statusTip">
-              <string>Export</string>
-             </property>
-             <property name="whatsThis">
               <string>Export</string>
              </property>
              <property name="layoutDirection">
@@ -3803,15 +3710,6 @@
            </item>
            <item>
             <widget class="QPushButton" name="pushButton_action_about">
-             <property name="toolTip">
-              <string>Documentation</string>
-             </property>
-             <property name="statusTip">
-              <string>Documentation</string>
-             </property>
-             <property name="whatsThis">
-              <string>Documentation</string>
-             </property>
              <property name="text">
               <string/>
              </property>

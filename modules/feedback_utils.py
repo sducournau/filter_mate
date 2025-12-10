@@ -81,8 +81,7 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
     
     operation_text = {
         'filter': f"Starting filter on {layer_count} layer(s)",
-        'undo': f"Removing filters from {layer_count} layer(s)",
-        'redo': f"Redoing filter on {layer_count} layer(s)",
+        'unfilter': f"Removing filters from {layer_count} layer(s)",
         'reset': f"Resetting {layer_count} layer(s)",
         'export': f"Exporting {layer_count} layer(s)"
     }.get(operation, f"Processing {layer_count} layer(s)")
@@ -134,8 +133,7 @@ def show_success_with_backend(iface, provider_type, operation='filter', layer_co
     
     operation_text = {
         'filter': f"Successfully filtered {layer_count} layer(s)",
-        'undo': f"Successfully removed filters from {layer_count} layer(s)",
-        'redo': f"Successfully restored filter on {layer_count} layer(s)",
+        'unfilter': f"Successfully removed filters from {layer_count} layer(s)",
         'reset': f"Successfully reset {layer_count} layer(s)",
         'export': f"Successfully exported {layer_count} layer(s)"
     }.get(operation, f"Successfully processed {layer_count} layer(s)")

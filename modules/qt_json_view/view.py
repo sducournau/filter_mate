@@ -55,8 +55,7 @@ class JsonView(QtWidgets.QTreeView):
             palette = QgsApplication.palette()
             bg_color = palette.color(QtGui.QPalette.Window)
             is_dark = bg_color.lightness() < 128
-        except (ImportError, AttributeError, RuntimeError) as e:
-            # Fallback if QGIS palette unavailable
+        except:
             is_dark = False
         
         if is_dark:
@@ -157,14 +156,14 @@ class JsonView(QtWidgets.QTreeView):
         if data is None:
             return
         actions = data.actions(index)
-        if actions is not None and len(actions) > 0:
+        if actions != None and len(actions) > 0:
             menu.addActions(actions)
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action:
             action_data = action.data()
             item = self.model.itemFromIndex(index)
 
-            if action_data is not None:
+            if action_data != None:
                 if action.text() == "Change":
                     if len(action_data) == 2:
                         item.setData(action_data[0], QtCore.Qt.DisplayRole)

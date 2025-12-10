@@ -226,26 +226,25 @@ def qgis_expression_to_spatialite(self, expression):
 ## Error Handling
 
 ### User-Facing Errors
-Use QGIS message bar for user feedback. **Note: duration is a positional argument, not a keyword argument.**
+Use QGIS message bar for user feedback. **CRITICAL: These methods only accept 2 arguments (title, message). Do NOT add duration parameter.**
 
 ```python
 from qgis.utils import iface
 
-# Success (with optional duration in seconds)
-iface.messageBar().pushSuccess("FilterMate", "Filter applied successfully", 3)
+# Success - NO duration parameter
+iface.messageBar().pushSuccess("FilterMate", "Filter applied successfully")
 
-# Info
-iface.messageBar().pushInfo("FilterMate", "Using Spatialite backend", 3)
+# Info - NO duration parameter
+iface.messageBar().pushInfo("FilterMate", "Using Spatialite backend")
 
-# Warning (duration as positional argument)
+# Warning - NO duration parameter
 iface.messageBar().pushWarning(
     "FilterMate", 
-    "Large dataset detected. Consider using PostgreSQL for better performance.",
-    10
+    "Large dataset detected. Consider using PostgreSQL for better performance."
 )
 
-# Error
-iface.messageBar().pushCritical("FilterMate", f"Error: {str(error)}", 5)
+# Error - NO duration parameter
+iface.messageBar().pushCritical("FilterMate", f"Error: {str(error)}")
 ```
 
 ### Development Errors
@@ -266,10 +265,9 @@ print(f"FilterMate Debug: {variable_name} = {value}")
 ```python
 if layer.featureCount() > 50000 and not POSTGRESQL_AVAILABLE:
     iface.messageBar().pushWarning(
-        "FilterMate - Performance",
+        "FilterMate",
         f"Large dataset ({layer.featureCount()} features) without PostgreSQL. "
-        "Performance may be reduced. Consider installing psycopg2.",
-        duration=10
+        "Performance may be reduced. Consider installing psycopg2."
     )
 ```
 

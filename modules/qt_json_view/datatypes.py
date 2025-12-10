@@ -420,8 +420,8 @@ class FilepathType(DataType):
                 extension = os.path.basename(input_path).split('.')[-1]
                 new_path = os.path.normcase(str(QtWidgets.QFileDialog.getSaveFileName(None, 'Save to a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
                 filename = os.path.basename(new_path)
-        if new_path is not None:
-            if filename is not None:
+        if new_path != None:
+            if filename != None:
                 self.change.setData([filename, new_path])
             else:
                 self.change.setData([new_path])

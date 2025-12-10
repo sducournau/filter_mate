@@ -112,14 +112,14 @@ class UIConfig:
             
             # Frame exploring dimensions (NEW)
             "frame_exploring": {
-                "min_height": 150,
-                "base_height": 200,
-                "max_height": 350
+                "min_height": 200,
+                "base_height": 250,
+                "max_height": 400
             },
             
             # Frame filtering dimensions (NEW)
             "frame_filtering": {
-                "min_height": 200
+                "min_height": 250
             },
             
             # Widget keys dimensions (NEW)
@@ -195,8 +195,8 @@ class UIConfig:
             
             # Dockwidget dimensions
             "dockwidget": {
-                "min_width": 250,
-                "preferred_width": 320
+                "min_width": 280,
+                "preferred_width": 350
             }
         },
         
@@ -363,8 +363,8 @@ class UIConfig:
             
             # Dockwidget dimensions
             "dockwidget": {
-                "min_width": 300,
-                "preferred_width": 400
+                "min_width": 350,
+                "preferred_width": 450
             }
         }
     }
