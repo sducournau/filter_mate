@@ -322,3 +322,75 @@ def connect_signal(signal, slot):
             button.click()  # Handler will be called
     """
     return SignalConnection(signal, slot)
+
+
+def safe_disconnect(signal, slot=None):
+    """
+    Safely disconnect a signal without raising errors.
+    
+    Args:
+        signal: Qt signal to disconnect
+        slot: Optional specific slot to disconnect. If None, disconnects all.
+        
+    Returns:
+        True if disconnection successful, False otherwise
+        
+    Example:
+        # Disconnect specific slot
+        safe_disconnect(widget.valueChanged, on_value_changed)
+        
+        # Disconnect all slots
+        safe_disconnect(widget.valueChanged)
+    """
+    try:
+        if slot is None:
+            signal.disconnect()
+        else:
+            signal.disconnect(slot)
+        return True
+    except (TypeError, RuntimeError) as e:
+        logger.debug(f"Could not disconnect signal (may not be connected): {e}")
+        return False
+
+
+def safe_connect(signal, slot, connection_type=None):
+    """
+    Safely connect a signal, disconnecting first if already connected.
+    
+    Prevents duplicate connections by disconnecting the specific slot first,
+    then connecting cleanly. This is safer than just connecting, as Qt will
+    create multiple connections if you call connect() multiple times.
+    
+    Args:
+        signal: Qt signal to connect
+        slot: Function/method to connect
+        connection_type: Optional Qt.ConnectionType (e.g., Qt.QueuedConnection)
+        
+    Returns:
+        True if connection successful, False otherwise
+        
+    Example:
+        # Safe connection - won't create duplicates
+        safe_connect(widget.valueChanged, on_value_changed)
+        safe_connect(widget.valueChanged, on_value_changed)  # Won't duplicate
+        
+        # With connection type
+        from qgis.PyQt.QtCore import Qt
+        safe_connect(widget.signal, handler, Qt.QueuedConnection)
+    """
+    try:
+        # First disconnect this specific slot if connected
+        safe_disconnect(signal, slot)
+        
+        # Now connect cleanly
+        if connection_type is None:
+            signal.connect(slot)
+        else:
+            signal.connect(slot, connection_type)
+        
+        logger.debug(f"Safely connected signal to {slot.__name__ if hasattr(slot, '__name__') else slot}")
+        return True
+    except (TypeError, RuntimeError, AttributeError) as e:
+        logger.error(f"Could not connect signal: {e}")
+        return False
+

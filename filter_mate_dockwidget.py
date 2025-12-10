@@ -1221,7 +1221,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Reload configuration from file to revert changes in tree view
         try:
-            with open(self.plugin_dir + '/config/config.json', 'r') as infile:
+            with open(get_config_path(), 'r') as infile:
                 self.CONFIG_DATA = json.load(infile)
             
             # Recreate model with original data
@@ -1290,7 +1290,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Save to file
                 json_object = json.dumps(self.CONFIG_DATA, indent=4)
-                with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
+                with open(get_config_path(), 'w') as outfile:
                     outfile.write(json_object)
             except Exception as e:
                 logger.error(f"Error reloading configuration model: {e}")
@@ -1305,7 +1305,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.CONFIG_DATA = self.config_model.serialize()
             json_object = json.dumps(self.CONFIG_DATA, indent=4)
 
-            with open(self.plugin_dir + '/config/config.json', 'w') as outfile:
+            with open(get_config_path(), 'w') as outfile:
                 outfile.write(json_object)
 
 
@@ -1968,6 +1968,96 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Try to restore from PROJECT_LAYERS if current_layer exists
             if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+                pass  # TODO: Implement restoration logic
+
+    def update_exploring_widgets_layer(self):
+        """
+        Update ALL exploring widgets with the current layer.
+        
+        This ensures all exploration widgets (single, multiple, custom) 
+        are synchronized with the current layer, even if they're not 
+        currently visible/active.
+        
+        CRITICAL: Must be called when current_layer changes to prevent 
+        widgets from referencing stale layer data when switching groupboxes.
+        """
+        if not self.widgets_initialized or self.current_layer is None:
+            return
+        
+        if self.current_layer.id() not in self.PROJECT_LAYERS:
+            return
+        
+        layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+        
+        try:
+            # CRITICAL: Disconnect ALL signals before updating to prevent cascade
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
+            
+            # Update single selection widgets
+            if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(
+                    layer_props["exploring"]["single_selection_expression"]
+                )
+            
+            if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                # CRITICAL: Reset filters to ensure all field types are available from new layer
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setFilters(QgsFieldProxyModel.AllTypes)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(
+                    layer_props["exploring"]["single_selection_expression"]
+                )
+            
+            # Update multiple selection widgets
+            if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(
+                    self.current_layer, layer_props
+                )
+            
+            if "MULTIPLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                # CRITICAL: Reset filters to ensure all field types are available from new layer
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setFilters(QgsFieldProxyModel.AllTypes)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(
+                    layer_props["exploring"]["multiple_selection_expression"]
+                )
+            
+            # Update custom selection widget
+            if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                # CRITICAL: Reset filters to ensure all field types are available from new layer
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setFilters(QgsFieldProxyModel.AllTypes)
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(
+                    layer_props["exploring"]["custom_selection_expression"]
+                )
+            
+            # CRITICAL: Reconnect ALL signals after updating
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
+            self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            
+        except (AttributeError, KeyError, RuntimeError) as e:
+            # Widget may not be ready or already destroyed
+            logger.debug(f"Error updating exploring widgets: {e}")
+            pass
+
+
+    def exploring_groupbox_init(self):
+
+        if self.widgets_initialized is True:
+            self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"]) 
+
+            exploring_groupbox = "single_selection"  # Default
+            
+            # Try to restore from PROJECT_LAYERS if current_layer exists
+            if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
                 layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
                 if "current_exploring_groupbox" in layer_props.get("exploring", {}):
                     saved_groupbox = layer_props["exploring"]["current_exploring_groupbox"]
@@ -2012,38 +2102,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
 
                 if self.current_layer != None:
-                    # CRITICAL: Use safe getter to validate layer exists in PROJECT_LAYERS
-                    layer_props = self._safe_get_layer_props(self.current_layer)
-                    if layer_props is None:
-                        logger.warning(f"Cannot initialize single_selection exploring - layer not in PROJECT_LAYERS. Skipping.")
-                        return
+                    # NOTE: Widgets are already updated with current_layer by update_exploring_widgets_layer()
+                    # called from current_layer_changed(). No need to setLayer() again here.
                     
-                    # CRITICAL: Disconnect signals BEFORE updating widgets to prevent unwanted triggers
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
-                    
+                    # Enable widgets for single selection mode
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    
-                    # CRITICAL FIX: Update SINGLE_SELECTION_FEATURES widget to use current layer
-                    # This ensures the QgsFeaturePickerWidget displays features from the correct layer
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-                    
-                    # Ensure mFieldExpressionWidget is linked to current layer
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                    
-                    # CRITICAL: Reconnect signals AFTER updating widgets
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
 
                     # Trigger features update and link widgets
                     self.exploring_link_widgets()
                     self.exploring_features_changed(self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature())
                 else:
+                    # No current layer - disable signals
                     self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
                     self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
 
@@ -2073,27 +2143,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
                 if self.current_layer != None:
-                    # CRITICAL: Disconnect ALL signals BEFORE updating widgets
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
-
+                    # NOTE: Widgets are already updated with current_layer by update_exploring_widgets_layer()
+                    # called from current_layer_changed(). No need to setLayer() again here.
+                    
+                    # Enable widgets for multiple selection mode
                     self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
                     self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    # Ensure mFieldExpressionWidget is linked to current layer
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-
-                    layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                    
-                    # CRITICAL: Reconnect signals AFTER updating widgets
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
 
                     # Trigger features update and link widgets
                     self.exploring_link_widgets()
                     self.exploring_features_changed(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
                 else:
+                    # No current layer - disable signals
                     self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
                     self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
 
@@ -2119,24 +2180,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
                 if self.current_layer != None:
-                    # CRITICAL: Disconnect ALL signals BEFORE updating widgets
-                    self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                    self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
-
-                    self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    # Ensure mFieldExpressionWidget is linked to current layer
-                    self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                    # NOTE: Widgets are already updated with current_layer by update_exploring_widgets_layer()
+                    # called from current_layer_changed(). No need to setLayer() again here.
                     
-                    # CRITICAL: Reconnect signals AFTER updating widgets
-                    self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                    self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
+                    # Enable widget for custom selection mode
+                    self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
                     
                     # Trigger link and custom selection
                     self.exploring_link_widgets()
                     self.exploring_custom_selection()
                 else:
+                    # No current layer - disable signals
                     self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
                     self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
 
@@ -2406,18 +2460,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     pk_name = layer_props["infos"]["primary_key_name"]
                     # Try to get the primary key value using multiple methods
                     pk_value = None
-                    try:
-                        # First try with attribute() method
-                        pk_value = input.attribute(pk_name)
-                    except (KeyError, IndexError):
+                    
+                    # First verify that the field exists in the feature
+                    fields = input.fields()
+                    pk_idx = fields.indexFromName(pk_name)
+                    
+                    if pk_idx >= 0:
+                        # Field exists, try to get its value
                         try:
-                            # Fallback to field index
-                            fields = input.fields()
-                            idx = fields.indexFromName(pk_name)
-                            if idx >= 0:
-                                pk_value = input.attributes()[idx]
-                        except:
-                            pass
+                            pk_value = input.attribute(pk_name)
+                            # Check if value is NULL/None
+                            if pk_value is None:
+                                # Try by index as fallback
+                                attrs = input.attributes()
+                                if pk_idx < len(attrs):
+                                    pk_value = attrs[pk_idx]
+                        except (KeyError, IndexError, AttributeError):
+                            # Fallback to direct index access
+                            try:
+                                attrs = input.attributes()
+                                if pk_idx < len(attrs):
+                                    pk_value = attrs[pk_idx]
+                            except (KeyError, IndexError, AttributeError, RuntimeError) as e:
+                                logger.debug(f"Could not extract primary key value: {e}")
+                                pass
                     
                     if pk_value is not None:
                         if layer_props["infos"]["primary_key_is_numeric"] is True: 
@@ -2427,7 +2493,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     else:
                         # If we can't get the primary key, use the feature as-is
                         features = [input]
-                        print(f"FilterMate Warning: Could not access primary key '{pk_name}' in feature. Using feature directly.")
+                        # Only log warning if field doesn't exist (not just NULL value)
+                        if pk_idx < 0:
+                            logger.warning(f"Primary key field '{pk_name}' not found in feature. Using feature directly.")
+                        else:
+                            logger.debug(f"Primary key '{pk_name}' has NULL value in feature. Using feature directly.")
                 else:
                     features = [input]
 
@@ -2609,17 +2679,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     layer_props["exploring"]["custom_selection_expression"] = primary_key
             
 
+                # CRITICAL: Disconnect widgets before updates to prevent signal cascades
+                # NOTE: EXPLORING widgets are NOT included here because update_exploring_widgets_layer()
+                # handles their disconnection/reconnection internally to avoid double connections
                 widgets_to_stop =   [
-                                        ["EXPLORING","SINGLE_SELECTION_FEATURES"],
-                                        ["EXPLORING","SINGLE_SELECTION_EXPRESSION"],
-                                        ["EXPLORING","MULTIPLE_SELECTION_FEATURES"],
-                                        ["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"],
-                                        ["EXPLORING", "CUSTOM_SELECTION_EXPRESSION"],
                                         ["EXPLORING", "IS_SELECTING"],
                                         ["EXPLORING", "IS_TRACKING"],
                                         ["EXPLORING", "IS_LINKING"],
                                         ["EXPLORING", "RESET_ALL_LAYER_PROPERTIES"],
-                                        ["FILTERING","CURRENT_LAYER"],
                                         ["FILTERING","HAS_LAYERS_TO_FILTER"],
                                         ["FILTERING", "LAYERS_TO_FILTER"],
                                         ["FILTERING","HAS_COMBINE_OPERATOR"],
@@ -2638,6 +2705,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 for widget_path in widgets_to_stop:
                     self.manageSignal(widget_path, 'disconnect')
 
+                # CRITICAL: Disconnect layer tree signal separately if linking is enabled
                 if self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
                     widget_path = ["QGIS","LAYER_TREE_VIEW"]
                     self.manageSignal(widget_path, 'disconnect')
@@ -2645,12 +2713,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
 
 
-                lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-                # Always synchronize comboBox_filtering_current_layer with current_layer
+                # CRITICAL: Always synchronize comboBox_filtering_current_layer with current_layer
                 # This ensures all linked widgets (FieldExpressionWidgets, FeaturePickerWidgets) 
                 # will reference the correct layer
-                # CRITICAL: Use manageSignal for consistent signal management
-                if lastLayer == None or lastLayer.id() != self.current_layer.id():
+                lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
+                if lastLayer is None or lastLayer.id() != self.current_layer.id():
+                    # Disconnect signal to prevent recursive call when setting layer
                     self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
                     self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
                     self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
@@ -2734,67 +2802,36 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.filtering_populate_layers_chekableCombobox()
                 self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
                 
-                # Force reload of ALL exploration widgets with new layer data
-                # This ensures all widgets are properly populated even if already initialized
-                # CRITICAL: Only update if widgets_initialized to prevent errors during startup
-                if self.widgets_initialized:
-                    try:
-                        # CRITICAL: Disconnect ALL exploration signals before updating widgets
-                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
-                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
-                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
-                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
-                        self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
-                        
-                        # Single selection widget
-                        if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
-                            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-                            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
-                            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
-                            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
-                        
-                        # Multiple selection widget
-                        if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
-                            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                        
-                        # Field expression widgets - setLayer BEFORE setExpression
-                        if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
-                        
-                        if "MULTIPLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
-                        
-                        if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
-                        
-                        # CRITICAL: Reconnect signals AFTER all widgets are updated
-                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
-                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'updatingCheckedItemList')
-                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
-                        self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                        self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                        self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-                    except (AttributeError, KeyError, RuntimeError) as e:
-                        # Widget may not be ready yet or already destroyed
-                        pass
+                # CRITICAL: Update ALL exploring widgets with new current_layer
+                # This must be done BEFORE exploring_groupbox_changed() is called
+                # to ensure all widgets (visible or not) reference the correct layer
+                self.update_exploring_widgets_layer()
 
                 for widget_path in widgets_to_stop:
                     self.manageSignal(widget_path, 'connect')
 
+                # CRITICAL: Synchronize layer tree view with current_layer if linking is enabled
+                # This ensures bidirectional sync: layer tree ↔ comboBox_filtering_current_layer
                 if self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
-                    if self.iface.activeLayer() != None and self.iface.activeLayer().id() != self.current_layer.id():
+                    # Check if layer tree selection differs from current_layer
+                    layer_tree_current = self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].currentLayer()
+                    if layer_tree_current is None or layer_tree_current.id() != self.current_layer.id():
+                        # Disconnect to prevent recursive call, update layer tree, then reconnect
+                        widget_path = ["QGIS","LAYER_TREE_VIEW"]
+                        self.manageSignal(widget_path, 'disconnect')
                         self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
-
-                    widget_path = ["QGIS","LAYER_TREE_VIEW"]
-                    self.manageSignal(widget_path, 'connect')
+                        self.manageSignal(widget_path, 'connect')
+                    else:
+                        # Layer tree already has correct selection, just ensure signal is connected
+                        widget_path = ["QGIS","LAYER_TREE_VIEW"]
+                        self.manageSignal(widget_path, 'connect')
                 
                 # Connect selectionChanged signal for current layer to enable tracking
+                # Use safe_connect to prevent duplicate connections
                 if self.current_layer is not None:
+                    from modules.signal_utils import safe_connect
                     try:
-                        self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
+                        safe_connect(self.current_layer.selectionChanged, self.on_layer_selection_changed)
                         self.current_layer_selection_connection = True
                     except (TypeError, RuntimeError):
                         # Signal connection failed

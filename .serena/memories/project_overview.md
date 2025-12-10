@@ -66,11 +66,23 @@ filter_mate/
 ```
 
 ## Current Status
-- **Version**: 2.2.4 (December 8, 2025)
-- **Status**: Production - Stable multi-backend release with accessibility improvements
+- **Version**: 2.2.5 (December 10, 2025)
+- **Status**: Production - Geographic CRS handling with automatic EPSG:3857 conversion
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
+- **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
 
 ## Recent Releases
+
+### v2.2.5 - Automatic Geographic CRS Handling (December 8, 2025)
+- **Automatic EPSG:3857 Conversion**: Auto-detects geographic CRS (EPSG:4326) and switches to EPSG:3857 for metric operations
+- **Accuracy Improvement**: 50m buffer is always 50 meters regardless of latitude (eliminates 30-50% errors at high latitudes)
+- **Zero Configuration**: Works automatically for all geographic layers
+- **Performance**: Minimal overhead (~1ms per feature transformation)
+- **Bug Fix**: Fixed geographic coordinates zoom & flash flickering issues
+- **Implementation**:
+  - Zoom operations: Auto-convert to EPSG:3857 for metric buffer
+  - Filtering: Spatialite and OGR backends auto-convert for buffer calculations
+  - Updated backends: `filter_mate_dockwidget.py`, `modules/appTasks.py`
 
 ### v2.2.4 - Bug Fix Release (December 8, 2025)
 - **CRITICAL FIX**: Spatialite expression field name quote handling

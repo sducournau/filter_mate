@@ -829,19 +829,28 @@ class FilterEngineTask(QgsTask):
             if self.source_layer.subsetString():
                 self.param_source_old_subset = self.source_layer.subsetString()
 
-    def _process_qgis_expression(self, expression):
+    def _process_qgis_expression(self, expression, allow_simple_field=False):
         """
         Process and validate a QGIS expression, converting it to appropriate SQL.
+        
+        Args:
+            expression: QGIS expression string to process
+            allow_simple_field: If True, allow simple field names (used for custom selection)
         
         Returns:
             tuple: (processed_expression, is_field_expression) or (None, None) if invalid
         """
         # FIXED: Only reject if expression is JUST a field name (no operators)
         # Allow expressions like "HOMECOUNT = 10" or "field > 5"
+        # When allow_simple_field=True (custom selection), accept simple field names
         qgs_expr = QgsExpression(expression)
         if qgs_expr.isField() and not any(op in expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
-            logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
-            return None, None
+            if not allow_simple_field:
+                logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
+                return None, None
+            else:
+                logger.debug(f"Accepting simple field name '{expression}' for custom selection (won't filter source layer)")
+                return None, None  # Return None to indicate no source layer filtering needed
         
         if not qgs_expr.isValid():
             logger.warning(f"Invalid QGIS expression: '{expression}'")
@@ -994,9 +1003,18 @@ class FilterEngineTask(QgsTask):
         return result
 
     def execute_source_layer_filtering(self):
-        """Manage the creation of the origin filtering expression"""
+        """Manage the creation of the origin filtering expression
+        
+        CRITICAL: When custom selection expression is just a field name,
+        don't apply it as a filter to the source layer. Use the features list instead.
+        """
         # Initialize all parameters and configuration
         self._initialize_source_filtering_parameters()
+        
+        # Check if exploring is in custom selection mode
+        exploring_props = self.task_parameters.get("exploring", {})
+        current_groupbox = exploring_props.get("current_exploring_groupbox", "")
+        is_custom_selection = (current_groupbox == "custom_selection")
         
         result = False
         task_expression = self.task_parameters["task"]["expression"]
@@ -1004,7 +1022,8 @@ class FilterEngineTask(QgsTask):
         
         # Process QGIS expression if provided
         if task_expression:
-            processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
+            # For custom selection, allow simple field names but don't use them for source filtering
+            processed_expr, is_field_expr = self._process_qgis_expression(task_expression, allow_simple_field=is_custom_selection)
             
             if processed_expr:
                 # Combine with existing subset if needed
@@ -1012,6 +1031,12 @@ class FilterEngineTask(QgsTask):
                 
                 # Apply filter and update subset
                 result = self._apply_filter_and_update_subset(self.expression)
+            elif is_custom_selection and not processed_expr:
+                # Custom selection with simple field name - skip source layer filtering
+                logger.info(f"Custom selection with field name '{task_expression}' - source layer will not be filtered, only target layers")
+                # Set expression for use in target layer filtering
+                self.expression = task_expression
+                result = True  # Don't filter source layer, but continue to filter target layers
         
         # Fallback to feature ID list if expression processing failed
         if not result:
@@ -1032,11 +1057,33 @@ class FilterEngineTask(QgsTask):
         
         Sets param_source_new_subset based on expression type and
         extracts buffer value/expression from task parameters.
+        
+        CRITICAL: When custom selection uses a simple field name,
+        don't apply it to source layer - keep existing subset or empty.
         """
         logger.info("🔧 _initialize_source_subset_and_buffer() START")
         
+        # Check if this is custom selection with a simple field name
+        exploring_props = self.task_parameters.get("exploring", {})
+        current_groupbox = exploring_props.get("current_exploring_groupbox", "")
+        is_custom_selection = (current_groupbox == "custom_selection")
+        
+        qgs_expr = QgsExpression(self.expression)
+        is_simple_field = qgs_expr.isField() and not any(op in self.expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR'])
+        
         # Set source subset based on expression type
-        if QgsExpression(self.expression).isField() is False:
+        if is_custom_selection and is_simple_field:
+            # Custom selection with simple field name - don't filter source layer
+            logger.info(f"  ℹ️  Custom selection with field name '{self.expression}' - source layer will NOT be filtered")
+            if self.has_combine_operator:
+                # Keep existing subset if combining
+                self.param_source_new_subset = self.param_source_old_subset
+                logger.info(f"  ✓ Keeping existing subset for source layer (combine mode)")
+            else:
+                # No combination - leave source layer unfiltered
+                self.param_source_new_subset = ''
+                logger.info(f"  ✓ Source layer will remain unfiltered")
+        elif qgs_expr.isField() is False:
             self.param_source_new_subset = self.expression
         else:
             self.param_source_new_subset = self.param_source_old_subset
@@ -2048,7 +2095,8 @@ class FilterEngineTask(QgsTask):
                         errors = geom.validateGeometry()
                         if errors:
                             logger.debug(f"  Validation errors: {[str(e.what()) for e in errors[:3]]}")  # First 3 errors
-                    except:
+                    except (AttributeError, RuntimeError) as e:
+                        logger.debug(f"Could not validate geometry: {e}")
                         pass
                     
                     # Try aggressive repair with multiple strategies
@@ -3692,7 +3740,8 @@ class FilterEngineTask(QgsTask):
                             # Remove incomplete ZIP file
                             try:
                                 os.remove(zip_path)
-                            except:
+                            except (OSError, PermissionError) as e:
+                                logger.debug(f"Could not remove incomplete ZIP: {e}")
                                 pass
                             return False
             
@@ -3713,7 +3762,8 @@ class FilterEngineTask(QgsTask):
             try:
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
-            except:
+            except (OSError, PermissionError) as cleanup_err:
+                logger.debug(f"Could not remove incomplete ZIP: {cleanup_err}")
                 pass
             return False
 
@@ -5225,11 +5275,42 @@ class LayersManagementEngineTask(QgsTask):
                     return False
                 if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
-                
-        new_field = QgsField('virtual_id', QVariant.LongLong)
-        layer.addExpressionField('@row_number', new_field)
+        
+        # Aucune clé primaire trouvée - créer un champ virtual_id avec des valeurs séquentielles
+        logger.info(f"No primary key found for layer {layer.name()}, creating virtual_id field")
+        
+        # Vérifier si virtual_id existe déjà
+        if 'virtual_id' not in [field.name() for field in layer.fields()]:
+            # Ajouter le champ virtual_id
+            provider = layer.dataProvider()
+            new_field = QgsField('virtual_id', QVariant.LongLong)
+            
+            # Démarrer l'édition
+            layer.startEditing()
+            provider.addAttributes([new_field])
+            layer.updateFields()
+            
+            # Remplir le champ avec des valeurs séquentielles
+            virtual_id_idx = layer.fields().indexFromName('virtual_id')
+            row_num = 1
+            
+            for feature in layer.getFeatures():
+                if self.isCanceled():
+                    layer.rollBack()
+                    return False
+                    
+                layer.changeAttributeValue(feature.id(), virtual_id_idx, row_num)
+                row_num += 1
+            
+            # Valider les modifications
+            if not layer.commitChanges():
+                logger.error(f"Failed to commit virtual_id field: {layer.commitErrors()}")
+                layer.rollBack()
+                return False
+            
+            logger.info(f"Successfully created and populated virtual_id field with {row_num - 1} values")
 
-        return ('virtual_id', layer.fields().indexFromName('virtual_id'), new_field.typeName(), True)
+        return ('virtual_id', layer.fields().indexFromName('virtual_id'), 'Integer64', True)
 
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):       
@@ -5596,7 +5677,8 @@ class LayersManagementEngineTask(QgsTask):
                 if conn:
                     try:
                         conn.rollback()
-                    except:
+                    except (sqlite3.Error, AttributeError) as rollback_err:
+                        logger.debug(f"Rollback failed: {rollback_err}")
                         pass
                 raise
             finally:

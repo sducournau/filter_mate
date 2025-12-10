@@ -1,4 +1,7 @@
-# Architecture Overview - FilterMate v2.2.2
+# Architecture Overview - FilterMate v2.2.5
+
+**Last Updated:** December 10, 2025
+**Current Version:** 2.2.5 - Automatic Geographic CRS Handling
 
 ## System Architecture
 

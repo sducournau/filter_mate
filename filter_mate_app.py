@@ -230,25 +230,27 @@ class FilterMateApp:
         """Keep the advanced filter combobox updated on adding or removing layers"""
         # Use QTimer.singleShot to defer project signal handling until QGIS is in stable state
         # This prevents access violations during project transitions
-        # Only connect signals once to avoid multiple connections on plugin reload
+        # Use safe_connect to prevent multiple connections on plugin reload
         if not self._signals_connected:
             from qgis.PyQt.QtCore import QTimer
-            self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
-            self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
+            from .modules.signal_utils import safe_connect as safe_connect_qgis
+            safe_connect_qgis(self.iface.projectRead, lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
+            safe_connect_qgis(self.iface.newProjectCreated, lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
             # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
-            self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
-            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
-            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+            safe_connect_qgis(self.MapLayerStore.layersAdded, lambda layers: self.manage_task('add_layers', layers))
+            safe_connect_qgis(self.MapLayerStore.layersWillBeRemoved, lambda layers: self.manage_task('remove_layers', layers))
+            safe_connect_qgis(self.MapLayerStore.allLayersRemoved, lambda: self.manage_task('remove_all_layers'))
             self._signals_connected = True
         
-        self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
-
-        self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
-        self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
-        self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
-
-        self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
-        self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
+        # CRITICAL FIX: Use safe_connect to prevent duplicate connections on plugin reload
+        from .modules.signal_utils import safe_connect
+        
+        safe_connect(self.dockwidget.launchingTask, lambda x: self.manage_task(x))
+        safe_connect(self.dockwidget.resettingLayerVariableOnError, lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+        safe_connect(self.dockwidget.settingLayerVariable, lambda layer, properties: self.save_variables_from_layer(layer, properties))
+        safe_connect(self.dockwidget.resettingLayerVariable, lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+        safe_connect(self.dockwidget.settingProjectVariables, self.save_project_variables)
+        safe_connect(self.PROJECT.fileNameChanged, lambda: self.save_project_variables())
         
 
     def get_spatialite_connection(self):
@@ -272,13 +274,6 @@ class FilterMateApp:
             logger.error(error_msg)
             iface.messageBar().pushCritical("FilterMate", error_msg)
             return None
-
-        
-        """Overload configuration qtreeview model to keep configuration file up to date"""
-        # 
-        # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
-        # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
-
 
     def manage_task(self, task_name, data=None):
         """
@@ -408,8 +403,6 @@ class FilterMateApp:
                 self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
                 self.appTasks[task_name].begun.connect(self.on_remove_layer_task_begun)
-            
-            # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
             self.appTasks[task_name].resultingLayers.connect(lambda result_project_layers, task_name=task_name: self.layer_management_engine_task_completed(result_project_layers, task_name))
             self.appTasks[task_name].savingLayerVariable.connect(lambda layer, variable_key, value_typped, type_returned: self.saving_layer_variable(layer, variable_key, value_typped, type_returned))
@@ -1131,7 +1124,7 @@ class FilterMateApp:
                 try: 
                     os.remove(self.db_file_path)
                     self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] = False
-                    with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
+                    with open(get_config_path(), 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
                     logger.error(f"Failed to remove database file: {error}")
@@ -1346,7 +1339,7 @@ class FilterMateApp:
                 if conn:
                     conn.close()
 
-            with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
+            with open(get_config_path(), 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
 
 

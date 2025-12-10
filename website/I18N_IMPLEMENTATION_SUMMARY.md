@@ -96,29 +96,56 @@ Comprehensive guide covering:
 |-----------|---------|--------|------------|
 | UI (Navbar/Footer) | ✅ 100% | ✅ 100% | ✅ 100% |
 | Homepage | ✅ 100% | ✅ 100% | ✅ 100% |
-| Documentation | ✅ 100% (80 files) | 🔄 1% (1/80) | 🔄 1% (1/80) |
+| Documentation | ✅ 100% (40 files) | 🔄 30% (12/40) | 🔄 27.5% (11/40) |
+
+## Completed Translations ✅
+
+### French (12 files - 30%)
+1. ✅ `intro.md` - Homepage
+2. ✅ `installation.md` - Installation instructions
+3. ✅ `getting-started/index.md` - Getting started intro
+4. ✅ `getting-started/quick-start.md` - Quick start guide
+5. ✅ `getting-started/first-filter.md` - First filter tutorial
+6. ✅ `getting-started/why-filtermate.md` - Why FilterMate
+7. ✅ `user-guide/introduction.md` - User guide introduction
+8. ✅ `user-guide/interface-overview.md` - Interface overview
+9. ✅ `user-guide/filtering-basics.md` - Filtering basics
+10. ✅ `user-guide/geometric-filtering.md` - Geometric filtering
+11. ✅ `user-guide/buffer-operations.md` - Buffer operations
+12. ✅ `user-guide/export-features.md` - Export features (831 lines)
+
+### Portuguese (11 files - 27.5%)
+1. ✅ `intro.md` - Homepage
+2. ✅ `installation.md` - Installation instructions
+3. ✅ `getting-started/index.md` - Getting started intro
+4. ✅ `getting-started/quick-start.md` - Quick start guide
+5. ✅ `getting-started/first-filter.md` - First filter tutorial
+6. ✅ `getting-started/why-filtermate.md` - Why FilterMate
+7. ✅ `user-guide/introduction.md` - User guide introduction
+8. ✅ `user-guide/interface-overview.md` - Interface overview
+9. ✅ `user-guide/filtering-basics.md` - Filtering basics
+10. ✅ `user-guide/geometric-filtering.md` - Geometric filtering
+11. ✅ `user-guide/export-features.md` - Export features (831 lines)
 
 ## Next Steps for Full Translation
 
-### High Priority (User-Facing)
-1. `installation.md` - Installation instructions
-2. `getting-started/quick-start.md` - Quick start guide
-3. `getting-started/first-filter.md` - First filter tutorial
-4. `user-guide/introduction.md` - User guide introduction
-5. `user-guide/interface-overview.md` - Interface overview
-6. `user-guide/filtering-basics.md` - Filtering basics
+### High Priority (User-Facing) - Remaining
+- `user-guide/filter-history.md` - Filter history (FR + PT)
+- `user-guide/common-mistakes.md` - Common mistakes (FR + PT)
+- ⚠️ `user-guide/buffer-operations.md` - Buffer operations (PT only - FR done)
 
 ### Medium Priority (Features)
-7. User guide remaining pages (8 files)
-8. Backend documentation (6 files)
-9. Workflows (6 real-world examples)
+- Backend documentation (~6 files)
+- Workflows (~6 real-world examples)
+- Accessibility guide
 
 ### Lower Priority (Advanced)
-10. Advanced configuration (3 files)
-11. Developer guide (6 files)
-12. Reference materials (glossary, cheat sheets)
+- Advanced configuration (~3 files)
+- Developer guide (~6 files)
+- Reference materials (glossary, cheat sheets)
+- Changelog
 
-**Total Remaining**: ~79 files per locale
+**Total Remaining**: 28 files (FR), 29 files (PT)
 
 ## Development Commands
 
@@ -230,7 +257,8 @@ See `website/I18N_GUIDE.md` for detailed contributor instructions.
 - ✅ Language selector implemented and functional
 - ✅ Build system validated
 - ✅ Comprehensive documentation provided
-- 🎯 ~2% overall content translated (1/80 docs per locale)
+- 🎯 30% French content translated (12/40 docs)
+- 🎯 27.5% Portuguese content translated (11/40 docs)
 
 ## Estimated Completion Timeline
 
@@ -242,7 +270,7 @@ See `website/I18N_GUIDE.md` for detailed contributor instructions.
 
 ---
 
-**Date**: December 9, 2024  
+**Date**: December 10, 2025  
 **Version**: FilterMate Docs 2.2.3  
 **Docusaurus**: 3.6.0  
-**Status**: ✅ Infrastructure Complete, Translation In Progress
+**Status**: ✅ Infrastructure Complete, 🔄 Translation In Progress (30% FR, 27.5% PT)

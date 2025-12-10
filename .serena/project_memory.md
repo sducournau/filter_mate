@@ -5,9 +5,10 @@
 **Project Name**: FilterMate  
 **Type**: QGIS Plugin (Python)  
 **Repository**: https://github.com/sducournau/filter_mate  
-**Version**: 1.8 (current), 1.9 (target with PostgreSQL optional)  
-**Primary Language**: Python 3.x  
-**Framework**: QGIS API, PyQt5
+**Version**: 2.2.5 (December 10, 2025)  
+**Primary Language**: Python 3.7+  
+**Framework**: QGIS API 3.0+, PyQt5  
+**Status**: Production - Automatic Geographic CRS Handling
 
 ---
 

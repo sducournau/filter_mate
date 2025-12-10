@@ -236,16 +236,17 @@ To contribute translations:
 
 | Language | Code | Progress | Files Translated |
 |----------|------|----------|------------------|
-| English  | `en` | 100% ✅  | 80+ (source)     |
-| French   | `fr` | ~2% 🔄   | 1/80+ (intro.md) |
-| Portuguese | `pt` | ~2% 🔄 | 1/80+ (intro.md) |
+| English  | `en` | 100% ✅  | 40 (source)      |
+| French   | `fr` | 30% 🔄   | 12/40            |
+| Portuguese | `pt` | 27.5% 🔄 | 11/40            |
 
 ### Quick Stats
 
-- **Total Documentation Files**: ~80 markdown files
-- **Fully Translated**: 1 file per locale (intro.md)
+- **Total Documentation Files**: 40 markdown files
+- **Fully Translated (FR)**: 12 files (installation, getting-started/*, user-guide/intro, interface-overview, filtering-basics, geometric-filtering, buffer-operations, export-features)
+- **Fully Translated (PT)**: 11 files (installation, getting-started/*, user-guide/intro, interface-overview, filtering-basics, geometric-filtering, export-features)
 - **UI Elements**: 100% translated (navbar, footer, theme)
-- **Estimated Work**: 79 files remaining per locale
+- **Estimated Work**: 28 files remaining (FR), 29 files remaining (PT)
 
 ## 🚀 Quick Start for Translators
 
@@ -301,6 +302,6 @@ FilterMate documentation doesn't use the blog feature (`blog: false` in config).
 
 ---
 
-**Last Updated**: December 9, 2024  
+**Last Updated**: December 10, 2025  
 **Docusaurus Version**: 3.6.0  
 **Maintained By**: FilterMate Documentation Team

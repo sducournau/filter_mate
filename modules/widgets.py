@@ -441,7 +441,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             # Calculate total height: 2 QLineEdit + spacing + list
             lineedit_height = combobox_height * 2 + 2  # 2 lineEdit + spacing
             total_min_height = lineedit_height + list_min_height + 4  # +4 for layout spacing
-        except:
+        except (ImportError, AttributeError, TypeError) as e:
+            logger.debug(f"Could not calculate dynamic height: {e}")
             total_min_height = 210  # Fallback: 54px (lineEdits) + 150px (list) + 6px
         
         self.setMinimumWidth(30)
@@ -841,7 +842,8 @@ class ListWidgetWrapper(QListWidget):
         try:
             from ..ui_config import UIConfig
             list_min_height = UIConfig.get_config('list', 'min_height') or 120
-        except:
+        except (ImportError, AttributeError, KeyError) as e:
+            logger.debug(f"Could not load UIConfig for list height: {e}")
             list_min_height = 120  # Reduced height for compact display (3-4 items)
         
         self.setMinimumHeight(list_min_height)
@@ -949,7 +951,8 @@ class QgsCheckableComboBoxLayer(QComboBox):
         try:
             from ..ui_config import UIConfig
             combobox_height = UIConfig.get_config('combobox', 'height') or 30
-        except:
+        except (ImportError, AttributeError, KeyError) as e:
+            logger.debug(f"Could not load UIConfig for combobox height: {e}")
             combobox_height = 30
         
         self.setBaseSize(combobox_height, 0)

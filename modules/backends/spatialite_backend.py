@@ -225,11 +225,12 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Load spatialite extension
             try:
                 conn.load_extension('mod_spatialite')
-            except:
+            except (OSError, AttributeError) as e:
+                # Try Windows DLL extension
                 try:
                     conn.load_extension('mod_spatialite.dll')  # Windows
                 except Exception as ext_error:
-                    self.log_error(f"Could not load spatialite extension: {ext_error}")
+                    self.log_error(f"Could not load spatialite extension: {e}, {ext_error}")
                     conn.close()
                     return None, None
             
@@ -278,7 +279,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             if conn:
                 try:
                     conn.close()
-                except:
+                except (sqlite3.Error, RuntimeError) as close_err:
+                    self.log_debug(f"Could not close connection: {close_err}")
                     pass
             return None, None
     
@@ -446,8 +448,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                         if ':' in authid:
                             try:
                                 srid = int(authid.split(':')[1])
-                            except:
-                                self.log_warning(f"Could not parse SRID from {authid}, using 4326")
+                            except (ValueError, IndexError) as e:
+                                self.log_warning(f"Could not parse SRID from {authid}, using 4326: {e}")
                 
                 # Create temp table
                 temp_table, conn = self._create_temp_geometry_table(db_path, source_geom, srid)

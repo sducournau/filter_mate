@@ -230,7 +230,8 @@ class HistoryNavigationWidget(QWidget):
                 if not undo_icon.isNull():
                     self.undo_button.setIcon(undo_icon)
                     self.undo_button.setText("")
-            except:
+            except (OSError, RuntimeError) as e:
+                logger.debug(f"Could not load undo icon: {e}")
                 pass
         
         # State indicator label
@@ -254,7 +255,8 @@ class HistoryNavigationWidget(QWidget):
                 if not redo_icon.isNull():
                     self.redo_button.setIcon(redo_icon)
                     self.redo_button.setText("")
-            except:
+            except (OSError, RuntimeError) as e:
+                logger.debug(f"Could not load redo icon: {e}")
                 pass
         
         # Add to layout
