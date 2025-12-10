@@ -584,13 +584,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
                 self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
 
-                if self.list_widgets[self.layer.id()].getDisplayExpression() != layer_props["exploring"]["multiple_selection_expression"]:
-                    self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
-                else:
-                    description = 'Loading features'
-                    action = 'loadFeaturesList'
-                    self.build_task(description, action, True)
-                    self.launch_task(action)
+                # CRITICAL: Always call setDisplayExpression() when layer changes to force reload of features
+                # Even if the expression is the same (e.g., "id" on both layers), the features are different
+                self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
 
         except (AttributeError, RuntimeError) as e:
             # Handle case where widgets don't exist or are being destroyed

@@ -2000,6 +2000,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Update single selection widgets
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+                # CRITICAL: Force refresh by resetting expression to empty then setting it back
+                # This ensures QgsFeaturePickerWidget reloads features even if expression is identical
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression("")
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(
                     layer_props["exploring"]["single_selection_expression"]
                 )
