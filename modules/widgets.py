@@ -96,16 +96,16 @@ class PopulateListEngineTask(QgsTask):
         if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
             self.parent.list_widgets[self.layer.id()].setTotalFeaturesListCount(total_features_list_count)
 
-        if layer_features_source != None and has_limit is True:
+        if layer_features_source is not None and has_limit is True:
             limit = self.parent.list_widgets[self.layer.id()].getLimit()
             
         
-        if layer_features_source != None:
+        if layer_features_source is not None:
             if self.parent.list_widgets[self.layer.id()].getFilterExpression() != '':
                 filter_expression = self.parent.list_widgets[self.layer.id()].getFilterExpression()
                 if QgsExpression(filter_expression).isValid():
 
-                    if filter_txt_splitted != None:
+                    if filter_txt_splitted is not None:
                         filter_txt_splitted_final = []
                         for filter_txt in filter_txt_splitted:
                             filter_txt_splitted_final.append("""{display_expression} *~ '{filter_txt}'""".format(display_expression=self.display_expression,
@@ -149,7 +149,7 @@ class PopulateListEngineTask(QgsTask):
             
             else:
 
-                if filter_txt_splitted != None:
+                if filter_txt_splitted is not None:
                     filter_txt_splitted_final = []
                     for filter_txt in filter_txt_splitted:
                         filter_txt_splitted_final.append("""{display_expression} *~ '{filter_txt}'""".format(display_expression=self.display_expression,
@@ -166,7 +166,18 @@ class PopulateListEngineTask(QgsTask):
 
                 if self.is_field_flag is True:
                     for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
-                        arr = [feature[self.display_expression], feature[self.identifier_field_name]]
+                        # ✅ DEFENSIVE: Handle KeyError if field doesn't exist
+                        try:
+                            arr = [feature[self.display_expression], feature[self.identifier_field_name]]
+                        except KeyError:
+                            logger.error(f"buildFeaturesList: Field '{self.display_expression}' not found in feature {feature.id()}. Falling back to expression evaluation.")
+                            # Fallback to expression evaluation
+                            display_expression = QgsExpression(self.display_expression)
+                            context = QgsExpressionContext()
+                            context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(self.layer))
+                            context.setFeature(feature)
+                            arr = [display_expression.evaluate(context), feature[self.identifier_field_name]]
+                        
                         features_list.append(arr)
                         self.setProgress((index/total_count)*100)
                 else:
@@ -529,19 +540,19 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         return selection
 
     def displayExpression(self):
-        if self.layer != None:
+        if self.layer is not None:
             return self.list_widgets[self.layer.id()].getDisplayExpression()
         else:
             return False
       
     def currentLayer(self):
-        if self.layer != None:
+        if self.layer is not None:
             return self.layer
         else:
             return False
     
     def currentSelectedFeatures(self):
-        if self.layer != None:
+        if self.layer is not None:
             # Vérifier que le layer existe toujours dans list_widgets
             if self.layer.id() not in self.list_widgets:
                 return False
@@ -551,7 +562,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             return False
         
     def currentVisibleFeatures(self):
-        if self.layer != None:
+        if self.layer is not None:
             # Vérifier que le layer existe toujours dans list_widgets
             if self.layer.id() not in self.list_widgets:
                 return False
@@ -561,35 +572,84 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             return False
         
     def setLayer(self, layer, layer_props):
-
+        """Set layer and reload features.
+        
+        Args:
+            layer: QgsVectorLayer to set
+            layer_props: Dictionary with structure:
+                {
+                    'infos': {'primary_key_name': str},
+                    'exploring': {'multiple_selection_expression': str}
+                }
+        """
         try:
-
-            if layer != None:
-                if self.layer != None:
-                    if self.layer.id() not in self.list_widgets:
-                        self.manage_list_widgets(layer_props)
-                    self.filter_le.clear()
-                    self.items_le.clear()
-                    
-                self.layer = layer
-
-                # Validate required keys exist before accessing
-                if "infos" in layer_props and "primary_key_name" in layer_props["infos"]:
-                    if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
-                        self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
-                else:
-                    logger.warning(f"layer_props missing required keys in setLayer for layer {layer.id()}")
-
+            # ✅ VALIDATION: Check layer first
+            if layer is None:
+                logger.warning("setLayer called with None layer")
+                return
+            
+            # ✅ VALIDATION: Verify layer_props structure BEFORE any access
+            required_keys = ["infos", "exploring"]
+            missing = [k for k in required_keys if k not in layer_props]
+            if missing:
+                logger.error(f"setLayer: layer_props missing required top-level keys: {missing}")
+                return
+            
+            if "primary_key_name" not in layer_props["infos"]:
+                logger.error(f"setLayer: layer_props['infos'] missing 'primary_key_name' for layer {layer.id()}")
+                return
+            
+            if "multiple_selection_expression" not in layer_props["exploring"]:
+                logger.error(f"setLayer: layer_props['exploring'] missing 'multiple_selection_expression' for layer {layer.id()}")
+                return
+            
+            # ✅ Clear previous layer data
+            if self.layer is not None:
+                self.filter_le.clear()
+                self.items_le.clear()
+            
+            self.layer = layer
+            
+            # ✅ CRITICAL: Ensure list_widgets entry exists BEFORE accessing it
+            if self.layer.id() not in self.list_widgets:
+                logger.debug(f"setLayer: Creating list_widgets entry for {layer.id()}")
                 self.manage_list_widgets(layer_props)
-
-                self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
-
-                # CRITICAL: Always call setDisplayExpression() when layer changes to force reload of features
-                # Even if the expression is the same (e.g., "id" on both layers), the features are different
-                self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
-
-        except (AttributeError, RuntimeError) as e:
-            # Handle case where widgets don't exist or are being destroyed
+            
+            # ✅ Verify that list_widgets entry was successfully created
+            if self.layer.id() not in self.list_widgets:
+                logger.warning(f"setLayer: manage_list_widgets() failed to create entry for layer {layer.id()}. Creating minimal fallback entry.")
+                # FALLBACK: Create minimal entry with defaults
+                try:
+                    identifier = layer_props["infos"]["primary_key_name"]
+                    is_numeric = layer_props["infos"].get("primary_key_is_numeric", False)
+                    self.list_widgets[self.layer.id()] = ListWidgetWrapper(identifier, is_numeric, self)
+                    self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
+                    self.layout.addWidget(self.list_widgets[self.layer.id()])
+                    logger.info(f"setLayer: Fallback list_widgets entry created successfully for layer {layer.id()}")
+                except Exception as fallback_error:
+                    logger.critical(f"setLayer: Fallback creation also failed for layer {layer.id()}: {fallback_error}", exc_info=True)
+                    return
+            
+            # ✅ Set identifier field
+            identifier = layer_props["infos"]["primary_key_name"]
+            if self.list_widgets[self.layer.id()].getIdentifierFieldName() != identifier:
+                self.list_widgets[self.layer.id()].setIdentifierFieldName(identifier)
+            
+            # ✅ Ensure list_widgets is properly initialized (idempotent)
+            self.manage_list_widgets(layer_props)
+            
+            # ✅ Restore filter text from previous session
+            self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
+            
+            # ✅ CRITICAL: ALWAYS call setDisplayExpression() to trigger feature loading
+            # This is THE key method that launches buildFeaturesList task
+            display_expr = layer_props["exploring"]["multiple_selection_expression"]
+            logger.debug(f"setLayer: Setting display expression '{display_expr}' for layer {layer.name()}")
+            self.setDisplayExpression(display_expr)
+            
+        except (AttributeError, RuntimeError, KeyError) as e:
+            logger.error(f"setLayer failed for layer {layer.id() if layer else 'None'}: {e}", exc_info=True)
+            # Clear widgets on error to avoid stale data
             try:
                 self.filter_le.clear()
                 self.items_le.clear()
@@ -598,7 +658,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
 
     def setFilterExpression(self, filter_expression, layer_props):
-        if self.layer != None:
+        if self.layer is not None:
             if self.layer.id() not in self.list_widgets:
                 self.manage_list_widgets(layer_props)
             if self.layer.id() in self.list_widgets:  
@@ -610,34 +670,46 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
 
     def setDisplayExpression(self, expression):
+        """Set display expression and validate field existence.
         
-        if self.layer != None:
-            self.filter_le.clear()
-            self.items_le.clear()
+        Args:
+            expression: Field name or QGIS expression to display
+        """
+        if self.layer is None:
+            return
+            
+        self.filter_le.clear()
+        self.items_le.clear()
         
-            if QgsExpression(expression).isField():
-                working_expression = expression.replace('"', '')
-                self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
+        # ✅ CRITICAL: Validate that field exists in layer before using as field
+        is_field = False
+        working_expression = expression
+        
+        # Check if it's a field reference
+        qgs_expr = QgsExpression(expression)
+        if qgs_expr.isField():
+            # Remove quotes to get raw field name
+            field_name = expression.replace('"', '').replace("'", '')
+            
+            # ✅ CRITICAL: Verify field exists in layer
+            layer_fields = [field.name() for field in self.layer.fields()]
+            if field_name in layer_fields:
+                is_field = True
+                working_expression = field_name
+                logger.debug(f"setDisplayExpression: Using field '{field_name}' (exists in layer)")
             else:
+                # Field doesn't exist - treat as expression
+                is_field = False
                 working_expression = expression
-                self.list_widgets[self.layer.id()].setExpressionFieldFlag(False)
-
-            self.list_widgets[self.layer.id()].setDisplayExpression(working_expression)
-
-            sub_description = 'Building features list'
-            sub_action = 'buildFeaturesList'
-
-            self.build_task(sub_description, sub_action)
-
-            description = 'Loading features'
-            action = 'loadFeaturesList'
-            self.build_task(description, action)
-
-            self.tasks['loadFeaturesList'][self.layer.id()].addSubTask(self.tasks[sub_action][self.layer.id()], [], QgsTask.ParentDependsOnSubTask)
-
-            self.launch_task('loadFeaturesList')
-                
+                logger.warning(f"setDisplayExpression: Field '{field_name}' not found in layer {self.layer.name()}. Available fields: {layer_fields}. Treating as expression.")
+        else:
+            # It's an expression, not a field
+            is_field = False
+            working_expression = expression
+            logger.debug(f"setDisplayExpression: Using expression '{expression}'")
         
+        self.list_widgets[self.layer.id()].setExpressionFieldFlag(is_field)
+        self.list_widgets[self.layer.id()].setDisplayExpression(working_expression)
 
     def eventFilter(self, obj, event):
 
@@ -646,7 +718,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             nonSubset_features_list = [feature[identifier_field_name] for feature in self.layer.getFeatures()]
             if event.button() == Qt.LeftButton:
                 clicked_item = self.list_widgets[self.layer.id()].itemAt(event.pos())
-                if clicked_item != None:
+                if clicked_item is not None:
                     id_item = clicked_item.data(3)
                     if clicked_item.checkState() == Qt.Checked:
                         clicked_item.setCheckState(Qt.Unchecked)
@@ -683,7 +755,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def connect_filter_lineEdit(self):
 
-        if self.layer != None:
+        if self.layer is not None:
             if self.layer.id() in self.list_widgets:
                 if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                     try:
@@ -781,7 +853,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.launch_task(action)
         
     def filter_items(self, filter_txt=None):
-        if filter_txt == None:
+        if filter_txt is None:
             self.filter_txt_limit_changed = True
             self.filter_txt = self.filter_le.text()
         else:
@@ -1018,7 +1090,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
         item.setData(icon, role=Qt.DecorationRole)
 
 
-        if data != None:
+        if data is not None:
             item.setData(data, role=Qt.UserRole)
 
         
@@ -1030,7 +1102,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
 
     def setItemCheckState(self, i, state=None):
         item = self.model().item(i)
-        if state != None:
+        if state is not None:
             item.setCheckState(state)
         else:
             state = item.data(Qt.CheckStateRole)

@@ -283,8 +283,7 @@ class FilterMate:
                     # Message de succès
                     iface.messageBar().pushSuccess(
                         "FilterMate",
-                        "Configuration réinitialisée avec succès. Recréation des fichiers...",
-                        duration=3
+                        "Configuration réinitialisée avec succès. Recréation des fichiers..."
                     )
                     
                     QgsMessageLog.logMessage(
@@ -312,8 +311,7 @@ class FilterMate:
                 
                 iface.messageBar().pushCritical(
                     "FilterMate",
-                    error_msg,
-                    duration=10
+                    error_msg
                 )
                 
                 QgsMessageLog.logMessage(
@@ -339,6 +337,12 @@ class FilterMate:
             config_data = ENV_VARS.get('CONFIG_DATA', {})
             sqlite_path = config_data.get('APP', {}).get('OPTIONS', {}).get('APP_SQLITE_PATH', None)
             
+            QgsMessageLog.logMessage(
+                f"Delete SQLite DB - sqlite_path from config: {sqlite_path}",
+                "FilterMate",
+                Qgis.Info
+            )
+            
             if not sqlite_path:
                 QMessageBox.warning(
                     self.iface.mainWindow(),
@@ -348,18 +352,47 @@ class FilterMate:
                 )
                 return
             
-            # Find all .db files in the directory
+            # Find all .db and .sqlite files in the directory
             db_files = []
             if os.path.exists(sqlite_path):
-                for file in os.listdir(sqlite_path):
-                    if file.endswith('.db'):
+                all_files = os.listdir(sqlite_path)
+                QgsMessageLog.logMessage(
+                    f"Delete SQLite DB - Files in directory: {all_files}",
+                    "FilterMate",
+                    Qgis.Info
+                )
+                for file in all_files:
+                    if file.endswith('.db') or file.endswith('.sqlite'):
                         db_files.append(os.path.join(sqlite_path, file))
+            else:
+                QgsMessageLog.logMessage(
+                    f"Delete SQLite DB - Directory does not exist: {sqlite_path}",
+                    "FilterMate",
+                    Qgis.Warning
+                )
+            
+            QgsMessageLog.logMessage(
+                f"Delete SQLite DB - Found {len(db_files)} database file(s): {db_files}",
+                "FilterMate",
+                Qgis.Info
+            )
             
             if not db_files:
+                # Get list of all files in directory for debug
+                all_files_info = []
+                if os.path.exists(sqlite_path):
+                    all_files_info = [f for f in os.listdir(sqlite_path) if os.path.isfile(os.path.join(sqlite_path, f))]
+                
+                message = f'Aucune base de données SQLite (.db ou .sqlite) trouvée dans :\n{sqlite_path}'
+                if all_files_info:
+                    message += f'\n\nFichiers présents dans le répertoire :\n' + '\n'.join(all_files_info[:10])
+                    if len(all_files_info) > 10:
+                        message += f'\n... et {len(all_files_info) - 10} autre(s) fichier(s)'
+                
                 QMessageBox.information(
                     self.iface.mainWindow(),
                     'FilterMate - Base SQLite',
-                    f'Aucune base de données SQLite trouvée dans :\n{sqlite_path}',
+                    message,
                     QMessageBox.Ok
                 )
                 return
@@ -411,8 +444,7 @@ class FilterMate:
                     deleted_list = '\n'.join(deleted_files)
                     iface.messageBar().pushSuccess(
                         "FilterMate",
-                        f"Base SQLite supprimée avec succès ({len(deleted_files)} fichier(s)). Recréation des fichiers...",
-                        duration=3
+                        f"Base SQLite supprimée avec succès ({len(deleted_files)} fichier(s)). Recréation des fichiers..."
                     )
                     QgsMessageLog.logMessage(
                         f"SQLite database(s) deleted successfully: {deleted_list}. Recreating files...",
@@ -439,8 +471,7 @@ class FilterMate:
                     )
                     iface.messageBar().pushWarning(
                         "FilterMate",
-                        "Base SQLite partiellement supprimée. Recréation des fichiers...",
-                        duration=3
+                        "Base SQLite partiellement supprimée. Recréation des fichiers..."
                     )
                     
                     # Recréer les fichiers même en cas de suppression partielle
@@ -458,8 +489,7 @@ class FilterMate:
                     )
                     iface.messageBar().pushCritical(
                         "FilterMate",
-                        "Échec de la suppression de la base SQLite",
-                        duration=10
+                        "Échec de la suppression de la base SQLite"
                     )
         
         except Exception as e:
@@ -473,8 +503,7 @@ class FilterMate:
             
             iface.messageBar().pushCritical(
                 "FilterMate",
-                error_msg,
-                duration=10
+                error_msg
             )
             
             QgsMessageLog.logMessage(
@@ -603,8 +632,7 @@ class FilterMate:
             
             iface.messageBar().pushSuccess(
                 "FilterMate",
-                "Plugin rechargé avec succès",
-                duration=3
+                "Plugin rechargé avec succès"
             )
             
         except Exception as e:
@@ -617,8 +645,7 @@ class FilterMate:
             
             iface.messageBar().pushWarning(
                 "FilterMate",
-                "Veuillez recharger manuellement le plugin",
-                duration=5
+                "Veuillez recharger manuellement le plugin"
             )
             
             import traceback

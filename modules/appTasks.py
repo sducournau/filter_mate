@@ -570,9 +570,89 @@ class FilterEngineTask(QgsTask):
         
         try:
             conn = spatialite_connect(self.db_file_path)
+            self._ensure_tables_exist(conn)
             return conn
         except Exception as e:
             logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
+            raise
+
+    def _ensure_tables_exist(self, conn):
+        """
+        Ensure required database tables exist, creating them if necessary.
+        
+        Args:
+            conn: Active database connection
+            
+        Note:
+            Creates filterMate_db, fm_projects and fm_project_layers_properties tables if missing.
+            Does not create project entry - that's handled by filter_mate_app.py
+        """
+        try:
+            cur = conn.cursor()
+            
+            # Check if filterMate_db table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='filterMate_db';""")
+            filtermate_db_exists = cur.fetchone()[0] > 0
+            
+            # Check if fm_projects table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='fm_projects';""")
+            projects_table_exists = cur.fetchone()[0] > 0
+            
+            # Check if fm_project_layers_properties table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='fm_project_layers_properties';""")
+            properties_table_exists = cur.fetchone()[0] > 0
+            
+            # Create missing tables
+            if not filtermate_db_exists:
+                logger.info("Creating missing filterMate_db table")
+                cur.execute("""CREATE TABLE filterMate_db (
+                    id INTEGER PRIMARY KEY,
+                    plugin_name VARYING CHARACTER(255) NOT NULL,
+                    _created_at DATETIME NOT NULL,
+                    _updated_at DATETIME NOT NULL,
+                    _version VARYING CHARACTER(255) NOT NULL);
+                """)
+                # Insert initial record
+                cur.execute("""INSERT INTO filterMate_db VALUES(1, 'FilterMate', datetime(), datetime(), '1.6');""")
+            
+            if not projects_table_exists:
+                logger.info("Creating missing fm_projects table")
+                cur.execute("""CREATE TABLE fm_projects (
+                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                    _created_at DATETIME NOT NULL,
+                    _updated_at DATETIME NOT NULL,
+                    project_name VARYING CHARACTER(255) NOT NULL,
+                    project_path VARYING CHARACTER(255) NOT NULL,
+                    project_settings TEXT NOT NULL);
+                """)
+            
+            if not properties_table_exists:
+                logger.info("Creating missing fm_project_layers_properties table")
+                cur.execute("""CREATE TABLE fm_project_layers_properties (
+                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                    _updated_at DATETIME NOT NULL,
+                    fk_project VARYING CHARACTER(255) NOT NULL,
+                    layer_id VARYING CHARACTER(255) NOT NULL,
+                    meta_type VARYING CHARACTER(255) NOT NULL,
+                    meta_key VARYING CHARACTER(255) NOT NULL,
+                    meta_value TEXT NOT NULL,
+                    FOREIGN KEY (fk_project)  
+                    REFERENCES fm_projects(project_id),
+                    CONSTRAINT property_unicity
+                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
+                """)
+            
+            if not filtermate_db_exists or not projects_table_exists or not properties_table_exists:
+                conn.commit()
+                logger.info("Database tables verified/created successfully")
+            
+            cur.close()
+            
+        except Exception as e:
+            logger.error(f"Failed to ensure tables exist: {e}")
             raise
 
     def _initialize_source_layer(self):
@@ -1361,7 +1441,7 @@ class FilterEngineTask(QgsTask):
                                                                                 source_geom=self.param_source_geom
                                                                                 )
 
-        if self.param_buffer_expression != None and self.param_buffer_expression != '':
+        if self.param_buffer_expression is not None and self.param_buffer_expression != '':
 
 
             if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
@@ -1388,7 +1468,7 @@ class FilterEngineTask(QgsTask):
         
 
 
-        elif self.param_buffer_value != None:
+        elif self.param_buffer_value is not None:
 
             self.param_buffer = self.param_buffer_value
 
@@ -3069,7 +3149,7 @@ class FilterEngineTask(QgsTask):
             logger.info("  → Geometric filtering disabled")
             logger.info("  → Only source layer filtered")
 
-        # elif self.is_field_expression != None:
+        # elif self.is_field_expression is not None:
         #     field_idx = -1
 
         #     for layer_provider_type in self.layers:
@@ -4790,9 +4870,89 @@ class LayersManagementEngineTask(QgsTask):
         
         try:
             conn = spatialite_connect(self.db_file_path)
+            self._ensure_tables_exist(conn)
             return conn
         except Exception as e:
             logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
+            raise
+
+    def _ensure_tables_exist(self, conn):
+        """
+        Ensure required database tables exist, creating them if necessary.
+        
+        Args:
+            conn: Active database connection
+            
+        Note:
+            Creates filterMate_db, fm_projects and fm_project_layers_properties tables if missing.
+            Does not create project entry - that's handled by filter_mate_app.py
+        """
+        try:
+            cur = conn.cursor()
+            
+            # Check if filterMate_db table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='filterMate_db';""")
+            filtermate_db_exists = cur.fetchone()[0] > 0
+            
+            # Check if fm_projects table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='fm_projects';""")
+            projects_table_exists = cur.fetchone()[0] > 0
+            
+            # Check if fm_project_layers_properties table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='fm_project_layers_properties';""")
+            properties_table_exists = cur.fetchone()[0] > 0
+            
+            # Create missing tables
+            if not filtermate_db_exists:
+                logger.info("Creating missing filterMate_db table")
+                cur.execute("""CREATE TABLE filterMate_db (
+                    id INTEGER PRIMARY KEY,
+                    plugin_name VARYING CHARACTER(255) NOT NULL,
+                    _created_at DATETIME NOT NULL,
+                    _updated_at DATETIME NOT NULL,
+                    _version VARYING CHARACTER(255) NOT NULL);
+                """)
+                # Insert initial record
+                cur.execute("""INSERT INTO filterMate_db VALUES(1, 'FilterMate', datetime(), datetime(), '1.6');""")
+            
+            if not projects_table_exists:
+                logger.info("Creating missing fm_projects table")
+                cur.execute("""CREATE TABLE fm_projects (
+                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                    _created_at DATETIME NOT NULL,
+                    _updated_at DATETIME NOT NULL,
+                    project_name VARYING CHARACTER(255) NOT NULL,
+                    project_path VARYING CHARACTER(255) NOT NULL,
+                    project_settings TEXT NOT NULL);
+                """)
+            
+            if not properties_table_exists:
+                logger.info("Creating missing fm_project_layers_properties table")
+                cur.execute("""CREATE TABLE fm_project_layers_properties (
+                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                    _updated_at DATETIME NOT NULL,
+                    fk_project VARYING CHARACTER(255) NOT NULL,
+                    layer_id VARYING CHARACTER(255) NOT NULL,
+                    meta_type VARYING CHARACTER(255) NOT NULL,
+                    meta_key VARYING CHARACTER(255) NOT NULL,
+                    meta_value TEXT NOT NULL,
+                    FOREIGN KEY (fk_project)  
+                    REFERENCES fm_projects(project_id),
+                    CONSTRAINT property_unicity
+                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
+                """)
+            
+            if not filtermate_db_exists or not projects_table_exists or not properties_table_exists:
+                conn.commit()
+                logger.info("Database tables verified/created successfully")
+            
+            cur.close()
+            
+        except Exception as e:
+            logger.error(f"Failed to ensure tables exist: {e}")
             raise
 
 
@@ -5316,7 +5476,7 @@ class LayersManagementEngineTask(QgsTask):
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):       
 
 
-        if layer != None or layer_props != None:
+        if layer is not None or layer_props is not None:
             # Validate required keys exist
             if "infos" not in layer_props:
                 logger.warning(f"layer_props missing 'infos' dictionary, skipping spatial index creation")
@@ -5705,7 +5865,7 @@ class LayersManagementEngineTask(QgsTask):
         value_typped= None
         type_returned = None
 
-        if value_as_string == None or value_as_string == '':   
+        if value_as_string is None or value_as_string == '':   
             value_typped = str('')
             type_returned = str
         elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:

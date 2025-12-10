@@ -91,23 +91,6 @@ def clean_config_json(config_path):
                     "BATCH_ZIP": False
                 }
             
-            # Clean EXPORT section (if different from EXPORTING)
-            if 'EXPORT' in config['CURRENT_PROJECT']:
-                config['CURRENT_PROJECT']['EXPORT'] = {
-                    "HAS_LAYERS_TO_EXPORT": False,
-                    "LAYERS_TO_EXPORT": [],
-                    "HAS_PROJECTION_TO_EXPORT": False,
-                    "PROJECTION_TO_EXPORT": "",
-                    "HAS_STYLES_TO_EXPORT": False,
-                    "STYLES_TO_EXPORT": "QML",
-                    "HAS_DATATYPE_TO_EXPORT": False,
-                    "DATATYPE_TO_EXPORT": "GPKG",
-                    "HAS_OUTPUT_FOLDER_TO_EXPORT": False,
-                    "OUTPUT_FOLDER_TO_EXPORT": "",
-                    "HAS_ZIP_TO_EXPORT": False,
-                    "ZIP_TO_EXPORT": ""
-                }
-            
             # Clean OPTIONS section
             if 'OPTIONS' in config['CURRENT_PROJECT']:
                 config['CURRENT_PROJECT']['OPTIONS']['PROJECT_ID'] = ""

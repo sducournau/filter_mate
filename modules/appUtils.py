@@ -360,8 +360,8 @@ def get_datasource_connexion_from_layer(layer):
     else:
         return connexion, source_uri
 
-    if password != None and len(password) > 0:
-        if ssl_mode != None:
+    if password is not None and len(password) > 0:
+        if ssl_mode is not None:
             connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
         else:
             connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)

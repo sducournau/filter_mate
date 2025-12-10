@@ -157,14 +157,14 @@ class JsonView(QtWidgets.QTreeView):
         if data is None:
             return
         actions = data.actions(index)
-        if actions != None and len(actions) > 0:
+        if actions is not None and len(actions) > 0:
             menu.addActions(actions)
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action:
             action_data = action.data()
             item = self.model.itemFromIndex(index)
 
-            if action_data != None:
+            if action_data is not None:
                 if action.text() == "Change":
                     if len(action_data) == 2:
                         item.setData(action_data[0], QtCore.Qt.DisplayRole)

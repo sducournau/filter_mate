@@ -100,13 +100,6 @@ class TestConfigChoicesTypeFormat(unittest.TestCase):
         expected_choices = ['QML', 'SLD', 'None']
         for choice in expected_choices:
             self.assertIn(choice, styles['choices'])
-        
-        # Test in EXPORT section (duplicate)
-        if 'EXPORT' in self.config['CURRENT_PROJECT']:
-            styles_export = self.config['CURRENT_PROJECT']['EXPORT']['STYLES_TO_EXPORT']
-            self.assertIsInstance(styles_export, dict)
-            self.assertIn('value', styles_export)
-            self.assertIn('choices', styles_export)
     
     def test_datatype_to_export_is_choices_type(self):
         """Test DATATYPE_TO_EXPORT uses ChoicesType format"""

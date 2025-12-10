@@ -10,10 +10,10 @@ class SignalStateChangeError(Exception):
     def __init__(self, input_state, widget_path, message=None):
         self.input_state = input_state
         self.widget_path = widget_path
-        if message != None:
+        if message is not None:
             self.input_message = message
         else:
-            if self.input_state == None:
+            if self.input_state is None:
                 self.input_message = "Signal doesn't exists"
             else:
                 self.input_message = "Cannot change signal state"

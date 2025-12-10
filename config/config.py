@@ -126,6 +126,36 @@ def reset_config_to_default(backup=True, preserve_app_settings=True):
         return False
 
 
+def migrate_export_to_exporting(config_data):
+    """
+    Migrate legacy 'EXPORT' key to 'EXPORTING' in CURRENT_PROJECT.
+    
+    Old versions used 'EXPORT' instead of 'EXPORTING' in CURRENT_PROJECT.
+    This function renames the key if found and removes the old one.
+    
+    Args:
+        config_data (dict): Configuration dictionary to migrate
+        
+    Returns:
+        dict: Migrated configuration data
+    """
+    if "CURRENT_PROJECT" in config_data:
+        current_project = config_data["CURRENT_PROJECT"]
+        
+        # Check if legacy EXPORT exists and EXPORTING doesn't
+        if "EXPORT" in current_project and "EXPORTING" not in current_project:
+            logger.info("Migrating CURRENT_PROJECT.EXPORT to CURRENT_PROJECT.EXPORTING")
+            current_project["EXPORTING"] = current_project["EXPORT"]
+            del current_project["EXPORT"]
+        
+        # If both exist, EXPORTING takes precedence and EXPORT is removed
+        elif "EXPORT" in current_project and "EXPORTING" in current_project:
+            logger.warning("Found both EXPORT and EXPORTING in CURRENT_PROJECT. Keeping EXPORTING and removing EXPORT.")
+            del current_project["EXPORT"]
+    
+    return config_data
+
+
 def reload_config():
     """
     Reload configuration from config.json file and update ENV_VARS.
@@ -138,6 +168,9 @@ def reload_config():
     try:
         with open(config_path, 'r') as f:
             config_data = json.load(f)
+        
+        # Apply structure migrations
+        config_data = migrate_export_to_exporting(config_data)
         
         # Update global ENV_VARS if it exists
         if "CONFIG_DATA" in ENV_VARS:
@@ -294,6 +327,8 @@ def init_env_vars():
     else:
         with open(old_config_path, 'r') as f:
             CONFIG_DATA = json.load(f)
+        # Apply structure migrations
+        CONFIG_DATA = migrate_export_to_exporting(CONFIG_DATA)
 
     QGIS_SETTINGS_PATH = QgsApplication.qgisSettingsDirPath()
     # Remove trailing separator if present
@@ -376,6 +411,8 @@ def init_env_vars():
         try:
             with open(new_config_path, 'r') as f:
                 CONFIG_DATA = json.load(f)
+            # Apply structure migrations
+            CONFIG_DATA = migrate_export_to_exporting(CONFIG_DATA)
             ENV_VARS["CONFIG_DATA"] = CONFIG_DATA
         except Exception as e:
             QgsMessageLog.logMessage(

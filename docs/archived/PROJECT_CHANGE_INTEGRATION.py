@@ -61,8 +61,7 @@ def on_project_loaded(self):
                 from qgis.utils import iface
                 iface.messageBar().pushInfo(
                     "FilterMate",
-                    "Project settings reset for new project",
-                    3
+                    "Project settings reset for new project"
                 )
             else:
                 print("FilterMate: Failed to save configuration")
@@ -116,7 +115,7 @@ class FilterMateApp:
                 save_config(self.CONFIG_DATA)
                 
                 from qgis.utils import iface
-                iface.messageBar().pushInfo("FilterMate", "Project settings reset", 3)
+                iface.messageBar().pushInfo("FilterMate", "Project settings reset")
 """
 
 

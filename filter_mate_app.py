@@ -268,12 +268,92 @@ class FilterMateApp:
             
         try:
             conn = spatialite_connect(self.db_file_path)
+            self._ensure_tables_exist(conn)
             return conn
         except Exception as error:
             error_msg = f"Failed to connect to database {self.db_file_path}: {error}"
             logger.error(error_msg)
             iface.messageBar().pushCritical("FilterMate", error_msg)
             return None
+
+    def _ensure_tables_exist(self, conn):
+        """
+        Ensure required database tables exist, creating them if necessary.
+        
+        Args:
+            conn: Active database connection
+            
+        Note:
+            Creates filterMate_db, fm_projects and fm_project_layers_properties tables if missing.
+            Does not create project entry - that's handled by init_filterMate_db()
+        """
+        try:
+            cur = conn.cursor()
+            
+            # Check if filterMate_db table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='filterMate_db';""")
+            filtermate_db_exists = cur.fetchone()[0] > 0
+            
+            # Check if fm_projects table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='fm_projects';""")
+            projects_table_exists = cur.fetchone()[0] > 0
+            
+            # Check if fm_project_layers_properties table exists
+            cur.execute("""SELECT count(*) FROM sqlite_master 
+                          WHERE type='table' AND name='fm_project_layers_properties';""")
+            properties_table_exists = cur.fetchone()[0] > 0
+            
+            # Create missing tables
+            if not filtermate_db_exists:
+                logger.info("Creating missing filterMate_db table")
+                cur.execute("""CREATE TABLE filterMate_db (
+                    id INTEGER PRIMARY KEY,
+                    plugin_name VARYING CHARACTER(255) NOT NULL,
+                    _created_at DATETIME NOT NULL,
+                    _updated_at DATETIME NOT NULL,
+                    _version VARYING CHARACTER(255) NOT NULL);
+                """)
+                # Insert initial record
+                cur.execute("""INSERT INTO filterMate_db VALUES(1, 'FilterMate', datetime(), datetime(), '1.6');""")
+            
+            if not projects_table_exists:
+                logger.info("Creating missing fm_projects table")
+                cur.execute("""CREATE TABLE fm_projects (
+                    project_id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                    _created_at DATETIME NOT NULL,
+                    _updated_at DATETIME NOT NULL,
+                    project_name VARYING CHARACTER(255) NOT NULL,
+                    project_path VARYING CHARACTER(255) NOT NULL,
+                    project_settings TEXT NOT NULL);
+                """)
+            
+            if not properties_table_exists:
+                logger.info("Creating missing fm_project_layers_properties table")
+                cur.execute("""CREATE TABLE fm_project_layers_properties (
+                    id VARYING CHARACTER(255) NOT NULL PRIMARY KEY,
+                    _updated_at DATETIME NOT NULL,
+                    fk_project VARYING CHARACTER(255) NOT NULL,
+                    layer_id VARYING CHARACTER(255) NOT NULL,
+                    meta_type VARYING CHARACTER(255) NOT NULL,
+                    meta_key VARYING CHARACTER(255) NOT NULL,
+                    meta_value TEXT NOT NULL,
+                    FOREIGN KEY (fk_project)  
+                    REFERENCES fm_projects(project_id),
+                    CONSTRAINT property_unicity
+                    UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
+                """)
+            
+            if not filtermate_db_exists or not projects_table_exists or not properties_table_exists:
+                conn.commit()
+                logger.info("Database tables verified/created successfully")
+            
+            cur.close()
+            
+        except Exception as e:
+            logger.error(f"Failed to ensure tables exist: {e}")
+            raise
 
     def manage_task(self, task_name, data=None):
         """
@@ -501,36 +581,103 @@ class FilterMateApp:
             features, expression = self.dockwidget.get_current_features()
 
             if task_name in ('filter','undo','reset','redo'):
+                logger.debug(f"get_task_parameters: Building layers_to_filter for task={task_name}")
+                logger.debug(f"get_task_parameters: Source layer [{current_layer.id()}]['filtering']['layers_to_filter'] = {self.PROJECT_LAYERS[current_layer.id()]['filtering']['layers_to_filter']}")
+                
                 layers_to_filter = []
                 for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
-                    if key in self.PROJECT_LAYERS:
-                        layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+                    if key not in self.PROJECT_LAYERS:
+                        logger.warning(f"Layer {key} not in PROJECT_LAYERS, skipping")
+                        continue
+                    
+                    layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+                    
+                    # ✅ VALIDATION: Required keys for geometric filtering
+                    required_keys = [
+                        'layer_name', 'layer_id', 'layer_provider_type',
+                        'primary_key_name', 'layer_geometry_field', 'layer_schema'
+                    ]
+                    
+                    missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                    
+                    if missing_keys:
+                        logger.warning(f"Layer {key} missing required keys: {missing_keys}. Attempting recovery...")
                         
-                        # Validate required keys exist for geometric filtering
-                        required_keys = [
-                            'layer_name', 'layer_id', 'layer_provider_type',
-                            'primary_key_name', 'layer_geometry_field', 'layer_schema'
-                        ]
+                        # ✅ Try to recover missing metadata from actual layer object
+                        layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
+                        if not layer_obj:
+                            logger.error(f"Cannot filter layer {key}: layer not found in project")
+                            continue
                         
-                        missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                        if missing_keys:
-                            logger.warning(f"Layer {key} missing required keys: {missing_keys}")
-                            # Try to fill in missing keys if possible
-                            layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
-                            if layer_obj:
-                                layer = layer_obj[0]
-                                if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
-                                    layer_info['layer_name'] = layer.name()
-                                if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
-                                    layer_info['layer_id'] = layer.id()
-                                # Log what couldn't be filled
-                                still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                                if still_missing:
-                                    logger.error(f"Cannot filter layer {key}: still missing {still_missing}")
-                                    continue
+                        layer = layer_obj[0]
                         
+                        # Fill basic info
+                        if 'layer_name' not in layer_info or not layer_info['layer_name']:
+                            layer_info['layer_name'] = layer.name()
+                        if 'layer_id' not in layer_info or not layer_info['layer_id']:
+                            layer_info['layer_id'] = layer.id()
+                        
+                        # ✅ CRITICAL: Recover layer_geometry_field
+                        if 'layer_geometry_field' not in layer_info or not layer_info['layer_geometry_field']:
+                            if layer.geometryType() != QgsWkbTypes.UnknownGeometry:
+                                # Get geometry column from provider
+                                geom_col = layer.dataProvider().geometryColumn()
+                                if geom_col:
+                                    layer_info['layer_geometry_field'] = geom_col
+                                    logger.info(f"Recovered geometry field '{geom_col}' for {layer.name()}")
+                                else:
+                                    # Fallback to common defaults by provider type
+                                    provider_type = layer.providerType()
+                                    if provider_type in ('ogr', 'spatialite'):
+                                        layer_info['layer_geometry_field'] = 'geometry'
+                                    elif provider_type == 'postgres':
+                                        layer_info['layer_geometry_field'] = 'geom'
+                                    else:
+                                        layer_info['layer_geometry_field'] = 'geometry'
+                                    logger.warning(f"Using default geometry field '{layer_info['layer_geometry_field']}' for {layer.name()}")
+                            else:
+                                logger.error(f"Layer {layer.name()} has no geometry - cannot use for spatial filtering")
+                                continue
+                        
+                        # ✅ CRITICAL: Recover layer_schema
+                        if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
+                            provider_type = layer.providerType()
+                            if provider_type == 'postgres':
+                                # Extract schema from PostgreSQL URI
+                                from qgis.core import QgsDataSourceUri
+                                uri = QgsDataSourceUri(layer.source())
+                                layer_info['layer_schema'] = uri.schema() or 'public'
+                                logger.info(f"Recovered schema '{layer_info['layer_schema']}' for {layer.name()}")
+                            else:
+                                # OGR/Spatialite don't use schemas
+                                layer_info['layer_schema'] = None
+                        
+                        # ✅ Final validation: Essential keys must be present
+                        essential_keys = ['layer_name', 'layer_id', 'layer_geometry_field']
+                        still_missing = [k for k in essential_keys if k not in layer_info or layer_info[k] is None]
+                        
+                        if still_missing:
+                            logger.error(f"Cannot filter layer {key}: still missing essential keys {still_missing} after recovery")
+                            from qgis.utils import iface
+                            iface.messageBar().pushWarning(
+                                "FilterMate",
+                                f"Skipping layer '{layer.name()}': missing geometric metadata ({', '.join(still_missing)})"
+                            )
+                            continue
+                        
+                        # ✅ Update PROJECT_LAYERS with recovered metadata for future use
+                        self.PROJECT_LAYERS[key]["infos"].update(layer_info)
+                    
+                    # ✅ Only add to layers_to_filter if geometry field is valid
+                    if layer_info.get('layer_geometry_field'):
                         layers_to_filter.append(layer_info)
+                        logger.debug(f"Added layer {layer_info['layer_name']} to layers_to_filter (geom_field={layer_info['layer_geometry_field']})")
+                    else:
+                        logger.error(f"Skipping layer {key}: no valid geometry field")
 
+                logger.debug(f"get_task_parameters: Final layers_to_filter list has {len(layers_to_filter)} layers")
+                for idx, layer_info in enumerate(layers_to_filter):
+                    logger.debug(f"  Layer {idx}: {layer_info.get('layer_name', 'UNKNOWN')} (ID: {layer_info.get('layer_id', 'UNKNOWN')})")
 
                 if task_name == 'filter':
 
@@ -1152,12 +1299,12 @@ class FilterMateApp:
                 if conn is None:
                     error_msg = "Cannot initialize FilterMate database: connection failed"
                     logger.error(error_msg)
-                    iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                    iface.messageBar().pushCritical("FilterMate", error_msg)
                     return
             except Exception as e:
                 error_msg = f"Critical error connecting to database: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                iface.messageBar().pushCritical("FilterMate", error_msg)
                 return
 
             try:
@@ -1268,7 +1415,7 @@ class FilterMateApp:
             except Exception as e:
                 error_msg = f"Error during database initialization: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg, duration=10)
+                iface.messageBar().pushCritical("FilterMate", error_msg)
                 return
             finally:
                 if conn:
