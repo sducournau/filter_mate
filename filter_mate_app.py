@@ -205,7 +205,6 @@ class FilterMateApp:
             
             # Initialize UI profile based on screen resolution
             try:
-                from qgis.PyQt.QtWidgets import QApplication
                 screen = QApplication.primaryScreen()
                 if screen:
                     screen_geometry = screen.geometry()
@@ -237,7 +236,6 @@ class FilterMateApp:
             # Process existing layers AFTER dockwidget is shown and fully initialized
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
             if init_layers != None and len(init_layers) > 0:
-                from qgis.PyQt.QtCore import QTimer
                 # Increased delay to 500ms to ensure complete initialization
                 QTimer.singleShot(500, lambda: self.manage_task('add_layers', init_layers))
 
@@ -247,7 +245,6 @@ class FilterMateApp:
         # This prevents access violations during project transitions
         # Only connect signals once to avoid multiple connections on plugin reload
         if not self._signals_connected:
-            from qgis.PyQt.QtCore import QTimer
             self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
             self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
             # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
@@ -331,7 +328,6 @@ class FilterMateApp:
         if task_name not in ('remove_all_layers', 'project_read', 'new_project'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
                 logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 300ms...")
-                from qgis.PyQt.QtCore import QTimer
                 QTimer.singleShot(300, lambda: self.manage_task(task_name, data))
                 return
 
@@ -348,7 +344,6 @@ class FilterMateApp:
         
         if task_name in ('project_read', 'new_project'):
             # Verify project is valid before processing
-            from qgis.core import QgsProject
             project = QgsProject.instance()
             if not project:
                 logger.warning(f"Project not available for {task_name}, skipping")
