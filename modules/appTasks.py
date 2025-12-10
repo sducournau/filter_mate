@@ -2068,7 +2068,7 @@ class FilterEngineTask(QgsTask):
                         errors = geom.validateGeometry()
                         if errors:
                             logger.debug(f"  Validation errors: {[str(e.what()) for e in errors[:3]]}")  # First 3 errors
-                    except:
+                    except (AttributeError, RuntimeError):
                         pass
                     
                     # Try aggressive repair with multiple strategies
@@ -3657,7 +3657,7 @@ class FilterEngineTask(QgsTask):
                             # Remove incomplete ZIP file
                             try:
                                 os.remove(zip_path)
-                            except:
+                            except (OSError, PermissionError):
                                 pass
                             return False
             
@@ -3678,7 +3678,7 @@ class FilterEngineTask(QgsTask):
             try:
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
-            except:
+            except (OSError, PermissionError):
                 pass
             return False
 
@@ -5561,7 +5561,7 @@ class LayersManagementEngineTask(QgsTask):
                 if conn:
                     try:
                         conn.rollback()
-                    except:
+                    except (AttributeError, OSError):
                         pass
                 raise
             finally:

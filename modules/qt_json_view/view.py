@@ -55,7 +55,7 @@ class JsonView(QtWidgets.QTreeView):
             palette = QgsApplication.palette()
             bg_color = palette.color(QtGui.QPalette.Window)
             is_dark = bg_color.lightness() < 128
-        except:
+        except (ImportError, AttributeError):
             is_dark = False
         
         if is_dark:

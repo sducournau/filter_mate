@@ -2431,7 +2431,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             idx = fields.indexFromName(pk_name)
                             if idx >= 0:
                                 pk_value = input.attributes()[idx]
-                        except:
+                        except (AttributeError, IndexError, KeyError):
                             pass
                     
                     if pk_value is not None:

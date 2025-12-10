@@ -225,7 +225,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Load spatialite extension
             try:
                 conn.load_extension('mod_spatialite')
-            except:
+            except (AttributeError, OSError):
                 try:
                     conn.load_extension('mod_spatialite.dll')  # Windows
                 except Exception as ext_error:
@@ -278,7 +278,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             if conn:
                 try:
                     conn.close()
-                except:
+                except (AttributeError, OSError):
                     pass
             return None, None
     
@@ -446,7 +446,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                         if ':' in authid:
                             try:
                                 srid = int(authid.split(':')[1])
-                            except:
+                            except (ValueError, IndexError):
                                 self.log_warning(f"Could not parse SRID from {authid}, using 4326")
                 
                 # Create temp table
