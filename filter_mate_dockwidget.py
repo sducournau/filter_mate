@@ -396,73 +396,126 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Apply dynamic dimensions to widgets based on active UI profile (compact/normal).
         
-        This method adjusts widget sizes at runtime to match the active profile configuration.
+        Orchestrates the application of dimensions by calling specialized methods.
         Called from setupUiCustom() during initialization.
+        """
+        try:
+            # Apply dimensions in logical groups
+            self._apply_widget_dimensions()
+            self._apply_frame_dimensions()
+            self._harmonize_checkable_pushbuttons()
+            self._apply_layout_spacing()
+            self._harmonize_spacers()
+            self._apply_qgis_widget_dimensions()
+            self._align_key_layouts()
+            self._adjust_row_spacing()
+            
+            logger.info("Successfully applied dynamic dimensions to all widgets")
+            
+        except Exception as e:
+            logger.error(f"Error applying dynamic dimensions: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _apply_widget_dimensions(self):
+        """
+        Apply dimensions to standard Qt widgets (ComboBox, LineEdit, SpinBox, GroupBox).
+        
+        Reads dimensions from UIConfig and applies them to all relevant widgets
+        using findChildren() for batch processing.
         """
         from .modules.ui_config import UIConfig
         from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox, QGroupBox
-        from qgis.gui import (QgsFeaturePickerWidget, QgsFieldExpressionWidget, 
-                              QgsProjectionSelectionWidget, QgsMapLayerComboBox, 
-                              QgsFieldComboBox, QgsCheckableComboBox)
         
+        # Get dimensions from active profile
+        combobox_height = UIConfig.get_config('combobox', 'height')
+        input_height = UIConfig.get_config('input', 'height')
+        groupbox_min_height = UIConfig.get_config('groupbox', 'min_height')
+        
+        # Apply to ComboBoxes
+        for combo in self.findChildren(QComboBox):
+            combo.setMinimumHeight(combobox_height)
+            combo.setMaximumHeight(combobox_height)
+            combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), 
+                              QtWidgets.QSizePolicy.Fixed)
+        
+        # Apply to LineEdits
+        for line_edit in self.findChildren(QLineEdit):
+            line_edit.setMinimumHeight(input_height)
+            line_edit.setMaximumHeight(input_height)
+            line_edit.setSizePolicy(line_edit.sizePolicy().horizontalPolicy(), 
+                                   QtWidgets.QSizePolicy.Fixed)
+        
+        # Apply to SpinBoxes (QDoubleSpinBox and QSpinBox)
+        for spinbox in self.findChildren(QDoubleSpinBox):
+            spinbox.setMinimumHeight(input_height)
+            spinbox.setMaximumHeight(input_height)
+            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
+                                QtWidgets.QSizePolicy.Fixed)
+        
+        for spinbox in self.findChildren(QSpinBox):
+            spinbox.setMinimumHeight(input_height)
+            spinbox.setMaximumHeight(input_height)
+            spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
+                                QtWidgets.QSizePolicy.Fixed)
+        
+        # Apply to GroupBoxes (QgsCollapsibleGroupBox included)
+        for groupbox in self.findChildren(QGroupBox):
+            groupbox.setMinimumHeight(groupbox_min_height)
+        
+        logger.debug(f"Applied widget dimensions: ComboBox={combobox_height}px, Input={input_height}px")
+    
+    def _apply_frame_dimensions(self):
+        """
+        Apply dimensions to frames and widget key containers.
+        
+        Sets min/max widths for widget key containers and heights for main frames.
+        """
+        from .modules.ui_config import UIConfig
+        
+        # Get widget_keys dimensions
+        widget_keys_min_width = UIConfig.get_config('widget_keys', 'min_width')
+        widget_keys_max_width = UIConfig.get_config('widget_keys', 'max_width')
+        
+        # Get frame dimensions
+        frame_exploring_min = UIConfig.get_config('frame_exploring', 'min_height')
+        frame_exploring_max = UIConfig.get_config('frame_exploring', 'max_height')
+        frame_filtering_min = UIConfig.get_config('frame_filtering', 'min_height')
+        
+        # Apply to widget keys containers
+        if hasattr(self, 'widget_exploring_keys'):
+            self.widget_exploring_keys.setMinimumWidth(widget_keys_min_width)
+            self.widget_exploring_keys.setMaximumWidth(widget_keys_max_width)
+        
+        if hasattr(self, 'widget_filtering_keys'):
+            self.widget_filtering_keys.setMinimumWidth(widget_keys_min_width)
+            self.widget_filtering_keys.setMaximumWidth(widget_keys_max_width)
+        
+        if hasattr(self, 'widget_exporting_keys'):
+            self.widget_exporting_keys.setMinimumWidth(widget_keys_min_width)
+            self.widget_exporting_keys.setMaximumWidth(widget_keys_max_width)
+        
+        # Apply to main frames
+        if hasattr(self, 'frame_exploring'):
+            self.frame_exploring.setMinimumHeight(frame_exploring_min)
+            self.frame_exploring.setMaximumHeight(frame_exploring_max)
+        
+        if hasattr(self, 'frame_filtering'):
+            self.frame_filtering.setMinimumHeight(frame_filtering_min)
+        
+        logger.debug(f\"Applied frame dimensions: widget_keys={widget_keys_min_width}-{widget_keys_max_width}px\")
+    
+    def _harmonize_checkable_pushbuttons(self):
+        \"\"\"
+        Harmonize dimensions of all checkable pushbuttons across tabs.
+        
+        Applies consistent sizing to exploring, filtering, and exporting pushbuttons
+        based on the active UI profile (compact/normal).
+        \"\"\"
         try:
-            # Get dimensions from active profile
-            combobox_height = UIConfig.get_config('combobox', 'height')
-            input_height = UIConfig.get_config('input', 'height')
-            groupbox_min_height = UIConfig.get_config('groupbox', 'min_height')
-            
-            # Get widget_keys dimensions
-            widget_keys_min_width = UIConfig.get_config('widget_keys', 'min_width')
-            widget_keys_max_width = UIConfig.get_config('widget_keys', 'max_width')
-            
-            # Get frame dimensions
-            frame_exploring_min = UIConfig.get_config('frame_exploring', 'min_height')
-            frame_exploring_max = UIConfig.get_config('frame_exploring', 'max_height')
-            frame_filtering_min = UIConfig.get_config('frame_filtering', 'min_height')
-            
-            # Apply to ComboBoxes
-            for combo in self.findChildren(QComboBox):
-                combo.setMinimumHeight(combobox_height)
-                combo.setMaximumHeight(combobox_height)
-                combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), 
-                                  QtWidgets.QSizePolicy.Fixed)
-            
-            # Apply to LineEdits
-            for line_edit in self.findChildren(QLineEdit):
-                line_edit.setMinimumHeight(input_height)
-                line_edit.setMaximumHeight(input_height)
-                line_edit.setSizePolicy(line_edit.sizePolicy().horizontalPolicy(), 
-                                       QtWidgets.QSizePolicy.Fixed)
-            
-            # Apply to SpinBoxes (QDoubleSpinBox and QSpinBox)
-            for spinbox in self.findChildren(QDoubleSpinBox):
-                spinbox.setMinimumHeight(input_height)
-                spinbox.setMaximumHeight(input_height)
-                spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
-                                    QtWidgets.QSizePolicy.Fixed)
-            
-            for spinbox in self.findChildren(QSpinBox):
-                spinbox.setMinimumHeight(input_height)
-                spinbox.setMaximumHeight(input_height)
-                spinbox.setSizePolicy(spinbox.sizePolicy().horizontalPolicy(), 
-                                    QtWidgets.QSizePolicy.Fixed)
-            
-            # Apply to GroupBoxes (QgsCollapsibleGroupBox included)
-            for groupbox in self.findChildren(QGroupBox):
-                groupbox.setMinimumHeight(groupbox_min_height)
-            
-            # Apply to widget keys containers
-            if hasattr(self, 'widget_exploring_keys'):
-                self.widget_exploring_keys.setMinimumWidth(widget_keys_min_width)
-                self.widget_exploring_keys.setMaximumWidth(widget_keys_max_width)
-            
-            if hasattr(self, 'widget_filtering_keys'):
-                self.widget_filtering_keys.setMinimumWidth(widget_keys_min_width)
-                self.widget_filtering_keys.setMaximumWidth(widget_keys_max_width)
-            
-            if hasattr(self, 'widget_exporting_keys'):
-                self.widget_exporting_keys.setMinimumWidth(widget_keys_min_width)
-                self.widget_exporting_keys.setMaximumWidth(widget_keys_max_width)
+            from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
+            from qgis.PyQt.QtCore import QSize
+            from .modules.ui_config import UIConfig, DisplayProfile
             
             # Harmonize all checkable pushbuttons in exploring/filtering/exporting sections
             try:
