@@ -21,7 +21,7 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 ```
 filter_mate/
 ├── filter_mate.py              # Plugin entry point (QGIS integration)
-├── filter_mate_app.py          # Main application orchestrator (~1687 lines)
+├── filter_mate_app.py          # Main application orchestrator (~1376 lines after Phase 5a)
 ├── filter_mate_dockwidget.py   # UI dockwidget management (~3877 lines)
 ├── filter_mate_dockwidget_base.py  # Base UI class (auto-generated)
 ├── filter_mate_dockwidget_base.ui  # Qt Designer UI file
@@ -76,21 +76,23 @@ filter_mate/
 
 ## Current Status
 - **Version**: 2.2.5 (December 10, 2025)
-- **Development Version**: 2.3.0-alpha (Phase 3 refactoring in progress)
+- **Development Version**: 2.3.0-alpha (Phase 5a refactoring complete)
 - **Status**: Production - Geographic CRS handling with automatic EPSG:3857 conversion
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
+- **Refactoring Progress**: Phase 1-5a complete (filter_mate_app.py complexity reduced 40%)
 
 ## Recent Development (December 10, 2025)
 
 ### Code Quality Improvements
-**Status**: Phase 1 & 2 & 3a Complete ✅
+**Status**: Phase 1 & 2 & 3 & 4 & 5a Complete ✅
 - **Tests**: 26 unit tests created, CI/CD active
 - **Wildcard Imports**: 94% eliminated (31/33 cleaned, 2 legitimate re-exports kept)
 - **PEP 8 Compliance**: 95% (was 85%)
 - **Code Quality**: 4.5/5 stars (was 2/5)
 - **Bare Except**: 100% eliminated (13/13 fixed)
 - **Null Comparisons**: 100% fixed (27/27 `!= None` → `is not None`)
+- **Code Complexity**: -40% in filter_mate_app.py (779→468 lines, 12 helpers extracted)
 
 ### Phase 3a: Task Module Extraction (✅ Complete)
 **Date**: December 10, 2025 - 23:00
@@ -111,17 +113,30 @@ filter_mate/
 - **Contains**: Complete layer lifecycle management, index creation, metadata detection
 - **Benefits**: Isolation, testability, clearer responsibilities
 - **Breaking Changes**: None (backwards compatibility via __init__.py)
-- **Commit**: Not yet pushed
+- **Commit**: Pushed
 
-### Latest Commits
-- `3d23744` (HEAD) - fixing missing imports
+### Phase 5a: filter_mate_app.py Refactoring (✅ Complete)
+**Date**: December 10, 2025 - Evening
+- **Refactored**: 4 large methods (779 → 468 lines, -40% complexity)
+- **Helper Methods**: 12 new helpers extracted following Single Responsibility Principle
+- **Methods Refactored**:
+  - `init_filterMate_db()`: 227→103 lines (-55%)
+  - `get_task_parameters()`: 198→134 lines (-33%)
+  - `manage_task()`: 164→127 lines (-23%)
+  - `layer_management_engine_task_completed()`: 190→104 lines (-46%)
+- **Benefits**: Better maintainability, testability, reduced complexity
+- **Breaking Changes**: None (100% backward compatibility)
+- **Commits**: 77a628c, 9ab7daa, 947f79a, ce9e18c
+
+### Latest Commits (Phase 5a - December 10, 2025)
+- `ce9e18c` (HEAD) - docs: Update status to Phase 5a complete in all doc files
+- `947f79a` - docs: Update IMPLEMENTATION_STATUS with Phase 5a completion
+- `9ab7daa` - refactor: Phase 5a - Complete filter_mate_app.py refactoring (4 methods)
+- `77a628c` - refactor: Phase 5a - Extract helpers from filter_mate_app.py
+- `3d23744` - fixing missing imports
 - `2c8b627` - docs: Update implementation status with Phase 3a completion
 - `699f637` - refactor: Phase 3a - Extract utilities and cache from appTasks.py
 - `4f672ae` - docs: update implementation status and quality audit
-- `a4612f2` - fix: replace remaining bare except clauses
-- `0d9367e` - style(pep8): replace != None with is not None
-- `92a1f82` - fix: replace bare except clauses with specific exceptions
-- `317337b` - refactor(imports): remove redundant local imports
 
 ## Recent Releases
 
@@ -369,14 +384,16 @@ FilterMate is configured for automatic Serena MCP server activation:
 - Check `POSTGRESQL_AVAILABLE` before PostgreSQL operations
 - Serena MCP server auto-starts when Chat opens (Windows: configured via MCP with SERENA_PROJECT)
 
-## Next Steps (Phase 3 Refactoring)
+## Next Steps (Phase 5b+ Refactoring)
 
-### In Progress
-- ✅ Phase 3a: Extract utilities from appTasks.py (Complete)
-- ✅ Phase 3b: Extract LayersManagementEngineTask (Complete)
-- 🔄 Phase 3c: Extract remaining tasks from appTasks.py (Next)
+### Completed
+- ✅ Phase 1: Test infrastructure (26 tests, CI/CD)
+- ✅ Phase 2: Code quality (wildcard imports, PEP 8, bare except)
+- ✅ Phase 3: File decomposition (appTasks.py → modules/tasks/)
+- ✅ Phase 4: filter_mate_dockwidget.py refactoring (35 methods extracted)
+- ✅ Phase 5a: filter_mate_app.py refactoring (4 methods, 12 helpers, -40% complexity)
 
 ### Planned
-- Phase 4: Decompose filter_mate_dockwidget.py into logical UI components
-- Phase 5: Additional testing and documentation
-- Phase 6: Performance optimization and final polish
+- Phase 5b: Additional method refactoring or test coverage expansion
+- Phase 6: Final optimization and polish
+- Documentation improvements

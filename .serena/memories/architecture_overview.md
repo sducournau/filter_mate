@@ -63,7 +63,7 @@ FilterMate follows a layered architecture with clear separation of concerns:
 
 ### 2. Application Orchestrator
 **File:** `filter_mate_app.py`
-**Lines:** ~1100
+**Lines:** ~1376 (after Phase 5a refactoring - was ~1687)
 **Purpose:** Central coordinator between UI and backend
 
 **Key Responsibilities:**
@@ -74,12 +74,22 @@ FilterMate follows a layered architecture with clear separation of concerns:
 - Result processing
 
 **Key Methods:**
-- `manage_task(task_type, params)`: Central task dispatcher
-- `get_task_parameters()`: Prepares task configuration
-- `layer_management_engine_task_completed()`: Layer operation callback
+- `manage_task(task_type, params)`: Central task dispatcher (127 lines after Phase 5a)
+- `get_task_parameters()`: Prepares task configuration (134 lines after Phase 5a)
+- `layer_management_engine_task_completed()`: Layer operation callback (104 lines after Phase 5a)
 - `filter_engine_task_completed()`: Filter operation callback
 - `apply_subset_filter()`: Applies filter expression to layers
-- `init_filterMate_db()`: Initialize Spatialite metadata database
+- `init_filterMate_db()`: Initialize Spatialite metadata database (103 lines after Phase 5a)
+
+**Phase 5a Refactoring (December 10, 2025):**
+- **12 Helper Methods Extracted** following Single Responsibility Principle
+- **40% Complexity Reduction** (779→468 lines in 4 core methods)
+- **Private Helpers**: `_ensure_db_directory()`, `_create_db_file()`, `_initialize_schema()`, 
+  `_migrate_schema_if_needed()`, `_load_or_create_project()`, `_build_layers_to_filter()`,
+  `_initialize_filter_history()`, `_handle_remove_all_layers()`, `_handle_project_initialization()`,
+  `_validate_layer_info()`, `_update_datasource_for_layer()`, `_remove_datasource_for_layer()`
+- **Complete Docstrings**: All helpers have Args/Returns documentation
+- **Zero Breaking Changes**: 100% backward compatibility maintained
 
 **Signal Handling:**
 - Connects to dockwidget signals (launchingTask, etc.)

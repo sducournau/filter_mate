@@ -958,11 +958,13 @@ Before submitting code:
 
 ## Version-Specific Patterns
 
-### v2.3.0-alpha (Current Development - Phase 3)
+### v2.3.0-alpha (Current Development - Phase 5a Complete)
 - **Task Module**: Import utilities from `modules/tasks/task_utils.py`
 - **Geometry Cache**: Use `SourceGeometryCache` for multi-layer operations
 - **Layer Management**: `LayersManagementEngineTask` now in separate file
 - **Backwards Compatibility**: All imports via `modules/tasks/__init__.py` still work
+- **Method Extraction**: 12 helper methods in filter_mate_app.py following `_verb_noun` pattern
+- **Refactoring Achievement**: 40% complexity reduction (779→468 lines in core methods)
 
 ### v2.2.5+ (Production)
 - **Geographic CRS**: Auto-convert to EPSG:3857 for metric operations
@@ -1023,6 +1025,57 @@ When extracting code from large files:
 5. **Update documentation** (README.md in module directory)
 6. **Test thoroughly** (ensure zero breaking changes)
 7. **Commit atomically** with descriptive message
+
+### Phase 5a Method Extraction Pattern (NEW - December 2025)
+When refactoring large methods (>140 lines):
+
+1. **Identify logical sections** within method
+2. **Extract as private helper methods** with `_verb_noun` naming
+3. **Add complete docstrings** with Args/Returns sections
+4. **Maintain call order** and data flow
+5. **Validate syntax** with `python -m py_compile`
+6. **Test thoroughly** (ensure zero regressions)
+7. **Document metrics** (lines before/after, % reduction)
+8. **Commit incrementally** (one method at a time)
+
+**Example: init_filterMate_db() Refactoring**
+```python
+# BEFORE (227 lines)
+def init_filterMate_db(self):
+    # Database directory creation logic (20 lines)
+    # File creation logic (25 lines)
+    # Schema initialization (35 lines)
+    # Migration logic (40 lines)
+    # Project loading (50 lines)
+    # Additional initialization (57 lines)
+    pass
+
+# AFTER (103 lines + 5 helpers)
+def init_filterMate_db(self):
+    \"\"\"Initialize or load FilterMate database.\"\"\"
+    self._ensure_db_directory()
+    self._create_db_file()
+    self._initialize_schema()
+    self._migrate_schema_if_needed()
+    return self._load_or_create_project()
+
+def _ensure_db_directory(self):
+    \"\"\"Ensure database directory exists.\"\"\"
+    # 20 lines
+
+def _create_db_file(self):
+    \"\"\"Create database file if it doesn't exist.\"\"\"
+    # 25 lines
+
+# etc...
+```
+
+**Benefits:**
+- ✅ -55% complexity (227→103 lines)
+- ✅ Each helper has single responsibility
+- ✅ Easier to test individual steps
+- ✅ Better code organization
+- ✅ Improved maintainability
 
 ### Example: Task Utilities Extraction (Phase 3a)
 ```python
