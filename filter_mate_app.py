@@ -39,6 +39,7 @@ from .modules.tasks import (
     spatialite_connect
 )
 from .modules.appUtils import POSTGRESQL_AVAILABLE
+from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
     show_backend_info, show_progress_message, show_success_with_backend,
     show_performance_warning, show_error_with_context
@@ -192,7 +193,7 @@ class FilterMateApp:
         
         This method should only be called once when the plugin is activated.
         """
-        if self.dockwidget == None:
+        if self.dockwidget is None:
 
             
         
@@ -298,12 +299,6 @@ class FilterMateApp:
             logger.error(error_msg)
             iface.messageBar().pushCritical("FilterMate", error_msg)
             return None
-
-        
-        """Overload configuration qtreeview model to keep configuration file up to date"""
-        # 
-        # self.managerWidgets.model.rowsInserted.connect(self.qtree_signal)
-        # self.managerWidgets.model.rowsRemoved.connect(self.qtree_signal)
     
     def _handle_remove_all_layers(self):
         """Handle remove all layers task."""
@@ -412,16 +407,17 @@ class FilterMateApp:
         if task_name == 'redo':
             self.handle_redo()
             return
-        
-        if task_name == 'redo':
-            self.handle_redo()
-            return
 
         task_parameters = self.get_task_parameters(task_name, data)
+        
+        # Guard: task_parameters can be None if layer is not in PROJECT_LAYERS
+        if task_parameters is None:
+            logger.warning(f"FilterMate: Task '{task_name}' aborted - no valid task parameters")
+            return
 
         if task_name in [name for name in self.tasks_descriptions.keys() if "layer" not in name]:
 
-            if self.dockwidget == None or self.dockwidget.current_layer == None:
+            if self.dockwidget is None or self.dockwidget.current_layer is None:
                 return
             else:
                 current_layer = self.dockwidget.current_layer 
@@ -460,8 +456,6 @@ class FilterMateApp:
                 self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
                 self.appTasks[task_name].begun.connect(self.on_remove_layer_task_begun)
-            
-            # self.appTasks[task_name].taskCompleted.connect(lambda state='connect': self.dockwidget_change_widgets_signal(state))
 
             # CRITICAL: Use Qt.QueuedConnection to defer signal handling and avoid accessing deleted C++ objects
             # The QgsTask object is destroyed by Qt immediately after finished() returns, so direct connections
@@ -702,13 +696,23 @@ class FilterMateApp:
 
         if task_name in [name for name in self.tasks_descriptions.keys() if "layer" not in name]:
 
-            if self.dockwidget == None or self.dockwidget.current_layer == None:
-                return
+            if self.dockwidget is None or self.dockwidget.current_layer is None:
+                return None
             else:
                 current_layer = self.dockwidget.current_layer 
 
-            if current_layer.id() in self.PROJECT_LAYERS.keys():
-                task_parameters = self.PROJECT_LAYERS[current_layer.id()]
+            # CRITICAL: Verify layer is in PROJECT_LAYERS before proceeding
+            if current_layer.id() not in self.PROJECT_LAYERS.keys():
+                logger.warning(f"FilterMate: Layer '{current_layer.name()}' (id: {current_layer.id()}) not found in PROJECT_LAYERS. "
+                              "The layer may not have been processed yet. Try selecting another layer and then back.")
+                iface.messageBar().pushWarning(
+                    "FilterMate", 
+                    f"La couche '{current_layer.name()}' n'est pas encore initialisée. "
+                    "Essayez de sélectionner une autre couche puis revenez à celle-ci."
+                )
+                return None
+            
+            task_parameters = self.PROJECT_LAYERS[current_layer.id()]
 
             if current_layer.subsetString() != '':
                 self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
@@ -1643,14 +1647,6 @@ class FilterMateApp:
                     except Exception:
                         pass
 
-            # if "FILTER" in self.CONFIG_DATA["CURRENT_PROJECT"] and "app_postgresql_temp_schema" in self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]:
-            #     self.app_postgresql_temp_schema = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"]
-            # else:
-            #     self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"] = 'filterMate_temp'
-            #     self.app_postgresql_temp_schema = self.CONFIG_DATA["CURRENT_PROJECT"]["FILTER"]["app_postgresql_temp_schema"]
-
-
-
     def add_project_datasource(self, layer):
 
         connexion, source_uri = get_datasource_connexion_from_layer(layer)
@@ -2006,46 +2002,19 @@ class FilterMateApp:
 
 
     def can_cast(self, dest_type, source_value):
-        try:
-            dest_type(source_value)
-            return True
-        except (ValueError, TypeError):
-            return False
+        """
+        Check if a value can be cast to a destination type.
+        Delegates to centralized type_utils.can_cast().
+        """
+        return can_cast(dest_type, source_value)
 
 
     def return_typped_value(self, value_as_string, action=None):
-        value_typped= None
-        type_returned = None
-
-        if value_as_string == None or value_as_string == '':   
-            value_typped = str('')
-            type_returned = str
-        elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
-            if action == 'save':
-                value_typped = json.dumps(dict(value_as_string))
-            elif action == 'load':
-                value_typped = dict(json.loads(value_as_string))
-            type_returned = dict
-        elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
-            if action == 'save':
-                value_typped = list(value_as_string)
-            elif action == 'load':
-                value_typped = list(json.loads(value_as_string))
-            type_returned = list
-        elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE','TRUE'):
-            value_typped = bool(value_as_string)
-            type_returned = bool
-        elif self.can_cast(float, value_as_string) is True and len(str(value_as_string).split('.')) > 1:
-            value_typped = float(value_as_string)
-            type_returned = float
-        elif self.can_cast(int, value_as_string) is True:
-            value_typped = int(value_as_string)
-            type_returned = int
-        else:
-            value_typped = str(value_as_string)
-            type_returned = str
-
-        return value_typped, type_returned
+        """
+        Convert string value to typed value with type detection.
+        Delegates to centralized type_utils.return_typed_value().
+        """
+        return return_typed_value(value_as_string, action)
 
 
 def zoom_to_features(layer, t0):

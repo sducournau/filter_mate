@@ -105,6 +105,7 @@ from ..prepared_statements import create_prepared_statements
 from .task_utils import (
     spatialite_connect,
     sqlite_execute_with_retry,
+    ensure_db_directory_exists,
     get_best_metric_crs,
     should_reproject_layer,
     SQLITE_TIMEOUT,
@@ -208,59 +209,14 @@ class FilterEngineTask(QgsTask):
         """
         Ensure the database directory exists before connecting.
         
+        Delegates to the centralized ensure_db_directory_exists function
+        in task_utils.py for consistent behavior across all tasks.
+        
         Raises:
             OSError: If directory cannot be created
             ValueError: If db_file_path is invalid
         """
-        if not self.db_file_path:
-            raise ValueError("db_file_path is not set")
-        
-        # Normalize path to handle any separator inconsistencies
-        normalized_path = os.path.normpath(self.db_file_path)
-        db_dir = os.path.dirname(normalized_path)
-        
-        if not db_dir:
-            raise ValueError(f"Invalid database path: {self.db_file_path}")
-        
-        if os.path.exists(db_dir):
-            # Directory already exists, check if it's writable
-            if not os.access(db_dir, os.W_OK):
-                raise OSError(f"Database directory exists but is not writable: {db_dir}")
-            logger.debug(f"Database directory exists: {db_dir}")
-        else:
-            # Validate parent directories before attempting creation
-            parent_dir = os.path.dirname(db_dir)
-            
-            if not parent_dir or not os.path.exists(parent_dir):
-                error_msg = (
-                    f"Cannot create database directory '{db_dir}': "
-                    f"parent directory '{parent_dir}' does not exist. "
-                    f"Original path: {self.db_file_path}"
-                )
-                logger.error(error_msg)
-                raise OSError(error_msg)
-            
-            if not os.access(parent_dir, os.W_OK):
-                error_msg = (
-                    f"Cannot create database directory '{db_dir}': "
-                    f"parent directory '{parent_dir}' is not writable. "
-                    f"Original path: {self.db_file_path}"
-                )
-                logger.error(error_msg)
-                raise OSError(error_msg)
-            
-            # Create directory with all intermediate directories
-            try:
-                os.makedirs(db_dir, exist_ok=True)
-                logger.info(f"Created database directory: {db_dir}")
-            except OSError as e:
-                error_msg = (
-                    f"Failed to create database directory '{db_dir}': {e}. "
-                    f"Original path: {self.db_file_path}, "
-                    f"Normalized: {normalized_path}"
-                )
-                logger.error(error_msg)
-                raise OSError(error_msg) from e
+        ensure_db_directory_exists(self.db_file_path)
     
     
     def _safe_spatialite_connect(self):
@@ -881,7 +837,7 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"Filtering layer {i}/{self.layers_count}: {layer.name()} ({layer_provider_type})")
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
                 
-                if result == True:
+                if result:
                     logger.info(f"{layer.name()} has been filtered")
                 else:
                     logger.error(f"{layer.name()} - errors occurred during filtering")
@@ -1019,7 +975,7 @@ class FilterEngineTask(QgsTask):
                                                                                 source_geom=self.param_source_geom
                                                                                 )
 
-        if self.param_buffer_expression != None and self.param_buffer_expression != '':
+        if self.param_buffer_expression is not None and self.param_buffer_expression != '':
 
 
             if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
@@ -1046,7 +1002,7 @@ class FilterEngineTask(QgsTask):
         
 
 
-        elif self.param_buffer_value != None:
+        elif self.param_buffer_value is not None:
 
             self.param_buffer = self.param_buffer_value
 
@@ -2675,7 +2631,7 @@ class FilterEngineTask(QgsTask):
         logger.info(f"\n🔍 Checking if distant layers should be filtered...")
         logger.info(f"  has_geometric_predicates: {has_geom_predicates}")
         
-        if has_geom_predicates == True:
+        if has_geom_predicates:
             geom_predicates_list = self.task_parameters["filtering"]["geometric_predicates"]
             logger.info(f"  geometric_predicates list: {geom_predicates_list}")
             logger.info(f"  geometric_predicates count: {len(geom_predicates_list)}")

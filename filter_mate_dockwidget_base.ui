@@ -9,14 +9,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>403</width>
-    <height>796</height>
+    <width>448</width>
+    <height>841</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>403</width>
-    <height>760</height>
+    <width>448</width>
+    <height>487</height>
    </size>
   </property>
   <property name="baseSize">
@@ -348,8 +348,8 @@
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>377</width>
-              <height>327</height>
+              <width>418</width>
+              <height>302</height>
              </rect>
             </property>
             <layout class="QGridLayout" name="gridLayout_main_header">
@@ -1023,7 +1023,7 @@
                    <property name="maximumSize">
                     <size>
                      <width>16777215</width>
-                     <height>23</height>
+                     <height>29</height>
                     </size>
                    </property>
                    <property name="font">
@@ -1372,8 +1372,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>375</width>
-                <height>270</height>
+                <width>416</width>
+                <height>295</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -2471,32 +2471,6 @@
                        </property>
                       </widget>
                      </item>
-                     <item>
-                      <widget class="QLineEdit" name="lineEdit_filtering_buffer_value_expression">
-                       <property name="enabled">
-                        <bool>true</bool>
-                       </property>
-                       <property name="font">
-                        <font>
-                         <family>Segoe UI Semibold</family>
-                         <pointsize>10</pointsize>
-                         <weight>75</weight>
-                         <italic>false</italic>
-                         <bold>true</bold>
-                         <underline>false</underline>
-                         <strikeout>false</strikeout>
-                         <stylestrategy>PreferAntialias</stylestrategy>
-                         <kerning>true</kerning>
-                        </font>
-                       </property>
-                       <property name="readOnly">
-                        <bool>false</bool>
-                       </property>
-                       <property name="clearButtonEnabled">
-                        <bool>true</bool>
-                       </property>
-                      </widget>
-                     </item>
                     </layout>
                    </item>
                    <item>
@@ -2561,8 +2535,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>375</width>
-                <height>292</height>
+                <width>416</width>
+                <height>331</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -3420,8 +3394,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>375</width>
-                <height>173</height>
+                <width>416</width>
+                <height>155</height>
                </rect>
               </property>
               <attribute name="icon">

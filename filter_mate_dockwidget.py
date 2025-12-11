@@ -173,6 +173,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._signals_connected = False
         self._pending_layers_update = False  # Flag to track if layers were updated before widgets_initialized
         
+        # Flag to track if LAYER_TREE_VIEW signal is connected (for bidirectional sync)
+        self._layer_tree_view_signal_connected = False
+        
         # Initialize layer state
         self._initialize_layer_state()
     
@@ -278,7 +281,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     current_triggered_function = signal[-1]
                     state = self.changeSignalState(widget_path, current_signal_name, current_triggered_function, custom_action)
         
-        if state == None:
+        if state is None:
             raise SignalStateChangeError(state, widget_path)
 
         return state
@@ -291,22 +294,63 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if isinstance(widget_path, list) and len(widget_path) == 2:
             if hasattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name):
-                state = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].isSignalConnected(self.getSignal(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name))
-                if custom_action is not None:
-                    if custom_action == 'disconnect' and state == True:
-                        getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).disconnect()
-                    elif custom_action == 'connect' and state == False:
-                        getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).connect(current_triggered_function)
+                # Special handling for LAYER_TREE_VIEW to use specific handler disconnect
+                is_layer_tree_view = (widget_path == ["QGIS", "LAYER_TREE_VIEW"])
+                
+                if is_layer_tree_view:
+                    # Use our own flag to track connection state
+                    state = self._layer_tree_view_signal_connected
                 else:
-                    if state == True:
-                        getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).disconnect()
+                    state = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].isSignalConnected(self.getSignal(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name))
+                
+                if custom_action is not None:
+                    if custom_action == 'disconnect' and state is True:
+                        try:
+                            # Use specific handler for disconnect to not break other connections
+                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).disconnect(current_triggered_function)
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = False
+                        except TypeError:
+                            # Signal was not connected or already disconnected
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = False
+                    elif custom_action == 'connect' and state is False:
+                        try:
+                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).connect(current_triggered_function)
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = True
+                        except TypeError:
+                            # Already connected
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = True
+                    elif custom_action == 'connect' and state is True:
+                        pass  # Already connected, skip
+                else:
+                    if state is True:
+                        try:
+                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).disconnect(current_triggered_function)
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = False
+                        except TypeError:
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = False
                     else:
-                        getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).connect(current_triggered_function)
+                        try:
+                            getattr(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name).connect(current_triggered_function)
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = True
+                        except TypeError:
+                            if is_layer_tree_view:
+                                self._layer_tree_view_signal_connected = True
 
-                state = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].isSignalConnected(self.getSignal(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name))   
+                if is_layer_tree_view:
+                    state = self._layer_tree_view_signal_connected
+                else:
+                    state = self.widgets[widget_path[0]][widget_path[1]]["WIDGET"].isSignalConnected(self.getSignal(self.widgets[widget_path[0]][widget_path[1]]["WIDGET"], current_signal_name))
+                
                 return state
         
-        if state == None:
+        if state is None:
             raise SignalStateChangeError(state, widget_path)
 
     def reset_multiple_checkable_combobox(self):
@@ -401,6 +445,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Called from setupUiCustom() during initialization.
         """
         try:
+            # Apply dockwidget minimum size based on profile
+            self._apply_dockwidget_dimensions()
+            
             # Apply dimensions in logical groups
             self._apply_widget_dimensions()
             self._apply_frame_dimensions()
@@ -417,6 +464,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error applying dynamic dimensions: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _apply_dockwidget_dimensions(self):
+        """
+        Apply minimum size to the dockwidget based on active UI profile (compact/normal).
+        
+        This ensures the dockwidget can be resized smaller in compact mode,
+        allowing better screen space management.
+        """
+        from .modules.ui_config import UIConfig
+        from qgis.PyQt.QtCore import QSize
+        
+        # Get dockwidget dimensions from active profile
+        min_width = UIConfig.get_config('dockwidget', 'min_width')
+        min_height = UIConfig.get_config('dockwidget', 'min_height')
+        preferred_width = UIConfig.get_config('dockwidget', 'preferred_width')
+        preferred_height = UIConfig.get_config('dockwidget', 'preferred_height')
+        
+        if min_width and min_height:
+            self.setMinimumSize(QSize(min_width, min_height))
+            logger.debug(f"Applied dockwidget minimum size: {min_width}x{min_height}px")
+        
+        # Set a reasonable preferred size (not enforced, just a hint)
+        if preferred_width and preferred_height:
+            # Only resize if current size is larger than preferred (don't expand small windows)
+            current_size = self.size()
+            if current_size.width() > preferred_width or current_size.height() > preferred_height:
+                self.resize(preferred_width, preferred_height)
+                logger.debug(f"Resized dockwidget to preferred size: {preferred_width}x{preferred_height}px")
     
     def _apply_widget_dimensions(self):
         """
@@ -1088,18 +1163,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["EXPLORING"] = {
                                     "IDENTIFY":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_identify, "SIGNALS":[("clicked", self.exploring_identify_clicked)], "ICON":None},
                                     "ZOOM":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_zoom, "SIGNALS":[("clicked", self.exploring_zoom_clicked)], "ICON":None},
-                                    "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("clicked", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_select_features(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("clicked", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.get_current_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
-                                    "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("clicked", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_link_widgets()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "IS_SELECTING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_selecting, "SIGNALS":[("toggled", lambda state, x='is_selecting', custom_functions={"ON_TRUE": lambda x: self.exploring_select_features(), "ON_FALSE": lambda x: self.exploring_deselect_features()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "IS_TRACKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_tracking, "SIGNALS":[("toggled", lambda state, x='is_tracking', custom_functions={"ON_TRUE": lambda x: self.exploring_zoom_clicked()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "IS_LINKING":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_exploring_linking_widgets, "SIGNALS":[("toggled", lambda state, x='is_linking', custom_functions={"ON_CHANGE": lambda x: self.exploring_link_widgets()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "RESET_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_reset_layer_properties, "SIGNALS":[("clicked", lambda: self.resetLayerVariableEvent())], "ICON":None},
                                     
                                     "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed)]},
-                                    "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", lambda state, x='single_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]},
+                                    "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", lambda state, x='single_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="single_selection")}: self.layer_property_changed(x, state, custom_functions))]},
                                     
-                                    "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", self.exploring_source_params_changed)]},
-                                    "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", lambda state, x='multiple_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]},
+                                    "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", lambda: self.exploring_source_params_changed(groupbox_override="multiple_selection"))]},
+                                    "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", lambda state, x='multiple_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="multiple_selection")}: self.layer_property_changed(x, state, custom_functions))]},
                                     
-                                    "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", lambda state, x='custom_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed()}: self.layer_property_changed(x, state, custom_functions))]}
+                                    "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", lambda state, x='custom_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="custom_selection")}: self.layer_property_changed(x, state, custom_functions))]}
                                     }
 
 
@@ -1673,7 +1748,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True:
 
-            if layer == None:
+            if layer is None:
                 layer = self.current_layer
             else:
                 assert isinstance(layer, QgsVectorLayer)
@@ -1687,7 +1762,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 layer_props = self.PROJECT_LAYERS[layer.id()]
 
-                if layer_props["filtering"]["has_layers_to_filter"] == True:
+                if layer_props["filtering"]["has_layers_to_filter"]:
                     i = 0
                     
                     for key in self.PROJECT_LAYERS:
@@ -2535,12 +2610,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # Safety check: ensure features is a list
-            if not features or not isinstance(features, list) or len(features) == 0:        
+            if not features or not isinstance(features, list) or len(features) == 0:
+                logger.debug("zooming_to_features: No features provided, zooming to layer extent")
                 extent = self.current_layer.extent()
                 self.iface.mapCanvas().zoomToFeatureExtent(extent) 
 
             else: 
                 features_with_geometry = [feature for feature in features if feature.hasGeometry()]
+                logger.debug(f"zooming_to_features: {len(features)} features, {len(features_with_geometry)} with geometry")
+
+                if len(features_with_geometry) == 0:
+                    logger.debug("zooming_to_features: No features have geometry, zooming to layer extent")
+                    extent = self.current_layer.extent()
+                    self.iface.mapCanvas().zoomToFeatureExtent(extent)
+                    return
 
                 if len(features_with_geometry) == 1:
                     feature = features_with_geometry[0]
@@ -2610,34 +2693,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Error in on_layer_selection_changed: {type(e).__name__}: {e}")
 
 
-    def exploring_source_params_changed(self, expression=None):
+    def exploring_source_params_changed(self, expression=None, groupbox_override=None):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
+            # Use groupbox_override if provided, otherwise fall back to current_exploring_groupbox
+            target_groupbox = groupbox_override if groupbox_override is not None else self.current_exploring_groupbox
 
-            if self.current_exploring_groupbox == "single_selection":
+            if target_groupbox == "single_selection":
 
                 expression = self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                if expression is not None and layer_props["exploring"]["single_selection_expression"] != expression:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = expression
+                if expression is not None:
+                    # Always update display expression when expression changes
+                    # Note: layer_property_changed may have already updated PROJECT_LAYERS
+                    if layer_props["exploring"]["single_selection_expression"] != expression:
+                        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = expression
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
                     # CRITICAL: Update linked widgets when single selection expression changes
                     self.exploring_link_widgets()
 
-            elif self.current_exploring_groupbox == "multiple_selection":
+            elif target_groupbox == "multiple_selection":
 
                 expression = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                if expression is not None and layer_props["exploring"]["multiple_selection_expression"] != expression:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
+                if expression is not None:
+                    # Always update display expression when expression changes
+                    # Note: layer_property_changed may have already updated PROJECT_LAYERS
+                    if layer_props["exploring"]["multiple_selection_expression"] != expression:
+                        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
+                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
+                    # CRITICAL: Update linked widgets when multiple selection expression changes
+                    self.exploring_link_widgets()
 
-                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                self.exploring_link_widgets()
-
-            elif self.current_exploring_groupbox == "custom_selection":
+            elif target_groupbox == "custom_selection":
 
                 expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
                 if expression is not None and layer_props["exploring"]["custom_selection_expression"] != expression:
@@ -2669,7 +2759,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            if self.current_layer == None:
+            if self.current_layer is None:
                 return
             
             self.current_layer.removeSelection()
@@ -2685,7 +2775,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if self.widgets_initialized is True and self.current_layer is not None:
             
-            if self.current_layer == None:
+            if self.current_layer is None:
                 return
             
             # Get features from the active groupbox
@@ -2702,22 +2792,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
             
+            # Guard: Check if current_layer is in PROJECT_LAYERS
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"exploring_features_changed: Layer {self.current_layer.name()} not in PROJECT_LAYERS")
+                return []
+            
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
 
+            logger.debug(f"exploring_features_changed: input type={type(input).__name__}, "
+                        f"features count={len(features)}, is_tracking={layer_props['exploring']['is_tracking']}, "
+                        f"is_selecting={layer_props['exploring']['is_selecting']}")
      
             self.exploring_link_widgets()
 
             self.current_layer.removeSelection()
 
             if len(features) == 0:
+                logger.debug("exploring_features_changed: No features to process")
                 return []
         
-            if layer_props["exploring"]["is_selecting"] == True:
+            if layer_props["exploring"]["is_selecting"]:
                 self.current_layer.removeSelection()
                 self.current_layer.select([feature.id() for feature in features])
 
-            if layer_props["exploring"]["is_tracking"] == True:
+            if layer_props["exploring"]["is_tracking"]:
+                logger.debug(f"exploring_features_changed: Tracking {len(features)} features")
                 self.zooming_to_features(features)  
 
             return features
@@ -2727,9 +2827,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
-        if self.widgets_initialized is True and self.current_layer is not None:
+        if self.widgets_initialized and self.current_layer is not None:
 
-            if self.current_layer == None:
+            if self.current_layer is None:
                 return [], None
             
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
@@ -2737,6 +2837,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             expression = None
 
             if isinstance(input, QgsFeature):
+                # Check if input feature is valid
+                if not input.isValid():
+                    logger.debug("get_exploring_features: Input feature is invalid, returning empty")
+                    return [], None
+                    
                 if identify_by_primary_key_name is True:
                     pk_name = layer_props["infos"]["primary_key_name"]
                     # Try to get the primary key value using multiple methods
@@ -2761,14 +2866,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         else:
                             expression = pk_name + " = '{}'".format(pk_value)
                     else:
-                        # If we can't get the primary key, use the feature as-is
-                        features = [input]
-                        print(f"FilterMate Warning: Could not access primary key '{pk_name}' in feature. Using feature directly.")
+                        # If we can't get the primary key, reload feature from layer by ID
+                        # This ensures geometry is loaded correctly for tracking
+                        try:
+                            reloaded_feature = self.current_layer.getFeature(input.id())
+                            if reloaded_feature.isValid():
+                                features = [reloaded_feature]
+                            else:
+                                features = [input]
+                        except Exception:
+                            features = [input]
+                        logger.debug(f"Could not access primary key '{pk_name}' in feature. "
+                                    f"Available fields: {[f.name() for f in input.fields()]}. Using feature directly.")
                 else:
-                    features = [input]
+                    # CRITICAL: Reload feature from layer to ensure geometry is loaded
+                    # QgsFeaturePickerWidget.featureChanged may emit features without geometry
+                    try:
+                        reloaded_feature = self.current_layer.getFeature(input.id())
+                        if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                            features = [reloaded_feature]
+                            logger.debug(f"Reloaded feature {input.id()} with geometry for tracking")
+                        else:
+                            features = [input]
+                    except Exception as e:
+                        logger.debug(f"Could not reload feature {input.id()}: {e}")
+                        features = [input]
 
             elif isinstance(input, list):
-                if len(input) == 0 and custom_expression == None:
+                if len(input) == 0 and custom_expression is None:
                     return features, expression
                 
                 if identify_by_primary_key_name is True:
@@ -2801,26 +2926,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def exploring_link_widgets(self, expression=None):
 
-        if self.widgets_initialized is True and self.current_layer is not None:
+        if self.widgets_initialized and self.current_layer is not None:
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
             layer_features_source = self.current_layer.dataProvider().featureSource() 
             
-            if layer_props["exploring"]["is_linking"] == True:
+            if layer_props["exploring"]["is_linking"]:
                    
 
-                if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid() is True:
-                    if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField() is False:
+                if QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isValid():
+                    if not QgsExpression(layer_props["exploring"]["custom_selection_expression"]).isField():
                         custom_filter = layer_props["exploring"]["custom_selection_expression"]
                         self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(custom_filter, layer_props)
                 if expression is not None:
                     self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
-                elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures() != False:
+                elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures() is not False:
                     features, expression = self.get_exploring_features(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
                     if len(features) > 0 and expression is not None:
                         self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
-                elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures() != False:
+                elif self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures() is not False:
                     features, expression = self.get_exploring_features(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentVisibleFeatures(), True)
                     if len(features) > 0 and expression is not None:
                         self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression(expression)
@@ -2898,10 +3023,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if layer is not None and not isinstance(layer, QgsVectorLayer):
             return (False, None, None)
         
-        # CRITICAL: Prevent recursive calls during layer update
-        if self._updating_current_layer:
-            logger.debug("Blocking recursive call to current_layer_changed")
-            return (False, None, None)
+        # Note: Recursive call check is now done at the beginning of current_layer_changed()
         
         if not self.widgets_initialized:
             return (False, None, None)
@@ -3002,7 +3124,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         # Always synchronize comboBox_filtering_current_layer with current_layer
         lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
-        if lastLayer == None or lastLayer.id() != self.current_layer.id():
+        if lastLayer is None or lastLayer.id() != self.current_layer.id():
             self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
             self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
             self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
@@ -3039,6 +3161,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             if group_state is True:
                 for i, property_tuple in enumerate(tuple_group):
+                    # Skip tuples that don't have a corresponding widget (data-only properties)
+                    if property_tuple[0].upper() not in self.widgets:
+                        continue
+                    if property_tuple[1].upper() not in self.widgets[property_tuple[0].upper()]:
+                        continue
+                    
                     widget_type = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["TYPE"]
                     if widget_type == 'PushButton':
                         if all(key in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()] for key in ["ICON_ON_TRUE", "ICON_ON_FALSE"]):
@@ -3132,23 +3260,99 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"Layer: {layer.name() if layer else 'None'}, widgets_initialized: {self.widgets_initialized}")
             import traceback
             logger.debug(f"Traceback: {traceback.format_exc()}")
+
+
+    def _restore_groupbox_ui_state(self, groupbox_name):
+        """
+        Restore only the visual UI state of exploring groupboxes without widget updates.
+        
+        This method sets the collapsed/expanded state of groupboxes based on the saved
+        groupbox name. Unlike exploring_groupbox_changed(), it does NOT:
+        - Disconnect/reconnect signals
+        - Call setLayer() on widgets
+        - Trigger exploring_link_widgets() or exploring_features_changed()
+        
+        Use this when widgets have already been updated (e.g., after _reload_exploration_widgets())
+        and only the visual groupbox state needs restoration.
+        
+        Args:
+            groupbox_name (str): The groupbox to expand ('single_selection', 'multiple_selection', 
+                               or 'custom_selection')
+        """
+        if not self.widgets_initialized:
+            return
+        
+        # Store current groupbox name
+        self.current_exploring_groupbox = groupbox_name
+        
+        # Save to PROJECT_LAYERS for persistence
+        if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
+            self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = groupbox_name
+        
+        # Set visual state based on groupbox type
+        if groupbox_name == "single_selection":
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+            # Enable widgets for this mode
+            if self.current_layer is not None:
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+                
+        elif groupbox_name == "multiple_selection":
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+            # Enable widgets for this mode
+            if self.current_layer is not None:
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+                
+        elif groupbox_name == "custom_selection":
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
+            self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
+            self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
+            self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
+            # Enable widgets for this mode
+            if self.current_layer is not None:
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
     
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
         """
         Reconnect all layer-related widget signals after updates.
         
-        Also restores exploring groupbox state and connects layer selection signal.
+        Also restores exploring groupbox UI state and connects layer selection signal.
+        
+        NOTE: This method now uses _restore_groupbox_ui_state() instead of 
+        exploring_groupbox_changed() to avoid double processing of widgets.
+        The widget layer updates are already done in _reload_exploration_widgets().
         """
         # Reconnect all disconnected signals
         for widget_path in widgets_to_reconnect:
             self.manageSignal(widget_path, 'connect')
         
-        # Reconnect legend link if enabled
+        # Reconnect legend link if enabled - ALWAYS reconnect the signal first
         if self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
-            if self.iface.activeLayer() is not None and self.iface.activeLayer().id() != self.current_layer.id():
-                self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
+            # First reconnect the signal to ensure bidirectional sync continues working
             widget_path = ["QGIS","LAYER_TREE_VIEW"]
             self.manageSignal(widget_path, 'connect')
+            
+            # Then sync the Layer Tree View with current_layer (ComboBox → Layer Tree View sync)
+            if self.current_layer is not None:
+                active_layer = self.iface.activeLayer()
+                if active_layer is None or active_layer.id() != self.current_layer.id():
+                    # Block the signal temporarily to avoid recursive call
+                    self.manageSignal(widget_path, 'disconnect')
+                    self.widgets["QGIS"]["LAYER_TREE_VIEW"]["WIDGET"].setCurrentLayer(self.current_layer)
+                    self.manageSignal(widget_path, 'connect')
         
         # Connect selectionChanged signal for current layer to enable tracking
         if self.current_layer is not None:
@@ -3159,16 +3363,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning(f"Could not connect selectionChanged signal to current layer {self.current_layer.name()}: {type(e).__name__}: {e}")
                 self.current_layer_selection_connection = None
         
-        # Restore exploring groupbox state and ensure widgets are properly configured
-        # exploring_groupbox_changed() will set UI state AND update widgets with current layer
+        # Restore exploring groupbox UI state only (no widget updates - already done in _reload_exploration_widgets)
+        # This replaces the previous call to exploring_groupbox_changed() which caused double processing
         if "current_exploring_groupbox" in layer_props.get("exploring", {}):
             saved_groupbox = layer_props["exploring"]["current_exploring_groupbox"]
             if saved_groupbox:
-                self.exploring_groupbox_changed(saved_groupbox)
+                self._restore_groupbox_ui_state(saved_groupbox)
         elif self.current_exploring_groupbox:
-            self.exploring_groupbox_changed(self.current_exploring_groupbox)
+            self._restore_groupbox_ui_state(self.current_exploring_groupbox)
         else:
-            self.exploring_groupbox_changed("single_selection")
+            self._restore_groupbox_ui_state("single_selection")
+        
+        # Link widgets and trigger feature update (previously done in exploring_groupbox_changed)
+        if self.current_layer is not None:
+            self.exploring_link_widgets()
+            # Trigger feature update based on current groupbox mode
+            if self.current_exploring_groupbox == "single_selection":
+                if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                    self.exploring_features_changed(self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature())
+            elif self.current_exploring_groupbox == "multiple_selection":
+                if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                    # Use same pattern as _configure_multiple_selection_groupbox()
+                    self.exploring_features_changed(self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures(), True)
+            elif self.current_exploring_groupbox == "custom_selection":
+                # For custom selection, trigger custom selection handling
+                self.exploring_custom_selection()
 
 
     def current_layer_changed(self, layer):
@@ -3178,14 +3397,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Orchestrates layer change by validating, disconnecting signals, 
         synchronizing widgets, and reconnecting signals.
         """
+        # CRITICAL: Check lock BEFORE any processing
+        if self._updating_current_layer:
+            return
+        
+        # Set lock immediately
+        self._updating_current_layer = True
+            
         try:
             # Validate layer and prepare for change
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
             if not should_continue:
                 return
-            
-            # Set update lock to prevent recursive calls
-            self._updating_current_layer = True
             
             # Reset expressions for new layer
             self._reset_layer_expressions(layer_props)
@@ -3202,14 +3425,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Reconnect all signals and restore state
             self._reconnect_layer_signals(widgets_to_reconnect, layer_props)
             
-        except (AttributeError, KeyError, RuntimeError) as e:
-            # Widget initialization may not be complete
+        except Exception as e:
             logger.error(f"Error in current_layer_changed: {type(e).__name__}: {e}")
-            logger.debug(f"Layer: {layer.name() if layer else 'None'}, widgets_initialized: {self.widgets_initialized}")
-            import traceback
-            logger.debug(f"Traceback: {traceback.format_exc()}")
         finally:
-            # CRITICAL: Always release the lock, even if an error occurred
+            # CRITICAL: Always release the lock
             self._updating_current_layer = False
 
 
@@ -3460,7 +3679,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Orchestrates property updates by type (is/selection_expression/other).
         """
         if self.widgets_initialized is True and self.current_layer is not None:
-            if self.current_layer == None:
+            if self.current_layer is None:
                 return
             
             # Disconnect exploring widgets
@@ -3530,6 +3749,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 else:
                     self.properties_group_state_enabler(properties_tuples)
                     for i, property_path in enumerate(properties_tuples):
+                        # Skip tuples that don't have a corresponding widget (data-only properties)
+                        if property_path[0].upper() not in self.widgets:
+                            continue
+                        if property_path[1].upper() not in self.widgets[property_path[0].upper()]:
+                            continue
+                        
                         widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
                         if widget_type == 'PushButton':
                             self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setChecked(self.project_props[property_path[0].upper()][property_path[1].upper()])
@@ -3567,6 +3792,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             for tuple in tuple_group:
+                # Skip tuples that don't have a corresponding widget (data-only properties)
+                if tuple[0].upper() not in self.widgets:
+                    continue
+                if tuple[1].upper() not in self.widgets[tuple[0].upper()]:
+                    continue
+                    
                 widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
                 self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(True)
                 
@@ -3579,6 +3810,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
             for i, property_path in enumerate(tuple_group):
+                # Skip tuples that don't have a corresponding widget (data-only properties)
+                if property_path[0].upper() not in self.widgets:
+                    continue
+                if property_path[1].upper() not in self.widgets[property_path[0].upper()]:
+                    continue
+                    
                 if state is False:
                     widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
                     self.manageSignal([property_path[0].upper(),property_path[1].upper()], 'disconnect')
@@ -3669,7 +3906,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Update stored value to string format
                 layer_props["filtering"]["buffer_value_expression"] = buffer_expression
             
-            if buffer_expression != '':
+            has_valid_expression = buffer_expression and buffer_expression.strip()
+            
+            if has_valid_expression:
                 property = QgsProperty.fromExpression(buffer_expression)
             else:
                 property = QgsProperty()
@@ -3677,25 +3916,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Initialize the property button with the layer context
             self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, property, property_definition, self.current_layer)
             
-            # Register the spinbox to be controlled by the property button
-            # When property is active (expression mode), spinbox is disabled
-            # When property is inactive (static mode), spinbox is enabled
-            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], False)
+            # Check if property button is active AND has valid expression
+            is_active = layer_props["filtering"]["buffer_value_property"]
             
-            # Set initial state based on whether there's an expression
-            if property.propertyType() == 0:
-                # No expression: show spinbox
-                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(True)
-            else:
-                # Has expression: property button will control via its own expression widget
-                # Spinbox will be disabled by the property button
-                pass
-
-
-                
-
-
-
+            # Spinbox disabled only when property button is active AND has valid expression
+            spinbox_enabled = not (is_active and has_valid_expression)
+            self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
 
 
     def filtering_buffer_property_changed(self):
@@ -3711,16 +3937,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'disconnect')
 
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            # Use widget state directly instead of stored value (which may not be updated yet)
+            is_active = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
+            has_valid_expression = False
             
-            if layer_props["filtering"]["buffer_value_property"] is True:
-                # Property button is active: get expression
-                expression = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty().asExpression()
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = expression
+            if is_active:
+                # Property button is active: get expression from the widget
+                qgs_property = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty()
+                if qgs_property.propertyType() == QgsProperty.ExpressionBasedProperty:
+                    expression = qgs_property.asExpression()
+                    if expression and expression.strip():
+                        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = expression
+                        has_valid_expression = True
+                    else:
+                        self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
+                else:
+                    # No valid expression, clear it
+                    self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
             else:
                 # Property button is inactive: clear expression, use spinbox value
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
+
+            # Enable/disable spinbox based on property button state and expression validity
+            # Spinbox disabled only when property button is active AND has valid expression
+            spinbox_enabled = not (is_active and has_valid_expression)
+            self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
 
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'connect')
@@ -3732,19 +3974,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
               
     def dialog_export_output_path(self):
 
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
+        if self.widgets_initialized and self.has_loaded_layers:
 
             path = ''
             datatype = ''
 
             state = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked()
 
-            if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() == True:  
+            if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked():  
                 datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText()
 
-            if state == True:
+            if state:
 
-                if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked() == True:
+                if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked():
 
                     layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
                     if len(layers) == 1 and datatype != '':
@@ -3782,7 +4024,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def reset_export_output_path(self):
 
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
+        if self.widgets_initialized and self.has_loaded_layers:
 
             if str(self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text()) == '':
                 self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
@@ -3792,12 +4034,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def dialog_export_output_pathzip(self):
 
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
+        if self.widgets_initialized and self.has_loaded_layers:
             
             path = ''
             state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
 
-            if state == True:
+            if state:
 
                 path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name) ,'*.zip')[0])
 
@@ -3828,18 +4070,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
 
-            if state == None:
+            if state is None:
                 state = self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"]
 
-
+            print(f"FilterMate DEBUG: filtering_auto_current_layer_changed - state={state}")
             self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
 
             if state is True:
                 self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
-                self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
+                print(f"FilterMate DEBUG: filtering_auto_current_layer_changed - Connecting LAYER_TREE_VIEW signal")
+                result = self.manageSignal(["QGIS","LAYER_TREE_VIEW"], 'connect')
+                print(f"FilterMate DEBUG: filtering_auto_current_layer_changed - connect result: {result}")
 
             elif state is False:
                 self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
+                print(f"FilterMate DEBUG: filtering_auto_current_layer_changed - Disconnecting LAYER_TREE_VIEW signal")
                 self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
                 
             self.setProjectVariablesEvent()
@@ -4085,7 +4330,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             properties = []
 
         if self.widgets_initialized is True:
-            if layer == None:
+            if layer is None:
                 layer = self.current_layer
             
             # Ensure properties is a list type for PyQt signal
@@ -4108,7 +4353,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             properties = []
 
         if self.widgets_initialized is True:
-            if layer == None:
+            if layer is None:
                 layer = self.current_layer
             
             # Double-check layer is valid before emitting signal
@@ -4142,7 +4387,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             properties = []
 
         if self.widgets_initialized is True:
-            if layer == None:
+            if layer is None:
                 layer = self.current_layer
             
             # Ensure properties is a list type for PyQt signal

@@ -196,7 +196,9 @@ class UIConfig:
             # Dockwidget dimensions
             "dockwidget": {
                 "min_width": 280,
-                "preferred_width": 350
+                "min_height": 400,
+                "preferred_width": 350,
+                "preferred_height": 600
             }
         },
         
@@ -364,7 +366,9 @@ class UIConfig:
             # Dockwidget dimensions
             "dockwidget": {
                 "min_width": 350,
-                "preferred_width": 450
+                "min_height": 550,
+                "preferred_width": 450,
+                "preferred_height": 750
             }
         }
     }

@@ -23,15 +23,19 @@
 
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QApplication
+from qgis.PyQt.QtWidgets import QAction, QApplication, QMenu, QMessageBox
 from qgis.utils import iface
+from qgis.core import QgsMessageLog, Qgis
 from functools import partial
+import shutil
+import json
 
 # Initialize Qt resources from file resources.py
 from .resources import *  # Qt resources must be imported with wildcard
 import os
 import os.path
 from .filter_mate_app import FilterMateApp
+from .config.config import ENV_VARS, init_env_vars
 
 class FilterMate:
     """QGIS Plugin Implementation."""
@@ -171,11 +175,24 @@ class FilterMate:
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
         icon_path = ':/plugins/filter_mate/icon.png'
+        
+        # Action principale pour ouvrir FilterMate
         self.add_action(
             icon_path,
             text=self.tr(u'FilterMate'),
             callback=self.run,
-            parent=self.iface.mainWindow())
+            parent=self.iface.mainWindow(),
+            status_tip=self.tr(u'Ouvrir le panneau FilterMate'))
+        
+        # Action pour réinitialiser la configuration et la base de données
+        reset_icon_path = ':/plugins/filter_mate/icons/reset_properties.png'
+        self.add_action(
+            reset_icon_path,
+            text=self.tr(u'Réinitialiser config et base de données'),
+            callback=self.reset_configuration,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=False,
+            status_tip=self.tr(u'Réinitialiser la configuration par défaut et supprimer la base de données SQLite'))
 
     #--------------------------------------------------------------------------
 
@@ -270,6 +287,94 @@ class FilterMate:
     #     """Signal to overload configuration qtreeview model to keep configuration file up to date"""
     #     global CONFIG_SCOPE
     #     CONFIG_SCOPE = True
+
+    def reset_configuration(self):
+        """Reset the configuration to default values and optionally delete the SQLite database.
+        
+        This method:
+        1. Copies config.default.json to config.json
+        2. Optionally deletes the SQLite database file
+        3. Prompts user to restart QGIS for changes to take effect
+        """
+        from qgis.PyQt.QtWidgets import QMessageBox
+        import shutil
+        
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self.iface.mainWindow(),
+            self.tr('Réinitialiser la configuration'),
+            self.tr('Êtes-vous sûr de vouloir réinitialiser la configuration par défaut ?\n\n'
+                   'Cette action va :\n'
+                   '- Restaurer les paramètres par défaut\n'
+                   '- Supprimer la base de données des couches\n\n'
+                   'QGIS devra être redémarré pour appliquer les changements.'),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        try:
+            config_dir = os.path.join(self.plugin_dir, 'config')
+            config_file = os.path.join(config_dir, 'config.json')
+            default_config_file = os.path.join(config_dir, 'config.default.json')
+            
+            # Copy default config to config.json
+            if os.path.exists(default_config_file):
+                shutil.copy2(default_config_file, config_file)
+                self.iface.messageBar().pushSuccess(
+                    "FilterMate",
+                    self.tr("Configuration réinitialisée avec succès.")
+                )
+            else:
+                self.iface.messageBar().pushWarning(
+                    "FilterMate",
+                    self.tr("Fichier de configuration par défaut introuvable.")
+                )
+                return
+            
+            # Try to delete SQLite database
+            from config.config import ENV_VARS, init_env_vars
+            
+            # Re-initialize to get current paths
+            try:
+                init_env_vars()
+                plugin_config_dir = ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "")
+                
+                if plugin_config_dir and os.path.isdir(plugin_config_dir):
+                    # Look for SQLite files
+                    for filename in os.listdir(plugin_config_dir):
+                        if filename.endswith('.db') or filename.endswith('.sqlite'):
+                            db_path = os.path.join(plugin_config_dir, filename)
+                            try:
+                                os.remove(db_path)
+                                self.iface.messageBar().pushInfo(
+                                    "FilterMate",
+                                    self.tr(f"Base de données supprimée : {filename}")
+                                )
+                            except OSError as e:
+                                self.iface.messageBar().pushWarning(
+                                    "FilterMate",
+                                    self.tr(f"Impossible de supprimer {filename}: {e}")
+                                )
+            except Exception as e:
+                # Non-critical error, config was already reset
+                pass
+            
+            # Prompt to restart QGIS
+            QMessageBox.information(
+                self.iface.mainWindow(),
+                self.tr('Redémarrage requis'),
+                self.tr('La configuration a été réinitialisée.\n\n'
+                       'Veuillez redémarrer QGIS pour appliquer les changements.')
+            )
+            
+        except Exception as e:
+            self.iface.messageBar().pushCritical(
+                "FilterMate",
+                self.tr(f"Erreur lors de la réinitialisation : {str(e)}")
+            )
 
 
     def run(self):

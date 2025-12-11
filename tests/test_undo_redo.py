@@ -55,7 +55,7 @@ def test_filter_history():
     
     # Push first state
     history.push_state("filter1", 100, "First filter")
-    assert history.can_undo() == False  # Can't undo from first state
+    assert not history.can_undo()  # Can't undo from first state
     assert not history.can_redo()
     print("✓ First state push works")
     
@@ -68,7 +68,7 @@ def test_filter_history():
     # Undo
     prev_state = history.undo()
     assert prev_state.expression == "filter1"
-    assert history.can_undo() == False
+    assert not history.can_undo()
     assert history.can_redo()
     print("✓ Undo works")
     
@@ -149,7 +149,7 @@ def test_history_manager():
         remote_layers={"layer2": ("filter2", 50)}
     )
     
-    assert manager.can_undo_global() == False  # First state
+    assert not manager.can_undo_global()  # First state
     assert not manager.can_redo_global()
     print("✓ Global history push works")
     

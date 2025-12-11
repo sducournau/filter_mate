@@ -137,16 +137,16 @@ class PopulateListEngineTask(QgsTask):
         if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
             self.parent.list_widgets[self.layer.id()].setTotalFeaturesListCount(total_features_list_count)
 
-        if layer_features_source != None and has_limit is True:
+        if layer_features_source is not None and has_limit is True:
             limit = self.parent.list_widgets[self.layer.id()].getLimit()
             
         
-        if layer_features_source != None:
+        if layer_features_source is not None:
             if self.parent.list_widgets[self.layer.id()].getFilterExpression() != '':
                 filter_expression = self.parent.list_widgets[self.layer.id()].getFilterExpression()
                 if QgsExpression(filter_expression).isValid():
 
-                    if filter_txt_splitted != None:
+                    if filter_txt_splitted is not None:
                         filter_txt_splitted_final = []
                         for filter_txt in filter_txt_splitted:
                             filter_txt_splitted_final.append("""{display_expression} *~ '{filter_txt}'""".format(display_expression=self.display_expression,
@@ -190,7 +190,7 @@ class PopulateListEngineTask(QgsTask):
             
             else:
 
-                if filter_txt_splitted != None:
+                if filter_txt_splitted is not None:
                     filter_txt_splitted_final = []
                     for filter_txt in filter_txt_splitted:
                         filter_txt_splitted_final.append("""{display_expression} *~ '{filter_txt}'""".format(display_expression=self.display_expression,
@@ -569,19 +569,19 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         return selection
 
     def displayExpression(self):
-        if self.layer != None:
+        if self.layer is not None:
             return self.list_widgets[self.layer.id()].getDisplayExpression()
         else:
             return False
       
     def currentLayer(self):
-        if self.layer != None:
+        if self.layer is not None:
             return self.layer
         else:
             return False
     
     def currentSelectedFeatures(self):
-        if self.layer != None:
+        if self.layer is not None:
             # Vérifier que le layer existe toujours dans list_widgets
             if self.layer.id() not in self.list_widgets:
                 return False
@@ -591,7 +591,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             return False
         
     def currentVisibleFeatures(self):
-        if self.layer != None:
+        if self.layer is not None:
             # Vérifier que le layer existe toujours dans list_widgets
             if self.layer.id() not in self.list_widgets:
                 return False
@@ -604,8 +604,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         try:
 
-            if layer != None:
-                if self.layer != None:
+            if layer is not None:
+                if self.layer is not None:
                     self.filter_le.clear()
                     self.items_le.clear()
                     
@@ -650,7 +650,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     
 
     def setFilterExpression(self, filter_expression, layer_props):
-        if self.layer != None:
+        if self.layer is not None:
             if self.layer.id() not in self.list_widgets:
                 self.manage_list_widgets(layer_props)
             if self.layer.id() in self.list_widgets:  
@@ -663,7 +663,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def setDisplayExpression(self, expression):
         
-        if self.layer != None:
+        if self.layer is not None:
             # Check if widget exists for this layer
             if self.layer.id() not in self.list_widgets:
                 logger.warning(f"No list widget found for layer {self.layer.id()} in setDisplayExpression")
@@ -707,7 +707,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             nonSubset_features_list = [feature[identifier_field_name] for feature in self.layer.getFeatures()]
             if event.button() == Qt.LeftButton:
                 clicked_item = self.list_widgets[self.layer.id()].itemAt(event.pos())
-                if clicked_item != None:
+                if clicked_item is not None:
                     id_item = clicked_item.data(3)
                     if clicked_item.checkState() == Qt.Checked:
                         clicked_item.setCheckState(Qt.Unchecked)
@@ -744,7 +744,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def connect_filter_lineEdit(self):
 
-        if self.layer != None:
+        if self.layer is not None:
             if self.layer.id() in self.list_widgets:
                 if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                     try:
@@ -842,7 +842,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.launch_task(action)
         
     def filter_items(self, filter_txt=None):
-        if filter_txt == None:
+        if filter_txt is None:
             self.filter_txt_limit_changed = True
             self.filter_txt = self.filter_le.text()
         else:
@@ -1077,7 +1077,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
         item.setData(icon, role=Qt.DecorationRole)
 
 
-        if data != None:
+        if data is not None:
             item.setData(data, role=Qt.UserRole)
 
         
@@ -1089,7 +1089,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
 
     def setItemCheckState(self, i, state=None):
         item = self.model().item(i)
-        if state != None:
+        if state is not None:
             item.setCheckState(state)
         else:
             state = item.data(Qt.CheckStateRole)

@@ -24,11 +24,13 @@ from .layer_management_task import LayersManagementEngineTask
 from .task_utils import (
     spatialite_connect,
     sqlite_execute_with_retry,
+    ensure_db_directory_exists,
     get_best_metric_crs,
     should_reproject_layer,
     SQLITE_TIMEOUT,
     SQLITE_MAX_RETRIES,
     SQLITE_RETRY_DELAY,
+    SQLITE_MAX_RETRY_TIME,
     MESSAGE_TASKS_CATEGORIES
 )
 
@@ -45,11 +47,13 @@ __all__ = [
     # Utilities (from task_utils.py - Phase 3a - ✅)
     'spatialite_connect',
     'sqlite_execute_with_retry',
+    'ensure_db_directory_exists',
     'get_best_metric_crs',
     'should_reproject_layer',
     'SQLITE_TIMEOUT',
     'SQLITE_MAX_RETRIES',
     'SQLITE_RETRY_DELAY',
+    'SQLITE_MAX_RETRY_TIME',
     
     # Cache (from geometry_cache.py - Phase 3a - ✅)
     'SourceGeometryCache',

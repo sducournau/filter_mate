@@ -33,6 +33,7 @@ from qgis import processing
 import logging
 import os
 import json
+import sqlite3
 import uuid
 from collections import OrderedDict
 import re
@@ -62,7 +63,15 @@ from ..appUtils import (
 )
 
 # Import task utilities
-from .task_utils import spatialite_connect, sqlite_execute_with_retry, MESSAGE_TASKS_CATEGORIES
+from .task_utils import (
+    spatialite_connect, 
+    sqlite_execute_with_retry, 
+    ensure_db_directory_exists,
+    MESSAGE_TASKS_CATEGORIES
+)
+
+# Import type utilities
+from ..type_utils import can_cast, return_typed_value
 
 # Conditional import for PostgreSQL support
 try:
@@ -141,59 +150,14 @@ class LayersManagementEngineTask(QgsTask):
         """
         Ensure the database directory exists before connecting.
         
+        Delegates to the centralized ensure_db_directory_exists function
+        in task_utils.py for consistent behavior across all tasks.
+        
         Raises:
             OSError: If directory cannot be created
             ValueError: If db_file_path is invalid
         """
-        if not self.db_file_path:
-            raise ValueError("db_file_path is not set")
-        
-        # Normalize path to handle any separator inconsistencies
-        normalized_path = os.path.normpath(self.db_file_path)
-        db_dir = os.path.dirname(normalized_path)
-        
-        if not db_dir:
-            raise ValueError(f"Invalid database path: {self.db_file_path}")
-        
-        if os.path.exists(db_dir):
-            # Directory already exists, check if it's writable
-            if not os.access(db_dir, os.W_OK):
-                raise OSError(f"Database directory exists but is not writable: {db_dir}")
-            logger.debug(f"Database directory exists: {db_dir}")
-        else:
-            # Validate parent directories before attempting creation
-            parent_dir = os.path.dirname(db_dir)
-            
-            if not parent_dir or not os.path.exists(parent_dir):
-                error_msg = (
-                    f"Cannot create database directory '{db_dir}': "
-                    f"parent directory '{parent_dir}' does not exist. "
-                    f"Original path: {self.db_file_path}"
-                )
-                logger.error(error_msg)
-                raise OSError(error_msg)
-            
-            if not os.access(parent_dir, os.W_OK):
-                error_msg = (
-                    f"Cannot create database directory '{db_dir}': "
-                    f"parent directory '{parent_dir}' is not writable. "
-                    f"Original path: {self.db_file_path}"
-                )
-                logger.error(error_msg)
-                raise OSError(error_msg)
-            
-            # Create directory with all intermediate directories
-            try:
-                os.makedirs(db_dir, exist_ok=True)
-                logger.info(f"Created database directory: {db_dir}")
-            except OSError as e:
-                error_msg = (
-                    f"Failed to create database directory '{db_dir}': {e}. "
-                    f"Original path: {self.db_file_path}, "
-                    f"Normalized: {normalized_path}"
-                )
-                logger.error(error_msg)
-                raise OSError(error_msg) from e
+        ensure_db_directory_exists(self.db_file_path)
     
     
     def _safe_spatialite_connect(self):
@@ -989,37 +953,55 @@ class LayersManagementEngineTask(QgsTask):
         """
         Select layer properties from Spatialite database.
         
+        Uses retry logic to handle database lock contention from concurrent access.
+        
         Args:
             layer_id (str): Layer ID to select properties for
             
         Returns:
             list: List of (meta_type, meta_key, meta_value) tuples
         """
-        results = []
-        conn = self._safe_spatialite_connect()
-        cur = conn.cursor()
-        cur.execute(
-            """SELECT meta_type, meta_key, meta_value FROM fm_project_layers_properties  
-               WHERE fk_project = ? and layer_id = ?""",
-            (str(self.project_uuid), layer_id)
+        def do_select():
+            conn = None
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT meta_type, meta_key, meta_value FROM fm_project_layers_properties  
+                       WHERE fk_project = ? and layer_id = ?""",
+                    (str(self.project_uuid), layer_id)
+                )
+                results = cur.fetchall()   
+                cur.close()
+                return results
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except (AttributeError, OSError, sqlite3.Error):
+                        pass
+        
+        return sqlite_execute_with_retry(
+            do_select, 
+            operation_name=f"select properties for layer {layer_id}"
         )
-        results = cur.fetchall()   
-        conn.commit()
-        cur.close()
-        conn.close()
-        return results
     
     def insert_properties_to_spatialite(self, layer_id, layer_props):
         """
         Insert layer properties into Spatialite database.
+        
+        Uses retry logic to handle database lock contention from concurrent access.
         
         Args:
             layer_id (str): Layer ID
             layer_props (dict): Dictionary of layer properties to insert
         """
         def do_insert():
-            conn = self._safe_spatialite_connect()
+            conn = None
             try:
+                conn = self._safe_spatialite_connect()
+                # Begin explicit transaction for better lock management
+                conn.execute('BEGIN IMMEDIATE')
                 cur = conn.cursor()
                 for key_group in layer_props:
                     for key in layer_props[key_group]:
@@ -1045,12 +1027,15 @@ class LayersManagementEngineTask(QgsTask):
                 if conn:
                     try:
                         conn.rollback()
-                    except (AttributeError, OSError):
+                    except (AttributeError, OSError, sqlite3.Error):
                         pass
                 raise
             finally:
                 if conn:
-                    conn.close()
+                    try:
+                        conn.close()
+                    except (AttributeError, OSError, sqlite3.Error):
+                        pass
         
         sqlite_execute_with_retry(
             do_insert, 
@@ -1060,6 +1045,7 @@ class LayersManagementEngineTask(QgsTask):
     def can_cast(self, dest_type, source_value):
         """
         Check if a value can be cast to a destination type.
+        Delegates to centralized type_utils.can_cast().
         
         Args:
             dest_type (type): Target type
@@ -1068,15 +1054,12 @@ class LayersManagementEngineTask(QgsTask):
         Returns:
             bool: True if castable, False otherwise
         """
-        try:
-            dest_type(source_value)
-            return True
-        except (ValueError, TypeError, OverflowError):
-            return False
+        return can_cast(dest_type, source_value)
 
     def return_typped_value(self, value_as_string, action=None):
         """
         Convert string value to typed value with type detection.
+        Delegates to centralized type_utils.return_typed_value().
         
         Args:
             value_as_string: String value to convert
@@ -1085,41 +1068,7 @@ class LayersManagementEngineTask(QgsTask):
         Returns:
             tuple: (typed_value, type_returned)
         """
-        value_typped = None
-        type_returned = None
-
-        if value_as_string is None or value_as_string == '':   
-            value_typped = str('')
-            type_returned = str
-        elif str(value_as_string).find('{') == 0 and self.can_cast(dict, value_as_string) is True:
-            if action == 'save':
-                value_typped = json.dumps(dict(value_as_string))
-            elif action == 'load':
-                value_typped = dict(json.loads(value_as_string))
-            type_returned = dict
-        elif str(value_as_string).find('[') == 0 and self.can_cast(list, value_as_string) is True:
-            if action == 'save':
-                value_typped = list(value_as_string)
-            elif action == 'load':
-                value_typped = list(json.loads(value_as_string))
-            type_returned = list
-        elif self.can_cast(bool, value_as_string) is True and str(value_as_string).upper() in ('FALSE', 'TRUE'):
-            if str(value_as_string).upper() == 'FALSE':
-                value_typped = False
-            elif str(value_as_string).upper() == 'TRUE':
-                value_typped = True
-            type_returned = bool
-        elif self.can_cast(float, value_as_string) is True and len(str(value_as_string).split('.')) > 1:
-            value_typped = float(value_as_string)
-            type_returned = float
-        elif self.can_cast(int, value_as_string) is True:
-            value_typped = int(value_as_string)
-            type_returned = int
-        else:
-            value_typped = str(value_as_string)
-            type_returned = str
-
-        return value_typped, type_returned
+        return return_typed_value(value_as_string, action)
 
     def cancel(self):
         """Handle task cancellation."""
