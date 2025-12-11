@@ -7,6 +7,7 @@ from qgis.PyQt.QtCore import (
     pyqtSignal
 )
 from qgis.PyQt.QtGui import (
+    QBrush,
     QColor,
     QCursor,
     QFont,
@@ -605,31 +606,39 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
             if layer != None:
                 if self.layer != None:
-                    if self.layer.id() not in self.list_widgets:
-                        self.manage_list_widgets(layer_props)
                     self.filter_le.clear()
                     self.items_le.clear()
                     
                 self.layer = layer
 
+                # Ensure the widget exists for the new layer BEFORE accessing it
+                if self.layer.id() not in self.list_widgets:
+                    self.manage_list_widgets(layer_props)
+
                 # Validate required keys exist before accessing
                 if "infos" in layer_props and "primary_key_name" in layer_props["infos"]:
-                    if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
-                        self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
+                    if self.layer.id() in self.list_widgets:
+                        if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
+                            self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
                 else:
                     logger.warning(f"layer_props missing required keys in setLayer for layer {layer.id()}")
 
+                # Refresh widgets (will show existing or just-created widget)
                 self.manage_list_widgets(layer_props)
 
-                self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
+                # Additional safety check: ensure widget was successfully created
+                if self.layer.id() in self.list_widgets:
+                    self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
 
-                if self.list_widgets[self.layer.id()].getDisplayExpression() != layer_props["exploring"]["multiple_selection_expression"]:
-                    self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+                    if self.list_widgets[self.layer.id()].getDisplayExpression() != layer_props["exploring"]["multiple_selection_expression"]:
+                        self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+                    else:
+                        description = 'Loading features'
+                        action = 'loadFeaturesList'
+                        self.build_task(description, action, True)
+                        self.launch_task(action)
                 else:
-                    description = 'Loading features'
-                    action = 'loadFeaturesList'
-                    self.build_task(description, action, True)
-                    self.launch_task(action)
+                    logger.error(f"Failed to create list widget for layer {self.layer.id()}")
 
         except (AttributeError, RuntimeError) as e:
             # Handle case where widgets don't exist or are being destroyed
@@ -655,6 +664,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     def setDisplayExpression(self, expression):
         
         if self.layer != None:
+            # Check if widget exists for this layer
+            if self.layer.id() not in self.list_widgets:
+                logger.warning(f"No list widget found for layer {self.layer.id()} in setDisplayExpression")
+                return
+            
             self.filter_le.clear()
             self.items_le.clear()
         
@@ -684,6 +698,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def eventFilter(self, obj, event):
 
+        # Safety check: ensure layer and widget exist
+        if self.layer is None or self.layer.id() not in self.list_widgets:
+            return False
+        
         if event.type() == QEvent.MouseButtonPress and obj == self.list_widgets[self.layer.id()].viewport():
             identifier_field_name = self.list_widgets[self.layer.id()].getIdentifierFieldName()
             nonSubset_features_list = [feature[identifier_field_name] for feature in self.layer.getFeatures()]

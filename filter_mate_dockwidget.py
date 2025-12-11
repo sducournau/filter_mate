@@ -2172,8 +2172,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.manageSignal(["DOCK", "SINGLE_SELECTION"], 'connect')
                 self.manageSignal(["DOCK", "MULTIPLE_SELECTION"], 'connect')
                 self.manageSignal(["DOCK", "CUSTOM_SELECTION"], 'connect')
-            except (AttributeError, RuntimeError, TypeError, SignalStateChangeError):
-                pass
+            except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
+                logger.debug(f"Could not connect DOCK groupbox signals (no layers): {type(e).__name__}: {e}")
         
         self.filtering_populate_predicates_chekableCombobox()
         self.filtering_populate_buffer_type_combobox()
@@ -2315,10 +2315,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
             
             # CRITICAL FIX: Update widget to use current layer
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+            try:
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+            except (AttributeError, KeyError, RuntimeError) as e:
+                logger.error(f"Error setting single selection features widget: {type(e).__name__}: {e}")
             
-            self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            try:
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            except (AttributeError, KeyError, RuntimeError) as e:
+                logger.error(f"Error setting single selection expression widget: {type(e).__name__}: {e}")
             
             # CRITICAL: Reconnect signals AFTER updating widgets
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
@@ -2370,10 +2376,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
             self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
             
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            try:
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            except (AttributeError, KeyError, RuntimeError) as e:
+                logger.error(f"Error setting multiple selection expression widget: {type(e).__name__}: {e}")
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+            try:
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+            except (AttributeError, KeyError, RuntimeError) as e:
+                logger.error(f"Error setting multiple selection features widget: {type(e).__name__}: {e}")
             
             # CRITICAL: Reconnect signals AFTER updating widgets
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
@@ -2421,7 +2433,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
 
             self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-            self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            try:
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+            except (AttributeError, KeyError, RuntimeError) as e:
+                logger.error(f"Error setting custom selection expression widget: {type(e).__name__}: {e}")
             
             # CRITICAL: Reconnect signals AFTER updating widgets
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
@@ -2580,15 +2595,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             deselected: List of removed feature IDs  
             clearAndSelect: Boolean indicating if selection was cleared
         """
-        if self.widgets_initialized is True and self.current_layer is not None:
-            layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
-            
-            if layer_props and layer_props["exploring"]["is_tracking"] is True:
-                # Get currently selected features
-                selected_features = self.current_layer.selectedFeatures()
+        try:
+            if self.widgets_initialized is True and self.current_layer is not None:
+                layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
                 
-                if len(selected_features) > 0:
-                    self.zooming_to_features(selected_features)
+                if layer_props and layer_props["exploring"]["is_tracking"] is True:
+                    # Get currently selected features
+                    selected_features = self.current_layer.selectedFeatures()
+                    
+                    if len(selected_features) > 0:
+                        logger.debug(f"Tracking: zooming to {len(selected_features)} selected features")
+                        self.zooming_to_features(selected_features)
+        except (AttributeError, KeyError, RuntimeError) as e:
+            logger.warning(f"Error in on_layer_selection_changed: {type(e).__name__}: {e}")
 
 
     def exploring_source_params_changed(self, expression=None):
@@ -2732,8 +2751,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             idx = fields.indexFromName(pk_name)
                             if idx >= 0:
                                 pk_value = input.attributes()[idx]
-                        except (AttributeError, IndexError, KeyError):
-                            pass
+                        except (AttributeError, IndexError, KeyError) as e:
+                            logger.warning(f"Could not get primary key value for feature: {type(e).__name__}: {e}")
+                            logger.debug(f"pk_name: {pk_name}, feature fields: {[f.name() for f in input.fields()]}")
                     
                     if pk_value is not None:
                         if layer_props["infos"]["primary_key_is_numeric"] is True: 
@@ -2891,8 +2911,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.current_layer.selectionChanged.disconnect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = None
-            except (TypeError, RuntimeError):
-                pass
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect selectionChanged signal from previous layer: {type(e).__name__}: {e}")
+                self.current_layer_selection_connection = None
         
         if layer is None:
             return (False, None, None)
@@ -3053,11 +3074,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.filtering_populate_layers_chekableCombobox()
         self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
     
-    def _reload_exploration_widgets(self, layer_props):
+    def _reload_exploration_widgets(self, layer, layer_props):
         """
         Force reload of ALL exploration widgets with new layer data.
         
         This ensures all widgets are properly populated even if already initialized.
+        
+        Args:
+            layer: The validated layer to use for widget updates
+            layer_props: Layer properties dictionary
         """
         if not self.widgets_initialized:
             return
@@ -3070,28 +3095,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
-            # Single selection widget
+            # Single selection widget - use validated layer parameter
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
             
-            # Multiple selection widget
+            # Multiple selection widget - use validated layer parameter
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props)
             
-            # Field expression widgets - setLayer BEFORE setExpression
+            # Field expression widgets - setLayer BEFORE setExpression - use validated layer parameter
             if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
             
             if "MULTIPLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
             
             if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
             
             # Reconnect signals AFTER all widgets are updated
@@ -3103,7 +3128,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
         except (AttributeError, KeyError, RuntimeError) as e:
             # Widget may not be ready yet or already destroyed
-            pass
+            logger.warning(f"Error in _reload_exploration_widgets: {type(e).__name__}: {e}")
+            logger.debug(f"Layer: {layer.name() if layer else 'None'}, widgets_initialized: {self.widgets_initialized}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
     
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
         """
@@ -3127,19 +3155,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
                 self.current_layer_selection_connection = True
-            except (TypeError, RuntimeError):
+            except (TypeError, RuntimeError) as e:
+                logger.warning(f"Could not connect selectionChanged signal to current layer {self.current_layer.name()}: {type(e).__name__}: {e}")
                 self.current_layer_selection_connection = None
         
-        # Restore exploring groupbox state from PROJECT_LAYERS
+        # Restore exploring groupbox state and ensure widgets are properly configured
+        # exploring_groupbox_changed() will set UI state AND update widgets with current layer
         if "current_exploring_groupbox" in layer_props.get("exploring", {}):
             saved_groupbox = layer_props["exploring"]["current_exploring_groupbox"]
             if saved_groupbox:
-                self.current_exploring_groupbox = saved_groupbox
                 self.exploring_groupbox_changed(saved_groupbox)
         elif self.current_exploring_groupbox:
             self.exploring_groupbox_changed(self.current_exploring_groupbox)
         else:
-            self.current_exploring_groupbox = "single_selection"
             self.exploring_groupbox_changed("single_selection")
 
 
@@ -3168,15 +3196,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Synchronize all widgets with new layer
             self._synchronize_layer_widgets(validated_layer, layer_props)
             
-            # Reload exploration widgets
-            self._reload_exploration_widgets(layer_props)
+            # Reload exploration widgets with validated layer
+            self._reload_exploration_widgets(validated_layer, layer_props)
             
             # Reconnect all signals and restore state
             self._reconnect_layer_signals(widgets_to_reconnect, layer_props)
             
         except (AttributeError, KeyError, RuntimeError) as e:
             # Widget initialization may not be complete
-            logger.debug(f"Error in current_layer_changed: {e}")
+            logger.error(f"Error in current_layer_changed: {type(e).__name__}: {e}")
+            logger.debug(f"Layer: {layer.name() if layer else 'None'}, widgets_initialized: {self.widgets_initialized}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
         finally:
             # CRITICAL: Always release the lock, even if an error occurred
             self._updating_current_layer = False

@@ -33,7 +33,7 @@ from .modules.customExceptions import (
     LayerNotFoundError,
     InvalidExpressionError
 )
-from .modules.appTasks import (
+from .modules.tasks import (
     FilterEngineTask,
     LayersManagementEngineTask,
     spatialite_connect
@@ -1399,14 +1399,26 @@ class FilterMateApp:
         layer = QgsVectorLayer(memory_uri, layer_name, "memory")
         
         try:
-            QgsVectorFileWriter.writeAsVectorFormat(
-                layer, 
-                self.db_file_path, 
-                "utf-8", 
-                crs, 
-                driverName="SQLite", 
-                datasourceOptions=["SPATIALITE=YES", "SQLITE_MAX_LENGTH=100000000"]
+            # Use modern QgsVectorFileWriter.create() instead of deprecated writeAsVectorFormat()
+            save_options = QgsVectorFileWriter.SaveVectorOptions()
+            save_options.driverName = "SQLite"
+            save_options.fileEncoding = "utf-8"
+            save_options.datasourceOptions = ["SPATIALITE=YES", "SQLITE_MAX_LENGTH=100000000"]
+            
+            writer = QgsVectorFileWriter.create(
+                self.db_file_path,
+                layer.fields(),
+                layer.wkbType(),
+                crs,
+                QgsCoordinateTransformContext(),
+                save_options
             )
+            
+            if writer.hasError() != QgsVectorFileWriter.NoError:
+                logger.error(f"Error creating database file: {writer.errorMessage()}")
+                return False
+            
+            del writer  # Ensure file is closed
             return True
         except Exception as error:
             error_msg = f"Failed to create database file {self.db_file_path}: {error}"

@@ -42,8 +42,9 @@
                 "ICONS": {
                     "ACTION": {
                         "FILTER": "filter.png",
-                        "UNDO": "undo.png",
-                        "REDO": "redo.png",
+                        "UNDO_FILTER": "undo.png",
+                        "REDO_FILTER": "redo.png",
+                        "UNFILTER": "unfilter.png",
                         "RESET": "reset.png",
                         "EXPORT": "export.png",
                         "ABOUT": "icon.png"
