@@ -723,6 +723,115 @@ class FilterMateApp:
                     }
 
 
+    def _refresh_layers_and_canvas(self, source_layer):
+        """
+        Refresh source layer and map canvas.
+        
+        Args:
+            source_layer (QgsVectorLayer): Layer to refresh
+        """
+        source_layer.updateExtents()
+        source_layer.triggerRepaint()
+        self.iface.mapCanvas().refreshAllLayers()
+        self.iface.mapCanvas().refresh()
+    
+    def _push_filter_to_history(self, source_layer, task_parameters, feature_count, provider_type, layer_count):
+        """
+        Push filter state to history for source and associated layers.
+        
+        Args:
+            source_layer (QgsVectorLayer): Source layer being filtered
+            task_parameters (dict): Task parameters containing layers info
+            feature_count (int): Number of features in filtered result
+            provider_type (str): Backend provider type
+            layer_count (int): Number of layers affected
+        """
+        # Save source layer state to history
+        history = self.history_manager.get_or_create_history(source_layer.id())
+        filter_expression = source_layer.subsetString()
+        description = f"Filter: {filter_expression[:60]}..." if len(filter_expression) > 60 else f"Filter: {filter_expression}"
+        history.push_state(
+            expression=filter_expression,
+            feature_count=feature_count,
+            description=description,
+            metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
+        )
+        logger.info(f"FilterMate: Pushed filter state to history for source layer (position {history._current_index + 1}/{len(history._states)})")
+        
+        # Save associated layers state to history
+        for layer_props in task_parameters.get("task", {}).get("layers", []):
+            if layer_props["layer_id"] in self.PROJECT_LAYERS:
+                layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
+                         if layer.id() == layer_props["layer_id"]]
+                if len(layers) == 1:
+                    assoc_layer = layers[0]
+                    assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
+                    assoc_filter = assoc_layer.subsetString()
+                    assoc_count = assoc_layer.featureCount()
+                    assoc_desc = f"Filter: {assoc_filter[:60]}..." if len(assoc_filter) > 60 else f"Filter: {assoc_filter}"
+                    assoc_history.push_state(
+                        expression=assoc_filter,
+                        feature_count=assoc_count,
+                        description=assoc_desc,
+                        metadata={"backend": layer_props.get("layer_provider_type", "unknown"), "operation": "filter"}
+                    )
+                    logger.info(f"FilterMate: Pushed filter state to history for layer {assoc_layer.name()}")
+    
+    def _clear_filter_history(self, source_layer, task_parameters):
+        """
+        Clear filter history for source and associated layers.
+        
+        Args:
+            source_layer (QgsVectorLayer): Source layer whose history to clear
+            task_parameters (dict): Task parameters containing layers info
+        """
+        # Clear history for source layer
+        history = self.history_manager.get_history(source_layer.id())
+        if history:
+            history.clear()
+            logger.info(f"FilterMate: Cleared filter history for source layer {source_layer.id()}")
+        
+        # Clear history for associated layers
+        for layer_props in task_parameters.get("task", {}).get("layers", []):
+            if layer_props["layer_id"] in self.PROJECT_LAYERS:
+                layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
+                         if layer.id() == layer_props["layer_id"]]
+                if len(layers) == 1:
+                    assoc_layer = layers[0]
+                    assoc_history = self.history_manager.get_history(assoc_layer.id())
+                    if assoc_history:
+                        assoc_history.clear()
+                        logger.info(f"FilterMate: Cleared filter history for layer {assoc_layer.name()}")
+    
+    def _show_task_completion_message(self, task_name, source_layer, provider_type, layer_count):
+        """
+        Show success message with backend info and feature counts.
+        
+        Args:
+            task_name (str): Name of completed task ('filter', 'unfilter', 'reset')
+            source_layer (QgsVectorLayer): Source layer with results
+            provider_type (str): Backend provider type
+            layer_count (int): Number of layers affected
+        """
+        feature_count = source_layer.featureCount()
+        show_success_with_backend(iface, provider_type, task_name, layer_count)
+        
+        if task_name == 'filter':
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                f"{feature_count:,} features visible in main layer"
+            )
+        elif task_name == 'unfilter':
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                f"{feature_count:,} features visible in main layer (restored from history)"
+            )
+        elif task_name == 'reset':
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                f"{feature_count:,} features visible in main layer"
+            )
+
     def filter_engine_task_completed(self, task_name, source_layer, task_parameters):
         """
         Handle completion of filtering operations.
@@ -743,119 +852,29 @@ class FilterMateApp:
             - Handles both single and multi-layer filtering
         """
 
-        if task_name in ('filter','unfilter','reset'):
-
-
-
-            # if source_layer.subsetString() != '':
-            #     self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = True
-            # else:
-            #     self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = False
-            # self.save_variables_from_layer(source_layer,[("infos","is_already_subset")])
-
-            
-            # source_layer.reload()
-            source_layer.updateExtents()
-            source_layer.triggerRepaint()
-            
-            # if task_parameters["filtering"]["has_layers_to_filter"] == True:
-            #     for layer_props in task_parameters["task"]["layers"]:
-            #         if layer_props["layer_id"] in self.PROJECT_LAYERS:
-            #             layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) if layer.id() == layer_props["layer_id"]]
-            #             if len(layers) == 1:
-            #                 layer = layers[0]
-
-            #                 # if layer.subsetString() != '':
-            #                 #     self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
-            #                 # else:
-            #                 #     self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-            #                 # self.save_variables_from_layer(layer,[("infos","is_already_subset")])
-
-            #                 layer.reload()
-            #                 layer.updateExtents()
-            #                 layer.triggerRepaint()
-                        
-
-            self.iface.mapCanvas().refreshAllLayers()
-            self.iface.mapCanvas().refresh()
-            
-            # Show success message with backend and feature count
-            feature_count = source_layer.featureCount()
-            provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
-            layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
-            
-            # Push filter state to history for undo/redo (except for unfilter which uses history.undo())
-            if task_name == 'filter':
-                # Save source layer state to history
-                history = self.history_manager.get_or_create_history(source_layer.id())
-                filter_expression = source_layer.subsetString()
-                description = f"Filter: {filter_expression[:60]}..." if len(filter_expression) > 60 else f"Filter: {filter_expression}"
-                history.push_state(
-                    expression=filter_expression,
-                    feature_count=feature_count,
-                    description=description,
-                    metadata={"backend": provider_type, "operation": "filter", "layer_count": layer_count}
-                )
-                logger.info(f"FilterMate: Pushed filter state to history for source layer (position {history._current_index + 1}/{len(history._states)})")
-                
-                # Save associated layers state to history
-                for layer_props in task_parameters.get("task", {}).get("layers", []):
-                    if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
-                                 if layer.id() == layer_props["layer_id"]]
-                        if len(layers) == 1:
-                            assoc_layer = layers[0]
-                            assoc_history = self.history_manager.get_or_create_history(assoc_layer.id())
-                            assoc_filter = assoc_layer.subsetString()
-                            assoc_count = assoc_layer.featureCount()
-                            assoc_desc = f"Filter: {assoc_filter[:60]}..." if len(assoc_filter) > 60 else f"Filter: {assoc_filter}"
-                            assoc_history.push_state(
-                                expression=assoc_filter,
-                                feature_count=assoc_count,
-                                description=assoc_desc,
-                                metadata={"backend": layer_props.get("layer_provider_type", "unknown"), "operation": "filter"}
-                            )
-                            logger.info(f"FilterMate: Pushed filter state to history for layer {assoc_layer.name()}")
-                
-                show_success_with_backend(iface, provider_type, 'filter', layer_count)
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    f"{feature_count:,} features visible in main layer"
-                )
-            elif task_name == 'unfilter':
-                show_success_with_backend(iface, provider_type, 'unfilter', layer_count)
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    f"{feature_count:,} features visible in main layer (restored from history)"
-                )
-            elif task_name == 'reset':
-                # Clear history on reset for source layer
-                history = self.history_manager.get_history(source_layer.id())
-                if history:
-                    history.clear()
-                    logger.info(f"FilterMate: Cleared filter history for source layer {source_layer.id()}")
-                
-                # Clear history for associated layers
-                for layer_props in task_parameters.get("task", {}).get("layers", []):
-                    if layer_props["layer_id"] in self.PROJECT_LAYERS:
-                        layers = [layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]) 
-                                 if layer.id() == layer_props["layer_id"]]
-                        if len(layers) == 1:
-                            assoc_layer = layers[0]
-                            assoc_history = self.history_manager.get_history(assoc_layer.id())
-                            if assoc_history:
-                                assoc_history.clear()
-                                logger.info(f"FilterMate: Cleared filter history for layer {assoc_layer.name()}")
-                
-                show_success_with_backend(iface, provider_type, 'reset', layer_count)
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    f"{feature_count:,} features visible in main layer"
-                )
-
+        if task_name not in ('filter', 'unfilter', 'reset'):
+            return
+        
+        # Refresh layers and map canvas
+        self._refresh_layers_and_canvas(source_layer)
+        
+        # Get task metadata
+        feature_count = source_layer.featureCount()
+        provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
+        layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
+        
+        # Handle filter history based on task type
+        if task_name == 'filter':
+            self._push_filter_to_history(source_layer, task_parameters, feature_count, provider_type, layer_count)
+        elif task_name == 'reset':
+            self._clear_filter_history(source_layer, task_parameters)
+        
+        # Show success message
+        self._show_task_completion_message(task_name, source_layer, provider_type, layer_count)
+        
+        # Zoom to filtered extent and update dockwidget
         extent = source_layer.extent()
-        self.iface.mapCanvas().zoomToFeatureExtent(extent)  
-
+        self.iface.mapCanvas().zoomToFeatureExtent(extent)
         self.dockwidget.PROJECT_LAYERS = self.PROJECT_LAYERS
 
 
@@ -932,49 +951,6 @@ class FilterMateApp:
             elif task_name == 'reset':
                 layer.setSubsetString('')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
-
-
-        # layer_props = self.PROJECT_LAYERS[layer.id()]
-        # schema = layer_props["infos"]["layer_schema"]
-        # table = layer_props["infos"]["layer_name"]
-        # geometry_field = layer_props["infos"]["geometry_field"]
-        # primary_key_name = layer_props["infos"]["primary_key_name"]
-
-
-        # source_uri = QgsDataSourceUri(layer.source())
-        # authcfg_id = source_uri.param('authcfg')
-        # host = source_uri.host()
-        # port = source_uri.port()
-        # dbname = source_uri.database()
-        # username = source_uri.username()
-        # password = source_uri.password()
-        # ssl_mode = source_uri.sslMode()
-
-        # if authcfg_id != "":
-        #     authConfig = QgsAuthMethodConfig()
-        #     if authcfg_id in QgsApplication.authManager().configIds():
-        #         QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
-        #         username = authConfig.config("username")
-        #         password = authConfig.config("password")
-
-        # if password != None and len(password) > 0:
-        #     if ssl_mode != None:
-        #         connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
-        #     else:
-        #         connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
-        # else:
-        #     return False
-        
-        # sql_statement =  'CLUSTER "{schema}"."{table}" USING {schema}_{table}_{geometry_field}_idx;'.format(schema=schema,
-        #                                                                                                     table=table,
-        #                                                                                                     geometry_field=geometry_field)
-
-        # sql_statement = sql_statement + 'ANALYZE "{schema}"."{table}";'.format(schema=schema,
-        #                                                                         table=table)
-        
-        # with connexion.cursor() as cursor:
-        #     cursor.execute(sql_statement)
-
 
     def save_variables_from_layer(self, layer, layer_properties=None):
         """
@@ -1788,57 +1764,7 @@ class FilterMateApp:
             value_typped = str(value_as_string)
             type_returned = str
 
-        return value_typped, type_returned       
-
-# class barProgress:
-
-#     def __init__(self):
-#         self.prog = 0
-#         self.bar = None
-#         self.type = type
-#         iface.messageBar().clearWidgets()
-#         self.init()
-#         self.bar.show()
-
-#     def init(self):
-#         self.bar = QProgressBar()
-#         self.bar.setMaximum(100)
-#         self.bar.setValue(self.prog)
-#         iface.mainWindow().statusBar().addWidget(self.bar)
-
-#     def show(self):
-#         self.bar.show()
-
-
-#     def update(self, prog):
-#         self.bar.setValue(prog)
-
-#     def hide(self):
-#         self.bar.hide()
-
-# class msgProgress:
-
-#     def __init__(self):
-#         self.messageBar = iface.messageBar().createMessage('Doing something time consuming...')
-#         self.progressBar = QProgressBar()
-#         self.progressBar.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
-#         self.cancelButton = QPushButton()
-#         self.cancelButton.setText('Cancel')
-#         self.messageBar.layout().addWidget(self.progressBar)
-#         self.messageBar.layout().addWidget(self.cancelButton)
-#         iface.messageBar().pushWidget(self.messageBar, Qgis.Info)
-
-
-#     def update(self, prog):
-#         self.progressBar.setValue(prog)
-
-#     def reset(self):
-#         self.progressBar.setValue(0)
-
-#     def setText(self, text):
-#         self.messageBar.setText(text)
-
-
+        return value_typped, type_returned
 
 
 def zoom_to_features(layer, t0):
