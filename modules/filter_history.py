@@ -302,17 +302,64 @@ class FilterHistory:
         return history
 
 
+class GlobalFilterState:
+    """
+    Represents a global filter state across multiple layers.
+    
+    Captures the state of a source layer and all its associated remote layers
+    at a specific point in time.
+    
+    Attributes:
+        source_layer_id (str): ID of the source layer
+        source_expression (str): Filter expression on source layer
+        source_feature_count (int): Features in source layer
+        remote_layers (dict): Dict mapping layer_id to (expression, feature_count)
+        description (str): Human-readable description
+        timestamp (datetime): When the state was captured
+        metadata (dict): Additional metadata
+    """
+    
+    def __init__(self, source_layer_id: str, source_expression: str, source_feature_count: int,
+                 remote_layers: Optional[Dict[str, Tuple[str, int]]] = None,
+                 description: str = "", metadata: Optional[Dict] = None):
+        self.source_layer_id = source_layer_id
+        self.source_expression = source_expression
+        self.source_feature_count = source_feature_count
+        self.remote_layers = remote_layers or {}  # {layer_id: (expression, feature_count)}
+        self.description = description or self._generate_description()
+        self.timestamp = datetime.now()
+        self.metadata = metadata or {}
+    
+    def _generate_description(self) -> str:
+        """Generate description based on layers involved"""
+        layer_count = 1 + len(self.remote_layers)
+        if layer_count == 1:
+            return f"Filter on source layer"
+        return f"Global filter on {layer_count} layers"
+    
+    def has_remote_layers(self) -> bool:
+        """Check if this state includes remote layers"""
+        return len(self.remote_layers) > 0
+    
+    def __repr__(self):
+        layer_count = 1 + len(self.remote_layers)
+        return f"GlobalFilterState({self.description}, {layer_count} layer(s))"
+
+
 class HistoryManager:
     """
     Manages filter histories for multiple layers.
     
     Provides centralized access to FilterHistory instances for all layers
     in the project. Handles creation, retrieval, and cleanup.
+    Also manages global filter history across source + remote layers.
     
     Example:
         >>> manager = HistoryManager()
         >>> history = manager.get_or_create_history(layer_id)
         >>> history.push_state("filter expression", 100)
+        >>> # Global history
+        >>> manager.push_global_state(source_id, "filter", 100, {remote_id: ("filter", 50)})
     """
     
     def __init__(self, max_size: int = 100):
@@ -324,6 +371,12 @@ class HistoryManager:
         """
         self.max_size = max_size
         self._histories: Dict[str, FilterHistory] = {}
+        
+        # Global history stack for coordinated source + remote layer states
+        self._global_states: List[GlobalFilterState] = []
+        self._global_current_index = -1
+        self._is_global_undoing = False
+        
         logger.debug(f"HistoryManager initialized (default max_size={max_size})")
     
     def get_or_create_history(self, layer_id: str) -> FilterHistory:
@@ -375,3 +428,171 @@ class HistoryManager:
             layer_id: history.get_stats()
             for layer_id, history in self._histories.items()
         }
+    
+    def push_global_state(self, source_layer_id: str, source_expression: str, 
+                         source_feature_count: int, 
+                         remote_layers: Dict[str, Tuple[str, int]],
+                         description: str = "", metadata: Optional[Dict] = None):
+        """
+        Push a global filter state capturing source + remote layers.
+        
+        Args:
+            source_layer_id: ID of source layer
+            source_expression: Filter expression on source
+            source_feature_count: Feature count of source
+            remote_layers: Dict mapping layer_id to (expression, feature_count)
+            description: Optional description
+            metadata: Optional metadata
+        """
+        if self._is_global_undoing:
+            return
+        
+        # Create global state
+        state = GlobalFilterState(
+            source_layer_id=source_layer_id,
+            source_expression=source_expression,
+            source_feature_count=source_feature_count,
+            remote_layers=remote_layers,
+            description=description,
+            metadata=metadata
+        )
+        
+        # Clear future states if not at end
+        if self._global_current_index < len(self._global_states) - 1:
+            removed_count = len(self._global_states) - self._global_current_index - 1
+            self._global_states = self._global_states[:self._global_current_index + 1]
+            logger.debug(f"Cleared {removed_count} future global states")
+        
+        # Add new state
+        self._global_states.append(state)
+        self._global_current_index += 1
+        
+        # Enforce max size
+        if len(self._global_states) > self.max_size:
+            overflow = len(self._global_states) - self.max_size
+            self._global_states = self._global_states[overflow:]
+            self._global_current_index -= overflow
+            logger.debug(f"Removed {overflow} old global states")
+        
+        logger.info(f"Pushed global state: {state.description} (position {self._global_current_index + 1}/{len(self._global_states)})")
+    
+    def undo_global(self) -> Optional[GlobalFilterState]:
+        """
+        Undo to previous global state.
+        
+        Returns:
+            Previous GlobalFilterState or None if at beginning
+        """
+        if not self.can_undo_global():
+            logger.debug("Cannot undo global: at beginning")
+            return None
+        
+        self._is_global_undoing = True
+        try:
+            self._global_current_index -= 1
+            state = self._global_states[self._global_current_index]
+            logger.info(f"Global undo to: {state.description} (position {self._global_current_index + 1}/{len(self._global_states)})")
+            return state
+        finally:
+            self._is_global_undoing = False
+    
+    def redo_global(self) -> Optional[GlobalFilterState]:
+        """
+        Redo to next global state.
+        
+        Returns:
+            Next GlobalFilterState or None if at end
+        """
+        if not self.can_redo_global():
+            logger.debug("Cannot redo global: at end")
+            return None
+        
+        self._is_global_undoing = True
+        try:
+            self._global_current_index += 1
+            state = self._global_states[self._global_current_index]
+            logger.info(f"Global redo to: {state.description} (position {self._global_current_index + 1}/{len(self._global_states)})")
+            return state
+        finally:
+            self._is_global_undoing = False
+    
+    def can_undo_global(self) -> bool:
+        """Check if global undo is possible"""
+        return self._global_current_index > 0
+    
+    def can_redo_global(self) -> bool:
+        """Check if global redo is possible"""
+        return self._global_current_index < len(self._global_states) - 1
+    
+    def get_current_global_state(self) -> Optional[GlobalFilterState]:
+        """Get current global state"""
+        if 0 <= self._global_current_index < len(self._global_states):
+            return self._global_states[self._global_current_index]
+        return None
+    
+    def clear_global_history(self):
+        """Clear all global history"""
+        self._global_states.clear()
+        self._global_current_index = -1
+        logger.info("Cleared global filter history")
+    
+    def get_global_stats(self) -> Dict:
+        """Get global history statistics"""
+        return {
+            "total_states": len(self._global_states),
+            "current_position": self._global_current_index + 1,
+            "can_undo": self.can_undo_global(),
+            "can_redo": self.can_redo_global(),
+            "max_size": self.max_size
+        }
+    
+    def debug_info(self, layer_id: Optional[str] = None) -> str:
+        """
+        Get detailed debug information about history state.
+        
+        Args:
+            layer_id: Optional layer ID to show specific layer history
+        
+        Returns:
+            Formatted debug string with history information
+        """
+        lines = ["=== FilterMate History Debug Info ==="]
+        
+        # Global history info
+        lines.append(f"\nGlobal History:")
+        lines.append(f"  Total states: {len(self._global_states)}")
+        lines.append(f"  Current position: {self._global_current_index + 1}/{len(self._global_states)}")
+        lines.append(f"  Can undo: {self.can_undo_global()}")
+        lines.append(f"  Can redo: {self.can_redo_global()}")
+        
+        if self._global_states:
+            lines.append(f"\n  Recent global states:")
+            for i, state in enumerate(self._global_states[-5:]):
+                marker = " <--" if i == self._global_current_index else ""
+                lines.append(f"    [{i}] {state.description} ({len(state.remote_layers) + 1} layers){marker}")
+        
+        # Layer-specific history
+        if layer_id:
+            history = self.get_history(layer_id)
+            if history:
+                lines.append(f"\nLayer History ({layer_id}):")
+                lines.append(f"  Total states: {len(history._states)}")
+                lines.append(f"  Current position: {history._current_index + 1}/{len(history._states)}")
+                lines.append(f"  Can undo: {history.can_undo()}")
+                lines.append(f"  Can redo: {history.can_redo()}")
+                
+                if history._states:
+                    lines.append(f"\n  Recent states:")
+                    for i, state in enumerate(history._states[-5:]):
+                        marker = " <--" if i == history._current_index else ""
+                        lines.append(f"    [{i}] {state.description}{marker}")
+            else:
+                lines.append(f"\nNo history found for layer {layer_id}")
+        else:
+            # Summary of all layers
+            lines.append(f"\nAll Layer Histories:")
+            lines.append(f"  Total tracked layers: {len(self._histories)}")
+            for lid, hist in self._histories.items():
+                lines.append(f"    {lid}: {len(hist._states)} states, pos {hist._current_index + 1}")
+        
+        return "\n".join(lines)

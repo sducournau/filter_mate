@@ -4,6 +4,27 @@ All notable changes to FilterMate will be documented in this file.
 
 ## [Unreleased]
 
+### 🚀 Major Features
+- **Global Undo/Redo Functionality**: Intelligent undo/redo system with context-aware behavior
+  - **Source Layer Only Mode**: Undo/redo applies only to the source layer when no remote layers are selected
+  - **Global Mode**: When remote layers are selected and filtered, undo/redo restores the complete state of all layers simultaneously
+  - **Smart Button States**: Undo/redo buttons automatically enable/disable based on history availability
+  - **Multi-Layer State Capture**: New `GlobalFilterState` class captures source + remote layers state atomically
+  - **Automatic Context Detection**: Seamlessly switches between source-only and global modes based on layer selection
+  - **UI Integration**: Existing pushButton_action_undo_filter and pushButton_action_redo_filter now fully functional
+  - **History Manager**: Extended with global history stack (up to 100 states by default)
+  - **User Feedback**: Clear success/warning messages indicating which mode is active
+
+### 🛠️ Technical Improvements
+- **New Module Components**:
+  - `GlobalFilterState` class in `modules/filter_history.py`: Manages multi-layer state snapshots
+  - `handle_undo()` and `handle_redo()` methods in `filter_mate_app.py`: Intelligent undo/redo with conditional logic
+  - `update_undo_redo_buttons()`: Automatic button state management
+  - `currentLayerChanged` signal: Real-time button updates on layer switching
+  
+### 📚 Documentation
+- Added `docs/UNDO_REDO_IMPLEMENTATION.md`: Comprehensive implementation guide with architecture, workflows, and use cases
+
 ## [2.2.5] - 2025-12-08 - Automatic Geographic CRS Handling
 
 ### 🚀 Major Improvements

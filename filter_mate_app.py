@@ -147,6 +147,8 @@ class FilterMateApp:
                                     'unfilter':'Unfiltering data',
                                     'reset':'Reseting data',
                                     'export':'Exporting data',
+                                    'undo':'Undo filter',
+                                    'redo':'Redo filter',
                                     'add_layers':'Adding layers',
                                     'remove_layers':'Removing layers',
                                     'remove_all_layers':'Removing all layers',
@@ -265,6 +267,7 @@ class FilterMateApp:
             self._signals_connected = True
         
         self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
+        self.dockwidget.currentLayerChanged.connect(self.update_undo_redo_buttons)
 
         self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
         self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
@@ -399,6 +402,19 @@ class FilterMateApp:
         
         if task_name in ('project_read', 'new_project'):
             self._handle_project_initialization(task_name)
+            return
+        
+        # Handle undo/redo operations
+        if task_name == 'undo':
+            self.handle_undo()
+            return
+        
+        if task_name == 'redo':
+            self.handle_redo()
+            return
+        
+        if task_name == 'redo':
+            self.handle_redo()
             return
 
         task_parameters = self.get_task_parameters(task_name, data)
@@ -570,7 +586,8 @@ class FilterMateApp:
             )
             logger.info(f"FilterMate: Initialized history with current state for source layer {current_layer.id()}")
         
-        # Initialize history for associated layers
+        # Initialize history for associated layers and prepare global state
+        remote_layers_info = {}
         for layer_info in layers_to_filter:
             layer_id = layer_info.get("layer_id")
             if layer_id and layer_id in self.PROJECT_LAYERS:
@@ -588,6 +605,23 @@ class FilterMateApp:
                             metadata={"operation": "initial", "backend": layer_info.get("layer_provider_type", "unknown")}
                         )
                         logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
+                    
+                    # Collect for global initial state
+                    remote_layers_info[assoc_layer.id()] = (assoc_layer.subsetString(), assoc_layer.featureCount())
+        
+        # Initialize global history if we have remote layers and global history is empty
+        if remote_layers_info and len(self.history_manager._global_states) == 0:
+            current_filter = current_layer.subsetString()
+            current_count = current_layer.featureCount()
+            self.history_manager.push_global_state(
+                source_layer_id=current_layer.id(),
+                source_expression=current_filter,
+                source_feature_count=current_count,
+                remote_layers=remote_layers_info,
+                description="Initial state (before first filter)",
+                metadata={"operation": "initial", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
+            )
+            logger.info(f"FilterMate: Initialized global history with {len(remote_layers_info) + 1} layers")
     
     def _build_common_task_params(self, features, expression, layers_to_filter, include_history=False):
         """
@@ -756,6 +790,9 @@ class FilterMateApp:
         )
         logger.info(f"FilterMate: Pushed filter state to history for source layer (position {history._current_index + 1}/{len(history._states)})")
         
+        # Collect remote layers info for global history
+        remote_layers_info = {}
+        
         # Save associated layers state to history
         for layer_props in task_parameters.get("task", {}).get("layers", []):
             if layer_props["layer_id"] in self.PROJECT_LAYERS:
@@ -774,6 +811,213 @@ class FilterMateApp:
                         metadata={"backend": layer_props.get("layer_provider_type", "unknown"), "operation": "filter"}
                     )
                     logger.info(f"FilterMate: Pushed filter state to history for layer {assoc_layer.name()}")
+                    
+                    # Add to global history info
+                    remote_layers_info[assoc_layer.id()] = (assoc_filter, assoc_count)
+        
+        # Push global state if we have remote layers
+        if remote_layers_info:
+            self.history_manager.push_global_state(
+                source_layer_id=source_layer.id(),
+                source_expression=filter_expression,
+                source_feature_count=feature_count,
+                remote_layers=remote_layers_info,
+                description=f"Global filter: {len(remote_layers_info) + 1} layers",
+                metadata={"backend": provider_type, "operation": "filter"}
+            )
+            logger.info(f"FilterMate: Pushed global filter state ({len(remote_layers_info) + 1} layers)")
+    
+    def update_undo_redo_buttons(self):
+        """
+        Update undo/redo button states based on history availability.
+        """
+        if not self.dockwidget or not hasattr(self.dockwidget, 'pushButton_action_undo_filter') or not hasattr(self.dockwidget, 'pushButton_action_redo_filter'):
+            return
+        
+        if not self.dockwidget.current_layer:
+            self.dockwidget.pushButton_action_undo_filter.setEnabled(False)
+            self.dockwidget.pushButton_action_redo_filter.setEnabled(False)
+            return
+        
+        source_layer = self.dockwidget.current_layer
+        layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
+        
+        # Check if remote layers are selected
+        has_remote_layers = bool(layers_to_filter)
+        
+        # Determine undo/redo availability
+        if has_remote_layers:
+            # Global history mode
+            can_undo = self.history_manager.can_undo_global()
+            can_redo = self.history_manager.can_redo_global()
+        else:
+            # Source layer only mode
+            history = self.history_manager.get_history(source_layer.id())
+            can_undo = history.can_undo() if history else False
+            can_redo = history.can_redo() if history else False
+        
+        self.dockwidget.pushButton_action_undo_filter.setEnabled(can_undo)
+        self.dockwidget.pushButton_action_redo_filter.setEnabled(can_redo)
+        
+        logger.debug(f"FilterMate: Updated undo/redo buttons - undo: {can_undo}, redo: {can_redo}")
+    
+    def handle_undo(self):
+        """
+        Handle undo operation with intelligent layer selection logic.
+        
+        Logic:
+        - If only source layer selected: undo only source layer
+        - If remote layers selected and filtered: undo all layers globally
+        """
+        if not self.dockwidget or not self.dockwidget.current_layer:
+            logger.warning("FilterMate: No current layer for undo")
+            return
+        
+        source_layer = self.dockwidget.current_layer
+        layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
+        
+        # Check if remote layers are selected and filtered
+        has_filtered_remote_layers = False
+        if layers_to_filter:
+            for layer_info in layers_to_filter:
+                layer_id = layer_info.get("layer_id")
+                if layer_id and layer_id in self.PROJECT_LAYERS:
+                    remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
+                    if remote_layers and remote_layers[0].subsetString():
+                        has_filtered_remote_layers = True
+                        break
+        
+        if has_filtered_remote_layers:
+            # Global undo
+            logger.info("FilterMate: Performing global undo (remote layers are filtered)")
+            global_state = self.history_manager.undo_global()
+            
+            if global_state:
+                # Apply state to source layer
+                source_layer.setSubsetString(global_state.source_expression)
+                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
+                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60]}")
+                
+                # Apply state to remote layers (with safety checks)
+                restored_count = 0
+                for remote_id, (expression, _) in global_state.remote_layers.items():
+                    # Check if layer still exists in project
+                    if remote_id not in self.PROJECT_LAYERS:
+                        logger.warning(f"FilterMate: Remote layer {remote_id} no longer exists, skipping")
+                        continue
+                    
+                    remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
+                    if remote_layers:
+                        remote_layer = remote_layers[0]
+                        remote_layer.setSubsetString(expression)
+                        self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
+                        logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
+                        restored_count += 1
+                    else:
+                        logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
+                
+                # Refresh
+                self._refresh_layers_and_canvas(source_layer)
+                iface.messageBar().pushSuccess("FilterMate", f"Global undo successful ({restored_count + 1} layers)")
+            else:
+                logger.info("FilterMate: No global undo history available")
+                iface.messageBar().pushWarning("FilterMate", "No more undo history")
+        else:
+            # Source layer only undo
+            logger.info("FilterMate: Performing source layer undo only")
+            history = self.history_manager.get_history(source_layer.id())
+            
+            if history and history.can_undo():
+                previous_state = history.undo()
+                if previous_state:
+                    source_layer.setSubsetString(previous_state.expression)
+                    self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_state.expression)
+                    logger.info(f"FilterMate: Undo source layer to: {previous_state.description}")
+                    
+                    # Refresh
+                    self._refresh_layers_and_canvas(source_layer)
+                    iface.messageBar().pushSuccess("FilterMate", f"Undo: {previous_state.description}")
+            else:
+                logger.info("FilterMate: No undo history for source layer")
+                iface.messageBar().pushWarning("FilterMate", "No more undo history")
+        
+        # Update button states after undo
+        self.update_undo_redo_buttons()
+    
+    def handle_redo(self):
+        """
+        Handle redo operation with intelligent layer selection logic.
+        
+        Logic:
+        - If only source layer selected: redo only source layer
+        - If remote layers selected and filtered: redo all layers globally
+        """
+        if not self.dockwidget or not self.dockwidget.current_layer:
+            logger.warning("FilterMate: No current layer for redo")
+            return
+        
+        source_layer = self.dockwidget.current_layer
+        layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
+        
+        # Check if remote layers are selected
+        has_remote_layers = bool(layers_to_filter)
+        
+        if has_remote_layers and self.history_manager.can_redo_global():
+            # Global redo
+            logger.info("FilterMate: Performing global redo")
+            global_state = self.history_manager.redo_global()
+            
+            if global_state:
+                # Apply state to source layer
+                source_layer.setSubsetString(global_state.source_expression)
+                self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
+                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60]}")
+                
+                # Apply state to remote layers (with safety checks)
+                restored_count = 0
+                for remote_id, (expression, _) in global_state.remote_layers.items():
+                    # Check if layer still exists in project
+                    if remote_id not in self.PROJECT_LAYERS:
+                        logger.warning(f"FilterMate: Remote layer {remote_id} no longer exists, skipping")
+                        continue
+                    
+                    remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
+                    if remote_layers:
+                        remote_layer = remote_layers[0]
+                        remote_layer.setSubsetString(expression)
+                        self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
+                        logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
+                        restored_count += 1
+                    else:
+                        logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
+                
+                # Refresh
+                self._refresh_layers_and_canvas(source_layer)
+                iface.messageBar().pushSuccess("FilterMate", f"Global redo successful ({restored_count + 1} layers)")
+            else:
+                logger.info("FilterMate: No global redo history available")
+                iface.messageBar().pushWarning("FilterMate", "No more redo history")
+        else:
+            # Source layer only redo
+            logger.info("FilterMate: Performing source layer redo only")
+            history = self.history_manager.get_history(source_layer.id())
+            
+            if history and history.can_redo():
+                next_state = history.redo()
+                if next_state:
+                    source_layer.setSubsetString(next_state.expression)
+                    self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(next_state.expression)
+                    logger.info(f"FilterMate: Redo source layer to: {next_state.description}")
+                    
+                    # Refresh
+                    self._refresh_layers_and_canvas(source_layer)
+                    iface.messageBar().pushSuccess("FilterMate", f"Redo: {next_state.description}")
+            else:
+                logger.info("FilterMate: No redo history for source layer")
+                iface.messageBar().pushWarning("FilterMate", "No more redo history")
+        
+        # Update button states after redo
+        self.update_undo_redo_buttons()
     
     def _clear_filter_history(self, source_layer, task_parameters):
         """
@@ -788,6 +1032,9 @@ class FilterMateApp:
         if history:
             history.clear()
             logger.info(f"FilterMate: Cleared filter history for source layer {source_layer.id()}")
+        
+        # Clear global history
+        self.history_manager.clear_global_history()
         
         # Clear history for associated layers
         for layer_props in task_parameters.get("task", {}).get("layers", []):
@@ -866,6 +1113,9 @@ class FilterMateApp:
             self._push_filter_to_history(source_layer, task_parameters, feature_count, provider_type, layer_count)
         elif task_name == 'reset':
             self._clear_filter_history(source_layer, task_parameters)
+        
+        # Update undo/redo button states
+        self.update_undo_redo_buttons()
         
         # Show success message
         self._show_task_completion_message(task_name, source_layer, provider_type, layer_count)
@@ -1523,6 +1773,11 @@ class FilterMateApp:
                                                 layer_id=layer_key
                                             ))
                             conn.commit()
+                            
+                            # Clean up history for removed layer
+                            self.history_manager.remove_history(layer_key)
+                            logger.info(f"FilterMate: Removed history for deleted layer {layer_key}")
+                            
                             try:
                                 self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
                             except (KeyError, AttributeError, RuntimeError):

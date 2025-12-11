@@ -140,6 +140,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
+    currentLayerChanged = pyqtSignal()
 
     gettingProjectLayers = pyqtSignal()
 
@@ -1076,8 +1077,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         self.widgets["ACTION"] = {
                                 "FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_filter, "SIGNALS":[("clicked", lambda state, x='filter': self.launchTaskEvent(state, x))], "ICON":None},
-                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_undo_filter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
-                                "RESET":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_reset, "SIGNALS":[("clicked", lambda state, x='reset': self.launchTaskEvent(state, x))], "ICON":None},
+                                "UNDO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_undo_filter, "SIGNALS":[("clicked", lambda state, x='undo': self.launchTaskEvent(state, x))], "ICON":None},
+                                "REDO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_redo_filter, "SIGNALS":[("clicked", lambda state, x='redo': self.launchTaskEvent(state, x))], "ICON":None},
+                                "UNFILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_unfilter, "SIGNALS":[("clicked", lambda state, x='unfilter': self.launchTaskEvent(state, x))], "ICON":None},
                                 "EXPORT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_export, "SIGNALS":[("clicked", lambda state, x='export': self.launchTaskEvent(state, x))], "ICON":None},
                                 "ABOUT":{"TYPE":"PushButton", "WIDGET":self.pushButton_action_about, "SIGNALS":[("clicked", self.open_project_page)], "ICON":None}
                                 }        
@@ -1115,7 +1117,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
                                     "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed(x, state))]},
                                     "BUFFER_VALUE_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_value_property, "SIGNALS":[("activated", lambda state, x='buffer_value_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed(), "CUSTOM_DATA": lambda x: self.get_buffer_property_state()}: self.layer_property_changed(x, state, custom_functions))]},
-                                    "BUFFER_VALUE_EXPRESSION":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_filtering_buffer_value_expression, "SIGNALS":[("textEdited", lambda state, x='buffer_value_expression', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_expression_edited()}: self.layer_property_changed(x, state, custom_functions)), ("textChanged", lambda state, x='buffer_value_expression', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_expression_edited()}: self.layer_property_changed(x, state, custom_functions))]},
                                     "BUFFER_TYPE":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_buffer_type, "SIGNALS":[("currentTextChanged", lambda state, x='buffer_type': self.layer_property_changed(x, state))]},
                                     }
         
@@ -2204,10 +2205,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True:
 
             self.tabTools_current_index = self.widgets["DOCK"]["TOOLS"]["WIDGET"].currentIndex()
-            if self.tabTools_current_index == 1:
-                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
-            else:
+            
+            # Index 0: FILTERING panel active
+            if self.tabTools_current_index == 0:
+                # Enable filter, undo, redo, unfilter buttons
+                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(True)
+                self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(True)
+                self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(True)
+                self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(True)
+                # Disable export button
                 self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
+                # Keep about button enabled
+                self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
+            
+            # Index 1: EXPORTING panel active
+            elif self.tabTools_current_index == 1:
+                # Disable filter, undo, redo, unfilter buttons
+                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(False)
+                # Enable export button
+                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(True)
+                # Keep about button enabled
+                self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
+            
+            # Index 2: CONFIGURATION panel active
+            elif self.tabTools_current_index == 2:
+                # Disable filter, undo, redo, unfilter, export buttons
+                self.widgets["ACTION"]["FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["UNDO_FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["REDO_FILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["UNFILTER"]["WIDGET"].setEnabled(False)
+                self.widgets["ACTION"]["EXPORT"]["WIDGET"].setEnabled(False)
+                # Keep only about button enabled
+                self.widgets["ACTION"]["ABOUT"]["WIDGET"].setEnabled(True)
 
             self.set_exporting_properties()
 
@@ -2871,6 +2903,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.current_layer.id() not in self.PROJECT_LAYERS:
             return (False, None, None)
         
+        # Emit signal to notify app that current layer changed
+        self.currentLayerChanged.emit()
+        
         layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
         return (True, layer, layer_props)
     
@@ -2925,7 +2960,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ["FILTERING","HAS_BUFFER_VALUE"],
             ["FILTERING","BUFFER_VALUE"],
             ["FILTERING","BUFFER_VALUE_PROPERTY"],
-            ["FILTERING", "BUFFER_VALUE_EXPRESSION"],
             ["FILTERING","HAS_BUFFER_TYPE"],
             ["FILTERING","BUFFER_TYPE"]
         ]
@@ -3590,17 +3624,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def filtering_init_buffer_property(self):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
-                        
-
-
-
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]   
 
             name = str("{}_buffer_property_definition".format(self.current_layer.id()))
             description = str("Replace unique buffer value with values based on expression for {}".format(self.current_layer.id()))
             property_definition = QgsPropertyDefinition(name, QgsPropertyDefinition.DataTypeNumeric, description, 'Expression must returns numeric values (unit is in meters)')
-            
             
             buffer_expression = layer_props["filtering"]["buffer_value_expression"]
             # Ensure buffer_expression is a string (handle legacy data with int/float values)
@@ -3613,104 +3642,54 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 property = QgsProperty.fromExpression(buffer_expression)
             else:
                 property = QgsProperty()
-
-            # if self.buffer_property_has_been_init is False:
                 
+            # Initialize the property button with the layer context
             self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, property, property_definition, self.current_layer)
-
-            if property.propertyType() == 0:
-                # Register widgets with property button
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerVisibleWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"], False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerVisibleWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"], False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerExpressionWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"])
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setText('')
-                
-                # CRITICAL: Force visibility explicitly AFTER registration
-                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setVisible(True)
-                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setVisible(False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setEnabled(False)
-
-            else:
-                # Register widgets with property button
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerVisibleWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"], True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerVisibleWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"], True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setClearButtonEnabled(True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerExpressionWidget(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"])
-                
-                # CRITICAL: Force visibility explicitly AFTER registration
-                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setVisible(False)
-                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setVisible(True)
-                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setEnabled(True)
-                
-                #self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["SIGNALS"][0][1](True)
-
-                
-
-                
-                # self.buffer_property_has_been_init = True
-
-
-                
-
-
-    def filtering_buffer_expression_edited(self):
-
-        if self.widgets_initialized is True and self.has_loaded_layers is True:
-
-
-            widgets_to_stop =   [
-                                    ["FILTERING","BUFFER_VALUE_EXPRESSION"]
-                                ]
             
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'disconnect')
+            # Register the spinbox to be controlled by the property button
+            # When property is active (expression mode), spinbox is disabled
+            # When property is inactive (static mode), spinbox is enabled
+            self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].registerEnabledWidget(self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"], False)
+            
+            # Set initial state based on whether there's an expression
+            if property.propertyType() == 0:
+                # No expression: show spinbox
+                self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(True)
+            else:
+                # Has expression: property button will control via its own expression widget
+                # Spinbox will be disabled by the property button
+                pass
+
+
+                
 
 
 
-            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
-            if self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].text().strip() in ('', 'NULL') or len(self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].text().strip()) == 0:
-
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setActive(False)
-                self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["SIGNALS"][0][1](False)
-
-            for widget_path in widgets_to_stop:
-                self.manageSignal(widget_path, 'connect')
- 
 
     def filtering_buffer_property_changed(self):
-
+        """Handle changes to the buffer property override button.
+        
+        When active (True): Use expression from property button
+        When inactive (False): Use static value from spinbox
+        """
         if self.widgets_initialized is True and self.has_loaded_layers is True:
 
-
-            widgets_to_stop =   [
-                                    ["FILTERING","BUFFER_VALUE_PROPERTY"]
-                                ]
+            widgets_to_stop = [["FILTERING","BUFFER_VALUE_PROPERTY"]]
             
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'disconnect')
-
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             
             if layer_props["filtering"]["buffer_value_property"] is True:
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty().asExpression()
-                self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setClearButtonEnabled(True)
-
-
-            if layer_props["filtering"]["buffer_value_property"] is False:
+                # Property button is active: get expression
+                expression = self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].toProperty().asExpression()
+                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = expression
+            else:
+                # Property button is inactive: clear expression, use spinbox value
                 self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value_expression"] = ''
-                if self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].text().strip() != '':
-                    self.widgets["FILTERING"]["BUFFER_VALUE_EXPRESSION"]["WIDGET"].setText('')
                 self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setToProperty(QgsProperty())
-
 
             for widget_path in widgets_to_stop:
                 self.manageSignal(widget_path, 'connect')
