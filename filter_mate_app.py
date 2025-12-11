@@ -588,6 +588,53 @@ class FilterMateApp:
                             metadata={"operation": "initial", "backend": layer_info.get("layer_provider_type", "unknown")}
                         )
                         logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
+    
+    def _build_common_task_params(self, features, expression, layers_to_filter, include_history=False):
+        """
+        Build common task parameters for filter/unfilter/reset operations.
+        
+        Args:
+            features: Selected features for filtering
+            expression (str): Filter expression
+            layers_to_filter (list): List of layers to apply filter to
+            include_history (bool): Whether to include history_manager (for unfilter)
+            
+        Returns:
+            dict: Common task parameters
+        """
+        params = {
+            "features": features,
+            "expression": expression,
+            "options": self.dockwidget.project_props["OPTIONS"],
+            "layers": layers_to_filter,
+            "db_file_path": self.db_file_path,
+            "project_uuid": self.project_uuid
+        }
+        if include_history:
+            params["history_manager"] = self.history_manager
+        return params
+    
+    def _build_layer_management_params(self, layers, reset_flag):
+        """
+        Build parameters for layer management tasks (add/remove layers).
+        
+        Args:
+            layers (list): List of layers to manage
+            reset_flag (bool): Whether to reset all layer variables
+            
+        Returns:
+            dict: Layer management task parameters
+        """
+        return {
+            "task": {
+                "layers": layers,
+                "project_layers": self.PROJECT_LAYERS,
+                "reset_all_layers_variables_flag": reset_flag,
+                "config_data": self.CONFIG_DATA,
+                "db_file_path": self.db_file_path,
+                "project_uuid": self.project_uuid
+            }
+        }
 
     def get_task_parameters(self, task_name, data=None):
         """
@@ -636,46 +683,21 @@ class FilterMateApp:
 
             features, expression = self.dockwidget.get_current_features()
 
-            if task_name in ('filter','unfilter','reset'):
+            if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
-
-                if task_name == 'filter':
-                    task_parameters["task"] = {
-                        "features": features,
-                        "expression": expression,
-                        "options": self.dockwidget.project_props["OPTIONS"],
-                        "layers": layers_to_filter,
-                        "db_file_path": self.db_file_path,
-                        "project_uuid": self.project_uuid
-                    }
-                    
-                    # Initialize filter history
-                    self._initialize_filter_history(current_layer, layers_to_filter, task_parameters)
-                    return task_parameters
-
-                elif task_name == 'unfilter':
-                    task_parameters["task"] = {
-                        "features": features,
-                        "expression": expression,
-                        "options": self.dockwidget.project_props["OPTIONS"],
-                        "layers": layers_to_filter,
-                        "db_file_path": self.db_file_path,
-                        "project_uuid": self.project_uuid,
-                        "history_manager": self.history_manager
-                    }
-                    return task_parameters
                 
-                elif task_name == 'reset':
-                    task_parameters["task"] = {
-                        "features": features,
-                        "expression": expression,
-                        "options": self.dockwidget.project_props["OPTIONS"],
-                        "layers": layers_to_filter,
-                        "db_file_path": self.db_file_path,
-                        "project_uuid": self.project_uuid
-                    }
-                    return task_parameters
+                # Build common task parameters
+                include_history = (task_name == 'unfilter')
+                task_parameters["task"] = self._build_common_task_params(
+                    features, expression, layers_to_filter, include_history
+                )
+                
+                # Initialize filter history for 'filter' operation
+                if task_name == 'filter':
+                    self._initialize_filter_history(current_layer, layers_to_filter, task_parameters)
+                
+                return task_parameters
 
             elif task_name == 'export':
                 layers_to_export = []
@@ -689,38 +711,14 @@ class FilterMateApp:
             
         else:
             # Layer management tasks
-            if data is not None:
-                if task_name == 'add_layers':
-                    layers = data if isinstance(data, list) else [data]
-                    reset_flag = (self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and 
-                                 self.dockwidget.has_loaded_layers is False)
-                    
-                    return {
-                        "task": {
-                            "layers": layers,
-                            "project_layers": self.PROJECT_LAYERS,
-                            "reset_all_layers_variables_flag": reset_flag,
-                            "config_data": self.CONFIG_DATA,
-                            "db_file_path": self.db_file_path,
-                            "project_uuid": self.project_uuid
-                        }
-                    }
-
-                elif task_name == 'remove_layers':
-                    layers = data if isinstance(data, list) else [data]
-                    reset_flag = (self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] is True and 
-                                 self.dockwidget.has_loaded_layers is False)
-                    
-                    return {
-                        "task": {
-                            "layers": layers,
-                            "project_layers": self.PROJECT_LAYERS,
-                            "reset_all_layers_variables_flag": reset_flag,
-                            "config_data": self.CONFIG_DATA,
-                            "db_file_path": self.db_file_path,
-                            "project_uuid": self.project_uuid
-                        }
-                    }
+            if data is None:
+                return None
+            
+            if task_name in ('add_layers', 'remove_layers'):
+                layers = data if isinstance(data, list) else [data]
+                reset_flag = (self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] and 
+                             not self.dockwidget.has_loaded_layers)
+                return self._build_layer_management_params(layers, reset_flag)
 
 
     def _refresh_layers_and_canvas(self, source_layer):
