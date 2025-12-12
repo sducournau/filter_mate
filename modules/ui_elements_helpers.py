@@ -16,7 +16,6 @@ try:
     from modules.ui_config import UIConfig, DisplayProfile
 except ImportError:
     # Fallback for testing
-    print("Warning: Could not import modules, using mock data")
     SPACERS = {}
 
 
@@ -59,7 +58,6 @@ def apply_spacer_dimensions(widget: QWidget, compact_mode: bool = True) -> int:
                     )
                 
                 count += 1
-                print(f"  ✓ {spacer_name}: {size}px")
     
     return count
 
@@ -123,19 +121,15 @@ def toggle_display_mode(widget: QWidget, set_compact: bool) -> None:
         widget: Root widget containing UI elements
         set_compact: True to switch to compact, False for normal
     """
-    print(f"\n🔄 Switching to {'COMPACT' if set_compact else 'NORMAL'} mode...")
-    
     # Update UIConfig profile
     try:
         profile = DisplayProfile.COMPACT if set_compact else DisplayProfile.NORMAL
         UIConfig.set_profile(profile)
-    except (ImportError, AttributeError) as e:
-        print(f"⚠️  Could not update UIConfig profile: {e}")
+    except (ImportError, AttributeError):
+        pass
     
     # Apply spacer dimensions
     count = apply_spacer_dimensions(widget, compact_mode=set_compact)
-    
-    print(f"✅ Updated {count} spacers")
     
     # Trigger layout update
     widget.update()
@@ -260,22 +254,4 @@ def apply_layout_spacing(widget: QWidget, compact_mode: bool = True) -> int:
     # Alternative: Find layouts directly by object name if they're named QLayouts
     # This is more complex and would require QGIS-specific implementation
     
-    print(f"  Layout spacing rules configured:")
-    print(f"    Main: {spacing_rules['main']}px")
-    print(f"    Section: {spacing_rules['section']}px")
-    print(f"    Content: {spacing_rules['content']}px")
-    print(f"    Buttons: {spacing_rules['buttons']}px")
-    
     return count
-
-
-if __name__ == "__main__":
-    print("UI Elements Helpers - Example Module")
-    print("=" * 60)
-    print("\nThis module provides helper functions to apply dynamic")
-    print("dimensions to FilterMate's UI elements based on display mode.")
-    print("\nKey functions:")
-    print("  • apply_spacer_dimensions() - Configure all spacers")
-    print("  • apply_section_spacer_dimensions() - Configure specific section")
-    print("  • toggle_display_mode() - Switch between compact/normal")
-    print("  • apply_layout_spacing() - Configure layout spacing")

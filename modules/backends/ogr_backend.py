@@ -428,7 +428,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_warning("No features selected by geometric filter")
                 # Apply empty filter - no features should match
-                safe_set_subset_string(layer, '"fid" < 0')  # Better than $id IN () for compatibility
+                # Use universal expression that works with all OGR providers
+                safe_set_subset_string(layer, '1 = 0')  # Always false, no field dependency
                 return True
                 
         except Exception as select_error:
@@ -528,7 +529,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     return False
             else:
                 self.log_warning("No features selected by geometric filter")
-                safe_set_subset_string(layer, "$id IN ()")
+                # Use universal expression that works with all OGR providers
+                safe_set_subset_string(layer, '1 = 0')  # Always false, no field dependency
                 return True
                 
         except Exception as e:

@@ -9,6 +9,10 @@ Allows switching between 'compact' and 'normal' layouts for different screen siz
 from typing import Dict, Any, Optional
 from enum import Enum
 
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class DisplayProfile(Enum):
     """Display profile types for different screen configurations."""
@@ -386,7 +390,7 @@ class UIConfig:
             profile: DisplayProfile enum value (COMPACT or NORMAL)
         """
         cls._active_profile = profile
-        print(f"FilterMate UIConfig: Switched to '{profile.value}' profile")
+        logger.debug(f"Switched to '{profile.value}' profile")
     
     @classmethod
     def get_profile(cls) -> DisplayProfile:
@@ -421,7 +425,7 @@ class UIConfig:
         profile_config = cls.PROFILES.get(profile_name, cls.PROFILES["normal"])
         
         if component not in profile_config:
-            print(f"FilterMate UIConfig Warning: Component '{component}' not found in profile '{profile_name}'")
+            logger.debug(f"Component '{component}' not found in profile '{profile_name}'")
             return None
         
         component_config = profile_config[component]
@@ -430,7 +434,7 @@ class UIConfig:
             return component_config
         
         if key not in component_config:
-            print(f"FilterMate UIConfig Warning: Key '{key}' not found in component '{component}'")
+            logger.debug(f"Key '{key}' not found in component '{component}'")
             return None
         
         return component_config[key]
@@ -651,18 +655,18 @@ class UIConfig:
                     width = size.width()
                     height = size.height()
                     
-                    print(f"FilterMate UIConfig: Screen resolution detected: {width}x{height}")
+                    logger.debug(f"Screen resolution detected: {width}x{height}")
                     
                     # Determine profile based on resolution
                     # Use compact for laptops and small screens
                     if width < 1920 or height < 1080:
-                        print(f"FilterMate UIConfig: Small screen detected → COMPACT profile")
+                        logger.debug("Small screen detected → COMPACT profile")
                         return DisplayProfile.COMPACT
                     else:
-                        print(f"FilterMate UIConfig: Large screen detected → NORMAL profile")
+                        logger.debug("Large screen detected → NORMAL profile")
                         return DisplayProfile.NORMAL
         except Exception as e:
-            print(f"FilterMate UIConfig: Could not detect screen resolution: {e}")
+            logger.debug(f"Could not detect screen resolution: {e}")
         
         # Fallback to NORMAL if detection fails
         return DisplayProfile.NORMAL
@@ -688,23 +692,23 @@ class UIConfig:
             
             # Handle auto-detection
             if ui_profile == "auto" and auto_detect:
-                print("FilterMate UIConfig: Auto-detection enabled")
+                logger.debug("Auto-detection enabled")
                 detected_profile = cls.detect_optimal_profile()
                 cls.set_profile(detected_profile)
-                print(f"FilterMate UIConfig: Auto-selected profile '{detected_profile.value}'")
+                logger.debug(f"Auto-selected profile '{detected_profile.value}'")
             elif ui_profile == "compact":
                 cls.set_profile(DisplayProfile.COMPACT)
-                print(f"FilterMate UIConfig: Loaded profile 'compact' from config")
+                logger.debug("Loaded profile 'compact' from config")
             elif ui_profile == "normal":
                 cls.set_profile(DisplayProfile.NORMAL)
-                print(f"FilterMate UIConfig: Loaded profile 'normal' from config")
+                logger.debug("Loaded profile 'normal' from config")
             else:
                 # Unknown value, default to normal
                 cls.set_profile(DisplayProfile.NORMAL)
-                print(f"FilterMate UIConfig: Unknown profile '{ui_profile}', using 'normal'")
+                logger.debug(f"Unknown profile '{ui_profile}', using 'normal'")
             
         except Exception as e:
-            print(f"FilterMate UIConfig Warning: Could not load profile from config: {e}")
+            logger.warning(f"Could not load profile from config: {e}")
             cls.set_profile(DisplayProfile.NORMAL)
 
 

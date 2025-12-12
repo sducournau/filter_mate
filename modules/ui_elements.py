@@ -238,25 +238,3 @@ def get_spacer_size(spacer_name: str, compact_mode: bool = True) -> int:
     
     # Default fallback
     return 10 if compact_mode else 15
-
-
-# =============================================================================
-# USAGE EXAMPLES
-# =============================================================================
-
-if __name__ == "__main__":
-    # Example: Get all exploring spacers
-    print("Exploring spacers:")
-    for spacer in get_spacers_by_section("exploring"):
-        size = get_spacer_size(spacer, compact_mode=True)
-        print(f"  - {spacer}: {size}px (compact)")
-    
-    # Example: Get all filtering layouts
-    print("\nFiltering layouts:")
-    for layout in get_layouts_by_section("filtering"):
-        print(f"  - {layout}")
-    
-    # Example: Get all vertical spacers
-    print(f"\nTotal vertical spacers: {len(get_all_vertical_spacers())}")
-    print(f"Total horizontal spacers: {len(get_all_horizontal_spacers())}")
-    print(f"Total layouts: {len(ALL_LAYOUTS)}")

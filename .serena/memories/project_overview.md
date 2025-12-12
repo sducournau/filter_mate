@@ -75,12 +75,41 @@ filter_mate/
 ```
 
 ## Current Status
-- **Version**: 2.2.5 (December 10, 2025)
-- **Development Version**: 2.3.0-alpha (Phase 5a refactoring complete)
-- **Status**: Production - Geographic CRS handling with automatic EPSG:3857 conversion
+- **Version**: 2.2.5 (December 8, 2025)
+- **Development Version**: 2.3.0-alpha (Phase 5d refactoring complete, Undo/Redo implemented)
+- **Status**: Production - Global Undo/Redo with intelligent context detection
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
-- **Refactoring Progress**: Phase 1-5a complete (filter_mate_app.py complexity reduced 40%)
+- **Refactoring Progress**: Phase 1-5d complete, code extracted to modules/tasks/
+
+## File Sizes (as of December 12, 2025)
+- `filter_mate_app.py`: 2048 lines (with new undo/redo features)
+- `filter_mate_dockwidget.py`: 5077 lines
+- `modules/appTasks.py`: 58 lines (most code extracted to modules/tasks/)
+- `modules/tasks/layer_management_task.py`: ~1125 lines
+- `modules/tasks/filter_task.py`: ~950 lines
+- `modules/tasks/task_utils.py`: ~328 lines
+
+## Recent Development (December 12, 2025)
+
+### Global Undo/Redo Functionality (✅ Complete)
+**Date**: December 11-12, 2025
+
+**New Features:**
+- **GlobalFilterState class**: Captures source + remote layers state atomically
+- **Intelligent context detection**: Source-only mode vs global mode
+- **Button state management**: Auto-enable/disable based on history availability
+- **Multi-layer state restoration**: Restore all layers simultaneously
+
+**Implementation Details:**
+- `GlobalFilterState` class in `modules/filter_history.py`
+- `handle_undo()`, `handle_redo()` methods in `filter_mate_app.py`
+- `update_undo_redo_buttons()` for automatic button state updates
+- `currentLayerChanged` signal for real-time updates
+
+**Commits:**
+- `06e8ca2` - feat: Implement undo/redo functionality with visual indicators
+- `39a07c1` - feat: Add intelligent undo/redo for filter operations
 
 ## Recent Development (December 10, 2025)
 
@@ -384,16 +413,18 @@ FilterMate is configured for automatic Serena MCP server activation:
 - Check `POSTGRESQL_AVAILABLE` before PostgreSQL operations
 - Serena MCP server auto-starts when Chat opens (Windows: configured via MCP with SERENA_PROJECT)
 
-## Next Steps (Phase 5b+ Refactoring)
+## Next Steps (Post-Refactoring)
 
 ### Completed
-- ✅ Phase 1: Test infrastructure (26 tests, CI/CD)
+- ✅ Phase 1: Test infrastructure (26+ tests, CI/CD)
 - ✅ Phase 2: Code quality (wildcard imports, PEP 8, bare except)
 - ✅ Phase 3: File decomposition (appTasks.py → modules/tasks/)
 - ✅ Phase 4: filter_mate_dockwidget.py refactoring (35 methods extracted)
-- ✅ Phase 5a: filter_mate_app.py refactoring (4 methods, 12 helpers, -40% complexity)
+- ✅ Phase 5a-d: filter_mate_app.py refactoring (helpers, task params, completion handlers)
+- ✅ Undo/Redo: Global undo/redo with intelligent context detection
 
 ### Planned
-- Phase 5b: Additional method refactoring or test coverage expansion
-- Phase 6: Final optimization and polish
-- Documentation improvements
+- Documentation improvements and user guides
+- Additional unit tests for undo/redo functionality
+- Performance monitoring dashboard
+- End-to-end integration tests

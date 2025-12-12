@@ -320,11 +320,18 @@ class FilterEngineTask(QgsTask):
         Populates self.layers dictionary with layers grouped by provider,
         and updates layers_count.
         """
+        logger.info(f"🔍 _organize_layers_to_filter() called")
+        logger.info(f"  has_layers_to_filter: {self.task_parameters['filtering']['has_layers_to_filter']}")
+        logger.info(f"  task['layers'] count: {len(self.task_parameters['task'].get('layers', []))}")
+        
         if not self.task_parameters["filtering"]["has_layers_to_filter"]:
+            logger.warning("  ⚠️ has_layers_to_filter is False - skipping distant layers organization")
             return
         
         for layer_props in self.task_parameters["task"]["layers"]:
             provider_type = layer_props["layer_provider_type"]
+            layer_name = layer_props.get("layer_name", "unknown")
+            logger.info(f"  Processing layer: {layer_name} ({provider_type})")
             
             # Initialize provider list if needed
             if provider_type not in self.layers:
@@ -339,8 +346,12 @@ class FilterEngineTask(QgsTask):
             if layers:
                 self.layers[provider_type].append([layers[0], layer_props])
                 self.layers_count += 1
+                logger.info(f"    ✓ Added to filter list (total: {self.layers_count})")
+            else:
+                logger.warning(f"    ⚠️ Layer not found in project: {layer_name} (id: {layer_props.get('layer_id', 'unknown')})")
         
         self.provider_list = list(self.layers.keys())
+        logger.info(f"  📊 Final organized layers count: {self.layers_count}, providers: {self.provider_list}")
 
     def _log_backend_info(self):
         """
@@ -733,35 +744,53 @@ class FilterEngineTask(QgsTask):
             buffer_expr = self.task_parameters["filtering"]["buffer_value_expression"]
             buffer_val = self.task_parameters["filtering"]["buffer_value"]
             
-            logger.info(f"  buffer_value_property: {buffer_property}")
+            logger.info(f"  buffer_value_property (override active): {buffer_property}")
             logger.info(f"  buffer_value_expression: '{buffer_expr}'")
-            logger.info(f"  buffer_value: {buffer_val}")
+            logger.info(f"  buffer_value (spinbox): {buffer_val}")
             
-            # CRITICAL FIX: Check buffer_value_expression FIRST, regardless of buffer_property
-            # UI sometimes sets buffer_property=False but still provides buffer_value_expression
+            # CRITICAL: Check buffer_value_expression FIRST
+            # When mPropertyOverrideButton_filtering_buffer_value_property is active with valid expression,
+            # it takes precedence over the spinbox value
             if buffer_expr != '' and buffer_expr is not None:
                 # Try to convert to float - if successful, it's a static value
                 try:
                     numeric_value = float(buffer_expr)
                     self.param_buffer_value = numeric_value
-                    logger.info(f"  ✓ Buffer expression is static value: {self.param_buffer_value}m")
-                    logger.info(f"  ℹ️  Converted from expression '{buffer_expr}' to numeric value")
+                    logger.info(f"  ✓ Buffer from property override (numeric): {self.param_buffer_value}m")
+                    logger.info(f"  ℹ️  Expression '{buffer_expr}' converted to static value")
                 except (ValueError, TypeError):
-                    # It's a real dynamic expression (e.g., field reference)
+                    # It's a real dynamic expression (e.g., field reference or complex expression)
                     self.param_buffer_expression = buffer_expr
-                    logger.info(f"  ✓ Buffer DYNAMIC EXPRESSION set: {self.param_buffer_expression}")
-                    logger.warning(f"  ⚠️  Dynamic buffer expressions may not work with all backends")
+                    logger.info(f"  ✓ Buffer from property override (DYNAMIC EXPRESSION): {self.param_buffer_expression}")
+                    logger.info(f"  ℹ️  Will evaluate expression per feature (e.g., field reference)")
+                    if buffer_property:
+                        logger.info(f"  ✓ Property override button confirmed ACTIVE")
+                    else:
+                        logger.warning(f"  ⚠️  Expression found but buffer_value_property=False (UI state mismatch?)")
             elif buffer_val is not None and buffer_val != 0:
-                # Fallback to buffer_value
+                # Fallback to buffer_value from spinbox
                 self.param_buffer_value = buffer_val
-                logger.info(f"  ✓ Buffer VALUE set: {self.param_buffer_value}m")
+                logger.info(f"  ✓ Buffer from spinbox VALUE: {self.param_buffer_value}m")
             else:
                 # No valid buffer specified
                 self.param_buffer_value = 0
                 logger.warning(f"  ⚠️  No valid buffer value found, defaulting to 0m")
         else:
-            logger.warning(f"  ⚠️  NO BUFFER configured (has_buffer_value=False)")
-            logger.warning(f"  ⚠️  param_buffer_value will remain: {getattr(self, 'param_buffer_value', 'NOT SET')}")
+            # CRITICAL FIX: Reset buffer parameters when no buffer is configured
+            # This prevents using buffer values from previous filtering operations
+            old_buffer = getattr(self, 'param_buffer_value', None)
+            old_expr = getattr(self, 'param_buffer_expression', None)
+            
+            self.param_buffer_value = 0
+            self.param_buffer_expression = None
+            
+            logger.info(f"  ℹ️  NO BUFFER configured (has_buffer_value=False)")
+            if old_buffer is not None and old_buffer != 0:
+                logger.info(f"  ✓ Reset buffer_value: {old_buffer}m → 0m")
+            if old_expr is not None:
+                logger.info(f"  ✓ Reset buffer_expression: '{old_expr}' → None")
+            if old_buffer is None or old_buffer == 0:
+                logger.info(f"  ✓ Buffer already at 0m (no reset needed)")
         
         logger.info("✓ _initialize_source_subset_and_buffer() END")
 
@@ -2709,91 +2738,35 @@ class FilterEngineTask(QgsTask):
 
     def execute_unfiltering(self):
         """
-        Execute undo operation using the new HistoryManager system.
+        Remove all filters from source layer and selected remote layers.
         
-        This method now uses the in-memory history manager to restore the previous
-        filter state instead of manipulating the database history table directly.
+        This clears filters completely (sets subsetString to empty) for:
+        - The current/source layer
+        - All selected remote layers (layers_to_filter)
         
-        IMPORTANT: This bypasses manage_layer_subset_strings to avoid triggering
-        the old _unfilter_action that would delete database history entries.
+        NOTE: This is different from undo - it removes filters entirely rather than
+        restoring previous filter state. Use undo button for history navigation.
         """
-        # Get history manager from task parameters (passed from filter_mate_app)
-        history_manager = self.task_parameters["task"].get("history_manager")
+        logger.info("FilterMate: Clearing all filters on source and selected layers")
         
-        if not history_manager:
-            logger.error("FilterMate: No history_manager in task parameters, cannot undo")
-            return False
+        # Clear filter on source layer
+        safe_set_subset_string(self.source_layer, '')
+        logger.info(f"FilterMate: Cleared filter on source layer {self.source_layer.name()}")
         
-        # Get history for source layer
-        history = history_manager.get_history(self.source_layer.id())
+        # Clear filters on all selected associated layers
+        i = 1
+        self.setProgress((i/self.layers_count)*100)
         
-        if not history or not history.can_undo():
-            logger.info("FilterMate: No undo history available, clearing filters")
-            # No history available - clear filters as fallback
-            safe_set_subset_string(self.source_layer, '')
-            
-            # Clear filters on associated layers too
-            i = 1
-            self.setProgress((i/self.layers_count)*100)
-            
-            for layer_provider_type in self.layers:
-                for layer, layer_props in self.layers[layer_provider_type]:
-                    safe_set_subset_string(layer, '')
-                    i += 1
-                    self.setProgress((i/self.layers_count)*100)
-                    if self.isCanceled():
-                        return False
-            return True
+        for layer_provider_type in self.layers:
+            for layer, layer_props in self.layers[layer_provider_type]:
+                safe_set_subset_string(layer, '')
+                logger.info(f"FilterMate: Cleared filter on layer {layer.name()}")
+                i += 1
+                self.setProgress((i/self.layers_count)*100)
+                if self.isCanceled():
+                    return False
         
-        # Use history manager to get previous state
-        previous_state = history.undo()
-        
-        if previous_state:
-            logger.info(f"FilterMate: Restoring previous filter: {previous_state.description}")
-            # Apply previous filter expression to source layer directly
-            safe_set_subset_string(self.source_layer, previous_state.expression)
-            
-            # Restore associated layers filters from their history
-            i = 1
-            self.setProgress((i/self.layers_count)*100)
-            
-            for layer_provider_type in self.layers:
-                for layer, layer_props in self.layers[layer_provider_type]:
-                    # Get history for this associated layer
-                    layer_history = history_manager.get_history(layer.id())
-                    
-                    if layer_history and layer_history.can_undo():
-                        # Restore previous filter for this layer
-                        layer_previous_state = layer_history.undo()
-                        if layer_previous_state:
-                            safe_set_subset_string(layer, layer_previous_state.expression)
-                            logger.info(f"FilterMate: Restored filter for layer {layer.name()}: {layer_previous_state.description}")
-                        else:
-                            # No previous state available, clear the filter
-                            safe_set_subset_string(layer, '')
-                            logger.debug(f"FilterMate: No previous state for layer {layer.name()}, clearing filter")
-                    else:
-                        # No history available for this layer, clear the filter
-                        safe_set_subset_string(layer, '')
-                        logger.debug(f"FilterMate: No history for layer {layer.name()}, clearing filter")
-                    
-                    i += 1
-                    self.setProgress((i/self.layers_count)*100)
-                    if self.isCanceled():
-                        return False
-        else:
-            logger.warning("FilterMate: History undo returned None, clearing filters")
-            safe_set_subset_string(self.source_layer, '')
-            
-            i = 1
-            for layer_provider_type in self.layers:
-                for layer, layer_props in self.layers[layer_provider_type]:
-                    safe_set_subset_string(layer, '')
-                    i += 1
-                    self.setProgress((i/self.layers_count)*100)
-                    if self.isCanceled():
-                        return False
-        
+        logger.info(f"FilterMate: Successfully cleared filters on {self.layers_count} layer(s)")
         return True
     
     def execute_reseting(self):

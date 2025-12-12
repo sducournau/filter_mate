@@ -69,7 +69,13 @@ class PopulateListEngineTask(QgsTask):
         self.parent = parent
 
         self.silent_flag = silent_flag
+        
+        # CRITICAL: Store layer reference at task creation time
+        # This ensures consistency between layer and its properties
         self.layer = self.parent.layer
+        
+        # Store the layer_id at creation time to detect if layer changed
+        self._created_layer_id = self.layer.id() if self.layer else None
         
         # Vérifier que le layer existe toujours dans list_widgets
         if self.layer is None or self.layer.id() not in self.parent.list_widgets:
@@ -89,6 +95,16 @@ class PopulateListEngineTask(QgsTask):
             if self.layer is None or self.layer.id() not in self.parent.list_widgets:
                 logger.warning(f'Layer no longer exists in list_widgets, skipping task: {self.action}')
                 return False
+            
+            # CRITICAL: Check if the parent's current layer has changed since task creation
+            # This prevents race conditions where task was created for layer A but parent now has layer B
+            if self._created_layer_id and self.parent.layer is not None:
+                if self.parent.layer.id() != self._created_layer_id:
+                    # Get layer names for more informative message
+                    old_layer_name = self.layer.name() if self.layer else "Unknown"
+                    new_layer_name = self.parent.layer.name() if self.parent.layer else "Unknown"
+                    logger.info(f'Layer changed since task creation (was {old_layer_name}_{self._created_layer_id[:8]}, now {new_layer_name}_{self.parent.layer.id()[:8]}), skipping task: {self.action}')
+                    return False
                 
             if self.action == 'buildFeaturesList':
                 self.buildFeaturesList()
@@ -142,6 +158,19 @@ class PopulateListEngineTask(QgsTask):
             
         
         if layer_features_source is not None:
+            # Validate that required fields exist in the layer
+            field_names = [field.name() for field in self.layer.fields()]
+            
+            # Check identifier field
+            if self.identifier_field_name and self.identifier_field_name not in field_names:
+                logger.warning(f"Identifier field '{self.identifier_field_name}' not found in layer '{self.layer.name()}'. Available fields: {field_names}")
+                return
+            
+            # Check display expression field (only when is_field_flag is True)
+            if self.is_field_flag is True and self.display_expression and self.display_expression not in field_names:
+                logger.warning(f"Display field '{self.display_expression}' not found in layer '{self.layer.name()}'. Available fields: {field_names}")
+                return
+            
             if self.parent.list_widgets[self.layer.id()].getFilterExpression() != '':
                 filter_expression = self.parent.list_widgets[self.layer.id()].getFilterExpression()
                 if QgsExpression(filter_expression).isValid():
@@ -605,7 +634,20 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         try:
 
             if layer is not None:
+                # Cancel all tasks for the OLD layer BEFORE changing to new layer
                 if self.layer is not None:
+                    old_layer_id = self.layer.id()
+                    # Cancel all pending tasks for the old layer
+                    for task_type in self.tasks:
+                        if old_layer_id in self.tasks[task_type]:
+                            try:
+                                if isinstance(self.tasks[task_type][old_layer_id], QgsTask):
+                                    self.tasks[task_type][old_layer_id].cancel()
+                                    logger.debug(f"Cancelled task {task_type} for old layer {old_layer_id}")
+                            except (RuntimeError, KeyError):
+                                # Task already finished or doesn't exist
+                                pass
+                    
                     self.filter_le.clear()
                     self.items_le.clear()
                     
@@ -618,8 +660,19 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 # Validate required keys exist before accessing
                 if "infos" in layer_props and "primary_key_name" in layer_props["infos"]:
                     if self.layer.id() in self.list_widgets:
+                        # Update identifier field name if it changed (important when reusing widgets)
                         if self.list_widgets[self.layer.id()].getIdentifierFieldName() != layer_props["infos"]["primary_key_name"]:
+                            logger.debug(f"Updating identifier field from '{self.list_widgets[self.layer.id()].getIdentifierFieldName()}' to '{layer_props['infos']['primary_key_name']}' for layer {self.layer.name()}")
                             self.list_widgets[self.layer.id()].setIdentifierFieldName(layer_props["infos"]["primary_key_name"])
+                        
+                        # CRITICAL: Clear stale display expression when reusing a widget
+                        # This prevents using expressions from a different layer with the same ID
+                        current_expr = self.list_widgets[self.layer.id()].getDisplayExpression()
+                        if current_expr and current_expr != layer_props["infos"]["primary_key_name"]:
+                            # Widget has an expression that's not the primary key
+                            # Reset it to ensure it will be updated with correct layer_props expression
+                            logger.debug(f"Resetting stale display expression '{current_expr}' for reused widget of layer {self.layer.name()}")
+                            self.list_widgets[self.layer.id()].setDisplayExpression("")
                 else:
                     logger.warning(f"layer_props missing required keys in setLayer for layer {layer.id()}")
 
@@ -630,8 +683,16 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 if self.layer.id() in self.list_widgets:
                     self.filter_le.setText(self.list_widgets[self.layer.id()].getFilterText())
 
-                    if self.list_widgets[self.layer.id()].getDisplayExpression() != layer_props["exploring"]["multiple_selection_expression"]:
-                        self.setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+                    # ALWAYS update display expression when changing layer to ensure
+                    # we use the correct expression from layer_props, not a stale value
+                    # from a previous layer with the same widget
+                    expected_expression = layer_props["exploring"]["multiple_selection_expression"]
+                    current_expression = self.list_widgets[self.layer.id()].getDisplayExpression()
+                    
+                    # Force update if expression is different OR if widget was just created/reused
+                    if current_expression != expected_expression or not current_expression:
+                        logger.debug(f"Updating display expression from '{current_expression}' to '{expected_expression}' for layer {self.layer.name()}")
+                        self.setDisplayExpression(expected_expression)
                     else:
                         description = 'Loading features'
                         action = 'loadFeaturesList'
@@ -663,7 +724,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
     def setDisplayExpression(self, expression):
         
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setDisplayExpression called with: {expression}")
+        
         if self.layer is not None:
+            logger.debug(f"layer.id()={self.layer.id()}, list_widgets keys={list(self.list_widgets.keys())}")
             # Check if widget exists for this layer
             if self.layer.id() not in self.list_widgets:
                 logger.warning(f"No list widget found for layer {self.layer.id()} in setDisplayExpression")

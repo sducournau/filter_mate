@@ -314,19 +314,55 @@ class LayersManagementEngineTask(QgsTask):
 
     def _migrate_legacy_geometry_field(self, layer_variables, layer):
         """
-        Migrate old 'geometry_field' key to 'layer_geometry_field' and add missing properties.
+        Migrate legacy properties and ensure all required properties exist.
+        
+        This function handles backward compatibility for layers created with older versions
+        of the plugin. It ensures that:
+        1. Old property names are migrated to new names
+        2. All required properties exist with sensible defaults
+        3. Expression properties use the layer's primary key
         
         Args:
             layer_variables (dict): Dictionary with layer properties
             layer (QgsVectorLayer): Layer being processed
         """
         infos = layer_variables.get("infos", {})
+        exploring = layer_variables.get("exploring", {})
+        primary_key = infos.get("primary_key_name", "id")
         
-        # Migrate geometry_field to layer_geometry_field
+        # Migrate old geometry_field to layer_geometry_field
         if "geometry_field" in infos and "layer_geometry_field" not in infos:
             infos["layer_geometry_field"] = infos["geometry_field"]
             del infos["geometry_field"]
             logger.info(f"Migrated geometry_field to layer_geometry_field for layer {layer.id()}")
+        
+        # Ensure all required exploring boolean flags exist
+        exploring_booleans = {
+            "is_linking": False,
+            "is_selecting": False,
+            "is_tracking": False,
+            "is_changing_all_layer_properties": True
+        }
+        for prop_name, default_value in exploring_booleans.items():
+            if prop_name not in exploring:
+                exploring[prop_name] = default_value
+                logger.info(f"Added missing '{prop_name}' property for layer {layer.id()}")
+        
+        # Ensure exploring groupbox property exists
+        if "current_exploring_groupbox" not in exploring:
+            exploring["current_exploring_groupbox"] = "single_selection"
+            logger.info(f"Added missing 'current_exploring_groupbox' property for layer {layer.id()}")
+        
+        # Ensure all expression properties exist with primary key as default
+        expression_properties = [
+            "single_selection_expression",
+            "multiple_selection_expression",
+            "custom_selection_expression"
+        ]
+        for prop_name in expression_properties:
+            if prop_name not in exploring:
+                exploring[prop_name] = str(primary_key)
+                logger.info(f"Added missing '{prop_name}' property for layer {layer.id()}")
             
             # Update database with new key name
             try:

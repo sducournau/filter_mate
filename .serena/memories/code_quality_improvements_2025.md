@@ -1,5 +1,7 @@
 # Code Quality Improvements - Session 2025
 
+**Last Updated:** December 12, 2025
+
 ## Summary of Changes Made
 
 ### Phase A: PEP 8 None Comparisons ✅ COMPLETE
@@ -43,8 +45,35 @@ Identified for future work:
 - `connexion` → `connection` throughout codebase
 - Requires careful refactoring due to widespread usage
 
+### Phase D: Undo/Redo Implementation ✅ COMPLETE (December 11-12, 2025)
+**Major Feature Addition:**
+- Implemented GlobalFilterState class in `modules/filter_history.py`
+- Added `handle_undo()` and `handle_redo()` methods in `filter_mate_app.py`
+- Added `update_undo_redo_buttons()` for automatic button state management
+- Added `currentLayerChanged` signal in dockwidget
+- Intelligent context detection (source-only vs global mode)
+- Multi-layer state restoration capability
+
+**New Components:**
+- `GlobalFilterState` class with source + remote layers state
+- Extended `HistoryManager` with global history stack
+- `_push_filter_to_history()` extended with global state support
+
+**Files Modified:**
+- `filter_mate_app.py`: +400 lines (undo/redo methods)
+- `modules/filter_history.py`: +150 lines (GlobalFilterState, extended HistoryManager)
+- `filter_mate_dockwidget.py`: Added currentLayerChanged signal
+
+**Documentation Created:**
+- `docs/UNDO_REDO_IMPLEMENTATION.md`
+- `docs/USER_GUIDE_UNDO_REDO.md`
+
+**Tests Created:**
+- `tests/test_undo_redo.py`
+
 ## Files Created
 - `modules/type_utils.py` (126 lines)
+- `tests/test_undo_redo.py` (new)
 
 ## Files Modified
 - `filter_mate_app.py`

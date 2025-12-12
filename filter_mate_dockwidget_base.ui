@@ -897,9 +897,7 @@
                    <property name="collapsed">
                     <bool>false</bool>
                    </property>
-                   <property name="syncGroup">
-                    <string>exploring</string>
-                   </property>
+                   <!-- syncGroup REMOVED: interferes with manual exclusive groupbox logic -->
                    <property name="saveCollapsedState">
                     <bool>true</bool>
                    </property>
@@ -1017,13 +1015,7 @@
                    <property name="minimumSize">
                     <size>
                      <width>100</width>
-                     <height>65</height>
-                    </size>
-                   </property>
-                   <property name="maximumSize">
-                    <size>
-                     <width>16777215</width>
-                     <height>29</height>
+                     <height>0</height>
                     </size>
                    </property>
                    <property name="font">
@@ -1060,9 +1052,7 @@
                    <property name="collapsed">
                     <bool>true</bool>
                    </property>
-                   <property name="syncGroup">
-                    <string>exploring</string>
-                   </property>
+                   <!-- syncGroup REMOVED: interferes with manual exclusive groupbox logic -->
                    <property name="saveCollapsedState">
                     <bool>true</bool>
                    </property>
@@ -1184,9 +1174,7 @@
                    <property name="collapsed">
                     <bool>true</bool>
                    </property>
-                   <property name="syncGroup">
-                    <string>exploring</string>
-                   </property>
+                   <!-- syncGroup REMOVED: interferes with manual exclusive groupbox logic -->
                    <property name="saveCollapsedState">
                     <bool>true</bool>
                    </property>

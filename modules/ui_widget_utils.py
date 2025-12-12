@@ -260,7 +260,7 @@ def get_profile_info() -> dict:
             "spacing_medium": UIConfig.get_spacing("medium")
         }
     except Exception as e:
-        print(f"FilterMate: Error getting profile info: {e}")
+        logger.debug(f"Error getting profile info: {e}")
         return {"available": False, "error": str(e)}
 
 
@@ -285,11 +285,11 @@ def switch_profile(profile_name: str) -> bool:
             UIConfig.set_profile(DisplayProfile.NORMAL)
             return True
         else:
-            print(f"FilterMate: Unknown profile '{profile_name}'")
+            logger.debug(f"Unknown profile '{profile_name}'")
             return False
             
     except Exception as e:
-        print(f"FilterMate: Error switching profile: {e}")
+        logger.debug(f"Error switching profile: {e}")
         return False
 
 
@@ -354,7 +354,7 @@ def apply_dockwidget_dimensions(dockwidget: QWidget) -> None:
         # not on the widget itself. This is more of a hint for initial sizing.
         
     except Exception as e:
-        print(f"FilterMate: Error applying dockwidget dimensions: {e}")
+        logger.debug(f"Error applying dockwidget dimensions: {e}")
 
 
 def auto_configure_from_environment(config_data: dict = None) -> dict:
@@ -418,7 +418,7 @@ def auto_configure_from_environment(config_data: dict = None) -> dict:
             result['theme_source'] = 'auto-detected from QGIS'
             result['qgis_theme'] = detected_theme
         except Exception as e:
-            print(f"FilterMate: Could not detect QGIS theme: {e}")
+            logger.debug(f"Could not detect QGIS theme: {e}")
         
         # Override with config if provided and not "auto"
         if config_data:
@@ -452,17 +452,10 @@ def auto_configure_from_environment(config_data: dict = None) -> dict:
                 result['theme_detected'] = theme_setting
                 result['theme_source'] = 'config.json'
         
-        print(f"\n{'='*60}")
-        print(f"FilterMate Auto-Configuration")
-        print(f"{'='*60}")
-        print(f"Screen Resolution: {result['screen_resolution']}")
-        print(f"UI Profile: {result['profile_detected']} ({result['profile_source']})")
-        print(f"QGIS Theme: {result['qgis_theme']}")
-        print(f"Color Theme: {result['theme_detected']} ({result['theme_source']})")
-        print(f"{'='*60}\n")
+        logger.debug(f"Auto-Configuration: Screen={result['screen_resolution']}, Profile={result['profile_detected']}, Theme={result['theme_detected']}")
         
     except Exception as e:
-        print(f"FilterMate: Error in auto-configuration: {e}")
+        logger.debug(f"Error in auto-configuration: {e}")
         result['error'] = str(e)
     
     return result

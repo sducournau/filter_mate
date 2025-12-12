@@ -1,4 +1,4 @@
-# Testing & Quality Assurance - FilterMate v2.2.4
+# Testing & Quality Assurance - FilterMate v2.3.0-alpha
 
 ## Test Structure
 
@@ -30,6 +30,7 @@ tests/
 ├── test_qt_json_view_themes.py          # JSON view theme tests
 ├── test_refactored_helpers_appTasks.py  # AppTasks helper tests
 ├── test_refactored_helpers_dockwidget.py # Dockwidget helper tests
+├── test_undo_redo.py                    # Undo/redo functionality tests (NEW)
 ├── test_signal_type_fix.py              # Signal type fix tests
 ├── test_signal_utils.py                 # Signal utility tests
 ├── test_source_table_name.py            # Source table name tests
@@ -489,7 +490,12 @@ pytest tests/ -v --strict-markers --tb=short
 - `docs/DEVELOPER_ONBOARDING.md`: Developer setup including testing
 - `docs/COLOR_HARMONIZATION.md`: Accessibility testing guide
 
-## Recent Test Additions (v2.2.x)
+## Recent Test Additions (v2.2.x-2.3.x)
+
+### v2.3.0-alpha (December 2025)
+- ✅ `test_undo_redo.py`: Undo/redo functionality tests
+- ✅ GlobalFilterState and HistoryManager tests
+- ✅ Source-only vs global mode detection tests
 
 ### v2.2.4
 - ✅ `test_spatialite_expression_quotes.py`: Field name quote preservation

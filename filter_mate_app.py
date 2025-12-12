@@ -5,7 +5,9 @@ from qgis.core import (
     QgsApplication,
     QgsAuthMethodConfig,
     QgsCoordinateReferenceSystem,
+    QgsCoordinateTransformContext,
     QgsDataSourceUri,
+    QgsExpression,
     QgsExpressionContextUtils,
     QgsProject,
     QgsTask,
@@ -725,11 +727,34 @@ class FilterMateApp:
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
                 
+                # DEBUG: Log filtering state
+                filtering_props = self.PROJECT_LAYERS[current_layer.id()]["filtering"]
+                print(f"🔷 get_task_parameters - Filtering state for {current_layer.name()}:")
+                print(f"   has_layers_to_filter: {filtering_props.get('has_layers_to_filter', 'NOT SET')}")
+                print(f"   layers_to_filter (IDs): {filtering_props.get('layers_to_filter', [])}")
+                print(f"   has_geometric_predicates: {filtering_props.get('has_geometric_predicates', 'NOT SET')}")
+                print(f"   geometric_predicates: {filtering_props.get('geometric_predicates', [])}")
+                print(f"   Built layers_to_filter count: {len(layers_to_filter)}")
+                
                 # Build common task parameters
-                include_history = (task_name == 'unfilter')
+                # Note: unfilter no longer needs history_manager (just clears filters)
+                include_history = False
                 task_parameters["task"] = self._build_common_task_params(
                     features, expression, layers_to_filter, include_history
                 )
+                
+                # NOUVEAU: Détecter si le filtre source doit être ignoré
+                # Cas: custom_selection active ET expression est juste un champ (pas complexe)
+                skip_source_filter = False
+                if (task_name == 'filter' and 
+                    self.dockwidget.current_exploring_groupbox == "custom_selection" and
+                    expression):
+                    qgs_expr = QgsExpression(expression)
+                    if qgs_expr.isValid() and qgs_expr.isField():
+                        skip_source_filter = True
+                        logger.info(f"FilterMate: Custom selection with field-only expression '{expression}' - will skip source layer filter")
+                
+                task_parameters["task"]["skip_source_filter"] = skip_source_filter
                 
                 # Initialize filter history for 'filter' operation
                 if task_name == 'filter':
@@ -883,8 +908,8 @@ class FilterMateApp:
         # Check if remote layers are selected and filtered
         has_filtered_remote_layers = False
         if layers_to_filter:
-            for layer_info in layers_to_filter:
-                layer_id = layer_info.get("layer_id")
+            for layer_id in layers_to_filter:
+                # layer_id is a string (layer ID), not a dictionary
                 if layer_id and layer_id in self.PROJECT_LAYERS:
                     remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
                     if remote_layers and remote_layers[0].subsetString():
@@ -1073,7 +1098,7 @@ class FilterMateApp:
         elif task_name == 'unfilter':
             iface.messageBar().pushInfo(
                 "FilterMate",
-                f"{feature_count:,} features visible in main layer (restored from history)"
+                f"All filters cleared - {feature_count:,} features visible in main layer"
             )
         elif task_name == 'reset':
             iface.messageBar().pushInfo(
@@ -1572,7 +1597,7 @@ class FilterMateApp:
             - Creates directory structure if missing
         """
 
-        if self.PROJECT is not None and len(list(self.PROJECT.mapLayers().values())) > 0:
+        if self.PROJECT is not None:
 
             self.project_file_name = os.path.basename(self.PROJECT.absoluteFilePath())
             self.project_file_path = self.PROJECT.absolutePath()

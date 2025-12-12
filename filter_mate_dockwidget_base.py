@@ -433,8 +433,7 @@ class Ui_FilterMateDockWidgetBase(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.mGroupBox_exploring_multiple_selection.sizePolicy().hasHeightForWidth())
         self.mGroupBox_exploring_multiple_selection.setSizePolicy(sizePolicy)
-        self.mGroupBox_exploring_multiple_selection.setMinimumSize(QtCore.QSize(100, 65))
-        self.mGroupBox_exploring_multiple_selection.setMaximumSize(QtCore.QSize(16777215, 29))
+        self.mGroupBox_exploring_multiple_selection.setMinimumSize(QtCore.QSize(100, 0))
         font = QtGui.QFont()
         font.setFamily("Segoe UI Semibold")
         font.setPointSize(10)
@@ -1526,11 +1525,11 @@ class Ui_FilterMateDockWidgetBase(object):
         _translate = QtCore.QCoreApplication.translate
         FilterMateDockWidgetBase.setWindowTitle(_translate("FilterMateDockWidgetBase", "FilterMate"))
         self.mGroupBox_exploring_single_selection.setTitle(_translate("FilterMateDockWidgetBase", "SINGLE SELECTION"))
-        self.mGroupBox_exploring_single_selection.setSyncGroup(_translate("FilterMateDockWidgetBase", "exploring"))
+        # REMOVED: setSyncGroup interferes with manual exclusive groupbox logic
         self.mGroupBox_exploring_multiple_selection.setTitle(_translate("FilterMateDockWidgetBase", "MULTIPLE SELECTION"))
-        self.mGroupBox_exploring_multiple_selection.setSyncGroup(_translate("FilterMateDockWidgetBase", "exploring"))
+        # REMOVED: setSyncGroup interferes with manual exclusive groupbox logic
         self.mGroupBox_exploring_custom_selection.setTitle(_translate("FilterMateDockWidgetBase", "CUSTOM SELECTION"))
-        self.mGroupBox_exploring_custom_selection.setSyncGroup(_translate("FilterMateDockWidgetBase", "exploring"))
+        # REMOVED: setSyncGroup interferes with manual exclusive groupbox logic
         self.pushButton_checkable_filtering_layers_to_filter.setToolTip(_translate("FilterMateDockWidgetBase", "Filtrage multicouche"))
         self.pushButton_checkable_filtering_current_layer_combine_operator.setToolTip(_translate("FilterMateDockWidgetBase", "Filtrage additif pour la couche sélectionnée"))
         self.pushButton_checkable_filtering_geometric_predicates.setToolTip(_translate("FilterMateDockWidgetBase", "Filtrage géospatial"))

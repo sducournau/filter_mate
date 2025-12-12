@@ -1,5 +1,35 @@
 # Known Issues & Bug Fixes - FilterMate
 
+## Recently Added Features (v2.3.0-alpha - December 12, 2025)
+
+### Global Undo/Redo Functionality
+**Status:** ✅ IMPLEMENTED
+
+**Feature Description:**
+- Intelligent undo/redo system with context-aware behavior
+- **Source Layer Only Mode**: When no remote layers are selected
+- **Global Mode**: When remote layers are selected and filtered
+
+**Implementation:**
+- `GlobalFilterState` class in `modules/filter_history.py`
+- `handle_undo()` and `handle_redo()` methods in `filter_mate_app.py`
+- `update_undo_redo_buttons()` for automatic button state management
+- `currentLayerChanged` signal for real-time UI updates
+
+**Files Changed:**
+- `filter_mate_app.py`: Added undo/redo handlers
+- `modules/filter_history.py`: Added GlobalFilterState class, extended HistoryManager
+- `filter_mate_dockwidget.py`: Added currentLayerChanged signal
+
+**Documentation:**
+- `docs/UNDO_REDO_IMPLEMENTATION.md`: Complete implementation guide
+- `docs/USER_GUIDE_UNDO_REDO.md`: User documentation
+
+**Tests:**
+- `tests/test_undo_redo.py`: Unit tests for undo/redo functionality
+
+---
+
 ## Recently Fixed (v2.3.1-alpha - December 11, 2025)
 
 ### Code Duplicate Removed - manage_task()

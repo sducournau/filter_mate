@@ -1,4 +1,6 @@
-# UI System Documentation - FilterMate v2.2.2
+# UI System Documentation - FilterMate v2.3.0-alpha
+
+**Last Updated:** December 12, 2025
 
 ## Overview
 
@@ -753,6 +755,25 @@ pytest tests/test_qt_json_view_themes.py -v
 - `docs/THEMES.md`: Theme system details
 - `docs/CONFIG_JSON_REACTIVITY.md`: Configuration reactivity (v2.2.2)
 - `docs/CONFIG_JSON_IMPROVEMENTS.md`: Configuration enhancements (v2.2.2)
+
+## Undo/Redo UI Integration (NEW in v2.3.0-alpha)
+
+### Buttons
+- `pushButton_action_undo_filter`: Undo button
+- `pushButton_action_redo_filter`: Redo button
+
+### Signals
+- `currentLayerChanged`: Emitted when layer selection changes
+  - Triggers `update_undo_redo_buttons()` for immediate UI update
+
+### Button State Management
+- Buttons auto-enable/disable based on history availability
+- Updates after filter operations, undo, redo, or layer changes
+- Context-aware: source-only mode vs global mode
+
+### User Feedback
+- Success messages indicate which mode was used
+- Clear indication of state restoration
 
 ## Future UI Enhancements
 

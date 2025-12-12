@@ -1,7 +1,8 @@
 # Architecture Overview - FilterMate v2.2.5
 
-**Last Updated:** December 10, 2025
-**Current Version:** 2.2.5 - Automatic Geographic CRS Handling
+**Last Updated:** December 12, 2025
+**Current Version:** 2.2.5 (Production) / 2.3.0-alpha (Development)
+**Key Feature:** Global Undo/Redo with Intelligent Context Detection
 
 ## System Architecture
 
@@ -63,7 +64,7 @@ FilterMate follows a layered architecture with clear separation of concerns:
 
 ### 2. Application Orchestrator
 **File:** `filter_mate_app.py`
-**Lines:** ~1376 (after Phase 5a refactoring - was ~1687)
+**Lines:** ~2048 (after Phase 5d + Undo/Redo - was ~1376)
 **Purpose:** Central coordinator between UI and backend
 
 **Key Responsibilities:**
@@ -72,14 +73,18 @@ FilterMate follows a layered architecture with clear separation of concerns:
 - Project configuration persistence
 - Database initialization
 - Result processing
+- **NEW:** Global undo/redo with intelligent context detection
 
 **Key Methods:**
-- `manage_task(task_type, params)`: Central task dispatcher (127 lines after Phase 5a)
-- `get_task_parameters()`: Prepares task configuration (134 lines after Phase 5a)
-- `layer_management_engine_task_completed()`: Layer operation callback (104 lines after Phase 5a)
+- `manage_task(task_type, params)`: Central task dispatcher
+- `get_task_parameters()`: Prepares task configuration
+- `layer_management_engine_task_completed()`: Layer operation callback
 - `filter_engine_task_completed()`: Filter operation callback
 - `apply_subset_filter()`: Applies filter expression to layers
-- `init_filterMate_db()`: Initialize Spatialite metadata database (103 lines after Phase 5a)
+- `init_filterMate_db()`: Initialize Spatialite metadata database
+- **NEW:** `handle_undo()`: Intelligent undo (source-only or global)
+- **NEW:** `handle_redo()`: Intelligent redo (source-only or global)
+- **NEW:** `update_undo_redo_buttons()`: Auto-enable/disable based on history
 
 **Phase 5a Refactoring (December 10, 2025):**
 - **12 Helper Methods Extracted** following Single Responsibility Principle
@@ -98,7 +103,7 @@ FilterMate follows a layered architecture with clear separation of concerns:
 
 ### 3. UI Management
 **File:** `filter_mate_dockwidget.py`
-**Lines:** ~4438 (after Phase 4c/4d refactoring)
+**Lines:** ~5077 (after Phase 4c/4d refactoring + undo/redo integration)
 **Purpose:** User interface and interaction handling
 
 **Key Responsibilities:**
@@ -125,9 +130,15 @@ FilterMate follows a layered architecture with clear separation of concerns:
 - Configuration JSON tree view
 
 ### 4. Task Execution Layer
-**File:** `modules/appTasks.py`
-**Lines:** ~2800
-**Purpose:** Asynchronous task execution with QgsTask
+**File:** `modules/appTasks.py` (now just re-exports from modules/tasks/)
+**Lines:** ~58 (re-exports only - code moved to modules/tasks/)
+**Purpose:** Backwards compatibility re-exports for task classes
+
+**Actual Task Files (modules/tasks/):**
+- `filter_task.py`: FilterEngineTask (~950 lines)
+- `layer_management_task.py`: LayersManagementEngineTask (~1125 lines)
+- `task_utils.py`: Common utilities (~328 lines)
+- `geometry_cache.py`: SourceGeometryCache (~146 lines)
 
 **Key Classes:**
 

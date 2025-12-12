@@ -36,6 +36,9 @@ import os
 import os.path
 from .filter_mate_app import FilterMateApp
 from .config.config import ENV_VARS, init_env_vars
+from .modules.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class FilterMate:
     """QGIS Plugin Implementation."""
@@ -162,7 +165,7 @@ class FilterMate:
             self.toolbar.addAction(action)
 
         if add_to_menu:
-            self.iface.addPluginToMenu(
+            self.iface.addPluginToVectorMenu(
                 self.menu,
                 action)
 
@@ -185,7 +188,7 @@ class FilterMate:
             status_tip=self.tr(u'Ouvrir le panneau FilterMate'))
         
         # Action pour réinitialiser la configuration et la base de données
-        reset_icon_path = ':/plugins/filter_mate/icons/reset_properties.png'
+        reset_icon_path = ':/plugins/filter_mate/icons/parameters.png'
         self.add_action(
             reset_icon_path,
             text=self.tr(u'Réinitialiser config et base de données'),
@@ -243,8 +246,8 @@ class FilterMate:
             self.app.cleanup()
 
         for action in self.actions:
-            self.iface.removePluginMenu(
-                self.tr(u'&Filtrage des couches'),
+            self.iface.removePluginVectorMenu(
+                self.menu,
                 action)
             self.iface.removeToolBarIcon(action)
         # remove the toolbar
@@ -335,7 +338,7 @@ class FilterMate:
                 return
             
             # Try to delete SQLite database
-            from config.config import ENV_VARS, init_env_vars
+            from .config.config import ENV_VARS, init_env_vars
             
             # Re-initialize to get current paths
             try:
@@ -406,7 +409,7 @@ class FilterMate:
                     f"Error loading plugin: {str(e)}. Check QGIS Python console for details."
                 )
                 import traceback
-                print(f"FilterMate Error: {traceback.format_exc()}")
+                logger.error(f"Error loading plugin: {traceback.format_exc()}")
                 self.pluginIsActive = False
             
 
