@@ -6,12 +6,15 @@ Provides helper functions to apply dynamic styles and dimensions to Qt widgets
 based on the current UI profile (compact/normal).
 """
 
+import logging
 from typing import Optional
 from PyQt5.QtWidgets import (
     QPushButton, QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox,
     QLabel, QFrame, QWidget, QLayout, QSplitter
 )
 from PyQt5.QtCore import QSize, Qt
+
+logger = logging.getLogger(__name__)
 
 try:
     from .ui_config import UIConfig, DisplayProfile
@@ -41,7 +44,7 @@ def apply_button_dimensions(button: QPushButton, button_type: str = "button") ->
         button.setIconSize(QSize(icon_size, icon_size))
         
     except Exception as e:
-        print(f"FilterMate: Error applying button dimensions: {e}")
+        logger.warning(f"Error applying button dimensions: {e}")
 
 
 def apply_input_dimensions(widget: QWidget) -> None:
@@ -61,7 +64,7 @@ def apply_input_dimensions(widget: QWidget) -> None:
             widget.setMaximumHeight(height)
             
     except Exception as e:
-        print(f"FilterMate: Error applying input dimensions: {e}")
+        logger.warning(f"Error applying input dimensions: {e}")
 
 
 def apply_combobox_dimensions(combobox: QComboBox) -> None:
@@ -86,7 +89,7 @@ def apply_combobox_dimensions(combobox: QComboBox) -> None:
             combobox.setIconSize(QSize(icon_size, icon_size))
             
     except Exception as e:
-        print(f"FilterMate: Error applying combobox dimensions: {e}")
+        logger.warning(f"Error applying combobox dimensions: {e}")
 
 
 def apply_frame_dimensions(frame: QFrame, frame_type: str = "frame") -> None:
@@ -110,7 +113,7 @@ def apply_frame_dimensions(frame: QFrame, frame_type: str = "frame") -> None:
             frame.setMaximumHeight(max_height)
             
     except Exception as e:
-        print(f"FilterMate: Error applying frame dimensions: {e}")
+        logger.warning(f"Error applying frame dimensions: {e}")
 
 
 def apply_layout_spacing(layout: QLayout, size: str = "medium") -> None:
@@ -129,7 +132,7 @@ def apply_layout_spacing(layout: QLayout, size: str = "medium") -> None:
         layout.setSpacing(spacing)
             
     except Exception as e:
-        print(f"FilterMate: Error applying layout spacing: {e}")
+        logger.warning(f"Error applying layout spacing: {e}")
 
 
 def apply_layout_margins(layout: QLayout, size: str = "normal") -> None:
@@ -153,7 +156,7 @@ def apply_layout_margins(layout: QLayout, size: str = "normal") -> None:
         )
             
     except Exception as e:
-        print(f"FilterMate: Error applying layout margins: {e}")
+        logger.warning(f"Error applying layout margins: {e}")
 
 
 def apply_splitter_dimensions(splitter: QSplitter) -> None:
@@ -172,7 +175,7 @@ def apply_splitter_dimensions(splitter: QSplitter) -> None:
             splitter.setHandleWidth(handle_width)
             
     except Exception as e:
-        print(f"FilterMate: Error applying splitter dimensions: {e}")
+        logger.warning(f"Error applying splitter dimensions: {e}")
 
 
 def apply_label_dimensions(label: QLabel) -> None:
@@ -193,7 +196,7 @@ def apply_label_dimensions(label: QLabel) -> None:
             label.setFont(font)
             
     except Exception as e:
-        print(f"FilterMate: Error applying label dimensions: {e}")
+        logger.warning(f"Error applying label dimensions: {e}")
 
 
 def configure_action_buttons(widget: QWidget, button_names: list) -> None:

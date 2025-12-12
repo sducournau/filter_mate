@@ -8,10 +8,13 @@ Integrates with UIConfig for dynamic sizing based on display profiles.
 """
 
 import os
+import logging
 from typing import Dict, Optional
 from PyQt5.QtCore import QFile, QTextStream, QIODevice
 from PyQt5.QtWidgets import QWidget
 from qgis.core import QgsApplication
+
+logger = logging.getLogger(__name__)
 
 # Import UIConfig for dynamic sizing
 try:
@@ -19,7 +22,7 @@ try:
     UI_CONFIG_AVAILABLE = True
 except ImportError:
     UI_CONFIG_AVAILABLE = False
-    print("FilterMate: UIConfig not available, using default dimensions")
+    logger.warning("UIConfig not available, using default dimensions")
 
 
 class StyleLoader:
@@ -105,7 +108,7 @@ class StyleLoader:
             style_file = os.path.join(plugin_dir, 'resources', 'styles', 'default.qss')
         
         if not os.path.exists(style_file):
-            print(f"FilterMate: Stylesheet not found: {style_file}")
+            logger.error(f"Stylesheet not found: {style_file}")
             return ""
         
         try:
@@ -116,7 +119,7 @@ class StyleLoader:
             return stylesheet
                 
         except Exception as e:
-            print(f"FilterMate: Error loading stylesheet: {e}")
+            logger.error(f"Error loading stylesheet: {e}")
             return ""
     
     @classmethod
@@ -152,7 +155,7 @@ class StyleLoader:
             return stylesheet
                 
         except Exception as e:
-            print(f"FilterMate: Error applying color scheme: {e}")
+            logger.error(f"Error applying color scheme: {e}")
             return ""
     
     @classmethod
@@ -174,7 +177,7 @@ class StyleLoader:
             try:
                 UIConfig.load_from_config(config_data)
             except Exception as e:
-                print(f"FilterMate: Could not load UI profile: {e}")
+                logger.warning(f"Could not load UI profile: {e}")
         
         # Get raw stylesheet template (without color replacements)
         stylesheet = cls._load_raw_stylesheet('default')  # Always use default.qss file
@@ -233,7 +236,7 @@ class StyleLoader:
             return stylesheet
             
         except (KeyError, IndexError) as e:
-            print(f"FilterMate: Error reading config colors: {e}")
+            logger.warning(f"Error reading config colors: {e}")
             # Fallback to default theme colors using load_stylesheet
             return cls.load_stylesheet('default')
     
@@ -259,7 +262,7 @@ class StyleLoader:
         if stylesheet:
             widget.setStyleSheet(stylesheet)
             cls._current_theme = theme
-            print(f"FilterMate: Applied theme '{theme}' from config")
+            logger.info(f"Applied theme '{theme}' from config")
     
     @classmethod
     def set_theme(cls, widget, theme: str = 'default'):
@@ -324,13 +327,13 @@ class StyleLoader:
             
             # If luminance < 128, it's a dark theme
             if luminance < 128:
-                print(f"FilterMate: Detected QGIS dark theme (luminance: {luminance:.0f})")
+                logger.info(f"Detected QGIS dark theme (luminance: {luminance:.0f})")
                 return 'dark'
             else:
-                print(f"FilterMate: Detected QGIS light theme (luminance: {luminance:.0f})")
+                logger.info(f"Detected QGIS light theme (luminance: {luminance:.0f})")
                 return 'default'
         except Exception as e:
-            print(f"FilterMate: Could not detect QGIS theme: {e}. Using default.")
+            logger.warning(f"Could not detect QGIS theme: {e}. Using default.")
             return 'default'
     
     @classmethod
@@ -465,7 +468,7 @@ class StyleLoader:
             return stylesheet
             
         except Exception as e:
-            print(f"FilterMate: Error applying dynamic dimensions: {e}")
+            logger.error(f"Error applying dynamic dimensions: {e}")
             return stylesheet
     
     @classmethod

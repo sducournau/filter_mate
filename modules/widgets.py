@@ -1022,7 +1022,6 @@ class QgsCheckableComboBoxLayer(QComboBox):
         font.setBold(True)
         self.setFont(font)
 
-        #self.view().pressed.connect(self.handleItemPressed)
         self.setModel(QtGui.QStandardItemModel(self))
         self.setItemDelegate(ItemDelegate(self))
         self.createMenuContext()
