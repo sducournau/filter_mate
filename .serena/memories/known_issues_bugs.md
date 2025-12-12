@@ -1,5 +1,103 @@
 # Known Issues & Bug Fixes - FilterMate
 
+## Recently Fixed (v2.3.1-alpha - December 11, 2025)
+
+### Code Duplicate Removed - manage_task()
+**Status:** ✅ FIXED
+
+**Issue:**
+- Duplicate `if task_name == 'redo':` block in `FilterMateApp.manage_task()` (lines 413-419)
+- The same code was executed twice when handling redo operations
+
+**Solution:**
+- Removed the duplicate block
+
+**Files Changed:**
+- `filter_mate_app.py`
+
+### PEP 8 Boolean Comparisons Fixed
+**Status:** ✅ FIXED
+
+**Issue:**
+- Multiple `== True` and `== False` comparisons instead of Pythonic boolean checks
+
+**Solution:**
+- Converted all `== True` to direct boolean checks or `is True`
+- Converted all `== False` to `not` or `is False`
+- Updated tests to follow same pattern
+
+**Files Changed:**
+- `filter_mate_dockwidget.py` (12 occurrences)
+- `modules/tasks/filter_task.py` (2 occurrences)
+- `tests/test_undo_redo.py` (3 occurrences)
+
+### Dead Code Cleanup
+**Status:** ✅ FIXED
+
+**Issue:**
+- Commented out code blocks that were no longer needed
+- Old configuration qtreeview model signal connections
+- PostgreSQL temp schema configuration comments
+
+**Solution:**
+- Removed all obsolete commented code from `filter_mate_app.py`
+
+**Files Changed:**
+- `filter_mate_app.py` (3 sections removed, ~15 lines)
+
+---
+
+## Recently Fixed (v2.3.0-alpha)
+
+### Double Widget Processing Regression
+**Status:** ✅ FIXED in v2.3.0-alpha (December 11, 2025)
+
+**Issue:**
+- Widgets in exploring groupboxes not updating when layer source changes from combobox
+- Broken link between widgets in same groupbox
+- Tracking potentially affected by signal desynchronization
+- Double processing of exploration widgets causing state inconsistencies
+
+**Root Cause:**
+- Phase 4c refactoring (commit `2c036f3`) extracted `current_layer_changed()` into 6 helper methods
+- The new flow called both `_reload_exploration_widgets()` AND `exploring_groupbox_changed()` via `_reconnect_layer_signals()`
+- Both methods performed the same operations: disconnect signals → `setLayer()` on widgets → reconnect signals
+- This caused double processing and potential state desynchronization
+
+**Solution:**
+1. Created new method `_restore_groupbox_ui_state()` that ONLY restores visual state (collapsed/expanded)
+2. Modified `_reconnect_layer_signals()` to use `_restore_groupbox_ui_state()` instead of `exploring_groupbox_changed()`
+3. Added explicit calls to `exploring_link_widgets()` and `exploring_features_changed()` at the end of `_reconnect_layer_signals()`
+
+**Files Changed:**
+- `filter_mate_dockwidget.py`: 
+  - Added `_restore_groupbox_ui_state()` method (~65 lines)
+  - Modified `_reconnect_layer_signals()` to fix double processing
+
+**Technical Details:**
+```python
+# OLD (problematic) - in _reconnect_layer_signals():
+self.exploring_groupbox_changed(saved_groupbox)  # Calls setLayer() again!
+
+# NEW (correct) - in _reconnect_layer_signals():
+self._restore_groupbox_ui_state(saved_groupbox)  # Only visual state
+self.exploring_link_widgets()  # Link widgets
+self.exploring_features_changed(...)  # Trigger feature update
+```
+
+**Benefits:**
+- ✅ No more double widget processing
+- ✅ Correct signal connection sequence
+- ✅ Tracking functionality preserved
+- ✅ Layer sync (tree view ↔ combobox) working correctly
+- ✅ Consistent widget state when switching layers
+
+**References:**
+- Fix commit: December 11, 2025
+- Related commits: `2c036f3` (Phase 4c), `b6e993f` (Phase 4d Part 3)
+
+---
+
 ## Recently Fixed (v2.2.5)
 
 ### Automatic Geographic CRS Handling
@@ -348,11 +446,28 @@ def test_wcag_aaa_primary_text():
 ## Historical Fixes (Archived)
 
 ### SQLite Database Lock Fix
-**Status:** ✅ FIXED (v2.1.0)
+**Status:** ✅ IMPROVED (v2.3.0-alpha - December 11, 2025)
 
 **Issue:** Database locked errors when multiple operations accessed Spatialite
-**Solution:** Retry mechanism with exponential backoff (5 attempts)
-**Files:** `modules/tasks/task_utils.py` - `spatialite_connect()` (Phase 3a extracted)
+**Original Solution (v2.1.0):** Retry mechanism with exponential backoff (5 attempts)
+**Improved Solution (v2.3.0-alpha):** 
+- Increased retry attempts from 5 to 10
+- Increased initial delay from 0.1s to 0.5s
+- Added maximum total retry time (30 seconds)
+- Capped exponential backoff at 5 seconds
+- Added "database is busy" detection
+- Added `PRAGMA busy_timeout=60000` for 60-second busy timeout
+- Improved connection handling with proper `BEGIN IMMEDIATE` transactions
+- Better error handling in finally blocks with `sqlite3.Error` catch
+
+**Parameters:**
+- `SQLITE_MAX_RETRIES = 10` (was 5)
+- `SQLITE_RETRY_DELAY = 0.5` (was 0.1)
+- `SQLITE_MAX_RETRY_TIME = 30.0` (new)
+
+**Files:** 
+- `modules/tasks/task_utils.py` - `spatialite_connect()`, `sqlite_execute_with_retry()` 
+- `modules/tasks/layer_management_task.py` - `insert_properties_to_spatialite()`, `select_properties_from_spatialite()`
 **Documentation:** `docs/archived/fixes/SQLITE_LOCK_FIX.md`
 
 ### Field Selection Fix

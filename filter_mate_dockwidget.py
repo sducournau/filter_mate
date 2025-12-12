@@ -2364,14 +2364,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "single_selection"
 
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(True)
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(False)
-
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+        # CRITICAL: Block signals on ALL groupboxes before changing state to avoid recursive calls
+        single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
+        multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
+        custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+        
+        single_gb.blockSignals(True)
+        multiple_gb.blockSignals(True)
+        custom_gb.blockSignals(True)
+        
+        # Set exclusive state
+        single_gb.setChecked(True)
+        single_gb.setCollapsed(False)
+        
+        multiple_gb.setChecked(False)
+        multiple_gb.setCollapsed(True)
+        
+        custom_gb.setChecked(False)
+        custom_gb.setCollapsed(True)
+        
+        # Restore signals
+        single_gb.blockSignals(False)
+        multiple_gb.blockSignals(False)
+        custom_gb.blockSignals(False)
         
 
         if self.current_layer is not None:
@@ -2433,14 +2448,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "multiple_selection"
 
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(True)
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(False)
-
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(False)
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(True)
+        # CRITICAL: Block signals on ALL groupboxes before changing state to avoid recursive calls
+        single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
+        multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
+        custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+        
+        single_gb.blockSignals(True)
+        multiple_gb.blockSignals(True)
+        custom_gb.blockSignals(True)
+        
+        # Set exclusive state
+        multiple_gb.setChecked(True)
+        multiple_gb.setCollapsed(False)
+        
+        single_gb.setChecked(False)
+        single_gb.setCollapsed(True)
+        
+        custom_gb.setChecked(False)
+        custom_gb.setCollapsed(True)
+        
+        # Restore signals
+        single_gb.blockSignals(False)
+        multiple_gb.blockSignals(False)
+        custom_gb.blockSignals(False)
 
         if self.current_layer is not None:
             # CRITICAL: Disconnect ALL signals BEFORE updating widgets
@@ -2492,14 +2522,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.current_layer is not None and self.current_layer.id() in self.PROJECT_LAYERS:
             self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["current_exploring_groupbox"] = "custom_selection"
         
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setChecked(True)
-        self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"].setCollapsed(False)
-
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setChecked(False)
-        self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"].setCollapsed(True)
-
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setChecked(False)
-        self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"].setCollapsed(True)
+        # CRITICAL: Block signals on ALL groupboxes before changing state to avoid recursive calls
+        single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
+        multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
+        custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+        
+        single_gb.blockSignals(True)
+        multiple_gb.blockSignals(True)
+        custom_gb.blockSignals(True)
+        
+        # Set exclusive state
+        custom_gb.setChecked(True)
+        custom_gb.setCollapsed(False)
+        
+        multiple_gb.setChecked(False)
+        multiple_gb.setCollapsed(True)
+        
+        single_gb.setChecked(False)
+        single_gb.setCollapsed(True)
+        
+        # Restore signals
+        single_gb.blockSignals(False)
+        multiple_gb.blockSignals(False)
+        custom_gb.blockSignals(False)
 
         if self.current_layer is not None:
             # CRITICAL: Disconnect ALL signals BEFORE updating widgets
@@ -3172,7 +3217,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         if all(key in self.widgets[property_tuple[0].upper()][property_tuple[1].upper()] for key in ["ICON_ON_TRUE", "ICON_ON_FALSE"]):
                             self.switch_widget_icon(property_tuple, layer_props[property_tuple[0]][property_tuple[1]])
                         if self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].isCheckable():
-                            self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setChecked(layer_props[property_tuple[0]][property_tuple[1]])
+                            # CRITICAL: Block signals during setChecked to avoid triggering actions (select/zoom/etc)
+                            # during state restoration - we only want to restore the visual state
+                            widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
+                            widget.blockSignals(True)
+                            widget.setChecked(layer_props[property_tuple[0]][property_tuple[1]])
+                            widget.blockSignals(False)
                     elif widget_type == 'CheckableComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCheckedItems(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'CustomCheckableComboBox':

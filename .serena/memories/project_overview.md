@@ -22,7 +22,7 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 filter_mate/
 ├── filter_mate.py              # Plugin entry point (QGIS integration)
 ├── filter_mate_app.py          # Main application orchestrator (~1376 lines after Phase 5a)
-├── filter_mate_dockwidget.py   # UI dockwidget management (~3877 lines)
+├── filter_mate_dockwidget.py   # UI dockwidget management (~4438 lines)
 ├── filter_mate_dockwidget_base.py  # Base UI class (auto-generated)
 ├── filter_mate_dockwidget_base.ui  # Qt Designer UI file
 ├── config/

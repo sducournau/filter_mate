@@ -98,7 +98,7 @@ FilterMate follows a layered architecture with clear separation of concerns:
 
 ### 3. UI Management
 **File:** `filter_mate_dockwidget.py`
-**Lines:** ~2500
+**Lines:** ~4438 (after Phase 4c/4d refactoring)
 **Purpose:** User interface and interaction handling
 
 **Key Responsibilities:**

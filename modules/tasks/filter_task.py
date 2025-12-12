@@ -138,6 +138,7 @@ class FilterEngineTask(QgsTask):
 
         self.layers_count = None
         self.layers = {}
+        self.provider_list = []
         self.expression = None
         self.is_field_expression = None
 
