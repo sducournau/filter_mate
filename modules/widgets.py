@@ -1,4 +1,4 @@
-from qgis.PyQt import QtGui, QtWidgets, QtCore, uic
+from qgis.PyQt import QtGui, QtWidgets, QtCore, uic, sip
 from qgis.PyQt.QtCore import (
     QEvent,
     QRect,
@@ -991,11 +991,25 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.launch_task(action)
     
     def build_task(self, description, action, silent_flag=False):
-
-        # for key in self.tasks[action].keys():
-        #     if key == self.layer.id():
-        #         if isinstance(self.tasks[action][key], QgsTask):
-        #             self.tasks[action][key].cancel()
+        """Build a new task for populating features list.
+        
+        CRITICAL FIX: Cancel existing tasks before creating new ones to prevent
+        task accumulation during project load which causes freezes.
+        
+        Args:
+            description: Task description for progress display
+            action: 'buildFeaturesList' or 'loadFeaturesList'
+            silent_flag: If True, suppress progress notifications
+        """
+        # Cancel any existing task for this layer/action to prevent accumulation
+        if self.layer.id() in self.tasks[action]:
+            existing_task = self.tasks[action][self.layer.id()]
+            # Check if the C++ object still exists before accessing its methods
+            # to avoid RuntimeError: wrapped C/C++ object has been deleted
+            if isinstance(existing_task, QgsTask) and not sip.isdeleted(existing_task):
+                if existing_task.status() in [QgsTask.Running, QgsTask.Queued]:
+                    logger.debug(f"Cancelling existing {action} task for layer {self.layer.id()}")
+                    existing_task.cancel()
   
         self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
         self.tasks[action][self.layer.id()].setDependentLayers([self.layer])

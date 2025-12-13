@@ -42,7 +42,7 @@
                     "left",
                     "right"
                 ],
-                "value": "left"
+                "value": "bottom"
             },
             "_ACTION_BAR_POSITION_META": {
                 "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
@@ -229,7 +229,7 @@
             "HAS_LAYERS_TO_EXPORT": false,
             "LAYERS_TO_EXPORT": [],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:3857",
+            "PROJECTION_TO_EXPORT": "EPSG:31370",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,

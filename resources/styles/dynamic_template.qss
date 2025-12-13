@@ -366,26 +366,6 @@ QScrollBar::sub-line:horizontal {
 }
 
 /* ========================================================================
-   SPLITTER - Dynamic handle width
-   ======================================================================== */
-
-QSplitter::handle {
-    background-color: {color_2};
-}
-
-QSplitter::handle:horizontal {
-    width: {splitter_width};
-}
-
-QSplitter::handle:vertical {
-    height: {splitter_width};
-}
-
-QSplitter::handle:hover {
-    background-color: {color_accent};
-}
-
-/* ========================================================================
    TREE VIEW - Dynamic item height
    ======================================================================== */
 

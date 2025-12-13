@@ -9,7 +9,7 @@
  * {color_bg_1} - Secondary widget background (BACKGROUND[1], alias for color_1)
  * {color_2} - Selection background (BACKGROUND[2])
  * {color_bg_2} - Tertiary background (BACKGROUND[2], alias for color_2)
- * {color_bg_3} - Splitter hover color (BACKGROUND[3])
+ * {color_bg_3} - Hover color (BACKGROUND[3])
  * {color_3} - Text/accent color (FONT[1])
  * {color_font_0} - Primary font color (FONT[0])
  * {color_font_1} - Secondary font color (FONT[1], alias for color_3)
@@ -262,15 +262,6 @@ QgsCollapsibleGroupBox::title {
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
-}
-
-/* Splitter */
-QSplitter::handle {
-    background: {color_1};
-}
-
-QSplitter::handle:hover {
-    background: {color_accent};
 }
 
 /* Property Override Button */
@@ -964,29 +955,6 @@ QFrame#frame_actions QPushButton:!checkable:disabled {
     border-color: transparent;
     color: {color_font_2};
     opacity: 0.4;
-}
-
-/* Action Bar Splitter - For vertical action bar resizing */
-QSplitter#action_bar_splitter,
-QSplitter#main_content_splitter {
-    background-color: transparent;
-}
-
-QSplitter#action_bar_splitter::handle,
-QSplitter#main_content_splitter::handle {
-    background-color: {color_2};
-    border-radius: 2px;
-    margin: 2px 8px;
-}
-
-QSplitter#action_bar_splitter::handle:hover,
-QSplitter#main_content_splitter::handle:hover {
-    background-color: {color_accent};
-}
-
-QSplitter#action_bar_splitter::handle:pressed,
-QSplitter#main_content_splitter::handle:pressed {
-    background-color: {color_accent_dark};
 }
 
 /* TreeView & ListWidget - Harmonized backgrounds */

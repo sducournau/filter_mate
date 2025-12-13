@@ -7,21 +7,28 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.2.5 - Automatic Geographic CRS Handling
+## 🎉 What's New in v2.3.0 - Global Undo/Redo System
 
-### Major Improvements
-- ✅ **Automatic EPSG:3857 Conversion** - Geographic CRS (EPSG:4326, etc.) auto-converted for metric operations
-  - Feature: Detects geographic coordinate systems automatically
-  - Impact: 50m buffer is always 50 meters, regardless of latitude (no more 30-50% errors!)
-  - Implementation: Auto-converts to EPSG:3857 (Web Mercator) for buffer calculations
-  - Performance: Minimal overhead (~1ms per feature transformation)
-- ✅ **Geographic Zoom & Flash Fix** - Resolved flickering with `flashFeatureIds`
-  - Fixed: Feature geometry no longer modified in-place during transformation
-  - Solution: Uses `QgsGeometry()` copy constructor to prevent original geometry modification
-- ✅ **Consistent Metric Operations** - All backends updated (Spatialite, OGR, Zoom)
-  - Zero configuration required
-  - Clear logging with 🌍 indicator when CRS switching occurs
-- ✅ **Comprehensive Testing** - Added test suite in `tests/test_geographic_coordinates_zoom.py`
+### Major Features
+- ⭐ **Intelligent Undo/Redo** - Smart context-aware undo/redo for all filter operations
+  - **Source Layer Mode**: Undo/redo applies only to the source layer when no remote layers selected
+  - **Global Mode**: Undo/redo restores all layers (source + remote) atomically
+  - **Auto-Detection**: Seamlessly switches between modes based on layer selection
+  - **Button States**: Automatic enable/disable based on history availability
+- 🔄 **Automatic Filter Preservation** - Filters are now combined using AND by default
+  - Problem solved: Previously, applying a new filter replaced existing filters
+  - Solution: Filters are automatically combined: `(old_filter) AND (new_filter)`
+  - Available operators: AND (default), OR, AND NOT
+- 📉 **Reduced Notification Fatigue** - Configurable feedback levels
+  - Minimal: -92% messages (production use)
+  - Normal: -42% messages (default)
+  - Verbose: All messages (development)
+
+### Technical Improvements
+- 🏗️ **Architecture Refactor** - Task modules extracted (-99% appTasks.py)
+- ✅ **Code Quality** - PEP 8 95%, 26 automated tests, CI/CD active
+- 🚀 **5× Performance** - Geometry caching for multi-layer operations
+- 🐛 **Bug Fixes** - QSplitter freeze fixed, project load race conditions resolved
 
 ## Previous Updates
 

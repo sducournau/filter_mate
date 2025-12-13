@@ -279,9 +279,8 @@ class FilterMate:
             - Shows the dockwidget and processes new layers
             
         When called with the plugin already active and dockwidget visible:
-            - Does nothing - the FilterMateApp handles layer changes
-              via its own signal connections (layersAdded, projectRead, etc.)
-              This avoids duplicate processing and race conditions.
+            - Triggers project reinitialization via FilterMateApp
+              to handle project switch (clear old data, load new layers)
         
         Args:
             layers: Optional list of layers that were just added (from layersAdded signal)
@@ -290,18 +289,24 @@ class FilterMate:
         from qgis.PyQt.QtCore import QTimer
         from qgis.utils import iface as qgis_iface
         
-        # If plugin is already active, check if dockwidget is visible
+        # If plugin is already active, handle project change
         if self.pluginIsActive:
-            # If dockwidget exists and is visible, FilterMateApp handles everything
             if self.app and hasattr(self.app, 'dockwidget') and self.app.dockwidget:
-                if self.app.dockwidget.isVisible():
-                    logger.debug("FilterMate: _auto_activate_plugin called but plugin already active - FilterMateApp handles signals")
+                # CRITICAL: Skip if app is already initializing a project 
+                # This prevents multiple calls from projectRead + layersAdded signals
+                if hasattr(self.app, '_initializing_project') and self.app._initializing_project:
+                    logger.debug("FilterMate: Skipping _auto_activate_plugin - already initializing project")
                     return
-                else:
-                    # Dockwidget exists but hidden - show it and let FilterMateApp handle
-                    logger.info("FilterMate: Plugin active but dockwidget hidden - showing dockwidget")
-                    self.app.dockwidget.show()
+                if hasattr(self.app, '_loading_new_project') and self.app._loading_new_project:
+                    logger.debug("FilterMate: Skipping _auto_activate_plugin - loading new project")
                     return
+                    
+                # CRITICAL: When a new project is loaded while plugin is active,
+                # we need to reinitialize the app with the new project data.
+                # Use QTimer to defer and avoid blocking during project load.
+                logger.info("FilterMate: Project changed while plugin active - deferring reinitialization")
+                QTimer.singleShot(200, lambda: self._handle_project_change())
+                return
             return
         
         # Plugin not active - check if there are vector layers to activate for
@@ -320,6 +325,57 @@ class FilterMate:
         
         # Defer activation to next event loop iteration for stability
         QTimer.singleShot(50, self.run)
+
+    def _handle_project_change(self):
+        """Handle project change when plugin is already active.
+        
+        Reinitializes FilterMateApp with new project data without recreating
+        the dockwidget. This is called when projectRead signal is emitted
+        while the plugin is already active.
+        """
+        from qgis.core import QgsProject, QgsVectorLayer
+        
+        if not self.app:
+            return
+        
+        # CRITICAL: Check if app is already initializing a project
+        if hasattr(self.app, '_initializing_project') and self.app._initializing_project:
+            logger.debug("FilterMate: Skipping _handle_project_change - already initializing")
+            return
+        
+        # CRITICAL: Also check if loading is in progress
+        if hasattr(self.app, '_loading_new_project') and self.app._loading_new_project:
+            logger.debug("FilterMate: Skipping _handle_project_change - loading new project")
+            return
+        
+        project = QgsProject.instance()
+        if not project:
+            return
+        
+        # Check if there are vector layers in the new project
+        vector_layers = [layer for layer in project.mapLayers().values() 
+                        if isinstance(layer, QgsVectorLayer)]
+        
+        if not vector_layers:
+            logger.info("FilterMate: New project has no vector layers")
+            # Clear old data and disable UI
+            if hasattr(self.app, 'PROJECT_LAYERS'):
+                self.app.PROJECT_LAYERS = {}
+            # Only access dockwidget if it exists and has widgets_initialized
+            if (self.app.dockwidget and 
+                hasattr(self.app.dockwidget, 'widgets_initialized') and 
+                self.app.dockwidget.widgets_initialized):
+                self.app.dockwidget.set_widgets_enabled_state(False)
+            return
+        
+        logger.info(f"FilterMate: Reinitializing for new project with {len(vector_layers)} vector layers")
+        
+        # Reinitialize the app for the new project
+        try:
+            # Call the existing project initialization handler
+            self.app._handle_project_initialization('project_read')
+        except Exception as e:
+            logger.error(f"FilterMate: Error during project reinitialization: {e}")
 
 
     def unload(self):

@@ -185,6 +185,7 @@ class FilterMateApp:
         self._signals_connected = False
         self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
         self._loading_new_project = False  # Flag to track when loading a new project
+        self._initializing_project = False  # Flag to prevent recursive project initialization
         
         # Initialize PROJECT_LAYERS as instance attribute (shadows class attribute for isolation)
         self.PROJECT_LAYERS = {}
@@ -217,6 +218,8 @@ class FilterMateApp:
         connects signals for layer management, and displays the UI.
         Also processes any existing layers in the project on first run.
         
+        DIAGNOSTIC LOGGING ENABLED: Logging startup phases to identify freeze point.
+        
         This method can be called multiple times:
         - First call: creates dockwidget and initializes everything
         - Subsequent calls: shows existing dockwidget and refreshes layers if needed
@@ -233,8 +236,11 @@ class FilterMateApp:
             QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')    
 
             init_layers = list(self.PROJECT.mapLayers().values())
+            logger.info(f"FilterMate App.run(): Found {len(init_layers)} layers in project")
 
+            logger.info("FilterMate App.run(): Starting init_filterMate_db()")
             self.init_filterMate_db()
+            logger.info("FilterMate App.run(): init_filterMate_db() complete")
             
             # Initialize UI profile based on screen resolution
             try:
@@ -259,12 +265,15 @@ class FilterMateApp:
                 logger.error(f"FilterMate: Error detecting screen resolution: {e}")
                 UIConfig.set_profile(DisplayProfile.NORMAL)
             
+            logger.info("FilterMate App.run(): Creating FilterMateDockWidget")
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
+            logger.info("FilterMate App.run(): FilterMateDockWidget created")
 
             # show the dockwidget
             # TODO: fix to allow choice of dock location
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
+            logger.info("FilterMate App.run(): DockWidget shown")
             
             # Process existing layers AFTER dockwidget is shown and fully initialized
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
@@ -322,15 +331,17 @@ class FilterMateApp:
         # This prevents access violations during project transitions
         # Only connect signals once to avoid multiple connections on plugin reload
         if not self._signals_connected:
-            logger.debug("Connecting project signals (projectRead, newProjectCreated, layersAdded...)")
-            self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
-            self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
+            logger.debug("Connecting layer store signals (layersAdded, layersWillBeRemoved...)")
+            # NOTE: projectRead and newProjectCreated signals are handled by filter_mate.py
+            # via _auto_activate_plugin() which calls run(). We don't connect them here
+            # to avoid double processing which causes freezes during project load.
+            
             # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
             self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
             self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
             self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
             self._signals_connected = True
-            logger.debug("Project signals connected successfully")
+            logger.debug("Layer store signals connected successfully")
         
         # Only connect dockwidget signals once to avoid multiple connections
         if not self._dockwidget_signals_connected:
@@ -371,8 +382,12 @@ class FilterMateApp:
     def _handle_remove_all_layers(self):
         """Handle remove all layers task."""
         self._safe_cancel_all_tasks()
-        self.dockwidget.disconnect_widgets_signals()
-        self.dockwidget.reset_multiple_checkable_combobox()
+        
+        # CRITICAL: Check if dockwidget exists before accessing its methods
+        if self.dockwidget is not None:
+            self.dockwidget.disconnect_widgets_signals()
+            self.dockwidget.reset_multiple_checkable_combobox()
+        
         self.layer_management_engine_task_completed({}, 'remove_all_layers')
     
     def _handle_project_initialization(self, task_name):
@@ -382,87 +397,112 @@ class FilterMateApp:
             task_name: 'project_read' or 'new_project'
         """
         logger.debug(f"_handle_project_initialization called with task_name={task_name}")
-        # Verify project is valid
-        project = QgsProject.instance()
-        if not project:
-            logger.warning(f"Project not available for {task_name}, skipping")
+        
+        # CRITICAL: Skip if already initializing to prevent recursive calls
+        if self._initializing_project:
+            logger.debug(f"Skipping {task_name} - already initializing project")
             return
         
-        self.app_postgresql_temp_schema_setted = False
-        self._safe_cancel_all_tasks()
-        
-        # Reset project datasources
-        self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
-        self._loading_new_project = True
-        
-        init_env_vars()
-        global ENV_VARS
-        self.PROJECT = ENV_VARS["PROJECT"]
-        
-        # Verify project is still valid after init
-        if not self.PROJECT:
-            logger.warning(f"Project became invalid during {task_name}, skipping")
+        # CRITICAL: Skip if currently loading a new project (add_layers in progress)
+        if self._loading_new_project:
+            logger.debug(f"Skipping {task_name} - already loading new project")
             return
         
-        # CRITICAL: Disconnect old layer store signals before updating reference
-        # The old MapLayerStore may be invalid after project change
-        old_layer_store = self.MapLayerStore
-        new_layer_store = self.PROJECT.layerStore()
+        # CRITICAL: Skip if dockwidget doesn't exist yet - run() handles initial setup
+        if self.dockwidget is None:
+            logger.debug(f"Skipping {task_name} - dockwidget not created yet (run() will handle)")
+            return
         
-        # ALWAYS reconnect signals on project change - even if layer_store is same object,
-        # the project context has changed and signals may be stale
-        if self._signals_connected:
-            logger.info(f"FilterMate: Reconnecting layer store signals for {task_name}")
-            try:
-                # Disconnect old signals - use try/except as connections may already be invalid
-                try:
-                    old_layer_store.layersAdded.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    old_layer_store.layersWillBeRemoved.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-                try:
-                    old_layer_store.allLayersRemoved.disconnect()
-                except (TypeError, RuntimeError):
-                    pass
-            except Exception as e:
-                logger.warning(f"Error disconnecting old layer store signals: {e}")
+        self._initializing_project = True
+        
+        try:
+            # Verify project is valid
+            project = QgsProject.instance()
+            if not project:
+                logger.warning(f"Project not available for {task_name}, skipping")
+                return
             
-            # Update to new layer store
-            self.MapLayerStore = new_layer_store
+            self.app_postgresql_temp_schema_setted = False
+            self._safe_cancel_all_tasks()
             
-            # Reconnect signals to new layer store
-            self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
-            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
-            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
-            logger.info("FilterMate: Layer store signals reconnected to new project")
-        else:
-            # First time - just update reference, signals will be connected in run()
-            self.MapLayerStore = new_layer_store
-        
-        init_layers = list(self.PROJECT.mapLayers().values())
-        
-        # Clear old PROJECT_LAYERS when switching projects
-        self.PROJECT_LAYERS = {}
-        
-        self.init_filterMate_db()
-        
-        if len(init_layers) > 0:
-            logger.info(f"FilterMate: Loading {len(init_layers)} layers from {task_name}")
-            self.manage_task('add_layers', init_layers)
-        else:
-            logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
-            self.dockwidget.disconnect_widgets_signals()
-            self.dockwidget.reset_multiple_checkable_combobox()
-            self.layer_management_engine_task_completed({}, 'remove_all_layers')
-            self._loading_new_project = False
-            # Inform user that plugin is waiting for layers
-            iface.messageBar().pushInfo(
-                "FilterMate",
-                "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
-            )
+            # Reset project datasources
+            self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
+            self._loading_new_project = True
+            
+            init_env_vars()
+            global ENV_VARS
+            self.PROJECT = ENV_VARS["PROJECT"]
+            
+            # Verify project is still valid after init
+            if not self.PROJECT:
+                logger.warning(f"Project became invalid during {task_name}, skipping")
+                self._loading_new_project = False
+                return
+            
+            # CRITICAL: Disconnect old layer store signals before updating reference
+            # The old MapLayerStore may be invalid after project change
+            old_layer_store = self.MapLayerStore
+            new_layer_store = self.PROJECT.layerStore()
+            
+            # ALWAYS reconnect signals on project change - even if layer_store is same object,
+            # the project context has changed and signals may be stale
+            if self._signals_connected:
+                logger.info(f"FilterMate: Reconnecting layer store signals for {task_name}")
+                try:
+                    # Disconnect old signals - use try/except as connections may already be invalid
+                    try:
+                        old_layer_store.layersAdded.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                    try:
+                        old_layer_store.layersWillBeRemoved.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                    try:
+                        old_layer_store.allLayersRemoved.disconnect()
+                    except (TypeError, RuntimeError):
+                        pass
+                except Exception as e:
+                    logger.warning(f"Error disconnecting old layer store signals: {e}")
+                
+                # Update to new layer store
+                self.MapLayerStore = new_layer_store
+                
+                # Reconnect signals to new layer store
+                self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+                self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+                self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+                logger.info("FilterMate: Layer store signals reconnected to new project")
+            else:
+                # First time - just update reference, signals will be connected in run()
+                self.MapLayerStore = new_layer_store
+            
+            init_layers = list(self.PROJECT.mapLayers().values())
+            
+            # Clear old PROJECT_LAYERS when switching projects
+            self.PROJECT_LAYERS = {}
+            
+            self.init_filterMate_db()
+            
+            if len(init_layers) > 0:
+                logger.info(f"FilterMate: Loading {len(init_layers)} layers from {task_name}")
+                # CRITICAL: Use QTimer to defer add_layers to prevent blocking during project load
+                QTimer.singleShot(100, lambda: self.manage_task('add_layers', init_layers))
+            else:
+                logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
+                # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
+                if self.dockwidget is not None:
+                    self.dockwidget.disconnect_widgets_signals()
+                    self.dockwidget.reset_multiple_checkable_combobox()
+                self.layer_management_engine_task_completed({}, 'remove_all_layers')
+                self._loading_new_project = False
+                # Inform user that plugin is waiting for layers
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
+                )
+        finally:
+            self._initializing_project = False
 
     def manage_task(self, task_name, data=None):
         """
@@ -496,6 +536,13 @@ class FilterMateApp:
         assert task_name in list(self.tasks_descriptions.keys())
         
         logger.debug(f"manage_task called with task_name={task_name}, data={type(data)}")
+        
+        # CRITICAL: Skip layersAdded signals during project initialization
+        # These will be handled by _handle_project_initialization which calls add_layers explicitly
+        # Only check _initializing_project - _loading_new_project is used for the deferred call itself
+        if task_name == 'add_layers' and self._initializing_project:
+            logger.debug(f"Skipping add_layers - project initialization in progress (will be handled by _handle_project_initialization)")
+            return
         
         # Guard: Ensure dockwidget is fully initialized before processing tasks
         # Exception: remove_all_layers, project_read, new_project, add_layers can run without full initialization

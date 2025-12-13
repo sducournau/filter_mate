@@ -152,6 +152,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     # Static cache for geometry icons to avoid repeated calculations
     _icon_cache = {}
+    
+    # Static cache for signal lookup to avoid repeated metaObject iteration
+    _signal_cache = {}
 
     def __init__(self, project_layers, plugin_dir, config_data, project, parent=None):
         """Constructor."""
@@ -242,22 +245,62 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.pending_config_changes = []
         self.config_changes_pending = False
 
+        logger.info("FilterMate DockWidget: Starting setupUi()")
         self.setupUi(self)
+        logger.info("FilterMate DockWidget: setupUi() complete, starting setupUiCustom()")
         self.setupUiCustom()
+        logger.info("FilterMate DockWidget: setupUiCustom() complete, starting manage_ui_style()")
         self.manage_ui_style()
+        logger.info("FilterMate DockWidget: manage_ui_style() complete")
+        
+        # CRITICAL FIX: Defer manage_interactions() to allow Qt event loop to process
+        # This prevents blocking during project load as setLayer() calls can be slow
+        logger.info("FilterMate DockWidget: Deferring manage_interactions() to next event loop cycle")
+        QTimer.singleShot(0, self._deferred_manage_interactions)
+    
+    def _deferred_manage_interactions(self):
+        """Deferred initialization to prevent blocking during project load."""
+        logger.info("FilterMate DockWidget: Starting deferred manage_interactions()")
         self.manage_interactions()
+        logger.info("FilterMate DockWidget: manage_interactions() complete, initialization finished")
         
 
     def getSignal(self, oObject : QObject, strSignalName : str):
+        """Get signal from QObject by name with caching for performance.
+        
+        Uses a class-level cache to avoid repeated iteration over metaObject
+        which can be very slow for complex QGIS widgets with many methods.
+        
+        Args:
+            oObject: Qt object to search for signal
+            strSignalName: Name of the signal to find
+            
+        Returns:
+            QMetaMethod: The signal method if found, None otherwise
+        """
+        # Create cache key from object's class name and signal name
+        # Using class name instead of object id since signals are class-level
+        class_name = oObject.metaObject().className()
+        cache_key = f"{class_name}.{strSignalName}"
+        
+        # Check cache first
+        if cache_key in FilterMateDockWidget._signal_cache:
+            return FilterMateDockWidget._signal_cache[cache_key]
+        
+        # Not in cache - search metaObject
         oMetaObj = oObject.metaObject()
-        for i in range (oMetaObj.methodCount()):
+        for i in range(oMetaObj.methodCount()):
             oMetaMethod = oMetaObj.method(i)
             if not oMetaMethod.isValid():
                 continue
-            if oMetaMethod.methodType () == QMetaMethod.Signal and \
+            if oMetaMethod.methodType() == QMetaMethod.Signal and \
                 oMetaMethod.name() == strSignalName:
+                # Cache the result
+                FilterMateDockWidget._signal_cache[cache_key] = oMetaMethod
                 return oMetaMethod
-
+        
+        # Signal not found - cache None to avoid repeated searches
+        FilterMateDockWidget._signal_cache[cache_key] = None
         return None
 
     def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
@@ -492,39 +535,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         This allows users to resize the exploring and toolset sections
         by dragging a splitter handle between them.
-        """
-        try:
-            # Get the parent layout (verticalLayout_main_content)
-            parent_layout = self.verticalLayout_main_content
-            
-            # Remove frames from the current layout
-            parent_layout.removeWidget(self.frame_exploring)
-            parent_layout.removeWidget(self.frame_toolset)
-            
-            # Create vertical splitter
-            self.main_splitter = QSplitter(Qt.Vertical)
-            self.main_splitter.setObjectName("main_splitter")
-            self.main_splitter.setChildrenCollapsible(False)
-            self.main_splitter.setHandleWidth(5)
-            
-            # Add frames to splitter
-            self.main_splitter.addWidget(self.frame_exploring)
-            self.main_splitter.addWidget(self.frame_toolset)
-            
-            # Set initial sizes (exploring: 40%, toolset: 60%)
-            self.main_splitter.setStretchFactor(0, 2)
-            self.main_splitter.setStretchFactor(1, 3)
-            
-            # Add splitter to layout
-            parent_layout.addWidget(self.main_splitter)
-            
-            logger.debug("Main splitter setup completed successfully")
-            
-        except Exception as e:
-            logger.error(f"Error setting up main splitter: {e}")
-            # If splitter setup fails, widgets remain in original layout
         
-        # Setup tab-specific widgets
+        OPTIMIZATION: If ACTION_BAR_POSITION is 'left' or 'right', skip creating
+        the splitter here because _create_horizontal_wrapper_for_side_action_bar()
+        will create its own splitter. This avoids creating a splitter only to 
+        immediately delete it, which can cause Qt timing issues and freezes.
+        """
+        # Check if action bar will be on the side - if so, skip splitter creation here
+        action_bar_position = self._get_action_bar_position()
+        skip_splitter = action_bar_position in ('left', 'right')
+        
+        if skip_splitter:
+            logger.debug(f"Skipping main_splitter creation - action bar position is '{action_bar_position}', splitter will be created in side layout")
+            self.main_splitter = None  # Ensure attribute exists but is None
+        else:
+            try:
+                # Get the parent layout (verticalLayout_main_content)
+                parent_layout = self.verticalLayout_main_content
+                
+                # Remove frames from the current layout
+                parent_layout.removeWidget(self.frame_exploring)
+                parent_layout.removeWidget(self.frame_toolset)
+                
+                # Create vertical splitter
+                self.main_splitter = QSplitter(Qt.Vertical)
+                self.main_splitter.setObjectName("main_splitter")
+                self.main_splitter.setChildrenCollapsible(False)
+                self.main_splitter.setHandleWidth(5)
+                
+                # Add frames to splitter
+                self.main_splitter.addWidget(self.frame_exploring)
+                self.main_splitter.addWidget(self.frame_toolset)
+                
+                # Set initial sizes (exploring: 40%, toolset: 60%)
+                self.main_splitter.setStretchFactor(0, 2)
+                self.main_splitter.setStretchFactor(1, 3)
+                
+                # Add splitter to layout
+                parent_layout.addWidget(self.main_splitter)
+                
+                logger.debug("Main splitter setup completed successfully")
+                
+            except Exception as e:
+                logger.error(f"Error setting up main splitter: {e}")
+                self.main_splitter = None
+                # If splitter setup fails, widgets remain in original layout
+        
+        # Setup tab-specific widgets (always needed regardless of splitter)
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
@@ -1366,6 +1423,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         A QSplitter is used between frame_exploring and frame_toolset to allow
         dynamic resizing.
         
+        NOTE: With the optimization in _setup_main_splitter(), when position is
+        'left' or 'right', self.main_splitter should be None (never created),
+        so we don't need to clean it up here. This prevents Qt timing issues.
+        
         Args:
             position: str - 'left' or 'right'
         """
@@ -1380,7 +1441,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         frame_exploring = self.frame_exploring if hasattr(self, 'frame_exploring') else None
         frame_toolset = self.frame_toolset if hasattr(self, 'frame_toolset') else None
         
-        # Remove frames from current layout
+        # SAFETY CHECK: If main_splitter exists (shouldn't happen with new optimization),
+        # clean it up properly. This handles edge cases like runtime position changes.
+        if hasattr(self, 'main_splitter') and self.main_splitter:
+            logger.debug("Cleaning up unexpected main_splitter in side action bar layout")
+            # Reparent frames out of the splitter to prevent deletion
+            temp_parent = self.dockWidgetContents
+            if frame_exploring:
+                frame_exploring.setParent(temp_parent)
+            if frame_toolset:
+                frame_toolset.setParent(temp_parent)
+            
+            # Remove splitter from its parent layout
+            parent = self.main_splitter.parent()
+            if parent and parent.layout():
+                parent.layout().removeWidget(self.main_splitter)
+            
+            # Hide and schedule for deletion
+            self.main_splitter.hide()
+            self.main_splitter.deleteLater()
+            self.main_splitter = None
+        
+        # Remove frames from any current layout
         if frame_exploring and frame_exploring.parent():
             parent_layout = frame_exploring.parent().layout()
             if parent_layout:
@@ -1529,7 +1611,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Configure widgets for the Exploring tab.
         
         Sets up checkableComboBox for feature selection and configures mFieldExpressionWidget
-        for single/multiple/custom selection modes. Synchronizes with init_layer if available.
+        for single/multiple/custom selection modes. Layer initialization is deferred to
+        manage_interactions() to prevent blocking during project load.
         """
         layout = self.verticalLayout_exploring_multiple_selection
         layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
@@ -1542,12 +1625,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
         self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
         
-        # Initialize QgsFieldExpressionWidget with init layer if available
-        if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
-            # Initialize all mFieldExpressionWidget with init_layer
-            self.mFieldExpressionWidget_exploring_single_selection.setLayer(self.init_layer)
-            self.mFieldExpressionWidget_exploring_multiple_selection.setLayer(self.init_layer)
-            self.mFieldExpressionWidget_exploring_custom_selection.setLayer(self.init_layer)
+        # NOTE: setLayer() calls are deferred to manage_interactions() via _deferred_manage_interactions()
+        # to prevent blocking during project load. The old synchronous calls here caused freezes.
         
         # Setup direct signal connections for fieldChanged -> display expression sync
         # These bypass the unreliable manageSignal/isSignalConnected system
@@ -1589,32 +1668,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Configure widgets for the Filtering tab.
         
         Sets up comboBox_filtering_current_layer (VectorLayer filter), creates and configures
-        checkableComboBoxLayer_filtering_layers_to_filter, and synchronizes with init_layer.
-        Updates backend indicator based on current layer's provider type.
+        checkableComboBoxLayer_filtering_layers_to_filter. Layer initialization is deferred
+        to manage_interactions() to prevent blocking during project load.
         """
         # Filter comboBox_filtering_current_layer to show only vector layers
         self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
-        # Synchronize comboBox_filtering_current_layer with init_layer if available
-        if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
-            self.comboBox_filtering_current_layer.setLayer(self.init_layer)
-            
-            # Update backend indicator with initial layer
-            if self.init_layer.id() in self.PROJECT_LAYERS:
-                layer_props = self.PROJECT_LAYERS[self.init_layer.id()]
-                if 'layer_provider_type' in layer_props.get('infos', {}):
-                    self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
-            else:
-                # PROJECT_LAYERS not populated yet, detect directly from layer
-                provider_type = self.init_layer.providerType()
-                if provider_type == 'postgres':
-                    self._update_backend_indicator(PROVIDER_POSTGRES)
-                elif provider_type == 'spatialite':
-                    self._update_backend_indicator(PROVIDER_SPATIALITE)
-                elif provider_type == 'ogr':
-                    self._update_backend_indicator(PROVIDER_OGR)
-                else:
-                    self._update_backend_indicator(provider_type)
+        # NOTE: setLayer() and backend indicator update are deferred to manage_interactions()
+        # via _deferred_manage_interactions() to prevent blocking during project load.
 
         # Create custom checkable combobox for layers to filter
         self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self)
@@ -2945,14 +3006,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].contextMenuEvent
 
         if self.init_layer is not None and isinstance(self.init_layer, QgsVectorLayer):
+            logger.info(f"FilterMate manage_interactions: init_layer found: {self.init_layer.name()}")
             self.manage_output_name()
+            logger.debug("FilterMate manage_interactions: manage_output_name() done")
             self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
             self.exporting_populate_combobox()
+            logger.debug("FilterMate manage_interactions: exporting_populate_combobox() done")
             self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             self.set_exporting_properties()
+            logger.debug("FilterMate manage_interactions: set_exporting_properties() done")
             self.exploring_groupbox_init()
+            logger.debug("FilterMate manage_interactions: exploring_groupbox_init() done")
             self.current_layer_changed(self.init_layer)
+            logger.debug("FilterMate manage_interactions: current_layer_changed() done")
             self.filtering_auto_current_layer_changed()
+            logger.info("FilterMate manage_interactions: init_layer processing complete")
 
             
     def select_tabTools_index(self):

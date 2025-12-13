@@ -1,5 +1,192 @@
 # Known Issues & Bug Fixes - FilterMate
 
+## Recently Fixed (v2.3.0-alpha - December 13, 2025 - Session 4)
+
+### QSplitter Freeze - Optimization Fix
+**Status:** ✅ FIXED
+
+**Issue:**
+- Plugin would freeze QGIS when loading with ACTION_BAR_POSITION set to 'left' or 'right'
+- The previous fix (Session 3) partially addressed this but still had timing issues
+
+**Root Cause:**
+- `_setup_main_splitter()` was creating a `QSplitter` for `frame_exploring` and `frame_toolset`
+- Then `_setup_action_bar_layout()` would immediately call `_create_horizontal_wrapper_for_side_action_bar()`
+- This method would delete the just-created splitter and create a new one
+- Creating then immediately deleting Qt widgets caused timing issues and freezes
+
+**Solution:**
+Optimized `_setup_main_splitter()` to check ACTION_BAR_POSITION BEFORE creating the splitter:
+1. If position is 'left' or 'right', skip splitter creation entirely
+2. Set `self.main_splitter = None` to indicate no initial splitter
+3. `_create_horizontal_wrapper_for_side_action_bar()` creates its own splitter without needing cleanup
+4. Added safety check in case of runtime position changes
+
+**Code Change:**
+```python
+def _setup_main_splitter(self):
+    # Check if action bar will be on the side - if so, skip splitter creation here
+    action_bar_position = self._get_action_bar_position()
+    skip_splitter = action_bar_position in ('left', 'right')
+    
+    if skip_splitter:
+        logger.debug(f"Skipping main_splitter creation...")
+        self.main_splitter = None
+    else:
+        # Create splitter normally for top/bottom positions
+        ...
+```
+
+**Files Changed:**
+- `filter_mate_dockwidget.py`: Optimized `_setup_main_splitter()` and `_create_horizontal_wrapper_for_side_action_bar()`
+
+**Benefits:**
+- ✅ No more freeze with left/right action bar position
+- ✅ More efficient - no create-then-delete cycle
+- ✅ Cleaner code flow
+- ✅ Still handles runtime position changes safely
+
+**References:**
+- Fix date: December 13, 2025
+- Related: Qt widget lifecycle, QSplitter management
+
+---
+
+## Recently Fixed (v2.3.0-alpha - December 13, 2025 - Session 3)
+
+### QSplitter Freeze When Action Bar in Left/Right Position
+**Status:** ✅ FIXED
+
+**Issue:**
+- Plugin would freeze QGIS when loading with ACTION_BAR_POSITION set to 'left' or 'right'
+- Caused by recent changes to QSplitter and action bar layout (vertical/horizontal pushbuttons)
+- QGIS completely freezes (no response) on plugin initialization
+
+**Impact:**
+- CRITICAL: QGIS freezes completely when plugin loads
+- Users with left/right action bar position could not use the plugin
+
+**Root Cause:**
+1. `_setup_main_splitter()` creates `self.main_splitter` with `frame_exploring` and `frame_toolset` as children
+2. When ACTION_BAR_POSITION is 'left' or 'right', `_create_horizontal_wrapper_for_side_action_bar()` is called
+3. This method was attempting to delete `self.main_splitter` with `deleteLater()` BEFORE properly extracting the child widgets
+4. In Qt, when a parent widget is deleted, its children are also deleted - causing `frame_exploring` and `frame_toolset` to become invalid
+5. The orphaned/deleted widgets caused Qt layout conflicts and infinite recursion → QGIS freeze
+
+**Solution:**
+Fixed `_create_horizontal_wrapper_for_side_action_bar()` in `filter_mate_dockwidget.py`:
+1. Reparent child widgets (`frame_exploring`, `frame_toolset`) to a safe parent BEFORE deleting splitter
+2. Use `setParent()` to safely extract widgets from the splitter
+3. Hide splitter before calling `deleteLater()` for cleaner cleanup
+4. Add proper logging for debugging
+
+**Code Change:**
+```python
+# BEFORE (incorrect) - widgets deleted with splitter
+if hasattr(self, 'main_splitter') and self.main_splitter:
+    self.main_splitter.widget(0)  # This doesn't remove, just gets reference
+    self.main_splitter.widget(1)
+    parent.layout().removeWidget(self.main_splitter)
+    self.main_splitter.deleteLater()  # Children also deleted!
+    self.main_splitter = None
+
+# AFTER (correct) - reparent children first
+if hasattr(self, 'main_splitter') and self.main_splitter:
+    temp_parent = self.dockWidgetContents  # Safe parent
+    if frame_exploring:
+        frame_exploring.setParent(temp_parent)  # Extract from splitter
+    if frame_toolset:
+        frame_toolset.setParent(temp_parent)  # Extract from splitter
+    parent = self.main_splitter.parent()
+    if parent and parent.layout():
+        parent.layout().removeWidget(self.main_splitter)
+    self.main_splitter.hide()
+    self.main_splitter.deleteLater()
+    self.main_splitter = None
+```
+
+**Files Changed:**
+- `filter_mate_dockwidget.py`: Fixed `_create_horizontal_wrapper_for_side_action_bar()`
+
+**Benefits:**
+- ✅ No more freeze with left/right action bar position
+- ✅ All ACTION_BAR_POSITION values now work correctly
+- ✅ Proper Qt widget parenting/unparenting
+- ✅ Splitter is safely cleaned up
+
+**Testing Required:**
+1. Set ACTION_BAR_POSITION to 'left' → Plugin should load without freeze
+2. Set ACTION_BAR_POSITION to 'right' → Plugin should load without freeze
+3. Set ACTION_BAR_POSITION to 'top' → Plugin should work (no splitter cleanup needed)
+4. Set ACTION_BAR_POSITION to 'bottom' → Plugin should work (no splitter cleanup needed)
+5. Change position dynamically via config → Should work correctly
+
+**References:**
+- Fix date: December 13, 2025
+- Related: Qt widget parenting, QSplitter management
+
+---
+
+## Recently Fixed (v2.3.0-alpha - December 13, 2025 - Session 2)
+
+### Plugin Freeze During Project Load
+**Status:** ✅ FIXED
+
+**Issue:**
+- Plugin would freeze when loading a project with layers
+- Also occurred when launching plugin without active project or layers
+- Multiple signal handlers could trigger simultaneously causing race conditions
+
+**Impact:**
+- CRITICAL: QGIS would freeze when opening projects with the plugin active
+- Users had to force-quit QGIS
+
+**Root Cause:**
+1. `_handle_remove_all_layers()` did not check if `self.dockwidget` was None before accessing it
+2. `_handle_project_initialization()` did not reset `_loading_new_project` flag on early return when project became invalid
+3. `_handle_project_change()` in filter_mate.py did not check `_loading_new_project` flag, allowing duplicate initialization calls
+4. Multiple signal handlers (projectRead + layersAdded) could trigger simultaneously during project load
+
+**Solution:**
+1. Added null check for `self.dockwidget` in `_handle_remove_all_layers()`:
+   ```python
+   if self.dockwidget is not None:
+       self.dockwidget.disconnect_widgets_signals()
+       self.dockwidget.reset_multiple_checkable_combobox()
+   ```
+
+2. Added `_loading_new_project = False` reset on early return in `_handle_project_initialization()`
+
+3. Added additional null check for `self.dockwidget` in the `else` branch of `_handle_project_initialization()`:
+   ```python
+   if self.dockwidget is not None:
+       self.dockwidget.disconnect_widgets_signals()
+       self.dockwidget.reset_multiple_checkable_combobox()
+   ```
+
+4. Added `_loading_new_project` check in `_handle_project_change()` in filter_mate.py:
+   ```python
+   if hasattr(self.app, '_loading_new_project') and self.app._loading_new_project:
+       logger.debug("FilterMate: Skipping _handle_project_change - loading new project")
+       return
+   ```
+
+**Files Changed:**
+- `filter_mate_app.py`: Fixed `_handle_remove_all_layers()`, `_handle_project_initialization()`
+- `filter_mate.py`: Fixed `_handle_project_change()`
+
+**Benefits:**
+- ✅ No more freeze when loading projects
+- ✅ Plugin can be launched without active project or layers
+- ✅ Proper signal handling prevents race conditions
+- ✅ Graceful degradation when dockwidget is not yet created
+
+**References:**
+- Fix date: December 13, 2025
+- Related: Project initialization, signal handling
+
+---
+
 ## Recently Fixed (v2.3.0-alpha - December 13, 2025)
 
 ### Global Undo Not Restoring All Remote Layers

@@ -1179,6 +1179,22 @@ class FilterEngineTask(QgsTask):
         has_subset = bool(self.source_layer.subsetString())
         has_selection = self.source_layer.selectedFeatureCount() > 0
         
+        # Check if we're in field-based mode (Custom Selection with a simple field name)
+        is_field_based_mode = (
+            hasattr(self, 'is_field_expression') and 
+            self.is_field_expression is not None and
+            isinstance(self.is_field_expression, tuple) and
+            len(self.is_field_expression) >= 2 and
+            self.is_field_expression[0] is True
+        )
+        
+        logger.info(f"=== prepare_spatialite_source_geom DEBUG ===")
+        logger.info(f"  has_subset: {has_subset}")
+        logger.info(f"  has_selection: {has_selection}")
+        logger.info(f"  is_field_based_mode: {is_field_based_mode}")
+        if has_subset:
+            logger.info(f"  Current subset: '{self.source_layer.subsetString()[:100]}'")
+        
         if has_subset:
             # Source layer is filtered (e.g., from custom expression) - use getFeatures() which respects subsetString
             logger.info(f"=== prepare_spatialite_source_geom (FILTERED MODE) ===")
@@ -1190,11 +1206,25 @@ class FilterEngineTask(QgsTask):
             logger.info(f"=== prepare_spatialite_source_geom (MULTI-SELECTION MODE) ===")
             logger.info(f"  Using {self.source_layer.selectedFeatureCount()} selected features from source layer")
             features = self.source_layer.selectedFeatures()
+        elif is_field_based_mode:
+            # FIELD-BASED MODE: Use ALL features from source layer for geometric filtering
+            # In this mode, the source layer keeps its current filter (or no filter)
+            # and we use its visible features for intersection with distant layers
+            logger.info(f"=== prepare_spatialite_source_geom (FIELD-BASED MODE) ===")
+            logger.info(f"  Field name: '{self.is_field_expression[1]}'")
+            logger.info(f"  Using ALL visible features from source layer ({self.source_layer.featureCount()} features)")
+            features = list(self.source_layer.getFeatures())
         else:
             # Get features from task parameters (single selection or expression mode)
             features = self.task_parameters["task"]["features"]
             logger.info(f"=== prepare_spatialite_source_geom START ===")
             logger.info(f"  Features: {len(features)} features")
+        
+        # FALLBACK: If features list is empty, use all visible features from source layer
+        if not features or len(features) == 0:
+            logger.warning(f"  ⚠️ No features provided! Falling back to source layer's visible features")
+            features = list(self.source_layer.getFeatures())
+            logger.info(f"  → Fallback: Using {len(features)} features from source layer")
         
         logger.info(f"  Buffer value: {self.param_buffer_value}")
         logger.info(f"  Target CRS: {self.source_layer_crs_authid}")
@@ -1938,7 +1968,7 @@ class FilterEngineTask(QgsTask):
         Main method now orchestrates geometry preparation workflow.
         
         Process:
-        1. Copy filtered layer to memory (if subset string active OR features selected)
+        1. Copy filtered layer to memory (if subset string active OR features selected OR field-based mode)
         2. Fix invalid geometries in source layer
         3. Reproject if needed
         4. Apply buffer if specified
@@ -1951,6 +1981,22 @@ class FilterEngineTask(QgsTask):
         has_subset = bool(layer.subsetString())
         has_selection = layer.selectedFeatureCount() > 0
         
+        # Check if we're in field-based mode (Custom Selection with a simple field name)
+        is_field_based_mode = (
+            hasattr(self, 'is_field_expression') and 
+            self.is_field_expression is not None and
+            isinstance(self.is_field_expression, tuple) and
+            len(self.is_field_expression) >= 2 and
+            self.is_field_expression[0] is True
+        )
+        
+        logger.info(f"=== prepare_ogr_source_geom DEBUG ===")
+        logger.info(f"  has_subset: {has_subset}")
+        logger.info(f"  has_selection: {has_selection}")
+        logger.info(f"  is_field_based_mode: {is_field_based_mode}")
+        if has_subset:
+            logger.info(f"  Current subset: '{layer.subsetString()[:100]}'")
+        
         if has_subset or has_selection:
             if has_subset:
                 logger.debug(f"Source layer has subset string, copying to memory first...")
@@ -1962,6 +2008,14 @@ class FilterEngineTask(QgsTask):
                 layer = self._copy_selected_features_to_memory(layer, "source_selection")
             else:
                 layer = self._copy_filtered_layer_to_memory(layer, "source_filtered")
+        elif is_field_based_mode:
+            # FIELD-BASED MODE: Use all visible features from source layer
+            # In this mode, the source layer keeps its current state and we use all visible features
+            logger.info(f"=== prepare_ogr_source_geom (FIELD-BASED MODE) ===")
+            logger.info(f"  Field name: '{self.is_field_expression[1]}'")
+            logger.info(f"  Using ALL visible features from source layer ({layer.featureCount()} features)")
+            # Copy all visible features to memory for consistent processing
+            layer = self._copy_filtered_layer_to_memory(layer, "source_field_based")
         
         # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
         logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
