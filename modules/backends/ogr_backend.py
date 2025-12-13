@@ -290,27 +290,94 @@ class OGRGeometricFilter(GeometricFilterBackend):
         return source_layer
     
     def _map_predicates(self, predicates):
-        """Map predicate names to QGIS processing codes"""
+        """Map predicate names to QGIS processing codes.
+        
+        Handles multiple input formats:
+        - Lowercase names: 'intersects', 'disjoint', etc.
+        - UI names with capital: 'Intersect', 'Disjoint', etc.
+        - Numeric string indices: '0', '2', etc. (from filter_task.py execute_filtering mapping)
+        - SQL function names: 'ST_Intersects', 'ST_Disjoint', etc.
+        
+        Note: The numeric indices correspond to positions in filter_task.py's self.predicates dict:
+        0/1: Intersect/intersects, 2/3: Contain/contains, 4/5: Disjoint/disjoint, 
+        6/7: Equal/equals, 8/9: Touch/touches, 10/11: Overlap/overlaps,
+        12/13: Are within/within, 14/15: Cross/crosses, 16/17: covers/coveredby
+        """
+        # QGIS selectbylocation predicate codes:
         # 0: intersect, 1: contain, 2: disjoint, 3: equal, 4: touch, 5: overlap, 6: within, 7: cross
         predicate_map = {
+            # Lowercase names (standard)
             'intersects': [0],
             'contains': [1],
             'disjoint': [2],
             'equal': [3],
+            'equals': [3],
             'touches': [4],
             'overlaps': [5],
             'within': [6],
-            'crosses': [7]
+            'crosses': [7],
+            'covers': [1],  # Similar to contains
+            'coveredby': [6],  # Similar to within
+            # UI names (capitalized)
+            'Intersect': [0],
+            'Contain': [1],
+            'Disjoint': [2],
+            'Equal': [3],
+            'Touch': [4],
+            'Overlap': [5],
+            'Within': [6],
+            'Are within': [6],
+            'Cross': [7],
+            # Numeric string indices from filter_task.py execute_filtering
+            # Based on self.predicates dict order in filter_task.py:
+            # "Intersect": 0, "intersects": 1, "Contain": 2, "contains": 3,
+            # "Disjoint": 4, "disjoint": 5, "Equal": 6, "equals": 7,
+            # "Touch": 8, "touches": 9, "Overlap": 10, "overlaps": 11,
+            # "Are within": 12, "within": 13, "Cross": 14, "crosses": 15,
+            # "covers": 16, "coveredby": 17
+            '0': [0],   # Intersect -> QGIS intersect (0)
+            '1': [0],   # intersects -> QGIS intersect (0)
+            '2': [1],   # Contain -> QGIS contain (1)
+            '3': [1],   # contains -> QGIS contain (1)
+            '4': [2],   # Disjoint -> QGIS disjoint (2)
+            '5': [2],   # disjoint -> QGIS disjoint (2)
+            '6': [3],   # Equal -> QGIS equal (3)
+            '7': [3],   # equals -> QGIS equal (3)
+            '8': [4],   # Touch -> QGIS touch (4)
+            '9': [4],   # touches -> QGIS touch (4)
+            '10': [5],  # Overlap -> QGIS overlap (5)
+            '11': [5],  # overlaps -> QGIS overlap (5)
+            '12': [6],  # Are within -> QGIS within (6)
+            '13': [6],  # within -> QGIS within (6)
+            '14': [7],  # Cross -> QGIS cross (7)
+            '15': [7],  # crosses -> QGIS cross (7)
+            '16': [1],  # covers -> QGIS contain (1)
+            '17': [6],  # coveredby -> QGIS within (6)
+            # SQL function names (PostGIS style)
+            'ST_Intersects': [0],
+            'ST_Contains': [1],
+            'ST_Disjoint': [2],
+            'ST_Equals': [3],
+            'ST_Touches': [4],
+            'ST_Overlaps': [5],
+            'ST_Within': [6],
+            'ST_Crosses': [7],
+            'ST_Covers': [1],
+            'ST_CoveredBy': [6],
         }
         
         predicate_codes = []
         for pred in predicates:
             if pred in predicate_map:
                 predicate_codes.extend(predicate_map[pred])
+            else:
+                self.log_debug(f"Unknown predicate '{pred}', attempting lookup by index")
         
         if not predicate_codes:
             predicate_codes = [0]  # Default to intersects
             self.log_info("No predicates specified, defaulting to 'intersects'")
+        else:
+            self.log_debug(f"Mapped predicates {predicates} to QGIS codes {predicate_codes}")
         
         return predicate_codes
     
@@ -392,7 +459,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Generated subset expression using key '{pk_field}': {new_subset_expression[:100]}...")
                 
                 # Combine with old subset if needed
-                if old_subset and combine_operator:
+                # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
+                if old_subset:
+                    if not combine_operator:
+                        # Si aucun opérateur n'est spécifié, utiliser AND par défaut
+                        combine_operator = 'AND'
+                        self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
                     self.log_info(f"Combining with existing filter using: {combine_operator}")
                     final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
                 else:
@@ -512,7 +584,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 new_subset_expression = f'{escaped_temp} = 1'
                 
                 # Combine with old subset if needed
-                if old_subset and combine_operator:
+                # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
+                if old_subset:
+                    if not combine_operator:
+                        # Si aucun opérateur n'est spécifié, utiliser AND par défaut
+                        combine_operator = 'AND'
+                        self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
                     self.log_info(f"Combining with existing filter using: {combine_operator}")
                     final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
                 else:

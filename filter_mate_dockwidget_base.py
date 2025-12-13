@@ -1020,7 +1020,7 @@ class Ui_FilterMateDockWidgetBase(object):
         self.mQgsDoubleSpinBox_filtering_buffer_value.setProperty("showGroupSeparator", True)
         self.mQgsDoubleSpinBox_filtering_buffer_value.setMaximum(1000000.0)
         self.mQgsDoubleSpinBox_filtering_buffer_value.setSingleStep(0.1)
-        self.mQgsDoubleSpinBox_filtering_buffer_value.setStepType(QtWidgets.QAbstractSpinBox.AdaptiveDecimalStepType)
+        self.mQgsDoubleSpinBox_filtering_buffer_value.setStepType(QtWidgets.QAbstractSpinBox.DefaultStepType)
         self.mQgsDoubleSpinBox_filtering_buffer_value.setClearValue(True)
         self.mQgsDoubleSpinBox_filtering_buffer_value.setObjectName("mQgsDoubleSpinBox_filtering_buffer_value")
         self.horizontalLayout_filtering_values_buttons.addWidget(self.mQgsDoubleSpinBox_filtering_buffer_value)
@@ -1525,11 +1525,8 @@ class Ui_FilterMateDockWidgetBase(object):
         _translate = QtCore.QCoreApplication.translate
         FilterMateDockWidgetBase.setWindowTitle(_translate("FilterMateDockWidgetBase", "FilterMate"))
         self.mGroupBox_exploring_single_selection.setTitle(_translate("FilterMateDockWidgetBase", "SINGLE SELECTION"))
-        # REMOVED: setSyncGroup interferes with manual exclusive groupbox logic
         self.mGroupBox_exploring_multiple_selection.setTitle(_translate("FilterMateDockWidgetBase", "MULTIPLE SELECTION"))
-        # REMOVED: setSyncGroup interferes with manual exclusive groupbox logic
         self.mGroupBox_exploring_custom_selection.setTitle(_translate("FilterMateDockWidgetBase", "CUSTOM SELECTION"))
-        # REMOVED: setSyncGroup interferes with manual exclusive groupbox logic
         self.pushButton_checkable_filtering_layers_to_filter.setToolTip(_translate("FilterMateDockWidgetBase", "Filtrage multicouche"))
         self.pushButton_checkable_filtering_current_layer_combine_operator.setToolTip(_translate("FilterMateDockWidgetBase", "Filtrage additif pour la couche sélectionnée"))
         self.pushButton_checkable_filtering_geometric_predicates.setToolTip(_translate("FilterMateDockWidgetBase", "Filtrage géospatial"))

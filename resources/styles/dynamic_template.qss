@@ -18,6 +18,29 @@
  */
 
 /* ========================================================================
+   DOCKWIDGET - Base styling for docked and floating modes
+   ======================================================================== */
+
+QDockWidget {
+    background-color: {color_bg_0};
+    color: {color_font_0};
+}
+
+QDockWidget::title {
+    background-color: {color_1};
+    color: {color_font_0};
+    padding: 4px;
+}
+
+QDockWidget > QWidget {
+    background-color: {color_bg_0};
+}
+
+#dockWidgetContents {
+    background-color: {color_bg_0};
+}
+
+/* ========================================================================
    BUTTONS - Dynamic dimensions based on profile
    ======================================================================== */
 

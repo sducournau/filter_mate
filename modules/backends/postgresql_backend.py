@@ -163,7 +163,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 return False
             
             # Combine with existing filter if specified
-            if old_subset and combine_operator:
+            # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
+            if old_subset:
+                if not combine_operator:
+                    # Si aucun opérateur n'est spécifié, utiliser AND par défaut
+                    combine_operator = 'AND'
+                    self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
                 final_expression = f"({old_subset}) {combine_operator} ({expression})"
             else:
                 final_expression = expression

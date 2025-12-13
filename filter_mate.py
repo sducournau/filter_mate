@@ -82,6 +82,9 @@ class FilterMate:
 
         self.pluginIsActive = False
         self.app = False
+        self._auto_activation_signals_connected = False
+        self._project_read_connection = None
+        self._new_project_connection = None
 
 
     # noinspection PyMethodMayBeStatic
@@ -196,6 +199,9 @@ class FilterMate:
             parent=self.iface.mainWindow(),
             add_to_toolbar=False,
             status_tip=self.tr(u'Réinitialiser la configuration par défaut et supprimer la base de données SQLite'))
+        
+        # Connect signals for auto-activation when layers are added or project is loaded
+        self._connect_auto_activation_signals()
 
     #--------------------------------------------------------------------------
 
@@ -234,12 +240,102 @@ class FilterMate:
 
 
             return path
+    
+    def _connect_auto_activation_signals(self):
+        """Connect signals to auto-activate plugin when layers are added or project is loaded."""
+        if not self._auto_activation_signals_connected:
+            from qgis.core import QgsProject
+            from qgis.PyQt.QtCore import QTimer
+            from qgis.utils import iface as qgis_iface
+            
+            project = QgsProject.instance()
+            layer_store = project.layerStore()
+            
+            # Auto-activate when layers are added
+            layer_store.layersAdded.connect(self._auto_activate_plugin)
+            
+            # Store lambda references for proper disconnection
+            self._project_read_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
+            self._new_project_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
+            
+            # Auto-activate when a project is opened
+            self.iface.projectRead.connect(self._project_read_connection)
+            # Auto-activate when a new project is created with layers
+            self.iface.newProjectCreated.connect(self._new_project_connection)
+            
+            self._auto_activation_signals_connected = True
+            logger.info("FilterMate: Auto-activation signals connected")
+            
+            # Show user message
+            qgis_iface.messageBar().pushInfo(
+                "FilterMate",
+                "Le plugin s'activera automatiquement lors de l'ajout de couches ou de l'ouverture d'un projet"
+            )
+    
+    def _auto_activate_plugin(self, layers=None):
+        """Auto-activate plugin if not already active.
+        
+        When called with the plugin inactive:
+            - Checks for vector layers in the project
+            - If found, activates the plugin by calling run()
+            
+        When called with the plugin already active:
+            - Does nothing - the FilterMateApp handles layer changes
+              via its own signal connections (layersAdded, projectRead, etc.)
+              This avoids duplicate processing and race conditions.
+        
+        Args:
+            layers: Optional list of layers that were just added (from layersAdded signal)
+        """
+        from qgis.core import QgsProject, QgsVectorLayer
+        from qgis.utils import iface as qgis_iface
+        
+        # If plugin is already active, FilterMateApp handles everything
+        # via its own signal connections. No action needed here.
+        if self.pluginIsActive:
+            logger.debug("FilterMate: _auto_activate_plugin called but plugin already active - FilterMateApp handles signals")
+            return
+        
+        # Plugin not active - check if there are vector layers to activate for
+        project = QgsProject.instance()
+        vector_layers = [layer for layer in project.mapLayers().values() 
+                        if isinstance(layer, QgsVectorLayer)]
+        
+        if not vector_layers:
+            return  # No vector layers to process
+        
+        # Plugin not active and we have vector layers - activate it
+        logger.info(f"FilterMate: Auto-activating plugin ({len(vector_layers)} vector layer(s) detected)")
+        qgis_iface.messageBar().pushInfo(
+            "FilterMate",
+            f"Activation automatique du plugin ({len(vector_layers)} couche(s) vectorielle(s) détectée(s))"
+        )
+        self.run()
 
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
 
         #print "** UNLOAD FilterMate"
+        
+        # Disconnect auto-activation signals
+        if self._auto_activation_signals_connected:
+            from qgis.core import QgsProject
+            
+            try:
+                project = QgsProject.instance()
+                layer_store = project.layerStore()
+                
+                layer_store.layersAdded.disconnect(self._auto_activate_plugin)
+                
+                if self._project_read_connection:
+                    self.iface.projectRead.disconnect(self._project_read_connection)
+                if self._new_project_connection:
+                    self.iface.newProjectCreated.disconnect(self._new_project_connection)
+                
+                logger.info("FilterMate: Auto-activation signals disconnected")
+            except Exception as e:
+                logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
         
         # Nettoyer les ressources de l'application FilterMate
         if self.app:
@@ -399,10 +495,16 @@ class FilterMate:
                     self.app.run()
                     self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
                 else:
-                    # App already exists, just show the dockwidget
+                    # App already exists, call run() which will show the dockwidget
+                    # and refresh layers if needed
                     self.app.run()
+                    # Reconnect closingPlugin signal only if not already connected
+                    # Use try/except to safely disconnect then reconnect
+                    try:
+                        self.app.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
+                    except TypeError:
+                        pass  # Not connected, ignore
                     self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
-                    self.app.dockwidget.show()
             except Exception as e:
                 iface.messageBar().pushCritical(
                     "FilterMate",

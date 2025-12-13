@@ -897,7 +897,6 @@
                    <property name="collapsed">
                     <bool>false</bool>
                    </property>
-                   <!-- syncGroup REMOVED: interferes with manual exclusive groupbox logic -->
                    <property name="saveCollapsedState">
                     <bool>true</bool>
                    </property>
@@ -1052,7 +1051,6 @@
                    <property name="collapsed">
                     <bool>true</bool>
                    </property>
-                   <!-- syncGroup REMOVED: interferes with manual exclusive groupbox logic -->
                    <property name="saveCollapsedState">
                     <bool>true</bool>
                    </property>
@@ -1174,7 +1172,6 @@
                    <property name="collapsed">
                     <bool>true</bool>
                    </property>
-                   <!-- syncGroup REMOVED: interferes with manual exclusive groupbox logic -->
                    <property name="saveCollapsedState">
                     <bool>true</bool>
                    </property>
@@ -2452,7 +2449,7 @@
                         <double>0.100000000000000</double>
                        </property>
                        <property name="stepType">
-                        <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
+                        <enum>QAbstractSpinBox::DefaultStepType</enum>
                        </property>
                        <property name="clearValue">
                         <bool>true</bool>

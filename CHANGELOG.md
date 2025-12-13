@@ -4,26 +4,120 @@ All notable changes to FilterMate will be documented in this file.
 
 ## [Unreleased]
 
+### 🛠️ Code Quality
+
+#### Debug Statements Cleanup & PEP 8 Compliance
+Improved code quality by removing debug print statements and fixing style issues
+- **Debug prints removed**: All `print(f"FilterMate DEBUG: ...")` statements converted to `logger.debug()`
+- **Affected files**: `filter_mate_app.py`, `filter_mate_dockwidget.py`
+- **PEP 8 fixes**: Boolean comparisons corrected in `modules/qt_json_view/datatypes.py`
+  - `os.path.exists(value) == True` → `os.path.exists(value)`
+  - `os.path.isdir(value) == True` → `os.path.isdir(value)`
+  - `os.path.isfile(value) == True` → `os.path.isfile(value)`
+- **Benefit**: Cleaner production code, proper logging integration, better code maintainability
+
+### ✨ Enhancement
+
+#### Auto-Activation on Layer Addition or Project Load
+Improved user experience by automatically activating the plugin when needed
+- **Behavior**: Plugin now auto-activates when vector layers are added to an empty project
+- **Triggers**:
+  - When user adds layers to QGIS (drag & drop, Add Layer menu, etc.)
+  - When user opens a project containing vector layers
+  - When user creates a new project and adds layers
+- **Smart Detection**: Only activates if there are vector layers (ignores raster-only projects)
+- **Seamless Integration**: No manual plugin activation required after adding data
+- **Use Case**: User can start QGIS empty, add data, and FilterMate panel appears automatically
+- **Signal-Based**: Uses QGIS layersAdded, projectRead, and newProjectCreated signals
+- **Backward Compatible**: Manual activation via toolbar button still works as before
+
+## [2.3.0] - 2025-12-13 - Global Undo/Redo & Automatic Filter Preservation
+
 ### 🚀 Major Features
-- **Global Undo/Redo Functionality**: Intelligent undo/redo system with context-aware behavior
-  - **Source Layer Only Mode**: Undo/redo applies only to the source layer when no remote layers are selected
-  - **Global Mode**: When remote layers are selected and filtered, undo/redo restores the complete state of all layers simultaneously
-  - **Smart Button States**: Undo/redo buttons automatically enable/disable based on history availability
-  - **Multi-Layer State Capture**: New `GlobalFilterState` class captures source + remote layers state atomically
-  - **Automatic Context Detection**: Seamlessly switches between source-only and global modes based on layer selection
-  - **UI Integration**: Existing pushButton_action_undo_filter and pushButton_action_redo_filter now fully functional
-  - **History Manager**: Extended with global history stack (up to 100 states by default)
-  - **User Feedback**: Clear success/warning messages indicating which mode is active
+
+#### 0. Reduced Notification Fatigue - Configurable Feedback System ⭐ NEW
+Improved user experience by reducing unnecessary messages and adding verbosity control
+- **Problem Solved**: Plugin displayed 48+ messages during normal usage, creating notification overload
+- **Reduction Achieved**: 
+  - Normal mode: **-42% messages** (52 vs 90 per session)
+  - Minimal mode: **-92% messages** (7 vs 90 per session)
+- **Three Verbosity Levels**:
+  - **Minimal**: Only critical errors and performance warnings (production use)
+  - **Normal** ⭐ (default): Balanced feedback, essential information only
+  - **Verbose**: All messages including debug info (development/support)
+- **Messages Removed**:
+  - 8× Undo/redo confirmations (UI feedback sufficient via button states)
+  - 4× UI config changes (visible in interface)
+  - 4× "No more history" warnings (buttons already disabled)
+- **Configurable via**: `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
+- **Smart Categories**: filter_count, backend_info, progress_info, etc. independently controlled
+- **Developer API**: `should_show_message('category')` for conditional display
+- **Documentation**: See `docs/USER_FEEDBACK_SYSTEM.md` for complete guide
+
+### 🚀 Major Features
+
+#### 1. Global Undo/Redo Functionality
+Intelligent undo/redo system with context-aware behavior
+- **Source Layer Only Mode**: Undo/redo applies only to the source layer when no remote layers are selected
+- **Global Mode**: When remote layers are selected and filtered, undo/redo restores the complete state of all layers simultaneously
+- **Smart Button States**: Undo/redo buttons automatically enable/disable based on history availability
+- **Multi-Layer State Capture**: New `GlobalFilterState` class captures source + remote layers state atomically
+- **Automatic Context Detection**: Seamlessly switches between source-only and global modes based on layer selection
+- **UI Integration**: Existing pushButton_action_undo_filter and pushButton_action_redo_filter now fully functional
+- **History Manager**: Extended with global history stack (up to 100 states by default)
+- **User Feedback**: Clear success/warning messages indicating which mode is active
+
+#### 2. Automatic Filter Preservation ⭐ NEW
+Critical feature preventing filter loss during layer switching and multi-step filtering workflows
+- **Problem Solved**: Previously, applying a new filter would replace existing filters, causing data loss when switching layers
+- **Solution**: Filters are now automatically combined using logical operators (AND by default)
+- **Default Behavior**: When no operator is specified, uses AND to preserve all existing filters
+- **Available Operators**: 
+  - AND (default): Intersection of filters - `(filter1) AND (filter2)`
+  - OR: Union of filters - `(filter1) OR (filter2)`
+  - AND NOT: Exclusion - `(filter1) AND NOT (filter2)`
+- **Use Case Example**:
+  1. Filter by polygon geometry → 150 features
+  2. Switch to another layer
+  3. Apply attribute filter `population > 10000`
+  4. Result: 23 features (intersection of both filters preserved!)
+  5. Without preservation: 450 features (geometric filter lost)
+- **Multi-Layer Support**: Works for both source layer and distant layers
+- **Complex WHERE Clauses**: Correctly handles nested SQL expressions
+- **User Feedback**: Informative log messages when filters are preserved
 
 ### 🛠️ Technical Improvements
+
+#### Undo/Redo System
 - **New Module Components**:
   - `GlobalFilterState` class in `modules/filter_history.py`: Manages multi-layer state snapshots
   - `handle_undo()` and `handle_redo()` methods in `filter_mate_app.py`: Intelligent undo/redo with conditional logic
   - `update_undo_redo_buttons()`: Automatic button state management
   - `currentLayerChanged` signal: Real-time button updates on layer switching
+
+#### Filter Preservation
+- **Modified Methods** in `modules/tasks/filter_task.py`:
+  - `_initialize_source_filtering_parameters()`: Always captures existing subset string
+  - `_combine_with_old_subset()`: Uses AND operator by default when no operator specified
+  - `_combine_with_old_filter()`: Same logic for distant layers
+- **Logging**: Clear messages when filters are preserved and operators applied
+- **Backwards Compatible**: No breaking changes, 100% compatible with existing projects
+
+### 🧪 Testing
+- **New Test Suite**: `tests/test_filter_preservation.py`
+  - 8+ unit tests covering all operator combinations
+  - Tests for workflow scenarios (geometric → attribute filtering)
+  - Tests for complex WHERE clause preservation
+  - Tests for multi-layer operations
   
 ### 📚 Documentation
 - Added `docs/UNDO_REDO_IMPLEMENTATION.md`: Comprehensive implementation guide with architecture, workflows, and use cases
+- Added `docs/FILTER_PRESERVATION.md`: Complete technical guide for filter preservation system
+  - Architecture and logic explanation
+  - SQL examples and use cases
+  - User guide with FAQs
+  - Testing guidelines
+- Added `FILTER_PRESERVATION_SUMMARY.md`: Quick reference in French for users
 
 ## [2.2.5] - 2025-12-08 - Automatic Geographic CRS Handling
 

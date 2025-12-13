@@ -389,10 +389,10 @@ class FilepathType(DataType):
     def value_item(self, value, model, key):
         """Item representing a value."""
         value_item = super(FilepathType, self).value_item(value, model, key)
-        if os.path.exists(value) == True:
-            if os.path.isdir(value) == True:
+        if os.path.exists(value):
+            if os.path.isdir(value):
                 value_item.setData(value, QtCore.Qt.DisplayRole)
-            elif os.path.isfile(value) == True:
+            elif os.path.isfile(value):
                 value_item.setData(os.path.basename(value), QtCore.Qt.DisplayRole)
                 value_item.setData(os.path.normcase(value), QtCore.Qt.UserRole)
         return value_item
@@ -409,10 +409,10 @@ class FilepathType(DataType):
     def change_path(self, input_path, index):
         new_path = None
         filename = None
-        if os.path.isdir(input_path) == True:
+        if os.path.isdir(input_path):
             new_path = os.path.normcase(str(QtWidgets.QFileDialog.getExistingDirectory(None, 'Select a folder', input_path)))
         else:
-            if os.path.exists(input_path) == True:
+            if os.path.exists(input_path):
                 extension = os.path.basename(input_path).split('.')[-1]
                 new_path = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
                 filename = os.path.basename(new_path)

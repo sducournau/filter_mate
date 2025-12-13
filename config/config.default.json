@@ -1,6 +1,25 @@
 {
     "APP": {
         "DOCKWIDGET": {
+            "FEEDBACK_LEVEL": {
+                "choices": [
+                    "minimal",
+                    "normal",
+                    "verbose"
+                ],
+                "value": "normal"
+            },
+            "_FEEDBACK_LEVEL_META": {
+                "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
+                "categories_affected": [
+                    "filter_count",
+                    "undo_redo",
+                    "backend_info",
+                    "config_changes",
+                    "progress_info",
+                    "history_status"
+                ]
+            },
             "UI_PROFILE": {
                 "choices": [
                     "auto",

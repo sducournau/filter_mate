@@ -60,6 +60,6 @@ __all__ = [
 ]
 
 # Version info
-__version__ = '2.3.0-alpha'
+__version__ = '2.3.0'
 __phase__ = '3c'
 __status__ = 'FilterEngineTask extracted, all major tasks modularized'

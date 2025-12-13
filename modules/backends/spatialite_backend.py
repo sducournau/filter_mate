@@ -500,9 +500,33 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         # intersects > within > contains > overlaps > touches
         predicate_order = ['intersects', 'within', 'contains', 'overlaps', 'touches', 'crosses', 'disjoint']
         
+        # Normalize predicate keys: convert indices ('0', '4') to names ('intersects', 'touches')
+        # This handles the format from execute_filtering where predicates = {str(idx): sql_func}
+        index_to_name = {
+            '0': 'intersects', '1': 'contains', '2': 'disjoint', '3': 'equals',
+            '4': 'touches', '5': 'overlaps', '6': 'within', '7': 'crosses'
+        }
+        
+        normalized_predicates = {}
+        for key, value in predicates.items():
+            # Try to normalize the key
+            if key in index_to_name:
+                # Key is a string index like '0'
+                normalized_key = index_to_name[key]
+            elif key.lower().startswith('st_'):
+                # Key is SQL function like 'ST_Intersects'
+                normalized_key = key.lower().replace('st_', '')
+            elif key.lower() in predicate_order or key.lower() == 'equals':
+                # Key is already a name like 'intersects'
+                normalized_key = key.lower()
+            else:
+                # Unknown format, use as-is
+                normalized_key = key
+            normalized_predicates[normalized_key] = value
+        
         # Sort predicates by optimal order
         ordered_predicates = sorted(
-            predicates.items(),
+            normalized_predicates.items(),
             key=lambda x: predicate_order.index(x[0]) if x[0] in predicate_order else 999
         )
         
@@ -563,7 +587,12 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Current feature count: {layer.featureCount()}")
             
             # Combine with existing filter if specified
-            if old_subset and combine_operator:
+            # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
+            if old_subset:
+                if not combine_operator:
+                    # Si aucun opérateur n'est spécifié, utiliser AND par défaut
+                    combine_operator = 'AND'
+                    self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
                 final_expression = f"({old_subset}) {combine_operator} ({expression})"
                 self.log_debug(f"Combining with existing subset using {combine_operator}")
             else:

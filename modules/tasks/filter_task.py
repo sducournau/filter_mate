@@ -319,15 +319,22 @@ class FilterEngineTask(QgsTask):
         
         Populates self.layers dictionary with layers grouped by provider,
         and updates layers_count.
+        
+        For 'filter' action: respects has_layers_to_filter flag
+        For 'unfilter' and 'reset': processes all layers in the list regardless of flag
+        (to clean up filters that were applied previously)
         """
-        logger.info(f"🔍 _organize_layers_to_filter() called")
+        logger.info(f"🔍 _organize_layers_to_filter() called for action: {self.task_action}")
         logger.info(f"  has_layers_to_filter: {self.task_parameters['filtering']['has_layers_to_filter']}")
         logger.info(f"  task['layers'] count: {len(self.task_parameters['task'].get('layers', []))}")
         
-        if not self.task_parameters["filtering"]["has_layers_to_filter"]:
-            logger.warning("  ⚠️ has_layers_to_filter is False - skipping distant layers organization")
+        # For 'filter' action, respect the has_layers_to_filter flag
+        # For 'unfilter' and 'reset', always process layers to clean up previous filters
+        if self.task_action == 'filter' and not self.task_parameters["filtering"]["has_layers_to_filter"]:
+            logger.warning("  ⚠️ has_layers_to_filter is False for 'filter' action - skipping distant layers organization")
             return
         
+        # Process all layers in the list
         for layer_props in self.task_parameters["task"]["layers"]:
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
@@ -352,7 +359,6 @@ class FilterEngineTask(QgsTask):
         
         self.provider_list = list(self.layers.keys())
         logger.info(f"  📊 Final organized layers count: {self.layers_count}, providers: {self.provider_list}")
-
     def _log_backend_info(self):
         """
         Log backend information and performance warnings for filtering tasks.
@@ -496,11 +502,15 @@ class FilterEngineTask(QgsTask):
             if field.name() != self.primary_key_name
         ]
         
+        # TOUJOURS capturer le filtre existant si présent
+        # Cela garantit que les filtres ne sont jamais perdus lors du changement de couche
+        if self.source_layer.subsetString():
+            self.param_source_old_subset = self.source_layer.subsetString()
+            logger.info(f"FilterMate: Filtre existant détecté sur {self.param_source_table}: {self.param_source_old_subset[:100]}...")
+        
         if self.has_combine_operator:
             self.param_source_layer_combine_operator = self.task_parameters["filtering"]["source_layer_combine_operator"]
             self.param_other_layers_combine_operator = self.task_parameters["filtering"]["other_layers_combine_operator"]
-            if self.source_layer.subsetString():
-                self.param_source_old_subset = self.source_layer.subsetString()
 
     def _process_qgis_expression(self, expression):
         """
@@ -560,12 +570,25 @@ class FilterEngineTask(QgsTask):
         
         Uses logical operators (AND, AND NOT, OR) for source layer filtering.
         
+        COMPORTEMENT PAR DÉFAUT:
+        - Si un filtre existant est présent, il est TOUJOURS préservé
+        - Si aucun opérateur n'est spécifié, utilise AND par défaut
+        - Cela garantit que les filtres ne sont jamais perdus lors du changement de couche
+        
         Returns:
             str: Combined expression
         """
-        combine_operator = self._get_source_combine_operator()
-        if not self.param_source_old_subset or not combine_operator:
+        # Si aucun filtre existant, retourner la nouvelle expression
+        if not self.param_source_old_subset:
             return expression
+        
+        # Récupérer l'opérateur de combinaison (ou utiliser AND par défaut)
+        combine_operator = self._get_source_combine_operator()
+        if not combine_operator:
+            # NOUVEAU: Si un filtre existe mais pas d'opérateur, utiliser AND par défaut
+            # Cela préserve les filtres existants lors du changement de couche
+            combine_operator = 'AND'
+            logger.info(f"FilterMate: Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
         
         # Extract WHERE clause from old subset
         index_where = self.param_source_old_subset.find('WHERE')
@@ -623,8 +646,15 @@ class FilterEngineTask(QgsTask):
                 )
         
         # Combine with old subset if needed
-        combine_operator = self._get_source_combine_operator()
-        if self.param_source_old_subset and combine_operator:
+        # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
+        if self.param_source_old_subset:
+            combine_operator = self._get_source_combine_operator()
+            if not combine_operator:
+                # Si aucun opérateur n'est spécifié, utiliser AND par défaut
+                # Cela garantit que les filtres existants sont préservés
+                combine_operator = 'AND'
+                logger.info(f"FilterMate: Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant (feature ID list)")
+            
             expression = (
                 f'( {self.param_source_old_subset} ) '
                 f'{combine_operator} ( {expression} )'
@@ -675,6 +705,43 @@ class FilterEngineTask(QgsTask):
         task_expression = self.task_parameters["task"]["expression"]
         logger.debug(f"Task expression: {task_expression}")
         
+        # Check if expression is just a field name (no comparison operators)
+        is_simple_field = False
+        if task_expression:
+            qgs_expr = QgsExpression(task_expression)
+            is_simple_field = qgs_expr.isField() and not any(
+                op in task_expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
+            )
+        
+        # Check if geometric filtering is enabled
+        has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
+        geom_predicates_list = self.task_parameters["filtering"].get("geometric_predicates", [])
+        has_geometric_filtering = has_geom_predicates and len(geom_predicates_list) > 0
+        
+        # OPTIMIZATION: If expression is a simple field name AND geometric filtering is enabled,
+        # do NOT filter the source layer - keep existing subset and use selected features
+        # for geometric filtering only
+        if is_simple_field and has_geometric_filtering:
+            logger.info("=" * 60)
+            logger.info("🔄 FIELD-BASED GEOMETRIC FILTER MODE")
+            logger.info("=" * 60)
+            logger.info(f"  Expression is simple field: '{task_expression}'")
+            logger.info(f"  Geometric filtering enabled: {has_geometric_filtering}")
+            logger.info("  → Source layer will NOT be filtered")
+            logger.info("  → Using existing subset (if any) for source geometry")
+            
+            # Store the field expression for later use in geometric filtering
+            self.is_field_expression = (True, task_expression)
+            
+            # Keep existing subset - don't modify source layer filter
+            self.expression = self.param_source_old_subset if self.param_source_old_subset else ""
+            
+            # Mark as successful - source layer remains with current filter
+            result = True
+            logger.info(f"  → Existing subset preserved: '{self.expression[:100]}...' " if self.expression else "  → No existing subset")
+            logger.info("=" * 60)
+            return result
+        
         # Process QGIS expression if provided
         if task_expression:
             processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
@@ -705,14 +772,46 @@ class FilterEngineTask(QgsTask):
         
         Sets param_source_new_subset based on expression type and
         extracts buffer value/expression from task parameters.
+        
+        SPECIAL CASE: When is_field_expression is set and expression is a simple field,
+        we use the selected features to build the source geometry subset, not the
+        source layer's current filter.
         """
         logger.info("🔧 _initialize_source_subset_and_buffer() START")
         
-        # Set source subset based on expression type
-        if QgsExpression(self.expression).isField() is False:
-            self.param_source_new_subset = self.expression
+        # Check if we're in field-based geometric filter mode
+        # In this mode, is_field_expression = (True, field_name) and expression = old_subset
+        is_field_based_mode = (
+            hasattr(self, 'is_field_expression') and 
+            self.is_field_expression is not None and
+            isinstance(self.is_field_expression, tuple) and
+            len(self.is_field_expression) >= 2 and
+            self.is_field_expression[0] is True
+        )
+        
+        if is_field_based_mode:
+            # In field-based mode, build subset from selected features
+            features_list = self.task_parameters["task"]["features"]
+            field_name = self.is_field_expression[1]
+            
+            logger.info(f"  🔄 FIELD-BASED MODE: Using selected features for source geometry")
+            logger.info(f"  → Field name: '{field_name}'")
+            logger.info(f"  → Features list count: {len(features_list) if features_list else 0}")
+            
+            if features_list and len(features_list) > 0 and features_list[0] != "":
+                # Build expression from feature IDs for source geometry
+                self.param_source_new_subset = self._build_feature_id_expression(features_list)
+                logger.info(f"  → Source geometry subset built from {len(features_list)} features")
+            else:
+                # No features selected, use existing subset
+                self.param_source_new_subset = self.param_source_old_subset
+                logger.info(f"  → No features selected, using existing subset")
         else:
-            self.param_source_new_subset = self.param_source_old_subset
+            # Standard mode: Set source subset based on expression type
+            if QgsExpression(self.expression).isField() is False:
+                self.param_source_new_subset = self.expression
+            else:
+                self.param_source_new_subset = self.param_source_old_subset
 
         # Extract buffer parameters if configured
         has_buffer = self.task_parameters["filtering"]["has_buffer_value"]
@@ -1068,10 +1167,29 @@ class FilterEngineTask(QgsTask):
         
         Performance: Uses cache to avoid recalculating for multiple layers.
         """
-        # Get features from task parameters
-        features = self.task_parameters["task"]["features"]
-        logger.info(f"=== prepare_spatialite_source_geom START ===")
-        logger.info(f"  Features: {len(features)} features")
+        # CRITICAL FIX: Respect active subset filter on source layer
+        # When source layer has a subsetString (e.g., "homecount > 5"), we must use ONLY filtered features
+        # for geometric operations, not all features in the layer.
+        has_subset = bool(self.source_layer.subsetString())
+        has_selection = self.source_layer.selectedFeatureCount() > 0
+        
+        if has_subset:
+            # Source layer is filtered (e.g., from custom expression) - use getFeatures() which respects subsetString
+            logger.info(f"=== prepare_spatialite_source_geom (FILTERED MODE) ===")
+            logger.info(f"  Source layer has active filter: {self.source_layer.subsetString()[:100]}")
+            logger.info(f"  Using {self.source_layer.featureCount()} filtered features from source layer")
+            features = list(self.source_layer.getFeatures())
+        elif has_selection:
+            # Multi-selection mode - use selected features
+            logger.info(f"=== prepare_spatialite_source_geom (MULTI-SELECTION MODE) ===")
+            logger.info(f"  Using {self.source_layer.selectedFeatureCount()} selected features from source layer")
+            features = self.source_layer.selectedFeatures()
+        else:
+            # Get features from task parameters (single selection or expression mode)
+            features = self.task_parameters["task"]["features"]
+            logger.info(f"=== prepare_spatialite_source_geom START ===")
+            logger.info(f"  Features: {len(features)} features")
+        
         logger.info(f"  Buffer value: {self.param_buffer_value}")
         logger.info(f"  Target CRS: {self.source_layer_crs_authid}")
         logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
@@ -1814,7 +1932,7 @@ class FilterEngineTask(QgsTask):
         Main method now orchestrates geometry preparation workflow.
         
         Process:
-        1. Copy filtered layer to memory (if subset string active)
+        1. Copy filtered layer to memory (if subset string active OR features selected)
         2. Fix invalid geometries in source layer
         3. Reproject if needed
         4. Apply buffer if specified
@@ -1822,11 +1940,22 @@ class FilterEngineTask(QgsTask):
         """
         layer = self.source_layer
         
-        # Step 0: CRITICAL - Copy to memory if layer has subset string
-        # This prevents issues with QGIS algorithms not handling subset strings correctly
-        if layer.subsetString():
-            logger.debug(f"Source layer has subset string, copying to memory first...")
-            layer = self._copy_filtered_layer_to_memory(layer, "source_filtered")
+        # Step 0: CRITICAL - Copy to memory if layer has subset string OR selected features
+        # This prevents issues with QGIS algorithms not handling subset strings/selections correctly
+        has_subset = bool(layer.subsetString())
+        has_selection = layer.selectedFeatureCount() > 0
+        
+        if has_subset or has_selection:
+            if has_subset:
+                logger.debug(f"Source layer has subset string, copying to memory first...")
+            if has_selection:
+                logger.debug(f"Source layer has {layer.selectedFeatureCount()} selected features, copying selection to memory...")
+            
+            # For multi-selection, copy only selected features
+            if has_selection and not has_subset:
+                layer = self._copy_selected_features_to_memory(layer, "source_selection")
+            else:
+                layer = self._copy_filtered_layer_to_memory(layer, "source_filtered")
         
         # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
         logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
@@ -2390,6 +2519,11 @@ class FilterEngineTask(QgsTask):
         """
         Combine new expression with existing subset if needed.
         
+        COMPORTEMENT PAR DÉFAUT:
+        - Si un filtre existant est présent, il est TOUJOURS préservé
+        - Si aucun opérateur n'est spécifié, utilise AND par défaut
+        - Garantit que les filtres multi-couches ne sont jamais perdus
+        
         Args:
             expression: New filter expression
             layer: QGIS vector layer
@@ -2398,12 +2532,19 @@ class FilterEngineTask(QgsTask):
             str: Final combined expression
         """
         old_subset = layer.subsetString() if layer.subsetString() != '' else None
+        
+        # Si aucun filtre existant, retourner la nouvelle expression
+        if not old_subset:
+            return expression
+        
+        # Récupérer l'opérateur (ou AND par défaut)
         combine_operator = self._get_combine_operator()
+        if not combine_operator:
+            # NOUVEAU: Utiliser AND par défaut pour préserver les filtres existants
+            combine_operator = 'AND'
+            logger.info(f"FilterMate: Préservation du filtre existant sur {layer.name()} avec AND par défaut")
         
-        if old_subset and combine_operator:
-            return f"({old_subset}) {combine_operator} ({expression})"
-        
-        return expression
+        return f"({old_subset}) {combine_operator} ({expression})"
 
     def execute_geometric_filtering(self, layer_provider_type, layer, layer_props):
         """

@@ -167,9 +167,34 @@ class PopulateListEngineTask(QgsTask):
                 return
             
             # Check display expression field (only when is_field_flag is True)
+            # If field not found, use a fallback field instead of returning silently
             if self.is_field_flag is True and self.display_expression and self.display_expression not in field_names:
-                logger.warning(f"Display field '{self.display_expression}' not found in layer '{self.layer.name()}'. Available fields: {field_names}")
-                return
+                # Try to find a fallback field
+                fallback_field = None
+                
+                # First choice: use identifier_field_name if it exists
+                if self.identifier_field_name and self.identifier_field_name in field_names:
+                    fallback_field = self.identifier_field_name
+                # Second choice: use the first available field
+                elif field_names:
+                    fallback_field = field_names[0]
+                
+                if fallback_field:
+                    logger.warning(
+                        f"Display field '{self.display_expression}' not found in layer '{self.layer.name()}'. "
+                        f"Using fallback field '{fallback_field}'. Available fields: {field_names}"
+                    )
+                    # Update the display expression to use the fallback
+                    self.display_expression = fallback_field
+                    # Also update the widget's stored expression for consistency
+                    if self.layer.id() in self.parent.list_widgets:
+                        self.parent.list_widgets[self.layer.id()].setDisplayExpression(fallback_field)
+                else:
+                    logger.error(
+                        f"Display field '{self.display_expression}' not found in layer '{self.layer.name()}' "
+                        f"and no fallback field available. Cannot build features list."
+                    )
+                    return
             
             if self.parent.list_widgets[self.layer.id()].getFilterExpression() != '':
                 filter_expression = self.parent.list_widgets[self.layer.id()].getFilterExpression()

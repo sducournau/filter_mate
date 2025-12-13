@@ -15,7 +15,32 @@
  * {color_font_1} - Secondary font color (FONT[1], alias for color_3)
  */
 
-/* QGIS Widgets - Common Styling */
+/* ========================================================================
+   DOCKWIDGET - Base styling for docked and floating modes
+   ======================================================================== */
+
+QDockWidget {
+    background-color: {color_bg_0};
+    color: {color_font_0};
+}
+
+QDockWidget::title {
+    background-color: {color_1};
+    color: {color_font_0};
+    padding: 4px;
+}
+
+QDockWidget > QWidget {
+    background-color: {color_bg_0};
+}
+
+#dockWidgetContents {
+    background-color: {color_bg_0};
+}
+
+/* ========================================================================
+   QGIS Widgets - Common Styling
+   ======================================================================== */
 QgsFeaturePickerWidget,
 QgsProjectionSelectionWidget,
 QgsMapLayerComboBox,
@@ -282,6 +307,18 @@ QgsPropertyOverrideButton:pressed {
     border-color: {color_accent_dark};
 }
 
+/* Active state for Property Override Button - more visible */
+QgsPropertyOverrideButton[active="true"] {
+    background-color: {color_accent};
+    border: 2px solid {color_accent_dark};
+    border-radius: 3px;
+}
+
+QgsPropertyOverrideButton[active="true"]:hover {
+    background-color: {color_accent_light_bg};
+    border: 2px solid {color_accent};
+}
+
 /* Specific height adjustment for buffer value property button */
 QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property {
     min-height: 22px;
@@ -294,6 +331,22 @@ QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_propert
     margin: 0px;
     line-height: 22px;
     font-size: 9px;
+}
+
+/* Active state specific for buffer value property button - highly visible */
+QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property[active="true"] {
+    background-color: {color_accent};
+    border: 2px solid {color_accent_dark};
+    border-radius: 4px;
+    min-height: 24px;
+    max-height: 24px;
+    min-width: 24px;
+    max-width: 24px;
+}
+
+QgsPropertyOverrideButton#mPropertyOverrideButton_filtering_buffer_value_property[active="true"]:hover {
+    background-color: {color_accent_light_bg};
+    border: 2px solid {color_accent};
 }
 
 /* ScrollBar - Vertical */

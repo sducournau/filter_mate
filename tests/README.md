@@ -32,15 +32,27 @@ pytest tests/test_plugin_loading.py::test_plugin_module_imports -v
 ```
 tests/
 ├── __init__.py
-├── conftest.py                 # Pytest configuration and fixtures
-├── test_plugin_loading.py      # Smoke tests
-├── test_backends/              # Backend-specific tests
+├── conftest.py                     # Pytest configuration and fixtures
+├── test_plugin_loading.py          # Smoke tests
+├── test_undo_redo.py               # Undo/Redo system tests
+├── test_filter_preservation.py     # NEW: Filter preservation tests
+├── test_backends/                  # Backend-specific tests
 │   ├── test_spatialite_backend.py
 │   ├── test_ogr_backend.py
 │   └── test_postgresql_backend.py
-├── test_filter_operations.py  # Filter logic tests
-└── test_ui_components.py      # UI widget tests
+├── test_filter_operations.py      # Filter logic tests
+└── test_ui_components.py          # UI widget tests
 ```
+
+### New Test Files
+
+#### test_filter_preservation.py (v2.3.0+)
+Tests automatic filter preservation functionality:
+- Default AND operator when no operator specified
+- Explicit OR and AND NOT operators
+- Filter preservation on layer switch
+- Multi-layer filter preservation
+- Complex WHERE clause handling
 
 ## Writing Tests
 

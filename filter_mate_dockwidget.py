@@ -1434,12 +1434,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Re-apply dynamic dimensions with new profile
                     self.apply_dynamic_dimensions()
                     
-                    # Show confirmation message to user
+                    # Message removed - profile change is visible in UI
                     profile_display = UIConfig.get_profile_name().upper()
-                    iface.messageBar().pushSuccess(
-                        "FilterMate",
-                        f"UI profile changed to {profile_display} mode. Dimensions updated."
-                    )
+                    logger.info(f"UI profile changed to {profile_display} mode")
                     
                     changes_summary.append(f"Profile: {new_profile_value}")
                 else:
@@ -1483,11 +1480,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if index_to_set >= 0:
                     style_combo.setCurrentIndex(index_to_set)
                     logger.info(f"Export style updated to: {new_style_value}")
-                    
-                    iface.messageBar().pushInfo(
-                        "FilterMate",
-                        f"Export style changed to {new_style_value}"
-                    )
+                    # Message removed - change visible in combobox
                     
                     changes_summary.append(f"Style: {new_style_value}")
                 
@@ -1529,11 +1522,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if index_to_set >= 0:
                     format_combo.setCurrentIndex(index_to_set)
                     logger.info(f"Export format updated to: {new_format_value}")
-                    
-                    iface.messageBar().pushInfo(
-                        "FilterMate",
-                        f"Export format changed to {new_format_value}"
-                    )
+                    # Message removed - change visible in combobox
                     
                     changes_summary.append(f"Format: {new_format_value}")
                 
@@ -1623,11 +1612,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.buttonBox.setEnabled(False)
                 logger.info("Configuration buttons disabled (changes cancelled)")
             
-            iface.messageBar().pushInfo(
-                "FilterMate",
-                "Configuration changes cancelled and reverted",
-                3
-            )
+            # Message removed - button state change is sufficient feedback
             logger.info("Configuration changes cancelled successfully")
             
         except Exception as e:
@@ -2401,7 +2386,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This ensures the toggled and collapsedStateChanged signals are properly
         connected for exclusive groupbox behavior.
         """
-        print("FilterMate DEBUG: _connect_groupbox_signals_directly called")
+        logger.debug("_connect_groupbox_signals_directly called")
         
         try:
             single_gb = self.mGroupBox_exploring_single_selection
@@ -2444,10 +2429,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             multiple_gb.collapsedStateChanged.connect(lambda collapsed: self._on_groupbox_collapse_changed('multiple_selection', collapsed))
             custom_gb.collapsedStateChanged.connect(lambda collapsed: self._on_groupbox_collapse_changed('custom_selection', collapsed))
             
-            print("FilterMate DEBUG: Groupbox signals connected successfully")
+            logger.debug("Groupbox signals connected successfully")
             
         except Exception as e:
-            print(f"FilterMate DEBUG: Error connecting groupbox signals: {e}")
             logger.error(f"Error connecting groupbox signals directly: {e}")
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
@@ -2465,7 +2449,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         logger.debug(f"_force_exploring_groupbox_exclusive called: active_groupbox={active_groupbox}")
-        print(f"FilterMate DEBUG: _force_exploring_groupbox_exclusive called: active_groupbox={active_groupbox}")
         
         # Set lock to prevent recursion
         self._updating_groupbox = True
@@ -2503,9 +2486,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 custom_gb.setChecked(True)
                 custom_gb.setCollapsed(False)
             
-            print(f"FilterMate DEBUG: After setting - single: checked={single_gb.isChecked()}, collapsed={single_gb.isCollapsed()}")
-            print(f"FilterMate DEBUG: After setting - multiple: checked={multiple_gb.isChecked()}, collapsed={multiple_gb.isCollapsed()}")
-            print(f"FilterMate DEBUG: After setting - custom: checked={custom_gb.isChecked()}, collapsed={custom_gb.isCollapsed()}")
+            logger.debug(f"After setting - single: checked={single_gb.isChecked()}, collapsed={single_gb.isCollapsed()}")
+            logger.debug(f"After setting - multiple: checked={multiple_gb.isChecked()}, collapsed={multiple_gb.isCollapsed()}")
+            logger.debug(f"After setting - custom: checked={custom_gb.isChecked()}, collapsed={custom_gb.isCollapsed()}")
             
             # Restore signals
             single_gb.blockSignals(False)
@@ -2537,7 +2520,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         logger.debug(f"_on_groupbox_clicked called: groupbox={groupbox}, state={state}, widgets_initialized={self.widgets_initialized}")
-        print(f"FilterMate DEBUG: _on_groupbox_clicked called: groupbox={groupbox}, state={state}")
         
         if self.widgets_initialized is True:
             if state:
@@ -2600,7 +2582,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         logger.debug(f"_on_groupbox_collapse_changed called: groupbox={groupbox}, collapsed={collapsed}, widgets_initialized={self.widgets_initialized}")
-        print(f"FilterMate DEBUG: _on_groupbox_collapse_changed called: groupbox={groupbox}, collapsed={collapsed}")
         
         if self.widgets_initialized is True:
             # Only react when a groupbox is EXPANDED (user clicked arrow to open it)
@@ -2905,6 +2886,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             features = []    
             expression = ''
 
+            # Log current groupbox state for filtering diagnostics
+            logger.debug(f"get_current_features: current_exploring_groupbox = '{self.current_exploring_groupbox}'")
+            
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
                 features, expression = self.get_exploring_features(input, True)
@@ -3469,19 +3453,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return True
             return False
         
+        # Ensure primary_key itself is valid; if not, use the first available field
+        fallback_field = primary_key
+        if primary_key and primary_key not in layer_fields:
+            if layer_fields:
+                fallback_field = layer_fields[0]
+                logger.warning(f"Primary key '{primary_key}' not found in layer '{self.current_layer.name()}'. Using fallback field '{fallback_field}'")
+            else:
+                logger.error(f"Layer '{self.current_layer.name()}' has no fields available")
+                return
+        
         # Reset single_selection_expression if invalid for current layer
         single_expr = layer_props["exploring"].get("single_selection_expression", "")
         logger.debug(f"Checking single_selection_expression: '{single_expr}' - valid: {is_valid_field_expression(single_expr, layer_fields)}")
         if not is_valid_field_expression(single_expr, layer_fields):
-            logger.info(f"Resetting single_selection_expression from '{single_expr}' to '{primary_key}' (field not in layer)")
-            layer_props["exploring"]["single_selection_expression"] = primary_key
+            logger.info(f"Resetting single_selection_expression from '{single_expr}' to '{fallback_field}' (field not in layer)")
+            layer_props["exploring"]["single_selection_expression"] = fallback_field
         
         # Reset multiple_selection_expression if invalid for current layer
         multiple_expr = layer_props["exploring"].get("multiple_selection_expression", "")
         logger.debug(f"Checking multiple_selection_expression: '{multiple_expr}' - valid: {is_valid_field_expression(multiple_expr, layer_fields)}")
         if not is_valid_field_expression(multiple_expr, layer_fields):
-            logger.info(f"Resetting multiple_selection_expression from '{multiple_expr}' to '{primary_key}' (field not in layer)")
-            layer_props["exploring"]["multiple_selection_expression"] = primary_key
+            logger.info(f"Resetting multiple_selection_expression from '{multiple_expr}' to '{fallback_field}' (field not in layer)")
+            layer_props["exploring"]["multiple_selection_expression"] = fallback_field
         
         # Reset custom_selection_expression if invalid for current layer
         custom_expr = layer_props["exploring"].get("custom_selection_expression", "")
@@ -3489,10 +3483,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if custom_expr:
             qgs_expr = QgsExpression(custom_expr)
             if qgs_expr.isField() and not is_valid_field_expression(custom_expr, layer_fields):
-                logger.debug(f"Resetting custom_selection_expression from '{custom_expr}' to '{primary_key}' (field not in layer)")
-                layer_props["exploring"]["custom_selection_expression"] = primary_key
+                logger.debug(f"Resetting custom_selection_expression from '{custom_expr}' to '{fallback_field}' (field not in layer)")
+                layer_props["exploring"]["custom_selection_expression"] = fallback_field
         elif not custom_expr:
-            layer_props["exploring"]["custom_selection_expression"] = primary_key
+            layer_props["exploring"]["custom_selection_expression"] = fallback_field
     
     def _disconnect_layer_signals(self):
         """
@@ -4158,9 +4152,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     elif not new_value and "ON_FALSE" in custom_functions:
                         custom_functions["ON_FALSE"](0)
                     
-                    # DEBUG: Log when layers_to_filter is updated
+                    # Log when layers_to_filter is updated
                     if property_path[1] == 'layers_to_filter':
-                        print(f"🔵 layers_to_filter updated: {new_value}")
+                        logger.debug(f"layers_to_filter updated: {new_value}")
                     
         return flag_value_changed
 
@@ -4681,6 +4675,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Also updates backend indicator based on first available layer type.
         """
+        # Track if this is the first time we're activating (transition from empty to loaded)
+        was_empty = not self.has_loaded_layers
+        
         # Ensure flag is set
         if self.has_loaded_layers is False:
             self.has_loaded_layers = True
@@ -4709,6 +4706,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer_props = self.PROJECT_LAYERS[first_layer_id]
                 if 'layer_provider_type' in layer_props.get('infos', {}):
                     self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+        
+        # Notify user when transitioning from empty to loaded state
+        if was_empty and len(self.PROJECT_LAYERS) > 0:
+            from qgis.utils import iface as qgis_iface
+            qgis_iface.messageBar().pushSuccess(
+                "FilterMate",
+                f"Plugin activé avec {len(self.PROJECT_LAYERS)} couche(s) vectorielle(s)"
+            )
+            logger.info(f"FilterMate: Plugin activated with {len(self.PROJECT_LAYERS)} layer(s) after being empty")
 
     def _refresh_layer_specific_widgets(self, layer):
         """

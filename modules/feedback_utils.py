@@ -13,6 +13,13 @@ Usage:
 
 from qgis.core import Qgis
 
+try:
+    from config.feedback_config import should_show_message
+except ImportError:
+    # Fallback if config module not available
+    def should_show_message(category):
+        return True  # Show all messages by default
+
 
 # Backend display names and icons
 BACKEND_INFO = {
@@ -88,7 +95,8 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
     
     message = f"{backend_name}: {operation_text}..."
     
-    iface.messageBar().pushInfo("FilterMate", message)
+    if should_show_message('backend_info'):
+        iface.messageBar().pushInfo("FilterMate", message)
 
 
 def show_progress_message(iface, operation, current=None, total=None, duration=2):
@@ -111,7 +119,8 @@ def show_progress_message(iface, operation, current=None, total=None, duration=2
     else:
         message = f"{operation}..."
     
-    iface.messageBar().pushInfo("FilterMate", message)
+    if should_show_message('progress_info'):
+        iface.messageBar().pushInfo("FilterMate", message)
 
 
 def show_success_with_backend(iface, provider_type, operation='filter', layer_count=1, duration=3):

@@ -168,6 +168,9 @@ class FilterMateApp:
         global ENV_VARS
 
         self.CONFIG_DATA = ENV_VARS["CONFIG_DATA"]
+        
+        # Initialize feedback level from configuration
+        self._init_feedback_level()
         self.PROJECT = ENV_VARS["PROJECT"]
 
         self.MapLayerStore = self.PROJECT.layerStore()
@@ -180,10 +183,28 @@ class FilterMateApp:
         self.project_datasources = {}
         self.app_postgresql_temp_schema_setted = False
         self._signals_connected = False
+        self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
         self._loading_new_project = False  # Flag to track when loading a new project
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
+    def _init_feedback_level(self):
+        """
+        Initialize user feedback verbosity level from configuration.
+        
+        Loads the FEEDBACK_LEVEL setting from config.json and applies it
+        to the feedback_config module to control message display.
+        """
+        try:
+            from .config.feedback_config import set_feedback_level_from_string
+            
+            feedback_level = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("FEEDBACK_LEVEL", {}).get("value", "normal")
+            
+            set_feedback_level_from_string(feedback_level)
+            logger.info(f"FilterMate: Feedback level set to '{feedback_level}'")
+            
+        except Exception as e:
+            logger.warning(f"FilterMate: Could not set feedback level: {e}. Using default 'normal'.")
 
     def run(self):
         """
@@ -193,7 +214,9 @@ class FilterMateApp:
         connects signals for layer management, and displays the UI.
         Also processes any existing layers in the project on first run.
         
-        This method should only be called once when the plugin is activated.
+        This method can be called multiple times:
+        - First call: creates dockwidget and initializes everything
+        - Subsequent calls: shows existing dockwidget and refreshes layers if needed
         """
         if self.dockwidget is None:
 
@@ -254,6 +277,34 @@ class FilterMateApp:
                         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
                 
                 QTimer.singleShot(2000, ensure_ui_enabled)
+        else:
+            # Dockwidget already exists - show it and refresh layers if needed
+            logger.info("FilterMate: Dockwidget already exists, showing and refreshing layers")
+            
+            # Update project reference
+            init_env_vars()
+            self.PROJECT = ENV_VARS["PROJECT"]
+            self.MapLayerStore = self.PROJECT.layerStore()
+            
+            # Make sure the dockwidget is visible
+            if not self.dockwidget.isVisible():
+                self.dockwidget.show()
+            
+            # Check if there are new layers in the project that need to be loaded
+            current_project_layers = list(self.PROJECT.mapLayers().values())
+            if current_project_layers:
+                # Filter to get only layers not already in PROJECT_LAYERS
+                new_layers = [layer for layer in current_project_layers 
+                             if layer.id() not in self.PROJECT_LAYERS]
+                
+                if new_layers:
+                    logger.info(f"FilterMate: Found {len(new_layers)} new layers to add")
+                    QTimer.singleShot(300, lambda: self.manage_task('add_layers', new_layers))
+                else:
+                    # No new layers, but update UI if it's empty
+                    if len(self.PROJECT_LAYERS) == 0 and len(current_project_layers) > 0:
+                        logger.info("FilterMate: PROJECT_LAYERS is empty but project has layers, refreshing")
+                        QTimer.singleShot(300, lambda: self.manage_task('add_layers', current_project_layers))
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
@@ -261,6 +312,7 @@ class FilterMateApp:
         # This prevents access violations during project transitions
         # Only connect signals once to avoid multiple connections on plugin reload
         if not self._signals_connected:
+            logger.debug("Connecting project signals (projectRead, newProjectCreated, layersAdded...)")
             self.iface.projectRead.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('project_read')))
             self.iface.newProjectCreated.connect(lambda: QTimer.singleShot(50, lambda: self.manage_task('new_project')))
             # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
@@ -268,16 +320,20 @@ class FilterMateApp:
             self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
             self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
             self._signals_connected = True
+            logger.debug("Project signals connected successfully")
         
-        self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
-        self.dockwidget.currentLayerChanged.connect(self.update_undo_redo_buttons)
+        # Only connect dockwidget signals once to avoid multiple connections
+        if not self._dockwidget_signals_connected:
+            self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
+            self.dockwidget.currentLayerChanged.connect(self.update_undo_redo_buttons)
 
-        self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
-        self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
-        self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+            self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+            self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
+            self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
 
-        self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
-        self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
+            self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
+            self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
+            self._dockwidget_signals_connected = True
         
 
     def get_spatialite_connection(self):
@@ -315,6 +371,7 @@ class FilterMateApp:
         Args:
             task_name: 'project_read' or 'new_project'
         """
+        logger.debug(f"_handle_project_initialization called with task_name={task_name}")
         # Verify project is valid
         project = QgsProject.instance()
         if not project:
@@ -337,13 +394,56 @@ class FilterMateApp:
             logger.warning(f"Project became invalid during {task_name}, skipping")
             return
         
-        self.MapLayerStore = self.PROJECT.layerStore()
+        # CRITICAL: Disconnect old layer store signals before updating reference
+        # The old MapLayerStore may be invalid after project change
+        old_layer_store = self.MapLayerStore
+        new_layer_store = self.PROJECT.layerStore()
+        
+        # ALWAYS reconnect signals on project change - even if layer_store is same object,
+        # the project context has changed and signals may be stale
+        if self._signals_connected:
+            logger.info(f"FilterMate: Reconnecting layer store signals for {task_name}")
+            try:
+                # Disconnect old signals - use try/except as connections may already be invalid
+                try:
+                    old_layer_store.layersAdded.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    old_layer_store.layersWillBeRemoved.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    old_layer_store.allLayersRemoved.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+            except Exception as e:
+                logger.warning(f"Error disconnecting old layer store signals: {e}")
+            
+            # Update to new layer store
+            self.MapLayerStore = new_layer_store
+            
+            # Reconnect signals to new layer store
+            self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
+            logger.info("FilterMate: Layer store signals reconnected to new project")
+        else:
+            # First time - just update reference, signals will be connected in run()
+            self.MapLayerStore = new_layer_store
+        
         init_layers = list(self.PROJECT.mapLayers().values())
+        
+        # Clear old PROJECT_LAYERS when switching projects
+        self.PROJECT_LAYERS = {}
+        
         self.init_filterMate_db()
         
         if len(init_layers) > 0:
+            logger.info(f"FilterMate: Loading {len(init_layers)} layers from {task_name}")
             self.manage_task('add_layers', init_layers)
         else:
+            logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
             self.dockwidget.disconnect_widgets_signals()
             self.dockwidget.reset_multiple_checkable_combobox()
             self.layer_management_engine_task_completed({}, 'remove_all_layers')
@@ -379,6 +479,8 @@ class FilterMateApp:
         """
 
         assert task_name in list(self.tasks_descriptions.keys())
+        
+        logger.debug(f"manage_task called with task_name={task_name}, data={type(data)}")
         
         # Guard: Ensure dockwidget is fully initialized before processing tasks
         # Exception: remove_all_layers, project_read, new_project, add_layers can run without full initialization
@@ -455,7 +557,9 @@ class FilterMateApp:
 
             if task_name == "add_layers":
                 self.appTasks[task_name].setDependentLayers([layer for layer in task_parameters["task"]["layers"]])
-                self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
+                # Only connect to dockwidget signal if dockwidget exists
+                if self.dockwidget is not None:
+                    self.appTasks[task_name].begun.connect(self.dockwidget.disconnect_widgets_signals)
             elif task_name == "remove_layers":
                 self.appTasks[task_name].begun.connect(self.on_remove_layer_task_begun)
 
@@ -727,14 +831,11 @@ class FilterMateApp:
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
                 
-                # DEBUG: Log filtering state
+                # Log filtering state
                 filtering_props = self.PROJECT_LAYERS[current_layer.id()]["filtering"]
-                print(f"🔷 get_task_parameters - Filtering state for {current_layer.name()}:")
-                print(f"   has_layers_to_filter: {filtering_props.get('has_layers_to_filter', 'NOT SET')}")
-                print(f"   layers_to_filter (IDs): {filtering_props.get('layers_to_filter', [])}")
-                print(f"   has_geometric_predicates: {filtering_props.get('has_geometric_predicates', 'NOT SET')}")
-                print(f"   geometric_predicates: {filtering_props.get('geometric_predicates', [])}")
-                print(f"   Built layers_to_filter count: {len(layers_to_filter)}")
+                logger.debug(f"get_task_parameters - Filtering state for {current_layer.name()}: "
+                           f"has_layers_to_filter={filtering_props.get('has_layers_to_filter')}, "
+                           f"layers_count={len(layers_to_filter)}")
                 
                 # Build common task parameters
                 # Note: unfilter no longer needs history_manager (just clears filters)
@@ -779,8 +880,10 @@ class FilterMateApp:
             
             if task_name in ('add_layers', 'remove_layers'):
                 layers = data if isinstance(data, list) else [data]
+                # Safely check has_loaded_layers - default to False if dockwidget not available
+                has_loaded = self.dockwidget.has_loaded_layers if self.dockwidget else False
                 reset_flag = (self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] and 
-                             not self.dockwidget.has_loaded_layers)
+                             not has_loaded)
                 return self._build_layer_management_params(layers, reset_flag)
 
 
@@ -895,8 +998,8 @@ class FilterMateApp:
         Handle undo operation with intelligent layer selection logic.
         
         Logic:
-        - If only source layer selected: undo only source layer
-        - If remote layers selected and filtered: undo all layers globally
+        - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: undo all layers globally
+        - If pushButton_checkable_filtering_layers_to_filter is unchecked: undo only source layer
         """
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning("FilterMate: No current layer for undo")
@@ -905,18 +1008,14 @@ class FilterMateApp:
         source_layer = self.dockwidget.current_layer
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
-        # Check if remote layers are selected and filtered
-        has_filtered_remote_layers = False
-        if layers_to_filter:
-            for layer_id in layers_to_filter:
-                # layer_id is a string (layer ID), not a dictionary
-                if layer_id and layer_id in self.PROJECT_LAYERS:
-                    remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == layer_id]
-                    if remote_layers and remote_layers[0].subsetString():
-                        has_filtered_remote_layers = True
-                        break
+        # Check if the "Layers to filter" button is checked and has remote layers selected
+        button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
+        has_remote_layers = bool(layers_to_filter)
         
-        if has_filtered_remote_layers:
+        # Use global undo if button is checked and remote layers are selected
+        use_global_undo = button_is_checked and has_remote_layers
+        
+        if use_global_undo:
             # Global undo
             logger.info("FilterMate: Performing global undo (remote layers are filtered)")
             global_state = self.history_manager.undo_global()
@@ -947,10 +1046,10 @@ class FilterMateApp:
                 
                 # Refresh
                 self._refresh_layers_and_canvas(source_layer)
-                iface.messageBar().pushSuccess("FilterMate", f"Global undo successful ({restored_count + 1} layers)")
+                # Message removed - UI feedback (disabled button) is sufficient
             else:
                 logger.info("FilterMate: No global undo history available")
-                iface.messageBar().pushWarning("FilterMate", "No more undo history")
+                # Message removed - button already disabled when no history
         else:
             # Source layer only undo
             logger.info("FilterMate: Performing source layer undo only")
@@ -965,10 +1064,10 @@ class FilterMateApp:
                     
                     # Refresh
                     self._refresh_layers_and_canvas(source_layer)
-                    iface.messageBar().pushSuccess("FilterMate", f"Undo: {previous_state.description}")
+                    # Message removed - UI feedback (disabled button) is sufficient
             else:
                 logger.info("FilterMate: No undo history for source layer")
-                iface.messageBar().pushWarning("FilterMate", "No more undo history")
+                # Message removed - button already disabled when no history
         
         # Update button states after undo
         self.update_undo_redo_buttons()
@@ -978,8 +1077,8 @@ class FilterMateApp:
         Handle redo operation with intelligent layer selection logic.
         
         Logic:
-        - If only source layer selected: redo only source layer
-        - If remote layers selected and filtered: redo all layers globally
+        - If pushButton_checkable_filtering_layers_to_filter is checked AND has remote layers: redo all layers globally
+        - If pushButton_checkable_filtering_layers_to_filter is unchecked: redo only source layer
         """
         if not self.dockwidget or not self.dockwidget.current_layer:
             logger.warning("FilterMate: No current layer for redo")
@@ -988,10 +1087,14 @@ class FilterMateApp:
         source_layer = self.dockwidget.current_layer
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
-        # Check if remote layers are selected
+        # Check if the "Layers to filter" button is checked and has remote layers selected
+        button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
         has_remote_layers = bool(layers_to_filter)
         
-        if has_remote_layers and self.history_manager.can_redo_global():
+        # Use global redo if button is checked and remote layers are selected
+        use_global_redo = button_is_checked and has_remote_layers
+        
+        if use_global_redo and self.history_manager.can_redo_global():
             # Global redo
             logger.info("FilterMate: Performing global redo")
             global_state = self.history_manager.redo_global()
@@ -1022,10 +1125,10 @@ class FilterMateApp:
                 
                 # Refresh
                 self._refresh_layers_and_canvas(source_layer)
-                iface.messageBar().pushSuccess("FilterMate", f"Global redo successful ({restored_count + 1} layers)")
+                # Message removed - UI feedback (disabled button) is sufficient
             else:
                 logger.info("FilterMate: No global redo history available")
-                iface.messageBar().pushWarning("FilterMate", "No more redo history")
+                # Message removed - button already disabled when no history
         else:
             # Source layer only redo
             logger.info("FilterMate: Performing source layer redo only")
@@ -1040,10 +1143,10 @@ class FilterMateApp:
                     
                     # Refresh
                     self._refresh_layers_and_canvas(source_layer)
-                    iface.messageBar().pushSuccess("FilterMate", f"Redo: {next_state.description}")
+                    # Message removed - UI feedback (disabled button) is sufficient
             else:
                 logger.info("FilterMate: No redo history for source layer")
-                iface.messageBar().pushWarning("FilterMate", "No more redo history")
+                # Message removed - button already disabled when no history
         
         # Update button states after redo
         self.update_undo_redo_buttons()
@@ -1087,24 +1190,28 @@ class FilterMateApp:
             provider_type (str): Backend provider type
             layer_count (int): Number of layers affected
         """
+        from .config.feedback_config import should_show_message
+        
         feature_count = source_layer.featureCount()
         show_success_with_backend(iface, provider_type, task_name, layer_count)
         
-        if task_name == 'filter':
-            iface.messageBar().pushInfo(
-                "FilterMate",
-                f"{feature_count:,} features visible in main layer"
-            )
-        elif task_name == 'unfilter':
-            iface.messageBar().pushInfo(
-                "FilterMate",
-                f"All filters cleared - {feature_count:,} features visible in main layer"
-            )
-        elif task_name == 'reset':
-            iface.messageBar().pushInfo(
-                "FilterMate",
-                f"{feature_count:,} features visible in main layer"
-            )
+        # Only show feature count if configured to do so
+        if should_show_message('filter_count'):
+            if task_name == 'filter':
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    f"{feature_count:,} features visible in main layer"
+                )
+            elif task_name == 'unfilter':
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    f"All filters cleared - {feature_count:,} features visible in main layer"
+                )
+            elif task_name == 'reset':
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    f"{feature_count:,} features visible in main layer"
+                )
 
     def filter_engine_task_completed(self, task_name, source_layer, task_parameters):
         """
