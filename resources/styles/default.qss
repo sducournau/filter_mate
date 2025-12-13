@@ -966,6 +966,29 @@ QFrame#frame_actions QPushButton:!checkable:disabled {
     opacity: 0.4;
 }
 
+/* Action Bar Splitter - For vertical action bar resizing */
+QSplitter#action_bar_splitter,
+QSplitter#main_content_splitter {
+    background-color: transparent;
+}
+
+QSplitter#action_bar_splitter::handle,
+QSplitter#main_content_splitter::handle {
+    background-color: {color_2};
+    border-radius: 2px;
+    margin: 2px 8px;
+}
+
+QSplitter#action_bar_splitter::handle:hover,
+QSplitter#main_content_splitter::handle:hover {
+    background-color: {color_accent};
+}
+
+QSplitter#action_bar_splitter::handle:pressed,
+QSplitter#main_content_splitter::handle:pressed {
+    background-color: {color_accent_dark};
+}
+
 /* TreeView & ListWidget - Harmonized backgrounds */
 QTreeView,
 QListWidget {

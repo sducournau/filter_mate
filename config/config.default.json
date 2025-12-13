@@ -35,6 +35,28 @@
                     "compact_if_height_less_than": 1080
                 }
             },
+            "ACTION_BAR_POSITION": {
+                "choices": [
+                    "top",
+                    "bottom",
+                    "left",
+                    "right"
+                ],
+                "value": "left"
+            },
+            "_ACTION_BAR_POSITION_META": {
+                "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
+            },
+            "ACTION_BAR_VERTICAL_ALIGNMENT": {
+                "choices": [
+                    "top",
+                    "bottom"
+                ],
+                "value": "top"
+            },
+            "_ACTION_BAR_VERTICAL_ALIGNMENT_META": {
+                "description": "Vertical alignment of action buttons when action bar is in vertical mode (left/right): 'top' (buttons at top), 'bottom' (buttons at bottom). Use the splitter handle to adjust position."
+            },
             "PushButton": {
                 "STYLE": {
                     "QPushButton": {

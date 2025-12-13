@@ -59,7 +59,8 @@ class FilterMate:
         self.plugin_dir = os.path.dirname(__file__)
 
         # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
+        locale_setting = QSettings().value('locale/userLocale')
+        locale = locale_setting[0:2] if locale_setting else 'en'
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',

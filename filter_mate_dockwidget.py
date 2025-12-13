@@ -1138,11 +1138,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception:
             return 'top'
 
+    def _get_action_bar_vertical_alignment(self):
+        """
+        Get action bar vertical alignment from configuration.
+        
+        Only applies when action bar is in vertical mode (left/right position).
+        
+        Returns:
+            str: Alignment value ('top', 'bottom')
+        """
+        try:
+            alignment_config = self.CONFIG_DATA.get('APP', {}).get('DOCKWIDGET', {}).get('ACTION_BAR_VERTICAL_ALIGNMENT', {})
+            if isinstance(alignment_config, dict):
+                return alignment_config.get('value', 'top')
+            return alignment_config if alignment_config else 'top'
+        except Exception:
+            return 'top'
+
     def _apply_action_bar_position(self, position):
         """
         Apply action bar position dynamically.
         
         Reorganizes the layout to place the action bar at the specified position.
+        Supports horizontal (top/bottom) and vertical (left/right) layouts with
+        appropriate spacers for each mode.
         
         Args:
             position: str - 'top', 'bottom', 'left', 'right'
@@ -1168,9 +1187,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             parent.layout().removeWidget(self.frame_actions)
         
         # Step 2: Completely delete the old layout
+        self._clear_action_bar_layout()
+        
+        # Step 3: Create new layout based on position (horizontal or vertical)
+        is_horizontal = position in ('top', 'bottom')
+        if is_horizontal:
+            self._create_horizontal_action_layout(action_buttons)
+        else:
+            self._create_vertical_action_layout(action_buttons)
+        
+        # Step 4: Apply size constraints based on orientation
+        self._apply_action_bar_size_constraints(position)
+        
+        # Step 5: Reposition frame_actions in the main layout
+        self._reposition_action_bar_in_main_layout(position)
+        
+        # Store current position for reference
+        self._current_action_bar_position = position
+
+
+    def _clear_action_bar_layout(self):
+        """
+        Clear the existing action bar layout completely.
+        
+        Removes all widgets and spacers from the current layout and deletes it
+        to prepare for a new layout.
+        """
         old_layout = self.frame_actions.layout()
         if old_layout:
-            # First, remove all widgets from the layout
+            # Remove all items from the layout
             while old_layout.count():
                 item = old_layout.takeAt(0)
                 widget = item.widget()
@@ -1180,42 +1225,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             temp_widget = QtWidgets.QWidget()
             temp_widget.setLayout(old_layout)
             temp_widget.deleteLater()
+
+    def _create_horizontal_action_layout(self, action_buttons):
+        """
+        Create horizontal layout for action bar (top/bottom position).
         
-        # Step 3: Create new layout based on position
-        if position in ('top', 'bottom'):
-            # Horizontal layout for top/bottom
-            new_layout = QtWidgets.QHBoxLayout(self.frame_actions)
-            new_layout.setContentsMargins(4, 2, 4, 2)
-            new_layout.setSpacing(0)
-            for i, btn in enumerate(action_buttons):
-                btn.setParent(self.frame_actions)
-                new_layout.addWidget(btn)
-                if i < len(action_buttons) - 1:
-                    spacer = QtWidgets.QSpacerItem(4, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-                    new_layout.addItem(spacer)
-            
-            # Apply horizontal mode size constraints
-            self._apply_action_bar_size_constraints(position)
-        else:
-            # Vertical layout for left/right
-            new_layout = QtWidgets.QVBoxLayout(self.frame_actions)
-            new_layout.setContentsMargins(4, 4, 4, 4)
-            new_layout.setSpacing(4)
-            new_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-            for i, btn in enumerate(action_buttons):
-                btn.setParent(self.frame_actions)
-                new_layout.addWidget(btn, 0, Qt.AlignHCenter)
-                if i < len(action_buttons) - 1:
-                    spacer = QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
-                    new_layout.addItem(spacer)
-            # Add stretch at the end to push buttons to top
-            new_layout.addStretch(1)
-            
-            # Apply vertical mode size constraints
-            self._apply_action_bar_size_constraints(position)
+        Creates a QHBoxLayout with action buttons separated by expanding
+        horizontal spacers for even distribution.
         
-        # Step 4: Reposition frame_actions in the main layout
-        self._reposition_action_bar_in_main_layout(position)
+        Args:
+            action_buttons: list - List of QPushButton widgets to add
+        """
+        new_layout = QtWidgets.QHBoxLayout(self.frame_actions)
+        new_layout.setContentsMargins(4, 2, 4, 2)
+        new_layout.setSpacing(0)
+        
+        for i, btn in enumerate(action_buttons):
+            btn.setParent(self.frame_actions)
+            new_layout.addWidget(btn)
+            # Add expanding horizontal spacer between buttons
+            if i < len(action_buttons) - 1:
+                spacer = QtWidgets.QSpacerItem(
+                    4, 20, 
+                    QtWidgets.QSizePolicy.Expanding, 
+                    QtWidgets.QSizePolicy.Minimum
+                )
+                new_layout.addItem(spacer)
+        
+        logger.debug("Created horizontal action bar layout")
+
+    def _create_vertical_action_layout(self, action_buttons):
+        """
+        Create vertical layout for action bar (left/right position).
+        
+        Creates a QVBoxLayout with action buttons. The buttons are aligned
+        at the top of the frame, with spacing between them.
+        
+        Args:
+            action_buttons: list - List of QPushButton widgets to add
+        """
+        new_layout = QtWidgets.QVBoxLayout(self.frame_actions)
+        new_layout.setContentsMargins(4, 4, 4, 4)
+        new_layout.setSpacing(12)  # Spacing between buttons
+        
+        # Add buttons with center alignment
+        for btn in action_buttons:
+            btn.setParent(self.frame_actions)
+            new_layout.addWidget(btn, 0, Qt.AlignHCenter)
+        
+        # Add stretch at the end to push buttons to top
+        new_layout.addStretch(1)
+        
+        logger.debug("Created vertical action bar layout")
 
     def _apply_action_bar_size_constraints(self, position):
         """
@@ -1298,71 +1359,132 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Create a horizontal wrapper to position action bar on left or right side.
         
+        When action bar is on left/right:
+        - If alignment is 'top': action bar is placed alongside frame_exploring
+        - If alignment is 'bottom': action bar is placed alongside frame_toolset
+        
+        A QSplitter is used between frame_exploring and frame_toolset to allow
+        dynamic resizing.
+        
         Args:
             position: str - 'left' or 'right'
         """
-        # Check if we already have a horizontal wrapper
+        # Get alignment from config
+        alignment = self._get_action_bar_vertical_alignment()
+        
+        # Check if we already have a horizontal wrapper - need to rebuild if exists
         if hasattr(self, '_side_action_bar_container') and self._side_action_bar_container:
-            # Just reposition the frame_actions within existing wrapper
-            wrapper_layout = self._side_action_bar_container.layout()
-            if wrapper_layout:
-                wrapper_layout.removeWidget(self.frame_actions)
-                if position == 'left':
-                    wrapper_layout.insertWidget(0, self.frame_actions)
-                else:
-                    wrapper_layout.addWidget(self.frame_actions)
-            return
+            self._restore_original_layout()
         
         # Store references to original widgets
         frame_exploring = self.frame_exploring if hasattr(self, 'frame_exploring') else None
         frame_toolset = self.frame_toolset if hasattr(self, 'frame_toolset') else None
         
         # Remove frames from current layout
-        if frame_exploring:
-            self.verticalLayout_main_content.removeWidget(frame_exploring)
-        if frame_toolset:
-            self.verticalLayout_main_content.removeWidget(frame_toolset)
+        if frame_exploring and frame_exploring.parent():
+            parent_layout = frame_exploring.parent().layout()
+            if parent_layout:
+                parent_layout.removeWidget(frame_exploring)
+        if frame_toolset and frame_toolset.parent():
+            parent_layout = frame_toolset.parent().layout()
+            if parent_layout:
+                parent_layout.removeWidget(frame_toolset)
         
-        # Create a container widget to hold the horizontal arrangement
+        # Create main container
         self._side_action_bar_container = QtWidgets.QWidget()
         self._side_action_bar_container.setObjectName("side_action_bar_container")
-        wrapper_layout = QtWidgets.QHBoxLayout(self._side_action_bar_container)
-        wrapper_layout.setContentsMargins(0, 0, 0, 0)
-        wrapper_layout.setSpacing(2)
+        self._side_action_bar_container.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Expanding
+        )
+        container_layout = QtWidgets.QVBoxLayout(self._side_action_bar_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
         
-        # Create a widget to hold the main content (exploring + toolset)
-        main_content_widget = QtWidgets.QWidget()
-        main_content_widget.setObjectName("main_content_wrapper")
-        main_content_layout = QtWidgets.QVBoxLayout(main_content_widget)
-        main_content_layout.setContentsMargins(0, 0, 0, 0)
-        main_content_layout.setSpacing(2)
+        # Create QSplitter for frame_exploring and frame_toolset
+        self._main_splitter = QtWidgets.QSplitter(Qt.Vertical)
+        self._main_splitter.setObjectName("main_content_splitter")
+        self._main_splitter.setHandleWidth(6)
+        self._main_splitter.setChildrenCollapsible(False)
         
-        # Add frames to main content widget
+        # Create wrapper for frame_exploring with optional action bar
+        exploring_wrapper = QtWidgets.QWidget()
+        exploring_wrapper.setObjectName("exploring_wrapper")
+        exploring_wrapper.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        exploring_layout = QtWidgets.QHBoxLayout(exploring_wrapper)
+        exploring_layout.setContentsMargins(0, 0, 0, 0)
+        exploring_layout.setSpacing(2)
+        
+        # Create wrapper for frame_toolset with optional action bar
+        toolset_wrapper = QtWidgets.QWidget()
+        toolset_wrapper.setObjectName("toolset_wrapper")
+        toolset_wrapper.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        toolset_layout = QtWidgets.QHBoxLayout(toolset_wrapper)
+        toolset_layout.setContentsMargins(0, 0, 0, 0)
+        toolset_layout.setSpacing(2)
+        
+        # Setup frame_exploring
         if frame_exploring:
-            frame_exploring.setParent(main_content_widget)
-            main_content_layout.addWidget(frame_exploring)
-        if frame_toolset:
-            frame_toolset.setParent(main_content_widget)
-            main_content_layout.addWidget(frame_toolset)
+            frame_exploring.setParent(exploring_wrapper)
+            frame_exploring.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         
-        # Add frame_actions and main content in correct order
-        self.frame_actions.setParent(self._side_action_bar_container)
-        if position == 'left':
-            wrapper_layout.addWidget(self.frame_actions)
-            wrapper_layout.addWidget(main_content_widget, 1)  # stretch=1
-        else:  # right
-            wrapper_layout.addWidget(main_content_widget, 1)  # stretch=1
-            wrapper_layout.addWidget(self.frame_actions)
+        # Setup frame_toolset
+        if frame_toolset:
+            frame_toolset.setParent(toolset_wrapper)
+            frame_toolset.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        
+        # Place action bar based on alignment and position
+        self.frame_actions.setParent(exploring_wrapper if alignment == 'top' else toolset_wrapper)
+        
+        if alignment == 'top':
+            # Action bar alongside frame_exploring
+            if position == 'left':
+                exploring_layout.addWidget(self.frame_actions, 0)
+                if frame_exploring:
+                    exploring_layout.addWidget(frame_exploring, 1)
+            else:  # right
+                if frame_exploring:
+                    exploring_layout.addWidget(frame_exploring, 1)
+                exploring_layout.addWidget(self.frame_actions, 0)
+            # frame_toolset alone
+            if frame_toolset:
+                toolset_layout.addWidget(frame_toolset, 1)
+        else:  # bottom
+            # frame_exploring alone
+            if frame_exploring:
+                exploring_layout.addWidget(frame_exploring, 1)
+            # Action bar alongside frame_toolset
+            if position == 'left':
+                toolset_layout.addWidget(self.frame_actions, 0)
+                if frame_toolset:
+                    toolset_layout.addWidget(frame_toolset, 1)
+            else:  # right
+                if frame_toolset:
+                    toolset_layout.addWidget(frame_toolset, 1)
+                toolset_layout.addWidget(self.frame_actions, 0)
+        
+        # Add wrappers to splitter
+        self._main_splitter.addWidget(exploring_wrapper)
+        self._main_splitter.addWidget(toolset_wrapper)
+        
+        # Set stretch factors (equal distribution)
+        self._main_splitter.setStretchFactor(0, 1)
+        self._main_splitter.setStretchFactor(1, 1)
+        
+        # Add splitter to container
+        container_layout.addWidget(self._main_splitter)
         
         # Add the container to the main content layout
         self._side_action_bar_container.setParent(self.dockWidgetContents)
-        self.verticalLayout_main_content.addWidget(self._side_action_bar_container)
+        self.verticalLayout_main_content.addWidget(self._side_action_bar_container, 1)
+        
+        logger.info(f"Created side action bar wrapper with position={position}, alignment={alignment}")
 
     def _restore_original_layout(self):
         """
         Restore original layout when switching from side (left/right) to top/bottom position.
         
-        This method undoes the horizontal wrapper created for side positioning.
+        This method undoes the horizontal wrapper and splitter created for side positioning.
         """
         if not hasattr(self, '_side_action_bar_container') or not self._side_action_bar_container:
             return
@@ -1371,6 +1493,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Get references to the frames
             frame_exploring = self.frame_exploring if hasattr(self, 'frame_exploring') else None
             frame_toolset = self.frame_toolset if hasattr(self, 'frame_toolset') else None
+            
+            # Remove frame_actions from its current parent
+            if self.frame_actions.parent():
+                parent_layout = self.frame_actions.parent().layout()
+                if parent_layout:
+                    parent_layout.removeWidget(self.frame_actions)
             
             # Remove the container from the layout
             self.verticalLayout_main_content.removeWidget(self._side_action_bar_container)
@@ -1382,6 +1510,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if frame_toolset:
                 frame_toolset.setParent(self.dockWidgetContents)
                 self.verticalLayout_main_content.addWidget(frame_toolset)
+            
+            # Clean up the splitter
+            if hasattr(self, '_main_splitter') and self._main_splitter:
+                self._main_splitter.deleteLater()
+                self._main_splitter = None
             
             # Clean up the container
             self._side_action_bar_container.deleteLater()
@@ -1803,53 +1936,72 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _apply_action_bar_position_change(self, change, changes_summary):
         """
-        Apply ACTION_BAR_POSITION configuration change.
+        Apply ACTION_BAR_POSITION or ACTION_BAR_VERTICAL_ALIGNMENT configuration change.
         
-        Updates the action bar layout position and offers to reload the plugin
-        for full effect.
+        Updates the action bar layout position/alignment dynamically.
         """
         items_keys_values_path = change['path']
         index = change['index']
         
-        if 'ACTION_BAR_POSITION' not in items_keys_values_path:
+        # Check if this is a position or alignment change
+        is_position_change = 'ACTION_BAR_POSITION' in items_keys_values_path and 'VERTICAL' not in items_keys_values_path
+        is_alignment_change = 'ACTION_BAR_VERTICAL_ALIGNMENT' in items_keys_values_path
+        
+        if not is_position_change and not is_alignment_change:
             return
         
         try:
-            # Get the new position value from the edited item
+            # Get the new value from the edited item
             value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
             value_data = value_item.data(QtCore.Qt.UserRole)
             
             # Handle ChoicesType format (dict with 'value' and 'choices')
             if isinstance(value_data, dict) and 'value' in value_data:
-                new_position_value = value_data['value']
+                new_value = value_data['value']
             else:
                 # Fallback for string format (backward compatibility)
-                new_position_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+                new_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
             
-            if new_position_value:
-                logger.info(f"ACTION_BAR_POSITION changed to: {new_position_value}")
+            if new_value:
+                if is_position_change:
+                    logger.info(f"ACTION_BAR_POSITION changed to: {new_value}")
+                    
+                    # Update the config data in memory
+                    if 'APP' in self.CONFIG_DATA and 'DOCKWIDGET' in self.CONFIG_DATA['APP']:
+                        if isinstance(self.CONFIG_DATA['APP']['DOCKWIDGET'].get('ACTION_BAR_POSITION'), dict):
+                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION']['value'] = new_value
+                        else:
+                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION'] = new_value
+                    
+                    # Apply the new position
+                    self._apply_action_bar_position(new_value)
+                    changes_summary.append(f"Action bar position: {new_value}")
+                    
+                elif is_alignment_change:
+                    logger.info(f"ACTION_BAR_VERTICAL_ALIGNMENT changed to: {new_value}")
+                    
+                    # Update the config data in memory
+                    if 'APP' in self.CONFIG_DATA and 'DOCKWIDGET' in self.CONFIG_DATA['APP']:
+                        if isinstance(self.CONFIG_DATA['APP']['DOCKWIDGET'].get('ACTION_BAR_VERTICAL_ALIGNMENT'), dict):
+                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_VERTICAL_ALIGNMENT']['value'] = new_value
+                        else:
+                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_VERTICAL_ALIGNMENT'] = new_value
+                    
+                    # Re-apply the current position to update alignment
+                    current_position = self._get_action_bar_position()
+                    if current_position in ('left', 'right'):
+                        self._apply_action_bar_position(current_position)
+                    changes_summary.append(f"Action bar alignment: {new_value}")
                 
-                # Update the config data in memory
-                if 'APP' in self.CONFIG_DATA and 'DOCKWIDGET' in self.CONFIG_DATA['APP']:
-                    if isinstance(self.CONFIG_DATA['APP']['DOCKWIDGET'].get('ACTION_BAR_POSITION'), dict):
-                        self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION']['value'] = new_position_value
-                    else:
-                        self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION'] = new_position_value
-                
-                # Apply the new position
-                self._apply_action_bar_position(new_position_value)
-                
-                changes_summary.append(f"Action bar: {new_position_value}")
-                
-                # Show message that reload may be needed for full effect
+                # Show confirmation message
                 from qgis.utils import iface
                 iface.messageBar().pushInfo(
                     "FilterMate",
-                    f"Action bar position changed to '{new_position_value}'. Reload plugin if layout not updated correctly."
+                    f"Action bar updated successfully."
                 )
                     
         except Exception as e:
-            logger.error(f"Error applying ACTION_BAR_POSITION change: {e}")
+            logger.error(f"Error applying action bar change: {e}")
             import traceback
             logger.error(traceback.format_exc())
     
