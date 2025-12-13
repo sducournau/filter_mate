@@ -59,12 +59,14 @@ from ..appUtils import (
     get_source_table_name,
     get_datasource_connexion_from_layer,
     detect_layer_provider_type,
-    geometry_type_to_string
+    geometry_type_to_string,
+    escape_json_string
 )
 
 # Import task utilities
 from .task_utils import (
-    spatialite_connect, 
+    spatialite_connect,
+    safe_spatialite_connect,
     sqlite_execute_with_retry, 
     ensure_db_directory_exists,
     MESSAGE_TASKS_CATEGORIES
@@ -164,6 +166,8 @@ class LayersManagementEngineTask(QgsTask):
         """
         Safely connect to Spatialite database, ensuring directory exists.
         
+        Delegates to centralized safe_spatialite_connect() in task_utils.py.
+        
         Returns:
             sqlite3.Connection: Database connection
             
@@ -171,14 +175,7 @@ class LayersManagementEngineTask(QgsTask):
             OSError: If directory cannot be created
             sqlite3.OperationalError: If database cannot be opened
         """
-        self._ensure_db_directory_exists()
-        
-        try:
-            conn = spatialite_connect(self.db_file_path)
-            return conn
-        except Exception as e:
-            logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
-            raise
+        return safe_spatialite_connect(self.db_file_path)
 
 
     def run(self):
@@ -511,28 +508,30 @@ class LayersManagementEngineTask(QgsTask):
         source_table_name = get_source_table_name(layer)
         
         # Build properties from JSON templates
+        # CRITICAL: Escape all string values to prevent JSON parsing errors
+        # with special characters like em-dash (—), quotes, backslashes
         new_layer_variables = {}
         new_layer_variables["infos"] = json.loads(
             self.json_template_layer_infos % (
-                layer_geometry_type, 
-                layer.name(),
-                source_table_name,
-                layer.id(), 
-                source_schema, 
-                layer_provider_type, 
-                layer.sourceCrs().authid(), 
-                primary_key_name, 
+                escape_json_string(layer_geometry_type), 
+                escape_json_string(layer.name()),
+                escape_json_string(source_table_name) if source_table_name else "",
+                escape_json_string(layer.id()), 
+                escape_json_string(source_schema) if source_schema else "", 
+                escape_json_string(layer_provider_type), 
+                escape_json_string(layer.sourceCrs().authid()), 
+                escape_json_string(primary_key_name) if primary_key_name else "", 
                 primary_key_idx, 
-                primary_key_type, 
-                geometry_field, 
+                escape_json_string(primary_key_type) if primary_key_type else "", 
+                escape_json_string(geometry_field) if geometry_field else "", 
                 str(primary_key_is_numeric).lower()
             )
         )
         new_layer_variables["exploring"] = json.loads(
             self.json_template_layer_exploring % (
-                str(primary_key_name),
-                str(primary_key_name),
-                str(primary_key_name)
+                escape_json_string(str(primary_key_name)) if primary_key_name else "",
+                escape_json_string(str(primary_key_name)) if primary_key_name else "",
+                escape_json_string(str(primary_key_name)) if primary_key_name else ""
             )
         )
         new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
@@ -809,7 +808,9 @@ class LayersManagementEngineTask(QgsTask):
             layer_properties (list): List of (key_group, key) tuples, or empty for all properties
         """
         layer_all_properties_flag = False
-        assert isinstance(layer, QgsVectorLayer)
+        if not isinstance(layer, QgsVectorLayer):
+            logger.error(f"save_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+            return
 
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
@@ -877,7 +878,9 @@ class LayersManagementEngineTask(QgsTask):
             layer_properties (list): List of (key_group, key) tuples, or empty for all properties
         """
         layer_all_properties_flag = False
-        assert isinstance(layer, QgsVectorLayer)
+        if not isinstance(layer, QgsVectorLayer):
+            logger.error(f"remove_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+            return
 
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
@@ -1059,7 +1062,8 @@ class LayersManagementEngineTask(QgsTask):
                 conn.commit()
                 cur.close()
                 return True
-            except Exception:
+            except (sqlite3.Error, OSError, ValueError) as e:
+                logger.debug(f"Error inserting properties to Spatialite: {e}")
                 if conn:
                     try:
                         conn.rollback()
@@ -1142,10 +1146,8 @@ class LayersManagementEngineTask(QgsTask):
                     except (RuntimeError, TypeError):
                         pass
                 
-                iface.messageBar().pushMessage(
-                    'Completed with no exception and no result (probably manually canceled by the user).',
-                    MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Warning
-                )
+                # Task was likely canceled by user - log only, no message bar notification
+                logger.info('Task completed with no result (likely canceled by user)')
             else:
                 # CRITICAL: Emit signal BEFORE showing message
                 try:
@@ -1161,22 +1163,16 @@ class LayersManagementEngineTask(QgsTask):
                         result_action = f'{len(self.layers)} layer(s) added'
                     elif self.task_action == 'remove_layers':
                         result_action = f'{len(list(self.project_layers.keys())) - len(self.layers)} layer(s) removed'
-
-                    iface.messageBar().pushMessage(
-                        f'Layers list has been updated : {result_action}',
-                        MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success
-                    )
+                    # Message bar notification removed - internal operation, too verbose for UX
+                    logger.info(f'Layers list has been updated: {result_action}')
                 elif message_category == 'ManageLayersProperties':
                     if self.layer_all_properties_flag is True:    
                         if self.task_action == 'save_layer_variable':
                             result_action = f'All properties saved for {self.layer_id} layer'
                         elif self.task_action == 'remove_layer_variable':
                             result_action = f'All properties removed for {self.layer_id} layer'
-
-                        iface.messageBar().pushMessage(
-                            f'Layers list has been updated : {result_action}',
-                            MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success
-                        )
+                        # Message bar notification removed - internal operation, too verbose for UX
+                        logger.info(f'Layers properties updated: {result_action}')
                 
                 # Disconnect signals
                 try:

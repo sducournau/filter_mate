@@ -40,7 +40,7 @@ from .modules.tasks import (
     LayersManagementEngineTask,
     spatialite_connect
 )
-from .modules.appUtils import POSTGRESQL_AVAILABLE
+from .modules.appUtils import POSTGRESQL_AVAILABLE, sanitize_sql_identifier, get_data_source_uri, get_datasource_connexion_from_layer
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
     show_backend_info, show_progress_message, show_success_with_backend,
@@ -185,6 +185,9 @@ class FilterMateApp:
         self._signals_connected = False
         self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
         self._loading_new_project = False  # Flag to track when loading a new project
+        
+        # Initialize PROJECT_LAYERS as instance attribute (shadows class attribute for isolation)
+        self.PROJECT_LAYERS = {}
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
@@ -277,6 +280,13 @@ class FilterMateApp:
                         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
                 
                 QTimer.singleShot(2000, ensure_ui_enabled)
+            else:
+                # No layers in project - inform user that plugin is waiting for layers
+                logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    "Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin."
+                )
         else:
             # Dockwidget already exists - show it and refresh layers if needed
             logger.info("FilterMate: Dockwidget already exists, showing and refreshing layers")
@@ -448,6 +458,11 @@ class FilterMateApp:
             self.dockwidget.reset_multiple_checkable_combobox()
             self.layer_management_engine_task_completed({}, 'remove_all_layers')
             self._loading_new_project = False
+            # Inform user that plugin is waiting for layers
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
+            )
 
     def manage_task(self, task_name, data=None):
         """
@@ -668,11 +683,15 @@ class FilterMateApp:
     def _initialize_filter_history(self, current_layer, layers_to_filter, task_parameters):
         """Initialize filter history for source and associated layers.
         
+        Captures the CURRENT state of all layers BEFORE filtering is applied.
+        This ensures that undo will properly restore all layers to their pre-filter state.
+        
         Args:
             current_layer: Source layer
             layers_to_filter: List of layers to be filtered
             task_parameters: Task parameters with layer info
         """
+        # Initialize per-layer history for source layer if needed
         history = self.history_manager.get_or_create_history(current_layer.id())
         if len(history._states) == 0:
             # Push initial unfiltered state for source layer
@@ -686,7 +705,7 @@ class FilterMateApp:
             )
             logger.info(f"FilterMate: Initialized history with current state for source layer {current_layer.id()}")
         
-        # Initialize history for associated layers and prepare global state
+        # Initialize per-layer history for associated layers
         remote_layers_info = {}
         for layer_info in layers_to_filter:
             layer_id = layer_info.get("layer_id")
@@ -706,11 +725,13 @@ class FilterMateApp:
                         )
                         logger.info(f"FilterMate: Initialized history for associated layer {assoc_layer.name()}")
                     
-                    # Collect for global initial state
+                    # Collect CURRENT state for all remote layers (for global state)
                     remote_layers_info[assoc_layer.id()] = (assoc_layer.subsetString(), assoc_layer.featureCount())
         
-        # Initialize global history if we have remote layers and global history is empty
-        if remote_layers_info and len(self.history_manager._global_states) == 0:
+        # ALWAYS push global state BEFORE filtering if we have remote layers
+        # This captures the pre-filter state of ALL currently selected remote layers
+        # Critical fix: we must capture the state before EACH filter operation, not just the first one
+        if remote_layers_info:
             current_filter = current_layer.subsetString()
             current_count = current_layer.featureCount()
             self.history_manager.push_global_state(
@@ -718,10 +739,10 @@ class FilterMateApp:
                 source_expression=current_filter,
                 source_feature_count=current_count,
                 remote_layers=remote_layers_info,
-                description="Initial state (before first filter)",
-                metadata={"operation": "initial", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
+                description=f"Pre-filter state ({len(remote_layers_info) + 1} layers)",
+                metadata={"operation": "pre_filter", "backend": task_parameters["infos"].get("layer_provider_type", "unknown")}
             )
-            logger.info(f"FilterMate: Initialized global history with {len(remote_layers_info) + 1} layers")
+            logger.info(f"FilterMate: Captured pre-filter global state ({len(remote_layers_info) + 1} layers)")
     
     def _build_common_task_params(self, features, expression, layers_to_filter, include_history=False):
         """
@@ -1024,10 +1045,11 @@ class FilterMateApp:
                 # Apply state to source layer
                 source_layer.setSubsetString(global_state.source_expression)
                 self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
-                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60]}")
+                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
                 
-                # Apply state to remote layers (with safety checks)
+                # Apply state to ALL remote layers from the saved state
                 restored_count = 0
+                restored_layers = []
                 for remote_id, (expression, _) in global_state.remote_layers.items():
                     # Check if layer still exists in project
                     if remote_id not in self.PROJECT_LAYERS:
@@ -1041,15 +1063,22 @@ class FilterMateApp:
                         self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
                         logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
                         restored_count += 1
+                        restored_layers.append(remote_layer)
                     else:
                         logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
                 
-                # Refresh
-                self._refresh_layers_and_canvas(source_layer)
-                # Message removed - UI feedback (disabled button) is sufficient
+                # Refresh ALL affected layers (source + remotes), not just source
+                source_layer.updateExtents()
+                source_layer.triggerRepaint()
+                for remote_layer in restored_layers:
+                    remote_layer.updateExtents()
+                    remote_layer.triggerRepaint()
+                self.iface.mapCanvas().refreshAllLayers()
+                self.iface.mapCanvas().refresh()
+                
+                logger.info(f"FilterMate: Global undo completed - restored {restored_count + 1} layers")
             else:
                 logger.info("FilterMate: No global undo history available")
-                # Message removed - button already disabled when no history
         else:
             # Source layer only undo
             logger.info("FilterMate: Performing source layer undo only")
@@ -1064,10 +1093,8 @@ class FilterMateApp:
                     
                     # Refresh
                     self._refresh_layers_and_canvas(source_layer)
-                    # Message removed - UI feedback (disabled button) is sufficient
             else:
                 logger.info("FilterMate: No undo history for source layer")
-                # Message removed - button already disabled when no history
         
         # Update button states after undo
         self.update_undo_redo_buttons()
@@ -1103,10 +1130,11 @@ class FilterMateApp:
                 # Apply state to source layer
                 source_layer.setSubsetString(global_state.source_expression)
                 self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
-                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60]}")
+                logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
                 
-                # Apply state to remote layers (with safety checks)
+                # Apply state to ALL remote layers from the saved state
                 restored_count = 0
+                restored_layers = []
                 for remote_id, (expression, _) in global_state.remote_layers.items():
                     # Check if layer still exists in project
                     if remote_id not in self.PROJECT_LAYERS:
@@ -1120,15 +1148,22 @@ class FilterMateApp:
                         self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
                         logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
                         restored_count += 1
+                        restored_layers.append(remote_layer)
                     else:
                         logger.warning(f"FilterMate: Remote layer {remote_id} not found in project")
                 
-                # Refresh
-                self._refresh_layers_and_canvas(source_layer)
-                # Message removed - UI feedback (disabled button) is sufficient
+                # Refresh ALL affected layers (source + remotes), not just source
+                source_layer.updateExtents()
+                source_layer.triggerRepaint()
+                for remote_layer in restored_layers:
+                    remote_layer.updateExtents()
+                    remote_layer.triggerRepaint()
+                self.iface.mapCanvas().refreshAllLayers()
+                self.iface.mapCanvas().refresh()
+                
+                logger.info(f"FilterMate: Global redo completed - restored {restored_count + 1} layers")
             else:
                 logger.info("FilterMate: No global redo history available")
-                # Message removed - button already disabled when no history
         else:
             # Source layer only redo
             logger.info("FilterMate: Performing source layer redo only")
@@ -1143,10 +1178,8 @@ class FilterMateApp:
                     
                     # Refresh
                     self._refresh_layers_and_canvas(source_layer)
-                    # Message removed - UI feedback (disabled button) is sufficient
             else:
                 logger.info("FilterMate: No redo history for source layer")
-                # Message removed - button already disabled when no history
         
         # Update button states after redo
         self.update_undo_redo_buttons()
@@ -1390,7 +1423,10 @@ class FilterMateApp:
         
         layer_all_properties_flag = False
 
-        assert isinstance(layer, QgsVectorLayer)
+        # CRITICAL: Validate layer type instead of assert to prevent crashes
+        if not isinstance(layer, QgsVectorLayer):
+            logger.error(f"save_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+            return
 
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
@@ -1447,7 +1483,10 @@ class FilterMateApp:
         
         layer_all_properties_flag = False
 
-        assert isinstance(layer, QgsVectorLayer)
+        # CRITICAL: Validate layer type instead of assert to prevent crashes
+        if not isinstance(layer, QgsVectorLayer):
+            logger.error(f"remove_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+            return
 
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
@@ -1776,8 +1815,8 @@ class FilterMateApp:
                     try:
                         cur.close()
                         conn.close()
-                    except Exception:
-                        pass
+                    except (OSError, AttributeError, sqlite3.Error) as e:
+                        logger.debug(f"Error closing database connection: {e}")
 
     def add_project_datasource(self, layer):
 
@@ -2119,7 +2158,7 @@ class FilterMateApp:
                             datasource '{datasource}', 
                             format '{format}');
                         IMPORT FOREIGN SCHEMA ogr_all
-                        FROM SERVER server_{datasource_name} INTO filter_mate_temp;""".format(datasource_name=datasource.replace('.', '_').replace('-', '_').replace('@', '_'),
+                        FROM SERVER server_{datasource_name} INTO filter_mate_temp;""".format(datasource_name=sanitize_sql_identifier(datasource),
                                                                                         datasource=project_datasource.replace('\\\\', '\\'),
                                                                                         format=format)
 

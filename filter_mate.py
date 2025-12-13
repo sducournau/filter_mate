@@ -265,12 +265,7 @@ class FilterMate:
             
             self._auto_activation_signals_connected = True
             logger.info("FilterMate: Auto-activation signals connected")
-            
-            # Show user message
-            qgis_iface.messageBar().pushInfo(
-                "FilterMate",
-                "Le plugin s'activera automatiquement lors de l'ajout de couches ou de l'ouverture d'un projet"
-            )
+            # Message bar notification removed - too verbose for UX
     
     def _auto_activate_plugin(self, layers=None):
         """Auto-activate plugin if not already active.
@@ -279,7 +274,10 @@ class FilterMate:
             - Checks for vector layers in the project
             - If found, activates the plugin by calling run()
             
-        When called with the plugin already active:
+        When called with the plugin already active but dockwidget hidden:
+            - Shows the dockwidget and processes new layers
+            
+        When called with the plugin already active and dockwidget visible:
             - Does nothing - the FilterMateApp handles layer changes
               via its own signal connections (layersAdded, projectRead, etc.)
               This avoids duplicate processing and race conditions.
@@ -288,12 +286,21 @@ class FilterMate:
             layers: Optional list of layers that were just added (from layersAdded signal)
         """
         from qgis.core import QgsProject, QgsVectorLayer
+        from qgis.PyQt.QtCore import QTimer
         from qgis.utils import iface as qgis_iface
         
-        # If plugin is already active, FilterMateApp handles everything
-        # via its own signal connections. No action needed here.
+        # If plugin is already active, check if dockwidget is visible
         if self.pluginIsActive:
-            logger.debug("FilterMate: _auto_activate_plugin called but plugin already active - FilterMateApp handles signals")
+            # If dockwidget exists and is visible, FilterMateApp handles everything
+            if self.app and hasattr(self.app, 'dockwidget') and self.app.dockwidget:
+                if self.app.dockwidget.isVisible():
+                    logger.debug("FilterMate: _auto_activate_plugin called but plugin already active - FilterMateApp handles signals")
+                    return
+                else:
+                    # Dockwidget exists but hidden - show it and let FilterMateApp handle
+                    logger.info("FilterMate: Plugin active but dockwidget hidden - showing dockwidget")
+                    self.app.dockwidget.show()
+                    return
             return
         
         # Plugin not active - check if there are vector layers to activate for
@@ -302,15 +309,16 @@ class FilterMate:
                         if isinstance(layer, QgsVectorLayer)]
         
         if not vector_layers:
+            logger.debug("FilterMate: No vector layers found - plugin will not auto-activate")
             return  # No vector layers to process
         
         # Plugin not active and we have vector layers - activate it
+        # Use QTimer to ensure QGIS is in a stable state before activation
         logger.info(f"FilterMate: Auto-activating plugin ({len(vector_layers)} vector layer(s) detected)")
-        qgis_iface.messageBar().pushInfo(
-            "FilterMate",
-            f"Activation automatique du plugin ({len(vector_layers)} couche(s) vectorielle(s) détectée(s))"
-        )
-        self.run()
+        # Message bar notification removed - too verbose for UX
+        
+        # Defer activation to next event loop iteration for stability
+        QTimer.singleShot(50, self.run)
 
 
     def unload(self):

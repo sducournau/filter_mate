@@ -590,3 +590,128 @@ def get_source_table_name(layer):
     
     # Fallback: use layer display name
     return layer.name()
+
+
+def sanitize_sql_identifier(name: str) -> str:
+    """
+    Sanitize a string to be used as a SQL identifier (table name, view name, etc.).
+    
+    Replaces all non-alphanumeric characters (except underscore) with underscores.
+    Handles special characters like em-dash (—), en-dash (–), and other Unicode characters.
+    
+    Args:
+        name: The name to sanitize
+        
+    Returns:
+        str: A sanitized string safe for use as a SQL identifier
+        
+    Examples:
+        >>> sanitize_sql_identifier("mro_woluwe — Home Count")
+        'mro_woluwe___Home_Count'
+        >>> sanitize_sql_identifier("layer-name with spaces")
+        'layer_name_with_spaces'
+    """
+    if not name:
+        return ""
+    
+    import re
+    # Replace any non-alphanumeric character (except underscore) with underscore
+    # This handles em-dash (—), en-dash (–), spaces, and other special characters
+    sanitized = re.sub(r'[^\w]', '_', name, flags=re.UNICODE)
+    
+    # Collapse multiple underscores into one
+    sanitized = re.sub(r'_+', '_', sanitized)
+    
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    
+    return sanitized
+
+
+def sanitize_filename(name: str, replacement: str = '_') -> str:
+    """
+    Sanitize a string to be used as a filename.
+    
+    Replaces characters that are invalid or problematic in filenames across
+    different operating systems (Windows, Linux, macOS).
+    
+    Args:
+        name: The filename to sanitize
+        replacement: Character to use for replacement (default: '_')
+        
+    Returns:
+        str: A sanitized string safe for use as a filename
+        
+    Examples:
+        >>> sanitize_filename("mro_woluwe — Home Count")
+        'mro_woluwe_-_Home_Count'
+        >>> sanitize_filename("file:with*invalid<chars>")
+        'file_with_invalid_chars_'
+    """
+    if not name:
+        return ""
+    
+    import re
+    
+    # Characters forbidden in Windows filenames: \ / : * ? " < > |
+    # Also handle em-dash (—) and en-dash (–) which can cause encoding issues
+    forbidden_chars = r'[\\/:*?"<>|]'
+    
+    # Replace forbidden characters
+    sanitized = re.sub(forbidden_chars, replacement, name)
+    
+    # Replace em-dash (—) and en-dash (–) with regular dash for readability
+    sanitized = sanitized.replace('—', '-').replace('–', '-')
+    
+    # Replace other problematic Unicode characters with underscore
+    # Keep basic alphanumeric, dash, underscore, dot, and space
+    sanitized = re.sub(r'[^\w\s.\-]', replacement, sanitized, flags=re.UNICODE)
+    
+    # Collapse multiple replacement characters
+    if replacement:
+        sanitized = re.sub(f'{re.escape(replacement)}+', replacement, sanitized)
+    
+    # Remove leading/trailing spaces and dots (problematic on Windows)
+    sanitized = sanitized.strip(' .')
+    
+    # Ensure the filename is not empty
+    if not sanitized:
+        sanitized = "unnamed"
+    
+    return sanitized
+
+
+def escape_json_string(s: str) -> str:
+    """
+    Escape a string for safe inclusion in a JSON string value.
+    
+    This properly escapes backslashes, double quotes, and control characters
+    that would break JSON parsing.
+    
+    Args:
+        s: The string to escape
+        
+    Returns:
+        str: A JSON-safe escaped string
+        
+    Examples:
+        >>> escape_json_string('layer "name" with quotes')
+        'layer \\"name\\" with quotes'
+        >>> escape_json_string('path\\to\\file')
+        'path\\\\to\\\\file'
+    """
+    if not s:
+        return ""
+    
+    # Escape backslashes first (must be done first!)
+    escaped = s.replace('\\', '\\\\')
+    
+    # Escape double quotes
+    escaped = escaped.replace('"', '\\"')
+    
+    # Escape control characters
+    escaped = escaped.replace('\n', '\\n')
+    escaped = escaped.replace('\r', '\\r')
+    escaped = escaped.replace('\t', '\\t')
+    
+    return escaped

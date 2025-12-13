@@ -55,6 +55,49 @@ import logging
 # Get FilterMate logger
 logger = logging.getLogger('FilterMate')
 
+
+def get_feature_attribute(feature, field_name):
+    """
+    Safely get an attribute value from a feature.
+    
+    Handles special cases like 'fid' which may be a pseudo-field
+    representing the feature ID rather than an actual attribute.
+    
+    Args:
+        feature: QgsFeature object
+        field_name: Name of the field to retrieve
+        
+    Returns:
+        The attribute value, or None if not found
+    """
+    if field_name is None:
+        return None
+    
+    # Handle special case for 'fid' (feature ID)
+    # In QGIS, 'fid' is often a pseudo-column representing feature.id()
+    if field_name.lower() == 'fid':
+        try:
+            # First try to get it as a regular attribute
+            return feature[field_name]
+        except (KeyError, IndexError):
+            # Fall back to feature.id() if 'fid' is not a real field
+            return feature.id()
+    
+    # For regular fields, try to access by name
+    try:
+        return feature[field_name]
+    except (KeyError, IndexError):
+        # If field access fails, try to get by index
+        try:
+            fields = feature.fields()
+            idx = fields.lookupField(field_name)
+            if idx >= 0:
+                return feature.attributes()[idx]
+        except Exception:
+            pass
+        return None
+
+
 class PopulateListEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
 
@@ -219,7 +262,7 @@ class PopulateListEngineTask(QgsTask):
 
                     if self.is_field_flag is True:
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
-                            arr = [feature[self.display_expression], feature[self.identifier_field_name]]
+                            arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                             features_list.append(arr)
                             self.setProgress((index/total_count)*100)
                     else:
@@ -236,7 +279,7 @@ class PopulateListEngineTask(QgsTask):
                                 scope.setFeature(feature)
                                 result = display_expression.evaluate(context)
                                 if result:
-                                    arr = [result, feature[self.identifier_field_name]]
+                                    arr = [result, get_feature_attribute(feature, self.identifier_field_name)]
                                     features_list.append(arr)
                                     self.setProgress((index/total_count)*100)
 
@@ -261,7 +304,7 @@ class PopulateListEngineTask(QgsTask):
 
                 if self.is_field_flag is True:
                     for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
-                        arr = [feature[self.display_expression], feature[self.identifier_field_name]]
+                        arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                         features_list.append(arr)
                         self.setProgress((index/total_count)*100)
                 else:
@@ -278,18 +321,18 @@ class PopulateListEngineTask(QgsTask):
                             scope.setFeature(feature)
                             result = display_expression.evaluate(context)
                             if result:
-                                arr = [result, feature[self.identifier_field_name]]
+                                arr = [result, get_feature_attribute(feature, self.identifier_field_name)]
                                 features_list.append(arr)
                                 self.setProgress((index/total_count)*100)
 
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
             self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
 
 
     def loadFeaturesList(self, new_list=True):
         current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[self.layer.id()].getSelectedFeaturesList()]
-        nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+        nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
         
         if new_list is True:
             self.parent.list_widgets[self.layer.id()].clear()
@@ -372,7 +415,7 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             total_count = list_widget.count()
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
 
             for index in range(total_count):
                 item = list_widget.item(index)
@@ -388,8 +431,8 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-            total_count = widget_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            total_count = widget_count - len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
 
             for index in range(widget_count):
                 item = list_widget.item(index)
@@ -404,8 +447,8 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'Select All (subset)':
 
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-            total_count = len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            total_count = len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
 
@@ -428,7 +471,7 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             total_count = list_widget.count()
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
 
             for index in range(total_count):
                 item = list_widget.item(index)
@@ -443,8 +486,8 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-            total_count = widget_count - len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            total_count = widget_count - len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
 
             for index in range(widget_count):
                 item = list_widget.item(index)
@@ -459,8 +502,8 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'De-select All (subset)':
 
-            nonSubset_features_list = [feature[self.identifier_field_name] for feature in self.layer.getFeatures()]
-            total_count = len([feature[self.identifier_field_name] for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            total_count = len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
 
@@ -506,8 +549,12 @@ class PopulateListEngineTask(QgsTask):
         """This function is called automatically when the task is completed and is
         called from the main thread so it is safe to interact with the GUI etc here"""
         if result is False:
-            if self.exception is None:
-                iface.messageBar().pushMessage('FilterMate', 'Task was cancelled', level=Qgis.Warning)
+            if self.isCanceled():
+                # Task was cancelled by user - no need to show message
+                pass
+            elif self.exception is None:
+                # Task failed without exception - unexpected
+                iface.messageBar().pushMessage('FilterMate', 'Task failed unexpectedly', level=Qgis.Warning)
             else:
                 iface.messageBar().pushCritical('FilterMate', f'Error occurred: {str(self.exception)}')
                 logger.error(f'Task failed with exception: {self.exception}', exc_info=True)
@@ -953,13 +1000,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.tasks[action][self.layer.id()] = PopulateListEngineTask(description, self, action, silent_flag)
         self.tasks[action][self.layer.id()].setDependentLayers([self.layer])
 
-
-        if silent_flag is False:
-            try:
-                self.tasks[action][self.layer.id()].begun.connect(lambda:  iface.messageBar().pushMessage(self.layer.name() + " : " + description))
-            except (AttributeError, RuntimeError):
-                # Task or message bar not available
-                pass
+        # Message bar notification removed - too verbose for user experience
+        # Task progress is visible in QGIS task manager if needed
 
 
     def launch_task(self, action):

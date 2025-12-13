@@ -56,6 +56,7 @@ from qgis.PyQt.QtWidgets import (
     QSizePolicy,
     QSpacerItem,
     QSpinBox,
+    QSplitter,
     QVBoxLayout
 )
 from qgis.core import (
@@ -447,14 +448,81 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
 
 
+    def _fix_toolbox_icons(self):
+        """
+        Fix toolBox_tabTools icons with absolute paths.
+        
+        The auto-generated filter_mate_dockwidget_base.py uses relative paths
+        for icons which don't work. This method replaces them with absolute paths.
+        """
+        toolbox_icons = {
+            0: "filter_multi.png",   # FILTERING tab
+            1: "save.png",           # EXPORTING tab
+            2: "parameters.png"      # CONFIGURATION tab
+        }
+        
+        for index, icon_file in toolbox_icons.items():
+            icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
+            if os.path.exists(icon_path):
+                icon = QtGui.QIcon(icon_path)
+                self.toolBox_tabTools.setItemIcon(index, icon)
+
+
     def setupUiCustom(self):
         self.set_multiple_checkable_combobox()
         
+        # Setup splitter between frame_exploring and frame_toolset
+        self._setup_main_splitter()
+        
         # Apply dynamic dimensions based on active profile
         self.apply_dynamic_dimensions()
+        
+        # Fix toolBox icons with absolute paths
+        self._fix_toolbox_icons()
 
         # Setup backend indicator (right-aligned label showing current backend)
         self._setup_backend_indicator()
+        
+        # Setup action bar layout based on configuration
+        self._setup_action_bar_layout()
+
+    def _setup_main_splitter(self):
+        """
+        Setup a QSplitter between frame_exploring and frame_toolset.
+        
+        This allows users to resize the exploring and toolset sections
+        by dragging a splitter handle between them.
+        """
+        try:
+            # Get the parent layout (verticalLayout_main_content)
+            parent_layout = self.verticalLayout_main_content
+            
+            # Remove frames from the current layout
+            parent_layout.removeWidget(self.frame_exploring)
+            parent_layout.removeWidget(self.frame_toolset)
+            
+            # Create vertical splitter
+            self.main_splitter = QSplitter(Qt.Vertical)
+            self.main_splitter.setObjectName("main_splitter")
+            self.main_splitter.setChildrenCollapsible(False)
+            self.main_splitter.setHandleWidth(5)
+            
+            # Add frames to splitter
+            self.main_splitter.addWidget(self.frame_exploring)
+            self.main_splitter.addWidget(self.frame_toolset)
+            
+            # Set initial sizes (exploring: 40%, toolset: 60%)
+            self.main_splitter.setStretchFactor(0, 2)
+            self.main_splitter.setStretchFactor(1, 3)
+            
+            # Add splitter to layout
+            parent_layout.addWidget(self.main_splitter)
+            
+            logger.debug("Main splitter setup completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error setting up main splitter: {e}")
+            # If splitter setup fails, widgets remain in original layout
         
         # Setup tab-specific widgets
         self._setup_exploring_tab_widgets()
@@ -621,39 +689,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Harmonize dimensions of all checkable pushbuttons across tabs.
         
         Applies consistent sizing to exploring, filtering, and exporting pushbuttons
-        based on the active UI profile (compact/normal).
+        based on the active UI profile (compact/normal) using key_button dimensions
+        from UIConfig.
         """
         try:
             from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
             from qgis.PyQt.QtCore import QSize
             from .modules.ui_config import UIConfig, DisplayProfile
             
-            # Get dynamic dimensions based on active profile (compact/normal)
-            is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
-            
-            if is_compact:
-                # Compact mode - smaller pushbuttons
-                pushbutton_min_width = 18
-                pushbutton_max_width = 20
-                pushbutton_min_height = 18
-                pushbutton_max_height = 25
-                pushbutton_icon_size = 16
+            # Get dynamic dimensions from key_button config
+            key_button_config = UIConfig.get_config('key_button')
+            if key_button_config:
+                pushbutton_min_size = key_button_config.get('min_size', 32)
+                pushbutton_max_size = key_button_config.get('max_size', 36)
+                pushbutton_icon_size = key_button_config.get('icon_size', 24)
+                button_spacing = key_button_config.get('spacing', 4)
             else:
-                # Normal mode - larger pushbuttons (ratio ~1.5x)
-                pushbutton_min_width = 27
-                pushbutton_max_width = 30
-                pushbutton_min_height = 27
-                pushbutton_max_height = 38
+                # Fallback values if config not available
+                pushbutton_min_size = 32
+                pushbutton_max_size = 36
                 pushbutton_icon_size = 24
+                button_spacing = 4
             
             # Get all checkable pushbuttons with consistent naming pattern
             checkable_buttons = []
             
-            # Exploring buttons
+            # Exploring buttons (including non-checkable explore buttons)
             exploring_button_names = [
+                'pushButton_exploring_identify',
+                'pushButton_exploring_zoom',
                 'pushButton_checkable_exploring_selecting',
                 'pushButton_checkable_exploring_tracking',
-                'pushButton_checkable_exploring_linking_widgets'
+                'pushButton_checkable_exploring_linking_widgets',
+                'pushButton_exploring_reset_layer_properties'
             ]
             
             # Filtering buttons
@@ -678,29 +746,36 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             all_button_names = exploring_button_names + filtering_button_names + exporting_button_names
             
-            # Apply consistent dimensions to all checkable pushbuttons
+            # Apply consistent dimensions to all key pushbuttons
             for button_name in all_button_names:
                 if hasattr(self, button_name):
                     button = getattr(self, button_name)
                     if isinstance(button, QPushButton):
-                        # Set consistent size constraints
-                        button.setMinimumSize(pushbutton_min_width, pushbutton_min_height)
-                        button.setMaximumSize(pushbutton_max_width, pushbutton_max_height)
+                        # Set consistent square size constraints
+                        button.setMinimumSize(pushbutton_min_size, pushbutton_min_size)
+                        button.setMaximumSize(pushbutton_max_size, pushbutton_max_size)
                         
                         # Set consistent icon size
                         button.setIconSize(QSize(pushbutton_icon_size, pushbutton_icon_size))
                         
                         # Ensure consistent style properties
                         button.setFlat(True)
-                        button.setCheckable(True)
                         
-                        # Set consistent size policy
-                        button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                        # Set consistent size policy - Fixed for uniform sizing
+                        button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
                         
                         checkable_buttons.append(button_name)
             
-            mode_name = 'COMPACT' if is_compact else 'NORMAL'
-            logger.debug(f"Harmonized {len(checkable_buttons)} checkable pushbuttons in {mode_name} mode: {pushbutton_min_width}-{pushbutton_max_width}x{pushbutton_min_height}-{pushbutton_max_height}px")
+            # Apply spacing to layout containers
+            for layout_name in ['verticalLayout_exploring_content', 
+                               'verticalLayout_filtering_keys',
+                               'verticalLayout_exporting_keys']:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    layout.setSpacing(button_spacing)
+            
+            mode_name = UIConfig.get_profile_name()
+            logger.debug(f"Harmonized {len(checkable_buttons)} key pushbuttons in {mode_name} mode: {pushbutton_min_size}-{pushbutton_max_size}px (icon: {pushbutton_icon_size}px)")
             
         except Exception as e:
             logger.warning(f"Could not harmonize checkable pushbuttons: {e}")
@@ -1036,6 +1111,285 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Add to the main layout (top of the widget)
         if hasattr(self, 'verticalLayout_main_root'):
             self.verticalLayout_main_root.insertLayout(0, backend_indicator_layout)
+
+    def _setup_action_bar_layout(self):
+        """
+        Setup the action bar layout based on configuration.
+        
+        Configures the action bar position (top, bottom, left, right) based on 
+        ACTION_BAR_POSITION setting in config.json.
+        """
+        # Get action bar position from config
+        position = self._get_action_bar_position()
+        self._apply_action_bar_position(position)
+
+    def _get_action_bar_position(self):
+        """
+        Get action bar position from configuration.
+        
+        Returns:
+            str: Position value ('top', 'bottom', 'left', 'right')
+        """
+        try:
+            position_config = self.CONFIG_DATA.get('APP', {}).get('DOCKWIDGET', {}).get('ACTION_BAR_POSITION', {})
+            if isinstance(position_config, dict):
+                return position_config.get('value', 'top')
+            return position_config if position_config else 'top'
+        except Exception:
+            return 'top'
+
+    def _apply_action_bar_position(self, position):
+        """
+        Apply action bar position dynamically.
+        
+        Reorganizes the layout to place the action bar at the specified position.
+        
+        Args:
+            position: str - 'top', 'bottom', 'left', 'right'
+        """
+        if not hasattr(self, 'frame_actions'):
+            return
+        
+        logger.info(f"Applying action bar position: {position}")
+        
+        # Get all action buttons
+        action_buttons = [
+            self.pushButton_action_filter,
+            self.pushButton_action_undo_filter,
+            self.pushButton_action_redo_filter,
+            self.pushButton_action_unfilter,
+            self.pushButton_action_export,
+            self.pushButton_action_about
+        ]
+        
+        # Step 1: Remove frame_actions from its current parent layout
+        parent = self.frame_actions.parent()
+        if parent and parent.layout():
+            parent.layout().removeWidget(self.frame_actions)
+        
+        # Step 2: Completely delete the old layout
+        old_layout = self.frame_actions.layout()
+        if old_layout:
+            # First, remove all widgets from the layout
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.setParent(None)  # Detach widget temporarily
+            # Delete the layout by reparenting to a temporary widget
+            temp_widget = QtWidgets.QWidget()
+            temp_widget.setLayout(old_layout)
+            temp_widget.deleteLater()
+        
+        # Step 3: Create new layout based on position
+        if position in ('top', 'bottom'):
+            # Horizontal layout for top/bottom
+            new_layout = QtWidgets.QHBoxLayout(self.frame_actions)
+            new_layout.setContentsMargins(4, 2, 4, 2)
+            new_layout.setSpacing(0)
+            for i, btn in enumerate(action_buttons):
+                btn.setParent(self.frame_actions)
+                new_layout.addWidget(btn)
+                if i < len(action_buttons) - 1:
+                    spacer = QtWidgets.QSpacerItem(4, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+                    new_layout.addItem(spacer)
+            
+            # Apply horizontal mode size constraints
+            self._apply_action_bar_size_constraints(position)
+        else:
+            # Vertical layout for left/right
+            new_layout = QtWidgets.QVBoxLayout(self.frame_actions)
+            new_layout.setContentsMargins(4, 4, 4, 4)
+            new_layout.setSpacing(4)
+            new_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+            for i, btn in enumerate(action_buttons):
+                btn.setParent(self.frame_actions)
+                new_layout.addWidget(btn, 0, Qt.AlignHCenter)
+                if i < len(action_buttons) - 1:
+                    spacer = QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+                    new_layout.addItem(spacer)
+            # Add stretch at the end to push buttons to top
+            new_layout.addStretch(1)
+            
+            # Apply vertical mode size constraints
+            self._apply_action_bar_size_constraints(position)
+        
+        # Step 4: Reposition frame_actions in the main layout
+        self._reposition_action_bar_in_main_layout(position)
+
+    def _apply_action_bar_size_constraints(self, position):
+        """
+        Apply appropriate size constraints to frame_actions based on position.
+        
+        For horizontal mode (top/bottom), constrains height.
+        For vertical mode (left/right), constrains width and removes height constraints.
+        
+        Args:
+            position: str - 'top', 'bottom', 'left', 'right'
+        """
+        if position in ('top', 'bottom'):
+            # Horizontal mode: constrain height, allow width to expand
+            if UI_CONFIG_AVAILABLE:
+                action_button_height = UIConfig.get_button_height("action_button")
+                frame_height = int(action_button_height * 1.5)
+            else:
+                frame_height = 54  # Fallback height
+            
+            self.frame_actions.setMinimumHeight(frame_height)
+            self.frame_actions.setMaximumHeight(frame_height)
+            self.frame_actions.setMinimumWidth(0)
+            self.frame_actions.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
+            self.frame_actions.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding, 
+                QtWidgets.QSizePolicy.Fixed
+            )
+        else:
+            # Vertical mode (left/right): constrain width, allow height to expand
+            if UI_CONFIG_AVAILABLE:
+                action_button_size = UIConfig.get_button_height("action_button")
+                frame_width = int(action_button_size * 1.3)
+            else:
+                frame_width = 54  # Fallback width
+            
+            self.frame_actions.setMinimumWidth(frame_width)
+            self.frame_actions.setMaximumWidth(frame_width)
+            self.frame_actions.setMinimumHeight(0)
+            self.frame_actions.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            self.frame_actions.setSizePolicy(
+                QtWidgets.QSizePolicy.Fixed, 
+                QtWidgets.QSizePolicy.Expanding
+            )
+        
+        logger.debug(f"Applied action bar size constraints for position: {position}")
+
+    def _reposition_action_bar_in_main_layout(self, position):
+        """
+        Reposition the action bar frame in the main layout.
+        
+        Args:
+            position: str - 'top', 'bottom', 'left', 'right'
+        """
+        # First, clean up any existing wrapper
+        if hasattr(self, '_side_action_bar_container') and self._side_action_bar_container:
+            # Restore original layout first
+            self._restore_original_layout()
+        
+        # Remove frame_actions from any current layout
+        parent = self.frame_actions.parent()
+        if parent and parent.layout():
+            parent.layout().removeWidget(self.frame_actions)
+        
+        if position == 'top':
+            # Insert at the beginning of main content
+            self.frame_actions.setParent(self.dockWidgetContents)
+            self.verticalLayout_main_content.insertWidget(0, self.frame_actions)
+            logger.info("Action bar positioned at TOP")
+        elif position == 'bottom':
+            # Add at the end of main content
+            self.frame_actions.setParent(self.dockWidgetContents)
+            self.verticalLayout_main_content.addWidget(self.frame_actions)
+            logger.info("Action bar positioned at BOTTOM")
+        elif position in ('left', 'right'):
+            # Need to wrap main content in horizontal layout
+            self._create_horizontal_wrapper_for_side_action_bar(position)
+            logger.info(f"Action bar positioned at {position.upper()}")
+
+    def _create_horizontal_wrapper_for_side_action_bar(self, position):
+        """
+        Create a horizontal wrapper to position action bar on left or right side.
+        
+        Args:
+            position: str - 'left' or 'right'
+        """
+        # Check if we already have a horizontal wrapper
+        if hasattr(self, '_side_action_bar_container') and self._side_action_bar_container:
+            # Just reposition the frame_actions within existing wrapper
+            wrapper_layout = self._side_action_bar_container.layout()
+            if wrapper_layout:
+                wrapper_layout.removeWidget(self.frame_actions)
+                if position == 'left':
+                    wrapper_layout.insertWidget(0, self.frame_actions)
+                else:
+                    wrapper_layout.addWidget(self.frame_actions)
+            return
+        
+        # Store references to original widgets
+        frame_exploring = self.frame_exploring if hasattr(self, 'frame_exploring') else None
+        frame_toolset = self.frame_toolset if hasattr(self, 'frame_toolset') else None
+        
+        # Remove frames from current layout
+        if frame_exploring:
+            self.verticalLayout_main_content.removeWidget(frame_exploring)
+        if frame_toolset:
+            self.verticalLayout_main_content.removeWidget(frame_toolset)
+        
+        # Create a container widget to hold the horizontal arrangement
+        self._side_action_bar_container = QtWidgets.QWidget()
+        self._side_action_bar_container.setObjectName("side_action_bar_container")
+        wrapper_layout = QtWidgets.QHBoxLayout(self._side_action_bar_container)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(2)
+        
+        # Create a widget to hold the main content (exploring + toolset)
+        main_content_widget = QtWidgets.QWidget()
+        main_content_widget.setObjectName("main_content_wrapper")
+        main_content_layout = QtWidgets.QVBoxLayout(main_content_widget)
+        main_content_layout.setContentsMargins(0, 0, 0, 0)
+        main_content_layout.setSpacing(2)
+        
+        # Add frames to main content widget
+        if frame_exploring:
+            frame_exploring.setParent(main_content_widget)
+            main_content_layout.addWidget(frame_exploring)
+        if frame_toolset:
+            frame_toolset.setParent(main_content_widget)
+            main_content_layout.addWidget(frame_toolset)
+        
+        # Add frame_actions and main content in correct order
+        self.frame_actions.setParent(self._side_action_bar_container)
+        if position == 'left':
+            wrapper_layout.addWidget(self.frame_actions)
+            wrapper_layout.addWidget(main_content_widget, 1)  # stretch=1
+        else:  # right
+            wrapper_layout.addWidget(main_content_widget, 1)  # stretch=1
+            wrapper_layout.addWidget(self.frame_actions)
+        
+        # Add the container to the main content layout
+        self._side_action_bar_container.setParent(self.dockWidgetContents)
+        self.verticalLayout_main_content.addWidget(self._side_action_bar_container)
+
+    def _restore_original_layout(self):
+        """
+        Restore original layout when switching from side (left/right) to top/bottom position.
+        
+        This method undoes the horizontal wrapper created for side positioning.
+        """
+        if not hasattr(self, '_side_action_bar_container') or not self._side_action_bar_container:
+            return
+        
+        try:
+            # Get references to the frames
+            frame_exploring = self.frame_exploring if hasattr(self, 'frame_exploring') else None
+            frame_toolset = self.frame_toolset if hasattr(self, 'frame_toolset') else None
+            
+            # Remove the container from the layout
+            self.verticalLayout_main_content.removeWidget(self._side_action_bar_container)
+            
+            # Re-add frames directly to verticalLayout_main_content
+            if frame_exploring:
+                frame_exploring.setParent(self.dockWidgetContents)
+                self.verticalLayout_main_content.addWidget(frame_exploring)
+            if frame_toolset:
+                frame_toolset.setParent(self.dockWidgetContents)
+                self.verticalLayout_main_content.addWidget(frame_toolset)
+            
+            # Clean up the container
+            self._side_action_bar_container.deleteLater()
+            self._side_action_bar_container = None
+            
+            logger.info("Restored original layout from side action bar")
+        except Exception as e:
+            logger.error(f"Error restoring original layout: {e}")
 
     def _setup_exploring_tab_widgets(self):
         """
@@ -1447,6 +1801,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             import traceback
             logger.error(traceback.format_exc())
     
+    def _apply_action_bar_position_change(self, change, changes_summary):
+        """
+        Apply ACTION_BAR_POSITION configuration change.
+        
+        Updates the action bar layout position and offers to reload the plugin
+        for full effect.
+        """
+        items_keys_values_path = change['path']
+        index = change['index']
+        
+        if 'ACTION_BAR_POSITION' not in items_keys_values_path:
+            return
+        
+        try:
+            # Get the new position value from the edited item
+            value_item = self.config_view.model.itemFromIndex(index.siblingAtColumn(1))
+            value_data = value_item.data(QtCore.Qt.UserRole)
+            
+            # Handle ChoicesType format (dict with 'value' and 'choices')
+            if isinstance(value_data, dict) and 'value' in value_data:
+                new_position_value = value_data['value']
+            else:
+                # Fallback for string format (backward compatibility)
+                new_position_value = value_item.data(QtCore.Qt.DisplayRole) if value_item else None
+            
+            if new_position_value:
+                logger.info(f"ACTION_BAR_POSITION changed to: {new_position_value}")
+                
+                # Update the config data in memory
+                if 'APP' in self.CONFIG_DATA and 'DOCKWIDGET' in self.CONFIG_DATA['APP']:
+                    if isinstance(self.CONFIG_DATA['APP']['DOCKWIDGET'].get('ACTION_BAR_POSITION'), dict):
+                        self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION']['value'] = new_position_value
+                    else:
+                        self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION'] = new_position_value
+                
+                # Apply the new position
+                self._apply_action_bar_position(new_position_value)
+                
+                changes_summary.append(f"Action bar: {new_position_value}")
+                
+                # Show message that reload may be needed for full effect
+                from qgis.utils import iface
+                iface.messageBar().pushInfo(
+                    "FilterMate",
+                    f"Action bar position changed to '{new_position_value}'. Reload plugin if layout not updated correctly."
+                )
+                    
+        except Exception as e:
+            logger.error(f"Error applying ACTION_BAR_POSITION change: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
     def _apply_export_style_change(self, change, changes_summary):
         """
         Apply STYLES_TO_EXPORT configuration change.
@@ -1558,6 +1964,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply specialized change handlers
             self._apply_theme_change(change, changes_summary)
             self._apply_ui_profile_change(change, changes_summary)
+            self._apply_action_bar_position_change(change, changes_summary)
             self._apply_export_style_change(change, changes_summary)
             self._apply_export_format_change(change, changes_summary)
             
@@ -1691,6 +2098,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.config_view.setEnabled(True)
             self.config_view.show()
             
+            # Add Reload Plugin button
+            self._setup_reload_button()
+            
             # Disable OK/Cancel buttons by default (no changes pending)
             if hasattr(self, 'buttonBox'):
                 self.buttonBox.setEnabled(False)
@@ -1705,6 +2115,61 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error creating configuration model: {e}")
             import traceback
             logger.error(traceback.format_exc())
+
+    def _setup_reload_button(self):
+        """
+        Setup the Reload Plugin button in the configuration panel.
+        
+        This button allows users to reload the plugin to apply layout changes.
+        """
+        try:
+            # Create reload button
+            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin")
+            self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
+            self.pushButton_reload_plugin.setToolTip("Reload the plugin to apply layout changes (action bar position)")
+            self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
+            
+            # Style the button
+            self.pushButton_reload_plugin.setMinimumHeight(30)
+            
+            # Connect signal
+            self.pushButton_reload_plugin.clicked.connect(self._on_reload_button_clicked)
+            
+            # Add to configuration layout (before buttonBox)
+            config_layout = self.CONFIGURATION.layout()
+            if config_layout:
+                # Insert before the last widget (buttonBox)
+                insert_index = config_layout.count() - 1  # Before buttonBox
+                config_layout.insertWidget(insert_index, self.pushButton_reload_plugin)
+                logger.info("Reload button added to configuration panel")
+        except Exception as e:
+            logger.error(f"Error setting up reload button: {e}")
+
+    def _on_reload_button_clicked(self):
+        """
+        Handle reload button click - save configuration and reload plugin.
+        """
+        from qgis.utils import iface
+        
+        # First, apply any pending changes
+        if self.config_changes_pending and self.pending_config_changes:
+            self.apply_pending_config_changes()
+        
+        # Save configuration
+        self.save_configuration_model()
+        
+        # Confirm reload
+        from qgis.PyQt.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reload Plugin",
+            "Do you want to reload FilterMate to apply all configuration changes?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.reload_plugin()
 
 
         
@@ -1808,7 +2273,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if layer is None:
                 layer = self.current_layer
             else:
-                assert isinstance(layer, QgsVectorLayer)
+                if not isinstance(layer, QgsVectorLayer):
+                    logger.error(f"filtering_populate_layers_chekableCombobox: Expected QgsVectorLayer, got {type(layer).__name__}")
+                    return
             try:    
                 self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].clear()
                 
@@ -3066,11 +3533,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
+            # CRITICAL: Verify layer exists in PROJECT_LAYERS before access
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"exploring_custom_selection: Layer {self.current_layer.name()} not in PROJECT_LAYERS")
+                return [], ''
+
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-            expression = layer_props["exploring"]["custom_selection_expression"]
+            expression = layer_props["exploring"].get("custom_selection_expression", "")
             features = []
             
-            # Always get features for custom expression (whether field or complex)
+            # Check if expression is just a field name (no comparison operators)
+            # In this case, we should NOT retrieve features - just pass the expression
+            # This allows "FIELD-BASED GEOMETRIC FILTER MODE" to work correctly:
+            # - The source layer keeps its existing subset filter
+            # - Distant layers are filtered by intersection with filtered source geometries
+            is_simple_field = False
+            if expression:
+                qgs_expr = QgsExpression(expression)
+                is_simple_field = qgs_expr.isField() and not any(
+                    op in expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
+                )
+            
+            if is_simple_field:
+                # Field-only expression: return empty features list
+                # The filter task will use the existing subset string for source geometry
+                logger.debug(f"exploring_custom_selection: Field-only expression '{expression}' - returning empty features list")
+                return [], expression
+            
+            # Complex expression: get matching features
             features = self.exploring_features_changed([], False, expression)
 
             return features, expression
@@ -3231,8 +3721,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 features = [reloaded_feature]
                             else:
                                 features = [input]
-                        except Exception:
+                        except (RuntimeError, KeyError, AttributeError) as e:
                             features = [input]
+                            logger.debug(f"Error reloading feature: {e}")
                         logger.debug(f"Could not access primary key '{pk_name}' in feature. "
                                     f"Available fields: {[f.name() for f in input.fields()]}. Using feature directly.")
                 else:
@@ -3284,6 +3775,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def exploring_link_widgets(self, expression=None):
 
         if self.widgets_initialized and self.current_layer is not None:
+
+            # CRITICAL: Verify layer exists in PROJECT_LAYERS before access
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.debug(f"exploring_link_widgets: Layer {self.current_layer.name()} not in PROJECT_LAYERS")
+                return
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
@@ -4389,6 +4885,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
 
+            # CRITICAL: Verify current_layer and its presence in PROJECT_LAYERS
+            if self.current_layer is None or self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.debug("filtering_init_buffer_property: No valid current_layer or not in PROJECT_LAYERS")
+                return
+
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]   
 
             name = str("{}_buffer_property_definition".format(self.current_layer.id()))
@@ -4833,6 +5334,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if url and url.startswith("http"):
                     webbrowser.open(url)
 
+    def reload_plugin(self):
+        """
+        Reload the FilterMate plugin to apply layout changes.
+        
+        This closes and reopens the dockwidget, applying any pending configuration changes
+        including action bar position changes.
+        """
+        try:
+            from qgis.utils import iface, plugins
+            
+            logger.info("Reloading FilterMate plugin...")
+            
+            # Save configuration before reload
+            self.save_configuration_model()
+            
+            # Get the FilterMate plugin instance
+            if 'filter_mate' in plugins:
+                filter_mate_plugin = plugins['filter_mate']
+                
+                # Close the current dockwidget
+                self.close()
+                
+                # Reset the plugin state
+                filter_mate_plugin.pluginIsActive = False
+                filter_mate_plugin.app = None
+                
+                # Use QTimer to delay the reopen slightly
+                from qgis.PyQt.QtCore import QTimer
+                QTimer.singleShot(100, filter_mate_plugin.run)
+                
+                logger.info("FilterMate plugin reload initiated")
+            else:
+                logger.warning("FilterMate plugin not found in plugins dictionary")
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "Could not reload plugin automatically. Please close and reopen the plugin."
+                )
+        except Exception as e:
+            logger.error(f"Error reloading plugin: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                f"Error reloading plugin: {str(e)}"
+            )
+
 
     def setLayerVariableEvent(self, layer=None, properties=None):
         """
@@ -4963,6 +5510,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def launchTaskEvent(self, state, task_name):
 
         if self.widgets_initialized is True:
+
+            # CRITICAL: Verify current_layer and its presence in PROJECT_LAYERS
+            if self.current_layer is None or self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"launchTaskEvent: Cannot launch task {task_name} - no valid current_layer")
+                return
 
             self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
             self.launchingTask.emit(task_name)

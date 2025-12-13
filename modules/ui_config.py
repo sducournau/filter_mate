@@ -128,9 +128,9 @@ class UIConfig:
             
             # Widget keys dimensions (NEW)
             "widget_keys": {
-                "min_width": 40,
-                "max_width": 56,
-                "base_width": 56
+                "min_width": 38,
+                "max_width": 48,
+                "base_width": 42
             },
             
             # GroupBox dimensions (NEW)
@@ -235,6 +235,14 @@ class UIConfig:
                 "border_radius": 5
             },
             
+            # Key buttons (buttons in widget_*_keys containers)
+            "key_button": {
+                "min_size": 38,
+                "max_size": 42,
+                "icon_size": 28,
+                "spacing": 6
+            },
+            
             # Frame and container dimensions
             "frame": {
                 "min_height": 80,
@@ -298,9 +306,9 @@ class UIConfig:
             
             # Widget keys dimensions (NEW)
             "widget_keys": {
-                "min_width": 55,
-                "max_width": 110,
-                "base_width": 110
+                "min_width": 44,
+                "max_width": 56,
+                "base_width": 50
             },
             
             # GroupBox dimensions (NEW)

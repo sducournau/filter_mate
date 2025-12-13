@@ -95,7 +95,9 @@ from ..appUtils import (
     get_datasource_connexion_from_layer,
     get_primary_key_name,
     detect_layer_provider_type,
-    geometry_type_to_string
+    geometry_type_to_string,
+    sanitize_sql_identifier,
+    sanitize_filename
 )
 
 # Import prepared statements manager
@@ -104,6 +106,7 @@ from ..prepared_statements import create_prepared_statements
 # Import task utilities (Phase 3a extractions)
 from .task_utils import (
     spatialite_connect,
+    safe_spatialite_connect,
     sqlite_execute_with_retry,
     ensure_db_directory_exists,
     get_best_metric_crs,
@@ -224,6 +227,8 @@ class FilterEngineTask(QgsTask):
         """
         Safely connect to Spatialite database, ensuring directory exists.
         
+        Delegates to centralized safe_spatialite_connect() in task_utils.py.
+        
         Returns:
             sqlite3.Connection: Database connection
             
@@ -231,14 +236,7 @@ class FilterEngineTask(QgsTask):
             OSError: If directory cannot be created
             sqlite3.OperationalError: If database cannot be opened
         """
-        self._ensure_db_directory_exists()
-        
-        try:
-            conn = spatialite_connect(self.db_file_path)
-            return conn
-        except Exception as e:
-            logger.error(f"Failed to connect to Spatialite database at {self.db_file_path}: {e}")
-            raise
+        return safe_spatialite_connect(self.db_file_path)
 
     def _initialize_source_layer(self):
         """
@@ -320,7 +318,7 @@ class FilterEngineTask(QgsTask):
         Populates self.layers dictionary with layers grouped by provider,
         and updates layers_count.
         
-        For 'filter' action: respects has_layers_to_filter flag
+        For 'filter' action: respects has_layers_to_filter flag OR processes if layers exist
         For 'unfilter' and 'reset': processes all layers in the list regardless of flag
         (to clean up filters that were applied previously)
         """
@@ -328,10 +326,15 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  has_layers_to_filter: {self.task_parameters['filtering']['has_layers_to_filter']}")
         logger.info(f"  task['layers'] count: {len(self.task_parameters['task'].get('layers', []))}")
         
-        # For 'filter' action, respect the has_layers_to_filter flag
+        # For 'filter' action, process layers if:
+        # - has_layers_to_filter is True, OR
+        # - There are layers in the task parameters (user selected layers)
         # For 'unfilter' and 'reset', always process layers to clean up previous filters
-        if self.task_action == 'filter' and not self.task_parameters["filtering"]["has_layers_to_filter"]:
-            logger.warning("  ⚠️ has_layers_to_filter is False for 'filter' action - skipping distant layers organization")
+        has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
+        has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
+        
+        if self.task_action == 'filter' and not has_layers_to_filter and not has_layers_in_params:
+            logger.warning("  ⚠️ has_layers_to_filter is False AND no layers in params - skipping distant layers organization")
             return
         
         # Process all layers in the list
@@ -1121,7 +1124,10 @@ class FilterEngineTask(QgsTask):
 
 
             layer_name = self.source_layer.name()
-            self.current_materialized_view_name = self.source_layer.id().replace(layer_name, '').replace('-', '_')
+            # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
+            self.current_materialized_view_name = sanitize_sql_identifier(
+                self.source_layer.id().replace(layer_name, '')
+            )
                 
             self.postgresql_source_geom = '"mv_{current_materialized_view_name}_dump"."{source_geom}"'.format(
                                                                                                         source_geom=self.param_source_geom,
@@ -2799,10 +2805,16 @@ class FilterEngineTask(QgsTask):
         # ═══════════════════════════════════════════════════════════════
         
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
+        has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
+        has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
         logger.info(f"\n🔍 Checking if distant layers should be filtered...")
         logger.info(f"  has_geometric_predicates: {has_geom_predicates}")
+        logger.info(f"  has_layers_to_filter: {has_layers_to_filter}")
+        logger.info(f"  has_layers_in_params: {has_layers_in_params}")
+        logger.info(f"  self.layers_count: {self.layers_count}")
         
-        if has_geom_predicates:
+        # Process if geometric predicates enabled AND (has_layers_to_filter OR layers in params) AND layers were organized
+        if has_geom_predicates and (has_layers_to_filter or has_layers_in_params) and self.layers_count > 0:
             geom_predicates_list = self.task_parameters["filtering"]["geometric_predicates"]
             logger.info(f"  geometric_predicates list: {geom_predicates_list}")
             logger.info(f"  geometric_predicates count: {len(geom_predicates_list)}")
@@ -2850,7 +2862,13 @@ class FilterEngineTask(QgsTask):
                 logger.info("  → No geometric predicates configured")
                 logger.info("  → Only source layer filtered")
         else:
-            logger.info("  → Geometric filtering disabled")
+            # Log detailed reason why geometric filtering is skipped
+            if not has_geom_predicates:
+                logger.info("  → Geometric predicates not enabled (has_geometric_predicates=False)")
+            if not has_layers_to_filter and not has_layers_in_params:
+                logger.info("  → No layers to filter (has_layers_to_filter=False AND no layers in params)")
+            if self.layers_count == 0:
+                logger.info("  → No layers organized for filtering (layers_count=0)")
             logger.info("  → Only source layer filtered")
 
         # elif self.is_field_expression != None:
@@ -3178,7 +3196,9 @@ class FilterEngineTask(QgsTask):
             if not layer:
                 continue
             
-            output_path = os.path.join(output_folder, layer_name)
+            # Sanitize filename to handle special characters like em-dash (—)
+            safe_filename = sanitize_filename(layer_name)
+            output_path = os.path.join(output_folder, safe_filename)
             success = self._export_single_layer(
                 layer, output_path, projection, datatype, style_format, save_styles
             )
@@ -3237,7 +3257,9 @@ class FilterEngineTask(QgsTask):
                 continue
             
             # Build output path for this layer
-            output_path = os.path.join(output_folder, layer_name)
+            # Sanitize filename to handle special characters like em-dash (—)
+            safe_filename = sanitize_filename(layer_name)
+            output_path = os.path.join(output_folder, safe_filename)
             logger.info(f"Exporting layer '{layer_name}' to: {output_path}")
             logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
             
@@ -3309,13 +3331,16 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"Skipping layer '{layer_name}' (not found)")
                 continue
             
+            # Sanitize filename to handle special characters like em-dash (—)
+            safe_filename = sanitize_filename(layer_name)
+            
             # Create temporary directory for this layer's export
             import tempfile
-            temp_dir = tempfile.mkdtemp(prefix=f"fm_batch_{layer_name}_")
+            temp_dir = tempfile.mkdtemp(prefix=f"fm_batch_{safe_filename}_")
             
             try:
                 # Export layer to temporary directory
-                temp_output = os.path.join(temp_dir, layer_name)
+                temp_output = os.path.join(temp_dir, safe_filename)
                 logger.info(f"Exporting layer '{layer_name}' to temp: {temp_output}")
                 logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
                 
@@ -3330,7 +3355,7 @@ class FilterEngineTask(QgsTask):
                     return False
                 
                 # Create ZIP for this layer
-                zip_path = os.path.join(output_folder, f"{layer_name}.zip")
+                zip_path = os.path.join(output_folder, f"{safe_filename}.zip")
                 logger.info(f"Creating ZIP archive: {zip_path} from {temp_dir}")
                 
                 # List files in temp_dir for debugging
@@ -3741,7 +3766,8 @@ class FilterEngineTask(QgsTask):
             tuple: (last_subset_id, last_seq_order, layer_name, name)
         """
         layer_name = layer.name()
-        name = layer.id().replace(layer_name, '').replace('-', '_')
+        # Use sanitize_sql_identifier to handle all special chars (em-dash, etc.)
+        name = sanitize_sql_identifier(layer.id().replace(layer_name, ''))
         
         cur.execute(
             """SELECT * FROM fm_subset_history 
@@ -4303,9 +4329,8 @@ class FilterEngineTask(QgsTask):
 
         if self.exception is None:
             if result is None:
-                iface.messageBar().pushMessage(
-                    'Completed with no exception and no result (probably manually canceled by the user).',
-                    MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Warning)
+                # Task was likely canceled by user - log only, no message bar notification
+                logger.info('Task completed with no result (likely canceled by user)')
             else:
                 if message_category == 'FilterLayers':
 

@@ -1,5 +1,67 @@
 # Known Issues & Bug Fixes - FilterMate
 
+## Recently Fixed (v2.3.0-alpha - December 13, 2025)
+
+### Global Undo Not Restoring All Remote Layers
+**Status:** ✅ FIXED
+
+**Issue:**
+- When undoing a filter with multiple remote layers selected (intersect mode), only the source layer (e.g., "Drop Cluster") was unfiltered
+- Other remote layers that were filtered via intersect remained filtered after undo
+- The bug occurred because the pre-filter state was only captured on the FIRST filter operation
+
+**Impact:**
+- CRITICAL: Undo didn't work correctly for multi-layer filtering
+- Remote layers retained their filters even after undo
+- Inconsistent state between source and remote layers
+
+**Root Cause:**
+1. In `_initialize_filter_history()` (lines 727-728), global state was only pushed if `len(self.history_manager._global_states) == 0`
+2. This meant that after the first filter operation, the pre-filter state of newly selected remote layers was never captured
+3. When undoing, the system restored to the last captured state, which didn't include the new remote layers
+
+**Solution:**
+1. Modified `_initialize_filter_history()` to ALWAYS push global state before each filter operation (not just the first)
+2. Removed the condition `len(self.history_manager._global_states) == 0`
+3. Now captures the current state of ALL selected remote layers before each filter
+4. Added proper refresh of ALL restored layers (source + remotes) in `handle_undo()` and `handle_redo()`
+
+**Files Changed:**
+- `filter_mate_app.py`:
+  - `_initialize_filter_history()`: Always push pre-filter global state
+  - `handle_undo()`: Refresh all restored remote layers
+  - `handle_redo()`: Refresh all restored remote layers
+
+**Technical Details:**
+```python
+# BEFORE (incorrect) - only captured on first filter
+if remote_layers_info and len(self.history_manager._global_states) == 0:
+    self.history_manager.push_global_state(...)
+
+# AFTER (correct) - captures before EVERY filter
+if remote_layers_info:
+    self.history_manager.push_global_state(
+        source_layer_id=current_layer.id(),
+        source_expression=current_filter,
+        source_feature_count=current_count,
+        remote_layers=remote_layers_info,
+        description=f"Pre-filter state ({len(remote_layers_info) + 1} layers)",
+        metadata={"operation": "pre_filter", ...}
+    )
+```
+
+**Benefits:**
+- ✅ Undo correctly restores ALL remote layers
+- ✅ Works with any number of remote layers
+- ✅ Works even when remote layer selection changes between filters
+- ✅ All layers properly refresh after undo/redo
+
+**References:**
+- Fix date: December 13, 2025
+- Related: Undo/Redo system (v2.3.0-alpha)
+
+---
+
 ## Recently Added Features (v2.3.0-alpha - December 12, 2025)
 
 ### Global Undo/Redo Functionality
@@ -27,6 +89,100 @@
 
 **Tests:**
 - `tests/test_undo_redo.py`: Unit tests for undo/redo functionality
+
+---
+
+## Recently Fixed (v2.3.2-alpha - January 2025)
+
+### Special Characters in Layer Names (em-dash, spaces, unicode)
+**Status:** ✅ FIXED
+
+**Issue:**
+- Layer names containing em-dash (—, U+2014), en-dash (–, U+2013), or other special characters caused failures in:
+  - JSON template string formatting (unescaped quotes, backslashes)
+  - Export filenames with invalid characters for filesystem
+  - PostgreSQL materialized view names (SQL identifier rules)
+  - Foreign data wrapper server names
+- Example layer name: `mro_woluwe_03_pop_033 — Home Count`
+
+**Impact:**
+- CRITICAL: Exports failed on Windows filesystem for layers with em-dash
+- CRITICAL: PostgreSQL view creation failed with special characters
+- HIGH: JSON parsing errors for layer properties with special chars
+- Affected all layers with display names containing em-dash, quotes, backslashes
+
+**Root Cause:**
+1. JSON templates used `%s` string formatting without proper escaping
+2. Export filenames used raw `layer.name()` without sanitization
+3. PostgreSQL view names only replaced `-` (hyphen), not `—` (em-dash)
+4. `sanitize_sql_identifier()` function was missing
+
+**Solution:**
+1. Created 3 new utility functions in `modules/appUtils.py`:
+   - `sanitize_sql_identifier(name)`: Replaces non-alphanumeric chars with underscores for SQL identifiers
+   - `sanitize_filename(name)`: Makes filenames safe for all OS (Windows forbidden chars + em-dash)
+   - `escape_json_string(s)`: Escapes backslashes, quotes, control chars for JSON embedding
+
+2. Applied fixes across multiple files:
+   - `modules/tasks/layer_management_task.py`: Wrapped all JSON template values with `escape_json_string()`
+   - `modules/tasks/filter_task.py`: Used `sanitize_filename()` for all export paths
+   - `modules/tasks/filter_task.py`: Used `sanitize_sql_identifier()` for materialized view names
+   - `filter_mate_app.py`: Used `sanitize_sql_identifier()` for foreign data wrapper server names
+
+**Files Changed:**
+- `modules/appUtils.py`: Added 3 utility functions (~65 lines)
+- `modules/tasks/layer_management_task.py`: Updated imports, fixed JSON templates
+- `modules/tasks/filter_task.py`: Updated imports, fixed 5 locations
+- `filter_mate_app.py`: Updated imports, fixed foreign data wrapper
+
+**Technical Details:**
+```python
+# NEW utility functions
+def sanitize_sql_identifier(name: str) -> str:
+    """Make a string safe for use as SQL identifier (table/view/column name)."""
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    sanitized = sanitized.replace('—', '_').replace('–', '_')  # em-dash, en-dash
+    if sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    return sanitized
+
+def sanitize_filename(name: str) -> str:
+    """Make a string safe for use as filename on any OS."""
+    sanitized = name.replace('—', '-').replace('–', '-')  # em-dash → hyphen
+    forbidden = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+    for char in forbidden:
+        sanitized = sanitized.replace(char, '_')
+    return sanitized.strip()
+
+def escape_json_string(s: str) -> str:
+    """Escape a string for safe embedding in JSON."""
+    if not isinstance(s, str):
+        return str(s) if s is not None else ''
+    return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+```
+
+**Test Cases:**
+```python
+# Layer names that now work correctly:
+layer_names = [
+    "mro_woluwe_03_pop_033 — Home Count",   # em-dash
+    "layer – with – en-dash",                # en-dash
+    'layer "with" quotes',                   # quotes
+    "layer\\with\\backslash",                # backslash
+    "layer:with:colons",                     # Windows forbidden
+]
+```
+
+**Benefits:**
+- ✅ All layer names with special characters now work
+- ✅ Exports succeed on all platforms
+- ✅ PostgreSQL operations work with any layer name
+- ✅ JSON templates parse correctly
+- ✅ Consistent handling across all backends
+
+**References:**
+- Fix date: January 2025
+- Related: Unicode character handling
 
 ---
 

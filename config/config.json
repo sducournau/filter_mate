@@ -16,6 +16,18 @@
                     "compact_if_height_less_than": 1080
                 }
             },
+            "ACTION_BAR_POSITION": {
+                "choices": [
+                    "top",
+                    "bottom",
+                    "left",
+                    "right"
+                ],
+                "value": "left"
+            },
+            "_ACTION_BAR_POSITION_META": {
+                "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
+            },
             "PushButton": {
                 "STYLE": {
                     "QPushButton": {
@@ -91,7 +103,7 @@
                         "qgis",
                         "system"
                     ],
-                    "value": "config"
+                    "value": "qgis"
                 },
                 "THEMES": {
                     "default": {
@@ -197,7 +209,7 @@
                 "OUT_DropClusters_c220a9b4_b131_429b_8a4d_15c1b401ecd2"
             ],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:2154",
+            "PROJECTION_TO_EXPORT": "EPSG:31370",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,

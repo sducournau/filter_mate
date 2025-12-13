@@ -331,6 +331,12 @@
          </property>
          <item>
           <widget class="QScrollArea" name="scrollArea_frame_exploring">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
            <property name="cursor" stdset="0">
             <cursorShape>PointingHandCursor</cursorShape>
            </property>
@@ -348,8 +354,8 @@
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>418</width>
-              <height>302</height>
+              <width>422</width>
+              <height>337</height>
              </rect>
             </property>
             <layout class="QGridLayout" name="gridLayout_main_header">
@@ -365,23 +371,35 @@
                  </property>
                  <property name="minimumSize">
                   <size>
-                   <width>55</width>
+                   <width>38</width>
                    <height>0</height>
                   </size>
                  </property>
                  <property name="maximumSize">
                   <size>
-                   <width>110</width>
+                   <width>48</width>
                    <height>16777215</height>
                   </size>
                  </property>
                  <property name="baseSize">
                   <size>
-                   <width>110</width>
+                   <width>48</width>
                    <height>0</height>
                   </size>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_exploring_container">
+                  <property name="leftMargin">
+                   <number>4</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>8</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>4</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>8</number>
+                  </property>
                   <item>
                    <layout class="QVBoxLayout" name="verticalLayout_exploring_content">
                     <item>
@@ -394,8 +412,8 @@
                       </property>
                       <property name="minimumSize">
                        <size>
-                        <width>18</width>
-                        <height>18</height>
+                        <width>32</width>
+                        <height>32</height>
                        </size>
                       </property>
                       <property name="maximumSize">
@@ -466,8 +484,8 @@
                       </property>
                       <property name="minimumSize">
                        <size>
-                        <width>18</width>
-                        <height>18</height>
+                        <width>32</width>
+                        <height>32</height>
                        </size>
                       </property>
                       <property name="maximumSize">
@@ -538,8 +556,8 @@
                       </property>
                       <property name="minimumSize">
                        <size>
-                        <width>18</width>
-                        <height>18</height>
+                        <width>32</width>
+                        <height>32</height>
                        </size>
                       </property>
                       <property name="maximumSize">
@@ -622,8 +640,8 @@
                       </property>
                       <property name="minimumSize">
                        <size>
-                        <width>18</width>
-                        <height>18</height>
+                        <width>32</width>
+                        <height>32</height>
                        </size>
                       </property>
                       <property name="maximumSize">
@@ -706,8 +724,8 @@
                       </property>
                       <property name="minimumSize">
                        <size>
-                        <width>18</width>
-                        <height>18</height>
+                        <width>32</width>
+                        <height>32</height>
                        </size>
                       </property>
                       <property name="maximumSize">
@@ -790,8 +808,8 @@
                       </property>
                       <property name="minimumSize">
                        <size>
-                        <width>18</width>
-                        <height>18</height>
+                        <width>32</width>
+                        <height>32</height>
                        </size>
                       </property>
                       <property name="maximumSize">
@@ -997,7 +1015,7 @@
                    </property>
                    <property name="sizeHint" stdset="0">
                     <size>
-                     <width>20</width>
+                     <width>36</width>
                      <height>3</height>
                     </size>
                    </property>
@@ -1124,7 +1142,7 @@
                    </property>
                    <property name="sizeHint" stdset="0">
                     <size>
-                     <width>20</width>
+                     <width>36</width>
                      <height>3</height>
                     </size>
                    </property>
@@ -1357,8 +1375,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>416</width>
-                <height>295</height>
+                <width>420</width>
+                <height>305</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -1381,23 +1399,35 @@
                    </property>
                    <property name="minimumSize">
                     <size>
-                     <width>55</width>
+                     <width>38</width>
                      <height>0</height>
                     </size>
                    </property>
                    <property name="maximumSize">
                     <size>
-                     <width>110</width>
+                     <width>48</width>
                      <height>16777215</height>
                     </size>
                    </property>
                    <property name="baseSize">
                     <size>
-                     <width>110</width>
+                     <width>48</width>
                      <height>0</height>
                     </size>
                    </property>
                    <layout class="QVBoxLayout" name="verticalLayout_filtering_keys_container">
+                    <property name="leftMargin">
+                     <number>4</number>
+                    </property>
+                    <property name="topMargin">
+                     <number>8</number>
+                    </property>
+                    <property name="rightMargin">
+                     <number>4</number>
+                    </property>
+                    <property name="bottomMargin">
+                     <number>8</number>
+                    </property>
                     <item>
                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                       <item>
@@ -1410,13 +1440,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -1494,13 +1524,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -1581,13 +1611,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -1668,13 +1698,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -1957,13 +1987,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -2108,7 +2138,7 @@
                      </property>
                      <property name="iconSize">
                       <size>
-                       <width>20</width>
+                       <width>36</width>
                        <height>20</height>
                       </size>
                      </property>
@@ -2314,7 +2344,7 @@
                      </property>
                      <property name="iconSize">
                       <size>
-                       <width>20</width>
+                       <width>36</width>
                        <height>20</height>
                       </size>
                      </property>
@@ -2487,7 +2517,7 @@
                      </property>
                      <property name="iconSize">
                       <size>
-                       <width>20</width>
+                       <width>36</width>
                        <height>20</height>
                       </size>
                      </property>
@@ -2520,8 +2550,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>416</width>
-                <height>331</height>
+                <width>299</width>
+                <height>292</height>
                </rect>
               </property>
               <attribute name="icon">
@@ -2544,13 +2574,13 @@
                    </property>
                    <property name="minimumSize">
                     <size>
-                     <width>55</width>
+                     <width>38</width>
                      <height>0</height>
                     </size>
                    </property>
                    <property name="maximumSize">
                     <size>
-                     <width>110</width>
+                     <width>48</width>
                      <height>16777215</height>
                     </size>
                    </property>
@@ -2561,6 +2591,18 @@
                     </size>
                    </property>
                    <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
+                    <property name="leftMargin">
+                     <number>4</number>
+                    </property>
+                    <property name="topMargin">
+                     <number>8</number>
+                    </property>
+                    <property name="rightMargin">
+                     <number>4</number>
+                    </property>
+                    <property name="bottomMargin">
+                     <number>8</number>
+                    </property>
                     <item>
                      <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                       <item>
@@ -2573,13 +2615,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -2651,13 +2693,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -2741,13 +2783,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -2828,13 +2870,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -2915,13 +2957,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -3002,13 +3044,13 @@
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>18</width>
-                          <height>18</height>
+                          <width>32</width>
+                          <height>32</height>
                          </size>
                         </property>
                         <property name="maximumSize">
                          <size>
-                          <width>20</width>
+                          <width>36</width>
                           <height>25</height>
                          </size>
                         </property>
@@ -3379,8 +3421,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>416</width>
-                <height>155</height>
+                <width>166</width>
+                <height>31</height>
                </rect>
               </property>
               <attribute name="icon">

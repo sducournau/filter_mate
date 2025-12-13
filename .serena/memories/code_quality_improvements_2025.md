@@ -108,6 +108,29 @@ Removed all debug print statements from production code:
 - `modules/qt_json_view/datatypes.py`
 - `modules/qt_json_view/view.py`
 
+## Crash Prevention Audit Session (Latest - 2025)
+
+### Exception Handling Improvements
+Fixed 3 `except Exception:` patterns to use specific exception types with logging:
+1. **filter_mate_app.py** (~line 1779): `except (OSError, AttributeError, sqlite3.Error) as e:`
+2. **filter_mate_dockwidget.py** (~line 3234): `except (RuntimeError, KeyError, AttributeError) as e:`
+3. **layer_management_task.py** (~line 1062): `except (sqlite3.Error, OSError, ValueError) as e:`
+
+### PROJECT_LAYERS Safety Guards Added
+Added 4 critical guards against KeyError crashes when accessing PROJECT_LAYERS:
+1. **exploring_custom_selection()** - Check before layer property access
+2. **filtering_init_buffer_property()** - Check before buffer property access
+3. **exploring_link_widgets()** - Check before layers_to_explore access
+4. **launchTaskEvent()** - Check before exploring property access
+
+### Assert Statement Replacements
+Replaced 5 `assert isinstance()` statements with graceful type validation and early return:
+1. **filter_mate_app.py**: `save_variables_from_layer()`, `remove_variables_from_layer()`
+2. **filter_mate_dockwidget.py**: `filtering_populate_layers_chekableCombobox()`
+3. **layer_management_task.py**: `save_variables_from_layer()`, `remove_variables_from_layer()`
+
+All changes verified with `python -m py_compile` - no syntax errors.
+
 ## Code Reduction Statistics
 - `filter_task.py._ensure_db_directory_exists()`: 65 lines → 6 lines (delegate)
 - `layer_management_task.py._ensure_db_directory_exists()`: 65 lines → 6 lines (delegate)
@@ -120,3 +143,76 @@ Removed all debug print statements from production code:
 
 ## All Files Syntax Verified
 `python -m py_compile` passed for all modified files.
+
+---
+
+## Comprehensive Audit Session (January 2025)
+
+### Scope
+Full plugin audit covering:
+- Code quality verification
+- Backend filtering logic inspection
+- Bug detection and fixes
+- Code duplication resolution
+- Repository cleanup
+
+### Bug Fixed: Syntax Error in filter_task.py
+**Line 3348** - Extra closing parenthesis:
+```python
+# BEFORE (broken)
+logger.info(f"Creating ZIP archive: {zip_path} from {temp_output}"))
+# AFTER (fixed)
+logger.info(f"Creating ZIP archive: {zip_path} from {temp_output}")
+```
+
+### Code Duplication Resolved: safe_spatialite_connect()
+**Problem**: `_safe_spatialite_connect()` method duplicated in both `FilterEngineTask` and `LayersManagementEngineTask` (~18 identical lines each)
+
+**Solution**: Created centralized `safe_spatialite_connect()` function in `task_utils.py`:
+```python
+def safe_spatialite_connect(db_file_path, timeout=SQLITE_TIMEOUT):
+    """Safely connect to Spatialite database, ensuring directory exists."""
+    ensure_db_directory_exists(db_file_path)
+    try:
+        conn = spatialite_connect(db_file_path, timeout)
+        return conn
+    except Exception as e:
+        logger.error(f"Failed to connect to Spatialite database at {db_file_path}: {e}")
+        raise
+```
+
+**Files Updated**:
+- `modules/tasks/task_utils.py`: Added `safe_spatialite_connect()` function
+- `modules/tasks/__init__.py`: Added export for `safe_spatialite_connect`
+- `modules/tasks/filter_task.py`: Simplified `_safe_spatialite_connect()` to delegate
+- `modules/tasks/layer_management_task.py`: Simplified `_safe_spatialite_connect()` to delegate
+- `modules/appTasks.py`: Added backwards-compatible export
+
+### Audit Findings
+
+#### Backend Architecture ✅ VALIDATED
+All 3 backends follow consistent patterns:
+- `PostgreSQLGeometricFilter`: PostGIS with materialized views
+- `SpatialiteGeometricFilter`: SQLite/Spatialite with R-tree indexes
+- `OGRGeometricFilter`: QGIS Processing fallback
+
+All backends implement:
+- `apply_filter()` with filter preservation (AND by default)
+- `build_expression()` for SQL generation
+- Proper spatial index handling
+
+#### TODOs Reviewed ✅
+Only 2 TODOs found (both minor future enhancements):
+1. `filter_mate.py`: Menu configuration (planned feature)
+2. `filter_mate.py`: Dock location choice (user preference)
+
+#### Deprecated Code ✅ VERIFIED
+- `modules/appTasks.py`: Properly documented as backwards-compatibility shim
+- Deprecation warning emitted on import
+- Scheduled for removal in v3.0.0
+
+#### Print Statements ✅ CLEAN
+No debug print statements found in production code.
+
+### All Files Syntax Verified ✅
+`python3 -m py_compile` passed for all modified files.

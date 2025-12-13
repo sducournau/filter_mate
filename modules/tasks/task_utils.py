@@ -178,6 +178,35 @@ def ensure_db_directory_exists(db_file_path):
             raise OSError(error_msg) from e
 
 
+def safe_spatialite_connect(db_file_path, timeout=SQLITE_TIMEOUT):
+    """
+    Safely connect to Spatialite database, ensuring directory exists.
+    
+    This is a convenience function that combines ensure_db_directory_exists()
+    and spatialite_connect() for common use cases in FilterMate tasks.
+    
+    Args:
+        db_file_path: Path to the SQLite/Spatialite database file
+        timeout: Timeout in seconds for database lock (default SQLITE_TIMEOUT)
+    
+    Returns:
+        sqlite3.Connection: Database connection with Spatialite extension loaded
+        
+    Raises:
+        OSError: If directory cannot be created
+        ValueError: If db_file_path is invalid
+        sqlite3.OperationalError: If connection fails or Spatialite extension unavailable
+    """
+    ensure_db_directory_exists(db_file_path)
+    
+    try:
+        conn = spatialite_connect(db_file_path, timeout)
+        return conn
+    except Exception as e:
+        logger.error(f"Failed to connect to Spatialite database at {db_file_path}: {e}")
+        raise
+
+
 def sqlite_execute_with_retry(operation_func, operation_name="database operation", 
                                max_retries=SQLITE_MAX_RETRIES, initial_delay=SQLITE_RETRY_DELAY,
                                max_total_time=SQLITE_MAX_RETRY_TIME):

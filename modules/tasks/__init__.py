@@ -23,6 +23,7 @@ from .layer_management_task import LayersManagementEngineTask
 # Import from new modules
 from .task_utils import (
     spatialite_connect,
+    safe_spatialite_connect,
     sqlite_execute_with_retry,
     ensure_db_directory_exists,
     get_best_metric_crs,
@@ -46,6 +47,7 @@ __all__ = [
     
     # Utilities (from task_utils.py - Phase 3a - ✅)
     'spatialite_connect',
+    'safe_spatialite_connect',
     'sqlite_execute_with_retry',
     'ensure_db_directory_exists',
     'get_best_metric_crs',
