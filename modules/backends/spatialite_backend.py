@@ -423,10 +423,40 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         self.log_debug(f"Geometry expression: {geom_expr}")
         
+        # Get target layer SRID for comparison
+        target_srid = 4326  # Default fallback
+        if layer:
+            crs = layer.crs()
+            if crs and crs.isValid():
+                authid = crs.authid()
+                if ':' in authid:
+                    try:
+                        target_srid = int(authid.split(':')[1])
+                        self.log_debug(f"Target layer SRID: {target_srid} (from {authid})")
+                    except (ValueError, IndexError):
+                        self.log_warning(f"Could not parse SRID from {authid}, using default 4326")
+        
+        # Get source geometry SRID from task parameters (this is the CRS of the WKT)
+        # The WKT was created in source_layer_crs_authid in prepare_spatialite_source_geom
+        source_srid = target_srid  # Default: assume same CRS
+        if hasattr(self, 'task_params') and self.task_params:
+            source_crs_authid = self.task_params.get('infos', {}).get('layer_crs_authid')
+            if source_crs_authid and ':' in str(source_crs_authid):
+                try:
+                    source_srid = int(source_crs_authid.split(':')[1])
+                    self.log_debug(f"Source geometry SRID: {source_srid} (from {source_crs_authid})")
+                except (ValueError, IndexError):
+                    self.log_warning(f"Could not parse source SRID from {source_crs_authid}")
+        
+        # Check if CRS transformation is needed
+        needs_transform = source_srid != target_srid
+        if needs_transform:
+            self.log_info(f"CRS mismatch: Source SRID={source_srid}, Target SRID={target_srid}")
+            self.log_info(f"Will use ST_Transform to reproject source geometry")
+        
         # CRITICAL: Temp tables DON'T WORK with setSubsetString!
         # QGIS uses its own connection and cannot see TEMP tables from our connection.
         # Always use inline WKT for subset string filtering.
-        # Note: This may be slow for very large WKT, but it's the only way that works.
         use_temp_table = False  # FORCED: temp tables incompatible with setSubsetString
         
         if use_temp_table and layer:
@@ -436,21 +466,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             db_path = self._get_spatialite_db_path(layer)
             
             if db_path:
-                # Get SRID from layer
-                srid = 4326  # Default
-                if hasattr(layer, 'crs'):
-                    crs = layer.crs()
-                    if crs and crs.isValid():
-                        # Extract numeric SRID from authid (e.g., 'EPSG:3857' -> 3857)
-                        authid = crs.authid()
-                        if ':' in authid:
-                            try:
-                                srid = int(authid.split(':')[1])
-                            except (ValueError, IndexError):
-                                self.log_warning(f"Could not parse SRID from {authid}, using 4326")
-                
                 # Create temp table
-                temp_table, conn = self._create_temp_geometry_table(db_path, source_geom, srid)
+                temp_table, conn = self._create_temp_geometry_table(db_path, source_geom, source_srid)
                 
                 if temp_table and conn:
                     # Store for cleanup later
@@ -472,7 +489,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         else:
             use_temp_table = False
         
-        # Use inline WKT (required for setSubsetString compatibility)
+        # Use inline WKT with SRID (required for setSubsetString compatibility)
         if not use_temp_table:
             if wkt_length > 500000:
                 self.log_warning(
@@ -485,10 +502,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     "Performance may be reduced for datasets >10k features."
                 )
             
-            # IMPORTANT: Single quotes in WKT must be escaped for SQL
-            # This was already done in prepare_spatialite_source_geom()
-            source_geom_expr = f"GeomFromText('{source_geom}')"
-            self.log_info(f"Using inline WKT method (required for QGIS subset strings)")
+            # Build source geometry expression with proper SRID
+            # Use source SRID for GeomFromText, then transform to target if needed
+            if needs_transform:
+                # Transform source geometry to target CRS
+                source_geom_expr = f"ST_Transform(GeomFromText('{source_geom}', {source_srid}), {target_srid})"
+                self.log_info(f"Using ST_Transform: SRID {source_srid} → {target_srid}")
+            else:
+                source_geom_expr = f"GeomFromText('{source_geom}', {target_srid})"
+                self.log_debug(f"Using SRID {target_srid} (same as target)")
         
         # NOTE: Buffer is already applied in prepare_spatialite_source_geom()
         if buffer_expression:
@@ -590,65 +612,39 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
             if old_subset:
                 if not combine_operator:
-                    # Si aucun opérateur n'est spécifié, utiliser AND par défaut
                     combine_operator = 'AND'
-                    self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
+                    self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
+                self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
+                self.log_info(f"  → Nouveau filtre: '{expression[:80]}...' (longueur: {len(expression)})")
                 final_expression = f"({old_subset}) {combine_operator} ({expression})"
-                self.log_debug(f"Combining with existing subset using {combine_operator}")
+                self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
             else:
                 final_expression = expression
             
-            self.log_info(f"Applying Spatialite filter to {layer.name()}")
-            self.log_info(f"Expression length: {len(final_expression)} chars")
-            
-            # Log full expression for debugging (first 500 chars)
-            if len(final_expression) <= 500:
-                self.log_debug(f"Full expression: {final_expression}")
-            else:
-                self.log_debug(f"Expression start: {final_expression[:250]}...")
-                self.log_debug(f"Expression end: ...{final_expression[-250:]}")
+            self.log_debug(f"Applying Spatialite filter to {layer.name()}")
+            self.log_debug(f"Expression length: {len(final_expression)} chars")
             
             # Apply the filter (thread-safe)
-            self.log_debug("Calling safe_set_subset_string()...")
             result = safe_set_subset_string(layer, final_expression)
             
             elapsed = time.time() - start_time
             
             if result:
                 feature_count = layer.featureCount()
-                self.log_info(f"✓ Filter applied successfully in {elapsed:.2f}s. {feature_count} features match.")
+                self.log_info(f"✓ {layer.name()}: {feature_count} features ({elapsed:.2f}s)")
                 
                 if feature_count == 0:
-                    self.log_warning("Filter resulted in 0 features - check if expression is correct")
-                    self.log_debug("Possible causes:")
-                    self.log_debug("  - No features actually match the spatial criteria")
-                    self.log_debug("  - Wrong CRS (source and target geometries in different projections)")
-                    self.log_debug("  - Invalid WKT geometry")
+                    self.log_warning("Filter resulted in 0 features - check CRS or expression")
                 
                 if elapsed > 5.0:
-                    self.log_warning(f"Slow filter operation ({elapsed:.2f}s) - consider using PostgreSQL for better performance")
-                
-                # Warn if dataset is large
-                if feature_count > 50000:
-                    self.log_warning(
-                        f"Large dataset ({feature_count} features) with Spatialite. "
-                        "Consider using PostgreSQL for better performance."
-                    )
+                    self.log_warning(f"Slow operation - consider PostgreSQL for large datasets")
             else:
-                self.log_error(f"✗ setSubsetString() returned False - filter expression may be invalid")
-                self.log_error("Common issues:")
-                self.log_error("  1. Spatial functions not available (mod_spatialite not loaded by QGIS)")
-                self.log_error("  2. Invalid WKT geometry syntax")
-                self.log_error("  3. Wrong geometry column name")
-                self.log_error("  4. SQL syntax error")
-                self.log_error("  5. Referencing non-existent table (e.g., temp tables)")
+                self.log_error(f"✗ Filter failed for {layer.name()}")
+                self.log_error("Check: spatial functions available, geometry column, SQL syntax")
                 
                 # Check if expression references a temp table (common mistake)
                 if '_fm_temp_geom_' in final_expression:
-                    self.log_error("⚠️ CRITICAL ERROR: Expression references temp table!")
-                    self.log_error("   Temp tables DON'T WORK with QGIS setSubsetString()!")
-                    self.log_error("   QGIS uses its own connection and cannot see our temp tables.")
-                    self.log_error("   This should have been fixed - please report this bug.")
+                    self.log_error("⚠️ Expression references temp table - this doesn't work with QGIS!")
                 
                 # Try a simple test to see if spatial functions work
                 try:

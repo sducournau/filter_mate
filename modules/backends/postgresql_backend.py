@@ -4,19 +4,20 @@ PostgreSQL Backend for FilterMate
 
 Optimized backend for PostgreSQL/PostGIS databases.
 Uses native PostGIS spatial functions and SQL queries for maximum performance.
+
+Performance Strategy:
+- Small datasets (< 10k features): Direct setSubsetString for simplicity
+- Large datasets (≥ 10k features): Materialized views with GIST spatial indexes
+- Custom buffers: Always use materialized views for geometry operations
 """
 
 from typing import Dict, Optional
-from qgis.core import QgsVectorLayer
+from qgis.core import QgsVectorLayer, QgsDataSourceUri
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
-from ..appUtils import safe_set_subset_string
-
-try:
-    import psycopg2
-    POSTGRESQL_AVAILABLE = True
-except ImportError:
-    POSTGRESQL_AVAILABLE = False
+from ..appUtils import safe_set_subset_string, get_datasource_connexion_from_layer, POSTGRESQL_AVAILABLE
+import time
+import uuid
 
 logger = get_tasks_logger()
 
@@ -31,6 +32,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     - SQL-based filtering for maximum performance
     """
     
+    # Performance thresholds
+    MATERIALIZED_VIEW_THRESHOLD = 10000  # Features count threshold for MV strategy
+    LARGE_DATASET_THRESHOLD = 100000     # Features count for additional logging
+    
     def __init__(self, task_params: Dict):
         """
         Initialize PostgreSQL backend.
@@ -40,6 +45,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         super().__init__(task_params)
         self.logger = logger
+        self.mv_schema = "public"  # Default schema for materialized views
+        self.mv_prefix = "filtermate_mv_"  # Prefix for MV names
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -135,10 +142,6 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         return ""
     
-    # Threshold for logging performance recommendations
-    SMALL_DATASET_THRESHOLD = 10000
-    LARGE_DATASET_THRESHOLD = 100000
-    
     def apply_filter(
         self,
         layer: QgsVectorLayer,
@@ -147,12 +150,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         combine_operator: Optional[str] = None
     ) -> bool:
         """
-        Apply filter to PostgreSQL layer using setSubsetString.
+        Apply filter to PostgreSQL layer.
         
-        Adapts messaging based on dataset size:
-        - Small datasets (< 10k): Direct filter is optimal
-        - Medium datasets (10k-100k): Direct filter works well
-        - Large datasets (≥ 100k): Recommends materialized views if slow
+        Strategy adapts based on dataset size:
+        - Small datasets (< 10k features): Direct setSubsetString for simplicity
+        - Large datasets (≥ 10k features): Materialized views with spatial indexes
         
         Args:
             layer: PostgreSQL layer to filter
@@ -163,7 +165,6 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         Returns:
             True if filter applied successfully
         """
-        import time
         start_time = time.time()
         
         try:
@@ -171,70 +172,256 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 self.log_warning("Empty expression, skipping filter")
                 return False
             
-            # Get feature count for strategy logging
+            # Get feature count to determine strategy
             feature_count = layer.featureCount()
             
-            # Log filtering strategy based on dataset size
-            if feature_count < self.SMALL_DATASET_THRESHOLD:
-                self.log_debug(
-                    f"Small dataset ({feature_count:,} features). "
-                    f"Using direct setSubsetString for simplicity."
-                )
-            elif feature_count < self.LARGE_DATASET_THRESHOLD:
-                self.log_info(
-                    f"Medium dataset ({feature_count:,} features). "
-                    f"Using direct setSubsetString (consider materialized views for complex spatial queries)."
-                )
-            else:
-                self.log_info(
-                    f"Large dataset ({feature_count:,} features). "
-                    f"Using direct setSubsetString. For repeated queries, materialized views may offer better performance."
-                )
-            
             # Combine with existing filter if specified
-            # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
             if old_subset:
                 if not combine_operator:
-                    # Si aucun opérateur n'est spécifié, utiliser AND par défaut
                     combine_operator = 'AND'
-                    self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
+                    self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
+                self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
+                self.log_info(f"  → Nouveau filtre: '{expression[:80]}...' (longueur: {len(expression)})")
                 final_expression = f"({old_subset}) {combine_operator} ({expression})"
+                self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
             else:
                 final_expression = expression
             
-            self.log_info(f"Applying filter to {layer.name()}")
-            self.log_debug(f"Expression: {final_expression[:200]}...")
+            # Decide strategy based on dataset size
+            if feature_count >= self.MATERIALIZED_VIEW_THRESHOLD:
+                # Large dataset - use materialized views
+                if feature_count >= self.LARGE_DATASET_THRESHOLD:
+                    self.log_info(
+                        f"PostgreSQL: Very large dataset ({feature_count:,} features). "
+                        f"Using materialized views with spatial index for optimal performance."
+                    )
+                else:
+                    self.log_info(
+                        f"PostgreSQL: Large dataset ({feature_count:,} features ≥ {self.MATERIALIZED_VIEW_THRESHOLD:,}). "
+                        f"Using materialized views for better performance."
+                    )
+                
+                return self._apply_with_materialized_view(layer, final_expression)
+            else:
+                # Small dataset - use direct setSubsetString
+                self.log_info(
+                    f"PostgreSQL: Small dataset ({feature_count:,} features < {self.MATERIALIZED_VIEW_THRESHOLD:,}). "
+                    f"Using direct setSubsetString for simplicity."
+                )
+                
+                return self._apply_direct(layer, final_expression)
+            
+        except Exception as e:
+            self.log_error(f"Error applying filter: {str(e)}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            return False
+    
+    def _apply_direct(self, layer: QgsVectorLayer, expression: str) -> bool:
+        """
+        Apply filter directly using setSubsetString (for small datasets).
+        
+        Simpler and faster for small datasets because it:
+        - Avoids creating/dropping materialized views
+        - Avoids creating spatial indexes
+        - Uses PostgreSQL's query optimizer directly
+        
+        Args:
+            layer: PostgreSQL layer to filter
+            expression: PostGIS SQL expression
+        
+        Returns:
+            True if successful
+        """
+        start_time = time.time()
+        
+        try:
+            self.log_debug(f"Applying direct filter to {layer.name()}")
+            self.log_debug(f"Expression: {expression[:200]}...")
             
             # Apply the filter (thread-safe)
-            result = safe_set_subset_string(layer, final_expression)
+            result = safe_set_subset_string(layer, expression)
             
             elapsed = time.time() - start_time
             
             if result:
                 new_feature_count = layer.featureCount()
-                self.log_info(f"Filter applied successfully in {elapsed:.2f}s. {new_feature_count} features match.")
-                
-                # Performance recommendations based on elapsed time and dataset size
-                if elapsed > 5.0:
-                    if feature_count >= self.LARGE_DATASET_THRESHOLD:
-                        self.log_warning(
-                            f"Slow filter operation ({elapsed:.2f}s) on large dataset. "
-                            f"Consider: 1) Adding spatial indexes (CREATE INDEX ... USING GIST), "
-                            f"2) Using materialized views for repeated queries, "
-                            f"3) Simplifying the filter expression."
-                        )
-                    else:
-                        self.log_warning(
-                            f"Slow filter operation ({elapsed:.2f}s) - "
-                            f"consider optimizing query or adding spatial indexes"
-                        )
+                self.log_info(
+                    f"✓ Direct filter applied in {elapsed:.3f}s. "
+                    f"{new_feature_count} features match."
+                )
             else:
-                self.log_error(f"Failed to apply filter to {layer.name()}")
+                self.log_error(f"Failed to apply direct filter to {layer.name()}")
             
             return result
             
         except Exception as e:
-            self.log_error(f"Error applying filter: {str(e)}")
+            self.log_error(f"Error applying direct filter: {str(e)}")
+            return False
+    
+    def _apply_with_materialized_view(self, layer: QgsVectorLayer, expression: str) -> bool:
+        """
+        Apply filter using materialized views (for large datasets).
+        
+        Provides optimal performance for large datasets by:
+        - Creating indexed materialized views on the server
+        - Using GIST spatial indexes for fast spatial queries
+        - Clustering data for sequential read optimization
+        
+        Args:
+            layer: PostgreSQL layer to filter
+            expression: PostGIS SQL expression
+        
+        Returns:
+            True if successful
+        """
+        start_time = time.time()
+        
+        try:
+            # Get database connection
+            conn, source_uri = get_datasource_connexion_from_layer(layer)
+            if not conn:
+                self.log_error("Cannot get PostgreSQL connection, falling back to direct method")
+                return self._apply_direct(layer, expression)
+            
+            cursor = conn.cursor()
+            
+            # Get layer properties
+            schema = source_uri.schema() or "public"
+            table = source_uri.table()
+            geom_column = source_uri.geometryColumn()
+            key_column = source_uri.keyColumn()
+            
+            if not key_column:
+                # Try to find primary key
+                from ..appUtils import get_primary_key_name
+                key_column = get_primary_key_name(layer)
+            
+            if not key_column:
+                self.log_warning("Cannot determine primary key, falling back to direct method")
+                conn.close()
+                return self._apply_direct(layer, expression)
+            
+            # Generate unique MV name
+            mv_name = f"{self.mv_prefix}{uuid.uuid4().hex[:8]}"
+            full_mv_name = f'"{schema}"."{mv_name}"'
+            
+            self.log_debug(f"Creating materialized view: {full_mv_name}")
+            
+            # Build SQL commands
+            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS {full_mv_name} CASCADE;'
+            
+            # Build CREATE MATERIALIZED VIEW with WHERE clause
+            sql_create = f'''
+                CREATE MATERIALIZED VIEW {full_mv_name} AS
+                SELECT * FROM "{schema}"."{table}"
+                WHERE {expression}
+                WITH DATA;
+            '''
+            
+            # Create spatial index
+            index_name = f"{mv_name}_gist_idx"
+            sql_create_index = f'CREATE INDEX "{index_name}" ON {full_mv_name} USING GIST ("{geom_column}");'
+            
+            # Cluster on spatial index for better sequential read performance
+            sql_cluster = f'CLUSTER {full_mv_name} USING "{index_name}";'
+            
+            # Analyze for query optimizer
+            sql_analyze = f'ANALYZE {full_mv_name};'
+            
+            # Execute commands
+            commands = [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze]
+            
+            for i, cmd in enumerate(commands):
+                self.log_debug(f"Executing PostgreSQL command {i+1}/{len(commands)}")
+                cursor.execute(cmd)
+                conn.commit()
+            
+            # Update layer to use materialized view
+            layer_subset = f'"{key_column}" IN (SELECT "{key_column}" FROM {full_mv_name})'
+            self.log_debug(f"Setting subset string: {layer_subset[:200]}...")
+            
+            result = safe_set_subset_string(layer, layer_subset)
+            
+            cursor.close()
+            conn.close()
+            
+            elapsed = time.time() - start_time
+            
+            if result:
+                new_feature_count = layer.featureCount()
+                self.log_info(
+                    f"✓ Materialized view created and filter applied in {elapsed:.2f}s. "
+                    f"{new_feature_count} features match."
+                )
+            else:
+                self.log_error(f"Failed to set subset string on layer")
+            
+            return result
+            
+        except Exception as e:
+            self.log_error(f"Error creating materialized view: {str(e)}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            
+            # Cleanup and fallback
+            try:
+                if 'cursor' in locals():
+                    cursor.close()
+                if 'conn' in locals():
+                    conn.close()
+            except:
+                pass
+            
+            self.log_info("Falling back to direct filter method")
+            return self._apply_direct(layer, expression)
+    
+    def cleanup_materialized_views(self, layer: QgsVectorLayer) -> bool:
+        """
+        Cleanup materialized views created by this backend.
+        
+        Args:
+            layer: PostgreSQL layer
+        
+        Returns:
+            True if cleanup successful
+        """
+        try:
+            conn, source_uri = get_datasource_connexion_from_layer(layer)
+            if not conn:
+                self.log_warning("Cannot get PostgreSQL connection for cleanup")
+                return False
+            
+            cursor = conn.cursor()
+            schema = source_uri.schema() or "public"
+            
+            # Find all FilterMate materialized views
+            cursor.execute(f"""
+                SELECT matviewname FROM pg_matviews 
+                WHERE schemaname = '{schema}' 
+                AND matviewname LIKE '{self.mv_prefix}%'
+            """)
+            
+            views = cursor.fetchall()
+            
+            for (view_name,) in views:
+                try:
+                    cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
+                    conn.commit()
+                    self.log_debug(f"Dropped materialized view: {view_name}")
+                except Exception as e:
+                    self.log_warning(f"Error dropping view {view_name}: {e}")
+            
+            cursor.close()
+            conn.close()
+            
+            if views:
+                self.log_info(f"Cleaned up {len(views)} materialized view(s)")
+            
+            return True
+            
+        except Exception as e:
+            self.log_error(f"Error during cleanup: {str(e)}")
             return False
     
     def get_backend_name(self) -> str:

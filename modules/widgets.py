@@ -1275,7 +1275,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
         for i in range(self.count()):
             item = self.model().item(i)
             data = item.data(Qt.UserRole)
-            if data:
+            if data and isinstance(data, dict) and "layer_geometry_type" in data:
                 if data["layer_geometry_type"] == geometry_type:
                     items_to_be_checked.append(i)
         self.setItemsCheckState(items_to_be_checked, state)

@@ -151,15 +151,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Preparing OGR processing for {layer_props.get('layer_name', 'unknown')}")
         
         # Store source_geom for later use in apply_filter
+        # NOTE: For OGR, source_geom is already a QgsVectorLayer with buffer applied
+        # in prepare_ogr_source_geom(), so we don't need to apply buffer again
         self.source_geom = source_geom
         
         # For OGR, we'll use QGIS processing, so we just return predicate names
         # The actual filtering will be done in apply_filter()
+        # NOTE: buffer_value is NOT passed here because it's already applied to source_geom
         import json
         params = {
             'predicates': list(predicates.keys()),
-            'buffer_value': buffer_value,
-            'buffer_expression': buffer_expression
+            # Buffer is already applied in prepare_ogr_source_geom - don't apply again
+            'buffer_value': None,
+            'buffer_expression': None
         }
         return json.dumps(params)
     
@@ -194,7 +198,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             predicates = params.get('predicates', [])
             buffer_value = params.get('buffer_value')
             
-            self.log_info(f"Applying OGR filter to {layer.name()} using QGIS processing")
+            self.log_debug(f"Applying OGR filter to {layer.name()} using QGIS processing")
             
             # Get source layer - should be set by build_expression
             source_layer = getattr(self, 'source_geom', None)
@@ -208,31 +212,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # Ensure spatial index exists (performance boost)
             self._ensure_spatial_index(layer)
             
-            if feature_count > 100000:
-                self.log_warning(
-                    f"Very large dataset ({feature_count} features) with OGR provider. "
-                    "Performance may be reduced. Consider using PostgreSQL for better performance."
-                )
-            elif feature_count >= 10000:
-                self.log_info(
-                    f"Medium-large dataset ({feature_count} features). "
-                    f"Using optimized filtering method with spatial index."
-                )
-            else:
-                self.log_info(
-                    f"OGR backend uses QGIS processing algorithms. "
-                    f"Performance acceptable for {feature_count} features."
-                )
+            # Only log for large datasets
+            if feature_count >= 100000:
+                self.log_info(f"Large dataset ({feature_count:,} features)")
             
             # Decide which method to use based on dataset size
             if feature_count >= 10000:
-                # Use optimized method for large datasets
                 return self._apply_filter_large(
                     layer, source_layer, predicates, buffer_value,
                     old_subset, combine_operator
                 )
             else:
-                # Use standard method for smaller datasets
                 return self._apply_filter_standard(
                     layer, source_layer, predicates, buffer_value,
                     old_subset, combine_operator
@@ -247,7 +237,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
     def _apply_buffer(self, source_layer, buffer_value):
         """Apply buffer to source layer if specified"""
         if buffer_value and buffer_value > 0:
-            self.log_info(f"Applying buffer of {buffer_value} to source layer")
+            self.log_debug(f"Applying buffer of {buffer_value} to source layer")
             try:
                 # Ensure buffer_value is numeric
                 buffer_dist = float(buffer_value)
@@ -446,27 +436,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     
                     # Quote string values, keep numeric values unquoted
                     if field_type == QMetaType.Type.QString:
-                        # String field - quote values and escape single quotes
                         id_list = ','.join(f"'{str(val).replace(chr(39), chr(39)+chr(39))}'" for val in selected_values)
                     else:
-                        # Numeric field - no quotes needed
                         id_list = ','.join(str(val) for val in selected_values)
                     
-                    # Use escape function for field name
                     escaped_pk = escape_ogr_identifier(pk_field)
                     new_subset_expression = f'{escaped_pk} IN ({id_list})'
                 
-                self.log_debug(f"Generated subset expression using key '{pk_field}': {new_subset_expression[:100]}...")
+                self.log_debug(f"Generated subset expression using key '{pk_field}'")
                 
                 # Combine with old subset if needed
-                # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
                 if old_subset:
                     if not combine_operator:
-                        # Si aucun opérateur n'est spécifié, utiliser AND par défaut
                         combine_operator = 'AND'
-                        self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
-                    self.log_info(f"Combining with existing filter using: {combine_operator}")
+                        self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
+                    self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
+                    self.log_info(f"  → Nouveau filtre: '{new_subset_expression[:80]}...'")
                     final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
+                    self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
                 else:
                     final_expression = new_subset_expression
                 
@@ -474,34 +461,20 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 result = safe_set_subset_string(layer, final_expression)
                 if result:
                     final_count = layer.featureCount()
-                    self.log_info(f"✓ Subset filter applied successfully!")
-                    self.log_info(f"  - Expression: {final_expression[:100]}...")
-                    self.log_info(f"  - Features after filter: {final_count:,}")
-                    self.log_info(f"  - Features selected: {selected_count:,}")
+                    self.log_info(f"✓ {layer.name()}: {final_count} features")
                     layer.removeSelection()
                     
-                    # Verify filter was actually applied
                     if final_count == 0 and selected_count > 0:
-                        self.log_warning(
-                            f"Filter applied but 0 features match! This may indicate:\n"
-                            f"  1. Primary key field '{pk_field}' may be incorrect\n"
-                            f"  2. Subset string syntax not supported by this OGR provider\n"
-                            f"  3. Feature IDs don't match primary key values"
-                        )
+                        self.log_warning(f"Filter returned 0 features - check primary key '{pk_field}'")
                     
                     return True
                 else:
-                    self.log_error("Failed to apply subset filter - setSubsetString returned False")
-                    self.log_error(f"  - Provider: {layer.providerType()}")
-                    self.log_error(f"  - Data source: {layer.source()[:100]}")
-                    self.log_error(f"  - Expression: {final_expression[:200]}")
+                    self.log_error(f"✗ Filter failed for {layer.name()}")
                     layer.removeSelection()
                     return False
             else:
-                self.log_warning("No features selected by geometric filter")
-                # Apply empty filter - no features should match
-                # Use universal expression that works with all OGR providers
-                safe_set_subset_string(layer, '1 = 0')  # Always false, no field dependency
+                self.log_debug("No features selected by geometric filter")
+                safe_set_subset_string(layer, '1 = 0')
                 return True
                 
         except Exception as select_error:
@@ -538,15 +511,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # Check if temp field already exists
             field_names = [field.name() for field in layer.fields()]
             if temp_field in field_names:
-                self.log_debug(f"Temp field '{temp_field}' already exists, will reuse")
+                self.log_debug(f"Temp field '{temp_field}' already exists")
             else:
-                # Add field
                 from qgis.core import QgsField
                 from qgis.PyQt.QtCore import QMetaType
                 
                 layer.dataProvider().addAttributes([QgsField(temp_field, QMetaType.Type.Int)])
                 layer.updateFields()
-                self.log_debug(f"Added temp field '{temp_field}'")
             
             # Initialize all to 0 (no match)
             field_idx = layer.fields().indexFromName(temp_field)
@@ -554,10 +525,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
             for feature in layer.getFeatures():
                 layer.changeAttributeValue(feature.id(), field_idx, 0)
             layer.commitChanges()
-            self.log_debug("Initialized temp field to 0")
             
             # Apply selectbylocation (benefits from spatial index)
-            self.log_info(f"Selecting features using spatial index and predicates: {predicate_codes}")
+            self.log_debug(f"Selecting features with predicates: {predicate_codes}")
             select_result = processing.run("native:selectbylocation", {
                 'INPUT': layer,
                 'PREDICATE': predicate_codes,
@@ -566,7 +536,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
             })
             
             selected_count = layer.selectedFeatureCount()
-            self.log_info(f"Selection complete: {selected_count} features selected")
             
             if selected_count > 0:
                 # Mark selected features in temp field
@@ -574,7 +543,6 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 for feature in layer.selectedFeatures():
                     layer.changeAttributeValue(feature.id(), field_idx, 1)
                 layer.commitChanges()
-                self.log_debug("Marked selected features in temp field")
                 
                 # Clear selection
                 layer.removeSelection()
@@ -584,14 +552,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 new_subset_expression = f'{escaped_temp} = 1'
                 
                 # Combine with old subset if needed
-                # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
                 if old_subset:
                     if not combine_operator:
-                        # Si aucun opérateur n'est spécifié, utiliser AND par défaut
                         combine_operator = 'AND'
-                        self.log_info(f"Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
-                    self.log_info(f"Combining with existing filter using: {combine_operator}")
+                        self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
+                    self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
                     final_expression = f"({old_subset}) {combine_operator} ({new_subset_expression})"
+                    self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
                 else:
                     final_expression = new_subset_expression
                 
@@ -599,23 +566,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 result = safe_set_subset_string(layer, final_expression)
                 if result:
                     final_count = layer.featureCount()
-                    self.log_info(f"✓ Optimized filter applied: {final_count} features match")
+                    self.log_info(f"✓ {layer.name()}: {final_count} features")
                     return True
                 else:
-                    self.log_error("Failed to apply subset filter")
+                    self.log_error(f"✗ Filter failed for {layer.name()}")
                     return False
             else:
-                self.log_warning("No features selected by geometric filter")
-                # Use universal expression that works with all OGR providers
-                safe_set_subset_string(layer, '1 = 0')  # Always false, no field dependency
+                self.log_debug("No features selected by geometric filter")
+                safe_set_subset_string(layer, '1 = 0')
                 return True
                 
         except Exception as e:
             self.log_error(f"Large dataset filtering failed: {str(e)}")
-            import traceback
-            self.log_debug(f"Traceback: {traceback.format_exc()}")
             # Fallback to standard method
-            self.log_info("Falling back to standard filtering method")
             return self._apply_filter_standard(
                 layer, source_layer, predicates, buffer_value,
                 old_subset, combine_operator

@@ -2530,7 +2530,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # Only add vector layers (skip raster layers)
                         layer_obj = self.PROJECT.mapLayer(layer_id)
                         if key != layer.id() and layer_obj and isinstance(layer_obj, QgsVectorLayer):
-                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), key)
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             if len(layer_props["filtering"]["layers_to_filter"]) > 0:
                                 if layer_id in list(layer_id for layer_id in list(layer_props["filtering"]["layers_to_filter"])):
@@ -2560,7 +2560,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # Only add vector layers (skip raster layers)
                         layer_obj = self.PROJECT.mapLayer(layer_id)
                         if key != layer.id() and layer_obj and isinstance(layer_obj, QgsVectorLayer):
-                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), key)
+                            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             item.setCheckState(Qt.Unchecked)
                             i += 1    
@@ -4070,7 +4070,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for i in range(self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].count()):
                 if self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemCheckState(i) == Qt.Checked:
                     data = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemData(i, Qt.UserRole)
-                    if isinstance(data, str):
+                    if isinstance(data, dict) and "layer_id" in data:
+                        checked_list_data.append(data["layer_id"])
+                    elif isinstance(data, str):
+                        # Backward compatibility with old format
                         checked_list_data.append(data)
             return checked_list_data
 

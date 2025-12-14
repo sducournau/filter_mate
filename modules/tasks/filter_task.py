@@ -735,17 +735,27 @@ class FilterEngineTask(QgsTask):
         geom_predicates_list = self.task_parameters["filtering"].get("geometric_predicates", [])
         has_geometric_filtering = has_geom_predicates and len(geom_predicates_list) > 0
         
-        # OPTIMIZATION: If expression is a simple field name AND geometric filtering is enabled,
-        # do NOT filter the source layer - keep existing subset and use selected features
-        # for geometric filtering only
+        # ================================================================
+        # MODE FIELD-BASED: Custom Selection avec champ simple + prédicats géométriques
+        # ================================================================
+        # COMPORTEMENT ATTENDU:
+        #   1. COUCHE SOURCE: Garder le subset existant (PAS de modification)
+        #   2. COUCHES DISTANTES: Appliquer filtre géométrique en intersection
+        #                         avec les géométries de la couche source déjà filtrée
+        #
+        # EXEMPLE:
+        #   - Couche source avec subset: "homecount > 5" (affiche 100 features)
+        #   - Custom selection active avec champ: "drop_ID"
+        #   - Prédicats géométriques: "intersects" vers couche distante
+        #   → Résultat: Source garde "homecount > 5", distant filtré par intersection avec ces 100 features
+        # ================================================================
         if is_simple_field and has_geometric_filtering:
             logger.info("=" * 60)
             logger.info("🔄 FIELD-BASED GEOMETRIC FILTER MODE")
             logger.info("=" * 60)
             logger.info(f"  Expression is simple field: '{task_expression}'")
             logger.info(f"  Geometric filtering enabled: {has_geometric_filtering}")
-            logger.info("  → Source layer will NOT be filtered")
-            logger.info("  → Using existing subset (if any) for source geometry")
+            logger.info("  → Source layer will NOT be filtered (keeps existing subset)")
             
             # Store the field expression for later use in geometric filtering
             self.is_field_expression = (True, task_expression)
@@ -753,9 +763,18 @@ class FilterEngineTask(QgsTask):
             # Keep existing subset - don't modify source layer filter
             self.expression = self.param_source_old_subset if self.param_source_old_subset else ""
             
+            # Log detailed information about source layer state
+            current_subset = self.source_layer.subsetString()
+            feature_count = self.source_layer.featureCount()
+            
+            if current_subset:
+                logger.info(f"  ✓ Source layer has active subset: '{current_subset[:80]}...'")
+                logger.info(f"  ✓ {feature_count} filtered features will be used for geometric intersection")
+            else:
+                logger.info(f"  ℹ Source layer has NO subset - all {feature_count} features will be used")
+            
             # Mark as successful - source layer remains with current filter
             result = True
-            logger.info(f"  → Existing subset preserved: '{self.expression[:100]}...' " if self.expression else "  → No existing subset")
             logger.info("=" * 60)
             return result
         
@@ -790,9 +809,19 @@ class FilterEngineTask(QgsTask):
         Sets param_source_new_subset based on expression type and
         extracts buffer value/expression from task parameters.
         
-        SPECIAL CASE: When is_field_expression is set and expression is a simple field,
-        we use the selected features to build the source geometry subset, not the
-        source layer's current filter.
+        CRITICAL MODE FIELD-BASED:
+        - Quand is_field_expression est activé (Custom Selection avec champ simple),
+          on PRESERVE TOUJOURS le subset existant de la couche source
+        - Le subset existant sera utilisé pour déterminer quelles géométries
+          sources utiliser pour l'intersection géométrique avec les couches distantes
+        - La couche source elle-même ne sera PAS modifiée
+        
+        Exemple:
+          Source avec subset "homecount > 5" (100 features)
+          + Custom selection "drop_ID" (champ)
+          + Prédicats géom vers distant
+          → Source garde "homecount > 5"
+          → Distant filtré par intersection avec ces 100 features
         """
         logger.info("🔧 _initialize_source_subset_and_buffer() START")
         
@@ -807,22 +836,23 @@ class FilterEngineTask(QgsTask):
         )
         
         if is_field_based_mode:
-            # In field-based mode, build subset from selected features
-            features_list = self.task_parameters["task"]["features"]
+            # CRITICAL: In field-based mode, ALWAYS keep existing subset
+            # The source layer stays filtered by its current subset (or no filter)
+            # Only distant layers get filtered by geometric intersection
             field_name = self.is_field_expression[1]
             
-            logger.info(f"  🔄 FIELD-BASED MODE: Using selected features for source geometry")
+            logger.info(f"  🔄 FIELD-BASED MODE: Preserving source layer filter")
             logger.info(f"  → Field name: '{field_name}'")
-            logger.info(f"  → Features list count: {len(features_list) if features_list else 0}")
+            logger.info(f"  → Source layer keeps its current state (subset preserved)")
             
-            if features_list and len(features_list) > 0 and features_list[0] != "":
-                # Build expression from feature IDs for source geometry
-                self.param_source_new_subset = self._build_feature_id_expression(features_list)
-                logger.info(f"  → Source geometry subset built from {len(features_list)} features")
+            # ALWAYS use existing subset - do NOT build from selected features
+            self.param_source_new_subset = self.param_source_old_subset
+            
+            if self.param_source_old_subset:
+                logger.info(f"  ✓ Existing subset preserved: '{self.param_source_old_subset[:80]}...'")
+                logger.info(f"  ✓ Source geometries from filtered layer will be used for intersection")
             else:
-                # No features selected, use existing subset
-                self.param_source_new_subset = self.param_source_old_subset
-                logger.info(f"  → No features selected, using existing subset")
+                logger.info(f"  ℹ No existing subset - all features from source layer will be used")
         else:
             # Standard mode: Set source subset based on expression type
             if QgsExpression(self.expression).isField() is False:
@@ -1000,6 +1030,13 @@ class FilterEngineTask(QgsTask):
     def manage_distant_layers_geometric_filtering(self):
         """
         Filter layers from a prefiltered layer.
+        
+        MODE FIELD-BASED BEHAVIOR:
+        - En mode field-based (Custom Selection avec champ simple),
+          la couche source conserve son subset existant
+        - Les géométries sources pour l'intersection proviennent de
+          TOUTES les features VISIBLES de la couche source (respect du subset)
+        - Seules les couches distantes reçoivent un nouveau filtre géométrique
         
         Orchestrates the complete workflow: initialize parameters, prepare geometries,
         and filter all layers with progress tracking.
@@ -1232,12 +1269,13 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  Using {self.source_layer.selectedFeatureCount()} selected features from source layer")
             features = self.source_layer.selectedFeatures()
         elif is_field_based_mode:
-            # FIELD-BASED MODE: Use ALL features from source layer for geometric filtering
-            # In this mode, the source layer keeps its current filter (or no filter)
-            # and we use its visible features for intersection with distant layers
+            # FIELD-BASED MODE: Use ALL features from filtered source layer
+            # The source layer keeps its current filter (subset string)
+            # We use ALL filtered features for geometric intersection with distant layers
             logger.info(f"=== prepare_spatialite_source_geom (FIELD-BASED MODE) ===")
             logger.info(f"  Field name: '{self.is_field_expression[1]}'")
-            logger.info(f"  Using ALL visible features from source layer ({self.source_layer.featureCount()} features)")
+            logger.info(f"  Source subset: '{self.source_layer.subsetString()[:80] if self.source_layer.subsetString() else '(none)'}...'")
+            logger.info(f"  Using ALL {self.source_layer.featureCount()} filtered features for geometric intersection")
             features = list(self.source_layer.getFeatures())
         else:
             # Get features from task parameters (single selection or expression mode)
@@ -1255,11 +1293,17 @@ class FilterEngineTask(QgsTask):
         logger.debug(f"  Target CRS: {self.source_layer_crs_authid}")
         logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
         
-        # Check cache first
+        # Get current subset string for cache key (critical for field-based mode)
+        current_subset = self.source_layer.subsetString() or ''
+        layer_id = self.source_layer.id()
+        
+        # Check cache first (includes layer_id and subset_string to avoid stale cache)
         cached_geom = self.geom_cache.get(
             features, 
             self.param_buffer_value,
-            self.source_layer_crs_authid
+            self.source_layer_crs_authid,
+            layer_id=layer_id,
+            subset_string=current_subset
         )
         
         if cached_geom is not None:
@@ -1387,12 +1431,14 @@ class FilterEngineTask(QgsTask):
         logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...")
         logger.info(f"=== prepare_spatialite_source_geom END ===") 
         
-        # Store in cache for future use
+        # Store in cache for future use (includes layer_id and subset_string)
         self.geom_cache.put(
             features,
             self.param_buffer_value,
             self.source_layer_crs_authid,
-            {'wkt': wkt_escaped}
+            {'wkt': wkt_escaped},
+            layer_id=layer_id,
+            subset_string=current_subset
         )
         logger.info("✓ Source geometry computed and CACHED") 
 
@@ -2034,11 +2080,13 @@ class FilterEngineTask(QgsTask):
             else:
                 layer = self._copy_filtered_layer_to_memory(layer, "source_filtered")
         elif is_field_based_mode:
-            # FIELD-BASED MODE: Use all visible features from source layer
-            # In this mode, the source layer keeps its current state and we use all visible features
+            # FIELD-BASED MODE: Use all visible features from filtered source layer
+            # The source layer keeps its current filter (subset string)
+            # We copy ALL filtered features to use for geometric intersection with distant layers
             logger.info(f"=== prepare_ogr_source_geom (FIELD-BASED MODE) ===")
             logger.info(f"  Field name: '{self.is_field_expression[1]}'")
-            logger.info(f"  Using ALL visible features from source layer ({layer.featureCount()} features)")
+            logger.info(f"  Source subset: '{layer.subsetString()[:80] if layer.subsetString() else '(none)'}...'")
+            logger.info(f"  Using ALL {layer.featureCount()} filtered features for geometric intersection")
             # Copy all visible features to memory for consistent processing
             layer = self._copy_filtered_layer_to_memory(layer, "source_field_based")
         
@@ -2683,9 +2731,13 @@ class FilterEngineTask(QgsTask):
             old_subset = layer.subsetString() if layer.subsetString() != '' else None
             combine_operator = self._get_combine_operator()
             
-            logger.debug(f"Filter expression for {layer.name()}: {expression[:200] if len(expression) < 500 else expression[:200] + '...'}")
+            logger.info(f"📋 Préparation du filtre pour {layer.name()}")
+            logger.info(f"  → Nouvelle expression: '{expression[:100]}...' ({len(expression)} chars)")
             if old_subset:
-                logger.debug(f"Will combine with existing filter using operator: {combine_operator}")
+                logger.info(f"  → ✓ Subset existant détecté: '{old_subset[:80]}...'")
+                logger.info(f"  → Opérateur de combinaison: {combine_operator if combine_operator else 'AND (par défaut)'}")
+            else:
+                logger.info(f"  → Pas de subset existant (filtre simple)")
             
             # Apply filter using backend (delegates to appropriate method for each provider type)
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)

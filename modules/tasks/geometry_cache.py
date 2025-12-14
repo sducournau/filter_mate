@@ -50,7 +50,7 @@ class SourceGeometryCache:
         self._access_order = []  # FIFO: First In, First Out
         logger.info("✓ SourceGeometryCache initialized (max size: 10)")
     
-    def get_cache_key(self, features, buffer_value, target_crs_authid):
+    def get_cache_key(self, features, buffer_value, target_crs_authid, layer_id=None, subset_string=None):
         """
         Génère une clé unique pour identifier une géométrie cachée.
         
@@ -58,6 +58,8 @@ class SourceGeometryCache:
             features: Liste de features ou IDs
             buffer_value: Distance de buffer (ou None)
             target_crs_authid: CRS authid (ex: 'EPSG:3857')
+            layer_id: ID de la couche source (optionnel, pour éviter les collisions)
+            subset_string: Subset string actif sur la couche (optionnel, pour invalider le cache quand le filtre change)
         
         Returns:
             tuple: Clé unique pour ce cache
@@ -71,9 +73,11 @@ class SourceGeometryCache:
         else:
             feature_ids = ()
         
-        return (feature_ids, buffer_value, target_crs_authid)
+        # Inclure layer_id et subset_string dans la clé pour éviter les collisions
+        # Le subset_string est critique: si le filtre change, la géométrie doit être recalculée
+        return (feature_ids, buffer_value, target_crs_authid, layer_id, subset_string)
     
-    def get(self, features, buffer_value, target_crs_authid):
+    def get(self, features, buffer_value, target_crs_authid, layer_id=None, subset_string=None):
         """
         Récupère une géométrie du cache si elle existe.
         
@@ -81,11 +85,13 @@ class SourceGeometryCache:
             features: Liste de features ou IDs
             buffer_value: Distance de buffer
             target_crs_authid: CRS authid
+            layer_id: ID de la couche source (optionnel)
+            subset_string: Subset string actif (optionnel)
         
         Returns:
             dict ou None: Données de géométrie cachées (wkt, bbox, etc.)
         """
-        key = self.get_cache_key(features, buffer_value, target_crs_authid)
+        key = self.get_cache_key(features, buffer_value, target_crs_authid, layer_id, subset_string)
         
         if key in self._cache:
             # Update access order (move to end)
@@ -99,7 +105,7 @@ class SourceGeometryCache:
         logger.debug("Cache MISS: Geometry not in cache")
         return None
     
-    def put(self, features, buffer_value, target_crs_authid, geometry_data):
+    def put(self, features, buffer_value, target_crs_authid, geometry_data, layer_id=None, subset_string=None):
         """
         Stocke une géométrie dans le cache.
         
@@ -108,8 +114,10 @@ class SourceGeometryCache:
             buffer_value: Distance de buffer
             target_crs_authid: CRS authid
             geometry_data: Données à cacher (dict avec wkt, bbox, etc.)
+            layer_id: ID de la couche source (optionnel)
+            subset_string: Subset string actif (optionnel)
         """
-        key = self.get_cache_key(features, buffer_value, target_crs_authid)
+        key = self.get_cache_key(features, buffer_value, target_crs_authid, layer_id, subset_string)
         
         # Vérifier limite de cache
         if len(self._cache) >= self._max_cache_size:
