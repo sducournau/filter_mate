@@ -2,485 +2,301 @@
 sidebar_position: 7
 ---
 
-# Filter History
+# Filter History & Undo/Redo
 
-Track, manage, and reuse your filters with FilterMate's powerful history system featuring undo/redo capabilities.
+FilterMate v2.3.0 features an intelligent history system with context-aware undo/redo capabilities.
+
+:::info Version 2.3.0
+This page documents the new Global Undo/Redo system introduced in v2.3.0. Previous versions had a simpler single-layer undo.
+:::
 
 ## Overview
 
 The **Filter History** system automatically records every filter you apply, allowing you to:
-- **Undo/Redo** filters quickly
-- **Review** past filter operations
-- **Reuse** common filter patterns
-- **Compare** different filter results
-- **Save** favorite filters for later
+- **Undo/Redo** filters with intelligent context detection
+- **Source Layer** or **Global** restoration based on your selection
+- **Navigate** through filter states seamlessly
+- **Preserve** filters automatically (combined with AND by default)
 
 ### Key Features
 
-- ✅ **Automatic History** - Every filter is recorded
-- ✅ **Undo/Redo** - Navigate through filter states
-- ✅ **Search** - Find past filters by expression
-- ✅ **Favorites** - Bookmark frequently used filters
-- ✅ **Export/Import** - Share filter configurations
+- ✅ **Automatic History** - Every filter is recorded (up to 100 states)
+- ✅ **Intelligent Undo/Redo** - Context-aware layer restoration
+- ✅ **Global Mode** - Restore multiple layers simultaneously
+- ✅ **Source Mode** - Undo only the active layer
+- ✅ **Smart Buttons** - Auto-enable/disable based on history availability
 - ✅ **Layer-Specific** - Separate history per layer
 
-## History Interface
+## Undo/Redo Buttons
 
-```mermaid
-graph TD
-    A[FilterMate Interface] --> B[History Panel]
-    B --> C[Timeline View]
-    B --> D[Search Box]
-    B --> E[Favorites List]
-    
-    C --> F[Filter 1: population > 100k]
-    C --> G[Filter 2: zone = 'residential']
-    C --> H[Filter 3: Buffer 500m]
-    
-    F --> I[Restore]
-    F --> J[Add to Favorites]
-    F --> K[Delete]
-    
-    style B fill:#87CEEB
-    style E fill:#FFD700
-```
+The Undo and Redo buttons are located in the **Action Bar** at the top of the FilterMate panel:
 
-### Panel Components
+| Button | Icon | Action |
+|--------|------|--------|
+| **UNDO** | ↩️ | Revert to previous filter state |
+| **REDO** | ↪️ | Reapply undone filter |
 
-1. **Timeline View** - Chronological list of filters
-2. **Search Box** - Find filters by keyword or expression
-3. **Current Filter Indicator** - Highlights active filter
-4. **Favorites Section** - Quick access to saved filters
-5. **Undo/Redo Buttons** - Navigate filter history
+### Button States
 
-## Using Filter History
+Buttons **automatically enable/disable** based on history availability:
+- **Enabled** (clickable): History available in that direction
+- **Disabled** (grayed out): No history to navigate
 
-### Undo/Redo Filters
+## Two Undo/Redo Modes
 
-**Keyboard Shortcuts:**
-- **Undo**: `Ctrl+Z` (Windows/Linux) or `Cmd+Z` (Mac)
-- **Redo**: `Ctrl+Y` or `Ctrl+Shift+Z`
+FilterMate intelligently chooses between two modes based on your current configuration:
 
-**Button Actions:**
-1. Click **Undo** button (⟲) to revert to previous filter
-2. Click **Redo** button (⟳) to reapply undone filter
+### 🎯 Source Layer Only Mode
 
-**Example Workflow:**
-```
-1. Apply filter: population > 100000
-   → 1,234 features shown
+**When activated:**
+- The **"Layers to Filter"** button is **unchecked** OR
+- No remote layers are selected
 
-2. Apply filter: population > 100000 AND zone = 'residential'
-   → 856 features shown
-
-3. Undo (Ctrl+Z)
-   → Back to 1,234 features (first filter restored)
-
-4. Redo (Ctrl+Y)
-   → Returns to 856 features (second filter reapplied)
-```
-
-### History Navigation
+**Behavior:**
+- Undo/Redo affects **only the source layer**
+- Fast and simple for single-layer workflows
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant H as History System
-    participant L as Layer
+    participant S as Source Layer
     
-    U->>H: Apply Filter A
-    H->>H: Record in history
-    H->>L: Apply Filter A
+    U->>H: Apply Filter "population > 10000"
+    H->>S: Filter source layer (150 features)
     
-    U->>H: Apply Filter B
-    H->>H: Record in history
-    H->>L: Apply Filter B
+    U->>H: Apply Filter "AND type = 'city'"
+    H->>S: Filter source layer (45 features)
     
-    U->>H: Undo (Ctrl+Z)
-    H->>H: Move back in history
-    H->>L: Restore Filter A
+    U->>H: Undo
+    H->>S: Restore "population > 10000" (150 features)
     
-    U->>H: Redo (Ctrl+Y)
-    H->>H: Move forward in history
-    H->>L: Reapply Filter B
+    U->>H: Redo
+    H->>S: Reapply "AND type = 'city'" (45 features)
 ```
 
-## History Management
+### 🌐 Global Mode
 
-### Timeline View
+**When activated:**
+- The **"Layers to Filter"** button is **checked** AND
+- One or more remote layers are selected
 
-The **Timeline** shows all filters chronologically:
-
-```
-┌─────────────────────────────────────┐
-│  Filter History - parcels_layer     │
-├─────────────────────────────────────┤
-│ ⭐ [14:23] zone = 'commercial'     │ ← Favorite
-│ ▶ [14:15] population > 50000        │ ← Current
-│   [14:10] area > 10000              │
-│   [14:05] status = 'active'         │
-│   [14:00] No filter (all features)  │
-└─────────────────────────────────────┘
-```
-
-**Icons:**
-- ⭐ **Favorite** - Saved for quick access
-- ▶ **Current** - Active filter
-- 🔍 **Complex** - Multi-condition expression
-- 📍 **Spatial** - Geometric filter
-
-### Search History
-
-Find past filters using keywords:
-
-```
-Search: "population"
-
-Results:
-  [14:15] population > 50000
-  [Yesterday] population BETWEEN 10000 AND 100000
-  [2024-12-05] population > 100000 AND density > 50
-```
-
-**Search Tips:**
-- Search by expression fragments
-- Search by date/time
-- Search by feature count
-- Use wildcards: `pop*` matches `population`
-
-### Managing History Items
-
-**Right-Click Menu:**
-- **Restore** - Apply this filter
-- **Add to Favorites** ⭐ - Bookmark for quick access
-- **Copy Expression** - Copy filter text
-- **Edit** - Modify filter before applying
-- **Delete** - Remove from history
-- **Export** - Save to file
-
-## Favorites System
-
-### Creating Favorites
-
-**Method 1: From History**
-1. Right-click any history item
-2. Select **Add to Favorites**
-3. Enter a descriptive name
-4. (Optional) Add tags for organization
-
-**Method 2: From Current Filter**
-1. Apply a filter
-2. Click **⭐ Add to Favorites** button
-3. Name and tag the filter
-
-**Example Favorites:**
-```
-⭐ Large Parcels
-   Expression: area > 10000
-
-⭐ Recent Buildings
-   Expression: year_built >= 2020
-
-⭐ Transit Coverage
-   Expression: distance($geometry, @transit_stations) < 400
-
-⭐ High Priority Sites
-   Expression: priority = 'high' AND status != 'complete'
-```
-
-### Using Favorites
-
-**Quick Access:**
-1. Open **Favorites** panel
-2. Double-click favorite to apply
-3. Or drag-and-drop onto layer
-
-**Keyboard Shortcuts:**
-- `Ctrl+1` through `Ctrl+9` - Apply favorite 1-9
-- `Ctrl+F` - Open favorites panel
-
-### Organizing Favorites
-
-**Tags:**
-```
-Urban Planning
-  ⭐ Large Parcels
-  ⭐ Mixed Use Zones
-  ⭐ Development Opportunities
-
-Environmental
-  ⭐ Protected Areas
-  ⭐ Riparian Buffers
-  ⭐ Wetland Proximity
-
-Analysis
-  ⭐ Transit Coverage
-  ⭐ Service Gaps
-  ⭐ High Density Areas
-```
-
-**Sort Options:**
-- By name (A-Z)
-- By usage frequency
-- By date created
-- By custom order (drag-and-drop)
-
-## History Workflow
-
-### Iterative Refinement
+**Behavior:**
+- Undo/Redo restores **all affected layers simultaneously**
+- Source layer + all remote layers are restored to their previous state
 
 ```mermaid
-graph LR
-    A[Initial Filter] --> B[Review Results]
-    B --> C{Satisfactory?}
-    C -->|No| D[Refine Filter]
-    D --> E[Apply New Filter]
-    E --> B
-    C -->|Yes| F[Add to Favorites]
+sequenceDiagram
+    participant U as User
+    participant H as History System
+    participant S as Source Layer
+    participant R1 as Remote Layer 1
+    participant R2 as Remote Layer 2
     
-    D -.Undo if needed.-> A
+    U->>H: Apply geometric filter (intersects)
+    H->>S: Filter source (500 → 150 features)
+    H->>R1: Filter remote 1 (1000 → 320 features)
+    H->>R2: Filter remote 2 (800 → 210 features)
     
-    style F fill:#90EE90
+    U->>H: Global Undo
+    H->>S: Restore (150 → 500 features)
+    H->>R1: Restore (320 → 1000 features)
+    H->>R2: Restore (210 → 800 features)
 ```
 
-**Example:**
-```
-Step 1: zone = 'residential'
-        → Too broad (10,000 features)
+## How It Works
 
-Step 2: zone = 'residential' AND area > 5000
-        → Better (3,200 features)
+### State Capture
 
-Step 3: zone = 'residential' AND area > 5000 AND year_built > 2000
-        → Perfect (1,200 features) ⭐ Add to Favorites
-```
+When you apply a filter, FilterMate captures:
 
-### Comparison Workflow
+**Source Layer History:**
+- Filter expression (subset string)
+- Feature count after filter
+- Timestamp
+- Operation metadata
 
-Compare different filter approaches:
+**Global History (when remote layers selected):**
+- Source layer state
+- All remote layer states (expression + feature count)
+- Combined snapshot for atomic restore
 
-```
-Approach A: Attribute-based
-  population > 100000
-  → 45 features
+### Context Detection
 
-Undo (Ctrl+Z)
+FilterMate checks the UI state before each undo/redo:
 
-Approach B: Spatial-based
-  distance($geometry, @center) < 10000
-  → 62 features
-
-Undo (Ctrl+Z)
-
-Approach C: Combined
-  population > 50000 AND distance($geometry, @center) < 10000
-  → 38 features ✓ Best balance
-```
-
-## Practical Examples
-
-### Urban Planning Session
-
-```
-Morning Session:
-  [09:15] No filter (all parcels)
-  [09:30] zone = 'commercial' ⭐ Saved
-  [09:45] zone = 'commercial' AND available = 'yes'
-  [10:00] zone = 'commercial' AND available = 'yes' AND area > 5000 ⭐ Saved
-  
-Afternoon Session:
-  [14:00] Retrieved: "Commercial available >5000`"
-  [14:30] Modified: + "AND price < 500000"
-  [15:00] New favorite: "Affordable commercial sites" ⭐
-```
-
-### Environmental Analysis
-
-```
-Wetland Buffer Analysis:
-  [10:00] All features
-  [10:15] habitat_type = 'wetland'
-  [10:30] + buffer 100m ⭐ "Wetland buffer 100m"
-  [10:45] + buffer 300m ⭐ "Wetland buffer 300m"
-  [11:00] Comparison: 100m vs 300m impact
-  [11:15] Final: 300m buffer + restrictions ⭐
-```
-
-### Emergency Response
-
-```
-Evacuation Planning:
-  [12:00] All buildings
-  [12:05] intersects(@hazard_zone) ⭐ "Hazard zone buildings"
-  [12:15] + occupancy > 50 ⭐ "High occupancy in hazard"
-  [12:30] + NOT exits >= 3 ⭐ "Evacuation risk buildings"
-  [12:45] Export results → Share with team
-```
-
-## History Persistence
-
-### Automatic Saving
-
-History is **automatically saved**:
-- Every filter application is recorded
-- History persists between sessions
-- Separate history per layer
-- Survives QGIS restart
-
-### Storage Location
-
-```
-Windows: %APPDATA%/QGIS/QGIS3/profiles/default/FilterMate/history/
-Linux:   ~/.local/share/QGIS/QGIS3/profiles/default/FilterMate/history/
-Mac:     ~/Library/Application Support/QGIS/QGIS3/profiles/default/FilterMate/history/
-```
-
-### History Limits
-
-**Default Settings:**
-- Maximum history items: **100** per layer
-- History retention: **30 days**
-- Favorites: **Unlimited**
-
-**Configurable:**
 ```python
-# In FilterMate settings
-max_history_items = 100
-history_retention_days = 30
-auto_cleanup = True
+# Simplified logic
+button_checked = "Layers to Filter" button is checked
+has_remote_layers = remote layers are selected
+
+if button_checked AND has_remote_layers:
+    use_global_mode()  # Restore all layers
+else:
+    use_source_mode()  # Restore source only
 ```
 
-## Export/Import
+## Example Workflows
 
-### Export History
+### Single Layer Workflow
 
-Share filter configurations with colleagues:
+1. Select a layer in QGIS
+2. Apply filter: `"population" > 10000` → 150 features
+3. Apply filter: `"type" = 'residential'` → 45 features
+4. Click **Undo** → Back to 150 features
+5. Click **Undo** → Back to all features (no filter)
+6. Click **Redo** → 150 features again
 
-**Export Options:**
-1. **Single Filter** - Right-click → Export
-2. **Multiple Filters** - Select → Export Selected
-3. **All History** - Export → All History
-4. **Favorites Only** - Export → Favorites
+### Multi-Layer Workflow
 
-**Export Format (JSON):**
-```json
-{
-  "filter_history_export": {
-    "version": "1.0",
-    "layer": "parcels_layer",
-    "filters": [
-      {
-        "expression": "zone = 'commercial' AND area > 5000",
-        "timestamp": "2024-12-08T14:30:00",
-        "feature_count": 1234,
-        "favorite": true,
-        "name": "Large Commercial Parcels",
-        "tags": ["commercial", "planning"]
-      }
-    ]
-  }
-}
-```
+1. Select source layer (e.g., "buildings")
+2. Enable **"Layers to Filter"** button
+3. Select remote layers: "parcels", "roads"
+4. Apply geometric filter: intersects with selection
+   - buildings: 500 → 150 features
+   - parcels: 1000 → 320 features
+   - roads: 800 → 210 features
+5. Click **Undo** → **All 3 layers** restored simultaneously
+6. Click **Redo** → **All 3 layers** filtered again
 
-### Import History
+### Progressive Filtering with Preservation
 
-Import filters from colleagues or backup:
-
-1. **File → Import History**
-2. Select `.json` file
-3. Choose merge or replace
-4. Confirm import
-
-**Import Options:**
-- **Merge** - Add to existing history
-- **Replace** - Clear and import
-- **Favorites Only** - Import bookmarks only
-
-## Best Practices
-
-### 1. Name Favorites Clearly
+:::tip Filter Preservation (v2.3.0)
+New filters are automatically combined with existing filters using AND by default.
+:::
 
 ```
-✅ Good:
-  "Commercial parcels >5000` sqm"
-  "Residential near transit `<400m`"
-  "High-priority incomplete projects"
+Step 1: Geometric filter (intersects polygon)
+        → Source: 150 features
 
-❌ Bad:
-  "Filter 1"
-  "Test"
-  "Temp filter"
+Step 2: Attribute filter: "population" > 5000
+        → Combined: (geometric) AND (population > 5000)
+        → Source: 23 features
+
+Step 3: Undo
+        → Back to: 150 features (geometric only)
+
+Step 4: Redo
+        → Forward to: 23 features (combined)
 ```
 
-### 2. Use Tags Effectively
+## Configuration
 
-```
-Tags: "commercial", "planning", "large-parcels"
-Tags: "environmental", "protected", "analysis"
-Tags: "emergency", "evacuation", "high-risk"
-```
+### History Size
 
-### 3. Clean Up Regularly
+Default maximum history: **100 states** per layer
 
-- Delete experimental filters
-- Archive old sessions
-- Export important workflows
-- Keep favorites organized
-
-### 4. Document Complex Filters
-
-Add comments to favorites:
-```
-Name: "Development Opportunities"
-Expression: zone = 'mixed-use' AND area > 10000 AND NOT protected
-Comment: "Large mixed-use parcels outside protected areas.
-          Used for quarterly development opportunity analysis."
-Tags: "planning", "development", "quarterly-report"
+Configured in `modules/filter_history.py`:
+```python
+def __init__(self, layer_id: str, max_size: int = 100):
 ```
 
-## Keyboard Shortcuts
+### Global History
 
-| Action | Windows/Linux | Mac |
-|--------|---------------|-----|
-| Undo | `Ctrl+Z` | `Cmd+Z` |
-| Redo | `Ctrl+Y` | `Cmd+Y` |
-| Open History | `Ctrl+H` | `Cmd+H` |
-| Open Favorites | `Ctrl+F` | `Cmd+F` |
-| Add to Favorites | `Ctrl+D` | `Cmd+D` |
-| Apply Favorite 1-9 | `Ctrl+1` to `Ctrl+9` | `Cmd+1` to `Cmd+9` |
-| Search History | `Ctrl+Shift+F` | `Cmd+Shift+F` |
+Global history also stores up to 100 states for multi-layer operations.
+
+## Technical Details
+
+### FilterState Class
+
+Represents a single filter state:
+```python
+class FilterState:
+    expression: str      # Filter expression (subset string)
+    feature_count: int   # Features visible after filter
+    description: str     # Human-readable description
+    timestamp: datetime  # When applied
+    metadata: dict       # Additional info (backend, etc.)
+```
+
+### GlobalFilterState Class
+
+Represents a multi-layer state:
+```python
+class GlobalFilterState:
+    source_layer_id: str                    # Source layer ID
+    source_expression: str                  # Source filter
+    remote_layers: Dict[str, Tuple[str, int]]  # {layer_id: (expression, count)}
+    timestamp: datetime                     # When captured
+    description: str                        # Human-readable
+```
+
+### HistoryManager Class
+
+Manages both single-layer and global history:
+```python
+class HistoryManager:
+    - get_history(layer_id) -> FilterHistory
+    - push_global_state(source_id, source_expr, remote_layers, desc)
+    - undo_global() -> GlobalFilterState
+    - redo_global() -> GlobalFilterState
+    - can_undo_global() -> bool
+    - can_redo_global() -> bool
+```
 
 ## Troubleshooting
 
-### History Not Saving
+### Undo/Redo Buttons Disabled
+
+**Cause:** No history available in that direction
 
 **Solutions:**
-1. Check write permissions in history folder
-2. Verify QGIS profile path
-3. Check disk space
-4. Reset history database
+- Apply at least one filter to enable Undo
+- Undo at least once to enable Redo
+- Check if you're at the beginning/end of history
 
-### Missing History Items
+### Global Undo Not Restoring All Layers
 
-**Causes:**
-- History limit reached (default 100 items)
-- Retention period expired (default 30 days)
-- Manual deletion
+**Cause:** Remote layers may have been removed from project
 
-**Solutions:**
-- Increase history limit in settings
-- Export important filters to favorites
-- Regular backups
+**Solution:** FilterMate logs warnings for missing layers:
+```
+FilterMate: Remote layer {id} no longer exists, skipping
+```
 
-### Undo/Redo Not Working
+### History Lost After Reload
 
-**Check:**
-1. History is enabled in settings
-2. Layer has filter history
-3. Not at beginning/end of history
-4. QGIS not in edit mode
+**Current behavior:** History is **in-memory only** and resets when:
+- QGIS is closed
+- Plugin is reloaded
+- Project is changed
+
+**Note:** Persistent history across sessions is a potential future enhancement.
+
+## Best Practices
+
+### 1. Use Global Mode for Multi-Layer Operations
+
+When filtering multiple layers together, always:
+1. Enable "Layers to Filter"
+2. Select all affected remote layers
+3. Apply filter once → all layers filtered
+4. Use Global Undo to restore all at once
+
+### 2. Progressive Refinement
+
+Build complex filters step by step:
+```
+Step 1: Broad geometric filter
+Step 2: Add attribute constraint
+Step 3: Add another constraint
+→ Each step recorded, easily reversible
+```
+
+### 3. Check Button States
+
+Before clicking Undo/Redo:
+- Enabled button = action available
+- Disabled button = no history in that direction
+
+### 4. Understand the Context
+
+Before undoing:
+- **Unchecked** "Layers to Filter" = source only undo
+- **Checked** + remote layers = global undo (all layers)
 
 ## Related Topics
 
-- [Filtering Basics](filtering-basics.md) - Create filters to add to history
+- [Filtering Basics](filtering-basics.md) - Create filters
+- [Geometric Filtering](geometric-filtering.md) - Spatial operations
 - [Interface Overview](interface-overview.md) - Navigate the UI

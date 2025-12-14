@@ -5,15 +5,53 @@ from . import themes
 from .datatypes import match_type, TypeRole, StrType
 
 
+# Default settings for JsonView
+DEFAULT_JSON_VIEW_SETTINGS = {
+    'theme': 'auto',
+    'font_size': 9,
+    'alternating_rows': True,
+    'editable_keys': True,
+    'editable_values': True,
+    'column_width_key': 180,
+    'column_width_value': 240,
+    'min_column_width': 120,
+}
+
 
 class JsonView(QtWidgets.QTreeView):
-    """Tree to display the JsonModel."""
+    """
+    Tree to display the JsonModel.
+    
+    Supports configuration via settings dictionary for integration
+    with FilterMate's configuration system.
+    
+    Args:
+        model: The JsonModel to display
+        plugin_dir: Path to the plugin directory (optional)
+        settings: Dictionary of view settings (optional)
+        parent: Parent widget (optional)
+    
+    Settings dictionary keys:
+        - theme (str): Color theme name or 'auto'
+        - font_size (int): Font size in points (8-16)
+        - alternating_rows (bool): Show alternating row colors
+        - editable_keys (bool): Allow editing keys
+        - editable_values (bool): Allow editing values
+        - column_width_key (int): Width of key column
+        - column_width_value (int): Width of value column
+    """
     onLeaveEvent = QtCore.pyqtSignal()
+    settingsChanged = QtCore.pyqtSignal(dict)  # Emitted when settings change
 
-    def __init__(self, model, plugin_dir=None, parent=None):
+    def __init__(self, model, plugin_dir=None, settings=None, parent=None):
         super(JsonView, self).__init__(parent)
         self.model = model
         self.plugin_dir = plugin_dir
+        
+        # Merge provided settings with defaults
+        self._settings = DEFAULT_JSON_VIEW_SETTINGS.copy()
+        if settings:
+            self._settings.update(settings)
         
         # CRITICAL: Set model IMMEDIATELY to avoid Qt crashes
         if model is not None:
@@ -23,29 +61,72 @@ class JsonView(QtWidgets.QTreeView):
         self.customContextMenuRequested.connect(self._menu)
         self.setItemDelegate(delegate.JsonDelegate())
         
-        # Amélioration de la visibilité avec support du thème dark
-        self._apply_theme_stylesheet()
+        # Apply settings
+        self._apply_settings()
+    
+    def _apply_settings(self):
+        """Apply all settings from the settings dictionary."""
+        # Apply theme
+        theme_name = self._settings.get('theme', 'auto')
+        if theme_name == 'auto':
+            self._apply_theme_stylesheet()
+        else:
+            self.set_theme(theme_name)
+            self._apply_theme_stylesheet()
         
-        # Configuration additionnelle pour la lisibilité
-        self.setAlternatingRowColors(True)
-        self.setUniformRowHeights(False)
+        # Apply font size
+        font_size = self._settings.get('font_size', 9)
         font = self.font()
-        font.setPointSize(9)
+        font.setPointSize(font_size)
         self.setFont(font)
         
-        # Configuration des colonnes pour meilleure visibilité
+        # Apply alternating rows
+        self.setAlternatingRowColors(self._settings.get('alternating_rows', True))
+        self.setUniformRowHeights(False)
+        
+        # Configure columns
         header = self.header()
         header.setStretchLastSection(False)
         header.setVisible(True)
         header.setDefaultAlignment(QtCore.Qt.AlignLeft)
-        # Colonne Property (clé): largeur interactive avec minimum
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Interactive)
-        # Colonne Value: largeur interactive
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.Interactive)
-        # Définir des largeurs initiales optimales
-        header.resizeSection(0, 180)
-        header.resizeSection(1, 240)
-        header.setMinimumSectionSize(120)
+        
+        # Apply column widths from settings
+        header.resizeSection(0, self._settings.get('column_width_key', 180))
+        header.resizeSection(1, self._settings.get('column_width_value', 240))
+        header.setMinimumSectionSize(self._settings.get('min_column_width', 120))
+    
+    def get_settings(self):
+        """
+        Get current view settings.
+        
+        Returns:
+            dict: Current settings dictionary
+        """
+        return self._settings.copy()
+    
+    def update_settings(self, settings):
+        """
+        Update view settings.
+        
+        Args:
+            settings (dict): Settings to update
+        """
+        self._settings.update(settings)
+        self._apply_settings()
+        self.settingsChanged.emit(self._settings)
+    
+    def set_setting(self, key, value):
+        """
+        Set a single setting value.
+        
+        Args:
+            key (str): Setting key
+            value: Setting value
+        """
+        self._settings[key] = value
+        self._apply_settings()
 
     def _apply_theme_stylesheet(self):
         """Apply stylesheet based on detected theme (dark/light)."""
@@ -257,3 +338,72 @@ class JsonView(QtWidgets.QTreeView):
         
         # Force view update
         self.viewport().update()
+    
+    def is_dark_theme(self):
+        """
+        Detect if the current system/QGIS theme is dark.
+        
+        Returns:
+            bool: True if dark theme is detected
+        """
+        try:
+            from qgis.core import QgsApplication
+            palette = QgsApplication.palette()
+            bg_color = palette.color(QtGui.QPalette.Window)
+            return bg_color.lightness() < 128
+        except (ImportError, AttributeError):
+            return False
+    
+    def get_recommended_theme_for_ui(self, ui_theme=None):
+        """
+        Get recommended JSON View theme based on UI theme.
+        
+        Args:
+            ui_theme (str): UI theme name ('auto', 'dark', 'light', 'default')
+        
+        Returns:
+            str: Recommended JSON View theme name
+        """
+        # Theme mapping
+        mapping = {
+            'auto': 'dracula' if self.is_dark_theme() else 'default',
+            'dark': 'dracula',
+            'light': 'solarized_light',
+            'default': 'default',
+        }
+        
+        if ui_theme is None:
+            ui_theme = 'auto'
+        
+        return mapping.get(ui_theme, 'default')
+    
+    def apply_config_settings(self, config_manager):
+        """
+        Apply settings from a ConfigManager instance.
+        
+        Args:
+            config_manager: FilterMate ConfigManager instance
+        
+        This method bridges the plugin's configuration system with
+        the JSON View settings.
+        """
+        try:
+            json_view_settings = config_manager.get_json_view_settings()
+            self.update_settings(json_view_settings)
+        except AttributeError:
+            # ConfigManager doesn't have this method (old version)
+            pass
+    
+    def save_column_widths(self):
+        """
+        Get current column widths for saving to config.
+        
+        Returns:
+            dict: Dictionary with column_width_key and column_width_value
+        """
+        header = self.header()
+        return {
+            'column_width_key': header.sectionSize(0),
+            'column_width_value': header.sectionSize(1),
+        }
+

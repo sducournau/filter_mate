@@ -58,18 +58,45 @@ class FilterMate:
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
 
-        # initialize locale
-        locale_setting = QSettings().value('locale/userLocale')
-        locale = locale_setting[0:2] if locale_setting else 'en'
+        # initialize locale - Support for EN, FR, PT, ES
+        # Check if a forced language is set in config.json
+        forced_locale = self._get_config_language()
+        
+        if forced_locale and forced_locale != 'auto':
+            # Use forced language from config
+            locale = forced_locale
+            logger.info(f"FilterMate: Using forced language from config: '{locale}'")
+        else:
+            # Use QGIS locale (default behavior)
+            locale_setting = QSettings().value('locale/userLocale')
+            locale = locale_setting[0:2] if locale_setting else 'en'
+        
+        # Supported languages
+        supported_languages = ['en', 'fr', 'pt', 'es', 'it', 'de', 'nl']
+        if locale not in supported_languages:
+            logger.info(f"FilterMate: Language '{locale}' not supported, falling back to English")
+            locale = 'en'
+        
+        # Try to load the translation for the current locale
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
             'FilterMate_{}.qm'.format(locale))
-
+        
+        # Fallback to English if the locale is not available
+        if not os.path.exists(locale_path):
+            locale_path = os.path.join(
+                self.plugin_dir,
+                'i18n',
+                'FilterMate_en.qm')
+        
         if os.path.exists(locale_path):
             self.translator = QTranslator()
-            self.translator.load(locale_path)
-            QCoreApplication.installTranslator(self.translator)
+            if self.translator.load(locale_path):
+                QCoreApplication.installTranslator(self.translator)
+                logger.info(f"FilterMate: Loaded translation for locale '{locale}'")
+            else:
+                logger.warning(f"FilterMate: Failed to load translation from {locale_path}")
 
         # Declare instance attributes
         self.actions = []
@@ -87,6 +114,22 @@ class FilterMate:
         self._project_read_connection = None
         self._new_project_connection = None
 
+    def _get_config_language(self):
+        """Get the language setting from config.json.
+        
+        Returns:
+            str: Language code ('auto', 'en', 'fr', 'pt', 'es') or None if not set
+        """
+        try:
+            config_path = os.path.join(self.plugin_dir, 'config', 'config.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    language = config.get('APP', {}).get('DOCKWIDGET', {}).get('LANGUAGE', {}).get('value', 'auto')
+                    return language
+        except Exception as e:
+            logger.warning(f"FilterMate: Could not read language from config: {e}")
+        return 'auto'
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):

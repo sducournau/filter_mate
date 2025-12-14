@@ -20,6 +20,22 @@
                     "history_status"
                 ]
             },
+            "LANGUAGE": {
+                "choices": [
+                    "auto",
+                    "en",
+                    "fr",
+                    "pt",
+                    "es",
+                    "it",
+                    "de",
+                    "nl"
+                ],
+                "value": "auto"
+            },
+            "_LANGUAGE_META": {
+                "description": "Plugin language: 'auto' (use QGIS locale), 'en' (English), 'fr' (French), 'pt' (Portuguese), 'es' (Spanish), 'it' (Italian), 'de' (German), 'nl' (Dutch). Restart QGIS or reload plugin for changes to take effect."
+            },
             "UI_PROFILE": {
                 "choices": [
                     "auto",

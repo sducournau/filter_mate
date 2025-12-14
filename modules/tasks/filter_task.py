@@ -729,11 +729,15 @@ class FilterEngineTask(QgsTask):
             is_simple_field = qgs_expr.isField() and not any(
                 op in task_expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
             )
+            logger.debug(f"  is_simple_field check: isField()={qgs_expr.isField()}, result={is_simple_field}")
         
         # Check if geometric filtering is enabled
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
         geom_predicates_list = self.task_parameters["filtering"].get("geometric_predicates", [])
         has_geometric_filtering = has_geom_predicates and len(geom_predicates_list) > 0
+        
+        logger.debug(f"  has_geom_predicates={has_geom_predicates}, geom_predicates_list={geom_predicates_list}")
+        logger.debug(f"  has_geometric_filtering={has_geometric_filtering}, is_simple_field={is_simple_field}")
         
         # OPTIMIZATION: If expression is a simple field name AND geometric filtering is enabled,
         # do NOT filter the source layer - keep existing subset and use selected features

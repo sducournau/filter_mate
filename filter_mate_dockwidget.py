@@ -23,6 +23,14 @@
 
 
 from .config.config import ENV_VARS
+# Import ConfigManager for v2 configuration system
+try:
+    from .config.config_manager import ConfigManager
+    CONFIG_MANAGER_AVAILABLE = True
+except ImportError:
+    CONFIG_MANAGER_AVAILABLE = False
+    ConfigManager = None
+
 import os
 import json
 import re
@@ -170,6 +178,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.current_layer = None
         self.current_layer_selection_connection = None
         
+        # Initialize ConfigManager (v2 configuration system)
+        self._config_manager = None
+        if CONFIG_MANAGER_AVAILABLE:
+            try:
+                self._config_manager = ConfigManager(plugin_dir)
+                logger.info("ConfigManager initialized successfully")
+                
+                # Check if migration from v1 occurred
+                if self._config_manager.was_migrated_from_v1():
+                    logger.info("Configuration was reset from old v1 format")
+                    iface.messageBar().pushInfo(
+                        "FilterMate",
+                        self.tr("Configuration reset to defaults (preserved language & paths)")
+                    )
+            except Exception as e:
+                logger.warning(f"ConfigManager initialization failed: {e}, using legacy config")
+                self._config_manager = None
+        
         # Protection flags against recursive calls
         self._updating_layers = False
         self._updating_current_layer = False
@@ -210,6 +236,122 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return None
             
         return self.PROJECT_LAYERS[layer_id]
+    
+    # =========================================================================
+    # Configuration Helper Methods (ConfigManager integration)
+    # =========================================================================
+    
+    def get_config(self, *keys, default=None):
+        """
+        Get configuration value using ConfigManager if available, fallback to CONFIG_DATA.
+        
+        Args:
+            *keys: Path to the value (e.g., 'GENERAL', 'LANGUAGE')
+            default: Default value if not found
+        
+        Returns:
+            Configuration value or default
+        """
+        if self._config_manager is not None:
+            return self._config_manager.get(*keys, default=default)
+        
+        # Fallback to legacy CONFIG_DATA access
+        data = self.CONFIG_DATA
+        for key in keys:
+            if isinstance(data, dict):
+                data = data.get(key)
+                if data is None:
+                    return default
+            else:
+                return default
+        
+        # Handle both old format (direct value) and new format (value in dict)
+        if isinstance(data, dict) and 'value' in data:
+            return data['value']
+        return data if data is not None else default
+    
+    def set_config(self, *keys_and_value):
+        """
+        Set configuration value using ConfigManager if available.
+        
+        Args:
+            *keys_and_value: Path keys followed by the value
+        
+        Returns:
+            bool: True if set successfully
+        """
+        if self._config_manager is not None:
+            result = self._config_manager.set(*keys_and_value)
+            if result:
+                self._config_manager.save()
+            return result
+        
+        # Fallback: not implemented for legacy CONFIG_DATA
+        return False
+    
+    def is_feature_enabled(self, feature_name):
+        """
+        Check if a feature is enabled.
+        
+        Args:
+            feature_name: Name of the feature (e.g., 'ENABLE_UNDO_REDO')
+        
+        Returns:
+            bool: True if feature is enabled (defaults to True for compatibility)
+        """
+        if self._config_manager is not None:
+            return self._config_manager.is_feature_enabled(feature_name)
+        
+        # Default to True for legacy compatibility
+        return True
+    
+    def get_json_view_settings(self):
+        """
+        Get settings for the JSON View configuration panel.
+        
+        Returns:
+            dict: JSON View settings
+        """
+        if self._config_manager is not None:
+            return self._config_manager.get_json_view_settings()
+        
+        # Default settings for legacy mode
+        return {
+            'theme': 'auto',
+            'font_size': 9,
+            'alternating_rows': True,
+            'editable_keys': True,
+            'editable_values': True,
+            'column_width_key': 180,
+            'column_width_value': 240,
+        }
+    
+    def sync_json_view_theme(self, ui_theme=None):
+        """
+        Synchronize JSON View theme with UI theme.
+        
+        Args:
+            ui_theme: Current UI theme name (optional, auto-detected if None)
+        """
+        if hasattr(self, 'config_view') and self.config_view is not None:
+            try:
+                if self._config_manager is not None:
+                    json_theme = self._config_manager.sync_json_view_with_ui_theme()
+                else:
+                    # Fallback: map UI theme to JSON View theme
+                    theme_mapping = {
+                        'dark': 'dracula',
+                        'light': 'solarized_light',
+                        'default': 'default',
+                        'auto': 'auto',
+                    }
+                    json_theme = theme_mapping.get(ui_theme, 'default')
+                
+                if json_theme != 'auto':
+                    self.config_view.set_theme(json_theme)
+                    logger.debug(f"JSON View theme synchronized to: {json_theme}")
+            except Exception as e:
+                logger.warning(f"Could not sync JSON View theme: {e}")
     
     def _initialize_layer_state(self):
         """Initialize layer-related state during __init__."""
@@ -585,7 +727,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Setup tab-specific widgets (always needed regardless of splitter)
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
-        self._setup_exporting_tab_widgets()
+        
+        # Setup exporting tab only if feature is enabled
+        if self.is_feature_enabled('ENABLE_EXPORT'):
+            self._setup_exporting_tab_widgets()
+        else:
+            # Hide the exporting tab if feature is disabled
+            if hasattr(self, 'toolBox_tabTools') and hasattr(self, 'page_exporting'):
+                try:
+                    # Find and remove the exporting page from the toolbox
+                    for i in range(self.toolBox_tabTools.count()):
+                        if self.toolBox_tabTools.widget(i) == self.page_exporting:
+                            self.toolBox_tabTools.removeItem(i)
+                            logger.info("Exporting tab hidden (feature disabled)")
+                            break
+                except Exception as e:
+                    logger.warning(f"Could not hide exporting tab: {e}")
 
         # Continue setupUiCustom after widget creation
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
@@ -1234,15 +1391,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         logger.info(f"Applying action bar position: {position}")
         
-        # Get all action buttons
-        action_buttons = [
-            self.pushButton_action_filter,
-            self.pushButton_action_undo_filter,
-            self.pushButton_action_redo_filter,
-            self.pushButton_action_unfilter,
-            self.pushButton_action_export,
-            self.pushButton_action_about
-        ]
+        # Get all action buttons, filtering based on enabled features
+        action_buttons = [self.pushButton_action_filter]
+        
+        # Add undo/redo buttons only if feature is enabled
+        if self.is_feature_enabled('ENABLE_UNDO_REDO'):
+            action_buttons.append(self.pushButton_action_undo_filter)
+            action_buttons.append(self.pushButton_action_redo_filter)
+        else:
+            # Hide undo/redo buttons if feature is disabled
+            self.pushButton_action_undo_filter.setVisible(False)
+            self.pushButton_action_redo_filter.setVisible(False)
+        
+        action_buttons.append(self.pushButton_action_unfilter)
+        
+        # Add export button only if feature is enabled
+        if self.is_feature_enabled('ENABLE_EXPORT'):
+            action_buttons.append(self.pushButton_action_export)
+        else:
+            self.pushButton_action_export.setVisible(False)
+        
+        action_buttons.append(self.pushButton_action_about)
         
         # Step 1: Remove frame_actions from its current parent layout
         parent = self.frame_actions.parent()
@@ -1619,6 +1788,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Sets up checkableComboBox for feature selection and configures mFieldExpressionWidget
         for single/multiple/custom selection modes. Layer initialization is deferred to
         manage_interactions() to prevent blocking during project load.
+        
+        Respects feature toggles for layer linking.
         """
         layout = self.verticalLayout_exploring_multiple_selection
         layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
@@ -1630,6 +1801,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.mFieldExpressionWidget_exploring_single_selection.setFilters(field_filters)
         self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
         self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
+        
+        # Hide layer linking button if feature is disabled
+        if not self.is_feature_enabled('ENABLE_LAYER_LINKING'):
+            if hasattr(self, 'pushButton_checkable_exploring_linking_widgets'):
+                self.pushButton_checkable_exploring_linking_widgets.setVisible(False)
+            logger.info("Layer linking feature disabled")
         
         # NOTE: setLayer() calls are deferred to manage_interactions() via _deferred_manage_interactions()
         # to prevent blocking during project load. The old synchronous calls here caused freezes.
@@ -1676,6 +1853,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Sets up comboBox_filtering_current_layer (VectorLayer filter), creates and configures
         checkableComboBoxLayer_filtering_layers_to_filter. Layer initialization is deferred
         to manage_interactions() to prevent blocking during project load.
+        
+        Respects feature toggles for geometric predicates and buffer filtering.
         """
         # Filter comboBox_filtering_current_layer to show only vector layers
         self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
@@ -1689,6 +1868,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Insert into layout
         layout = self.verticalLayout_filtering_values
         layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
+        
+        # Hide geometric predicates widgets if feature is disabled
+        if not self.is_feature_enabled('ENABLE_GEOMETRIC_PREDICATES'):
+            if hasattr(self, 'pushButton_checkable_filtering_geometric_predicates'):
+                self.pushButton_checkable_filtering_geometric_predicates.setVisible(False)
+            if hasattr(self, 'comboBox_filtering_geometric_predicates'):
+                self.comboBox_filtering_geometric_predicates.setVisible(False)
+            logger.info("Geometric predicates feature disabled")
+        
+        # Hide buffer widgets if feature is disabled
+        if not self.is_feature_enabled('ENABLE_BUFFER_FILTER'):
+            if hasattr(self, 'pushButton_checkable_filtering_buffer_value'):
+                self.pushButton_checkable_filtering_buffer_value.setVisible(False)
+            if hasattr(self, 'pushButton_checkable_filtering_buffer_type'):
+                self.pushButton_checkable_filtering_buffer_type.setVisible(False)
+            if hasattr(self, 'mQgsDoubleSpinBox_filtering_buffer_value'):
+                self.mQgsDoubleSpinBox_filtering_buffer_value.setVisible(False)
+            if hasattr(self, 'mPropertyOverrideButton_filtering_buffer_value_property'):
+                self.mPropertyOverrideButton_filtering_buffer_value_property.setVisible(False)
+            if hasattr(self, 'comboBox_filtering_buffer_type'):
+                self.comboBox_filtering_buffer_type.setVisible(False)
+            logger.info("Buffer filter feature disabled")
         
         # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
         from .modules.ui_config import UIConfig
@@ -1931,9 +2132,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     detected_theme = StyleLoader.detect_qgis_theme()
                     logger.info(f"Auto-detected QGIS theme: {detected_theme}")
                     StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, detected_theme)
+                    # Synchronize JSON View theme
+                    self.sync_json_view_theme(detected_theme)
                 else:
                     # Apply specified theme (default, dark, light)
                     StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA, new_theme_value)
+                    # Synchronize JSON View theme
+                    self.sync_json_view_theme(new_theme_value)
                 
                 changes_summary.append(f"Theme: {new_theme_value}")
                 
@@ -2299,14 +2504,38 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def manage_configuration_model(self):
-        """Manage the qtreeview model configuration"""
+        """Manage the qtreeview model configuration with ConfigManager integration."""
 
         try:
+            # Check if advanced config feature is enabled
+            if not self.is_feature_enabled('ENABLE_ADVANCED_CONFIG'):
+                logger.info("Advanced configuration panel disabled by feature toggle")
+                # Hide the configuration tab if feature is disabled
+                if hasattr(self, 'tabTools') and hasattr(self, 'CONFIGURATION'):
+                    tab_index = self.tabTools.indexOf(self.CONFIGURATION)
+                    if tab_index >= 0:
+                        self.tabTools.removeTab(tab_index)
+                return
+            
+            # Get JSON View settings from ConfigManager
+            json_view_settings = self.get_json_view_settings()
+            
             # Create model with data
-            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True, plugin_dir=self.plugin_dir)
+            editable_keys = json_view_settings.get('editable_keys', True)
+            editable_values = json_view_settings.get('editable_values', True)
+            self.config_model = JsonModel(
+                data=self.CONFIG_DATA, 
+                editable_keys=editable_keys, 
+                editable_values=editable_values, 
+                plugin_dir=self.plugin_dir
+            )
 
-            # Create view with model - setModel() is called in JsonView.__init__()
-            self.config_view = JsonView(self.config_model, self.plugin_dir)
+            # Create view with model and settings - setModel() is called in JsonView.__init__()
+            self.config_view = JsonView(
+                self.config_model, 
+                self.plugin_dir, 
+                settings=json_view_settings
+            )
             
             # Insert into layout
             self.CONFIGURATION.layout().insertWidget(0, self.config_view)
@@ -2317,6 +2546,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.config_view.setAnimated(True)
             self.config_view.setEnabled(True)
             self.config_view.show()
+            
+            # Synchronize JSON View theme with UI theme
+            self.sync_json_view_theme()
             
             # Add Reload Plugin button
             self._setup_reload_button()
@@ -2344,9 +2576,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         try:
             # Create reload button
-            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin")
+            self.pushButton_reload_plugin = QtWidgets.QPushButton(self.tr("🔄 Reload Plugin"))
             self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
-            self.pushButton_reload_plugin.setToolTip("Reload the plugin to apply layout changes (action bar position)")
+            self.pushButton_reload_plugin.setToolTip(self.tr("Reload the plugin to apply layout changes (action bar position)"))
             self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
             
             # Style the button
@@ -5853,9 +6085,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     combo_widget.setToolTip(text)
                 elif text:
                     # Short text - use descriptive tooltip instead
-                    combo_widget.setToolTip(f"Current layer: {text}")
+                    combo_widget.setToolTip(self.tr("Current layer: {name}").format(name=text))
                 else:
-                    combo_widget.setToolTip("No layer selected")
+                    combo_widget.setToolTip(self.tr("No layer selected"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating combo tooltip: {e}")
     
@@ -5871,11 +6103,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Join item names with line breaks for readability
                     text = "\n".join([item.text() for item in items if hasattr(item, 'text')])
                     if text:
-                        combo_widget.setToolTip(f"Selected layers:\n{text}")
+                        combo_widget.setToolTip(self.tr("Selected layers:") + "\n" + text)
                     else:
-                        combo_widget.setToolTip("Multiple layers selected")
+                        combo_widget.setToolTip(self.tr("Multiple layers selected"))
                 else:
-                    combo_widget.setToolTip("No layers selected")
+                    combo_widget.setToolTip(self.tr("No layers selected"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating checkable combo tooltip: {e}")
     
@@ -5890,11 +6122,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if expr and len(expr) > 40:
                     # For long expressions, format with line breaks at logical points
                     formatted_expr = expr.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
-                    expression_widget.setToolTip(f"Expression:\n{formatted_expr}")
+                    expression_widget.setToolTip(self.tr("Expression:") + "\n" + formatted_expr)
                 elif expr:
-                    expression_widget.setToolTip(f"Expression: {expr}")
+                    expression_widget.setToolTip(self.tr("Expression:") + " " + expr)
                 else:
-                    expression_widget.setToolTip("No expression defined")
+                    expression_widget.setToolTip(self.tr("No expression defined"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating expression tooltip: {e}")
     
@@ -5907,14 +6139,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(picker_widget, 'displayExpression'):
                 display_expr = picker_widget.displayExpression()
                 if display_expr and len(display_expr) > 30:
-                    picker_widget.setToolTip(f"Display expression: {display_expr}")
+                    picker_widget.setToolTip(self.tr("Display expression:") + " " + display_expr)
                 elif hasattr(picker_widget, 'feature'):
                     feature = picker_widget.feature()
                     if feature and feature.isValid():
                         # Show feature ID and first attribute
                         attrs = feature.attributes()
                         if attrs:
-                            picker_widget.setToolTip(f"Feature ID: {feature.id()}\nFirst attribute: {attrs[0]}")
+                            picker_widget.setToolTip(self.tr("Feature ID:") + f" {feature.id()}\n" + self.tr("First attribute:") + f" {attrs[0]}")
         except Exception as e:
             logger.debug(f"FilterMate: Error updating feature picker tooltip: {e}")
 

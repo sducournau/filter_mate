@@ -1,6 +1,8 @@
 import math
 import logging
 import os
+import re  # Import at module level for performance (avoid repeated imports in functions)
+import sqlite3  # Import at module level for GeoPackage validation
 
 # Import logging configuration
 from .logging_config import setup_logger
@@ -80,7 +82,7 @@ def get_primary_key_name(layer):
     
     # Strategy 2: Pattern matching for fields ending with ID/id
     # Matches: AGG_ID, agg_id, node_id, FEATURE_ID, etc.
-    import re
+    # Note: 're' is imported at module level for performance
     id_pattern = re.compile(r'.*[_-]?id$', re.IGNORECASE)
     
     for field_name in field_names:
@@ -156,10 +158,8 @@ def is_valid_geopackage(file_path: str) -> bool:
     Note:
         This function only checks for required metadata tables.
         It does NOT validate the full OGC GeoPackage specification.
+        sqlite3 is imported at module level for performance.
     """
-    import sqlite3
-    import os
-    
     # Check file exists and has .gpkg extension
     if not os.path.isfile(file_path):
         return False
@@ -253,53 +253,45 @@ def detect_layer_provider_type(layer):
         return 'spatialite'
     elif normalized_type == PROVIDER_MEMORY:
         return 'memory'
-    elif provider_type == PROVIDER_OGR:
-        # Check file extension first - .sqlite and .gpkg files are Spatialite-based
-        source = layer.source()
-        source_path = source.split('|')[0] if '|' in source else source
-        
-        # For .gpkg files, validate it's a real GeoPackage
-        if source_path.lower().endswith('.gpkg'):
-            if is_valid_geopackage(source_path):
-                logger.debug(f"Detected valid GeoPackage: {source_path}")
-                return 'spatialite'
-            else:
-                logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
-                return 'ogr'
-        
-        # For .sqlite files, assume Spatialite
-        if source_path.lower().endswith('.sqlite'):
-            return 'spatialite'
-        
-        # Check if it's Spatialite via 'Transactions' capability
-        capabilities = layer.capabilitiesString().split(', ')
-        if 'Transactions' in capabilities:
-            return 'spatialite'
-        else:
-            return 'ogr'
-    else:
-        # Fallback for OGR-like providers
-        source = layer.source()
-        source_path = source.split('|')[0] if '|' in source else source
-        
-        # For .gpkg files, validate it's a real GeoPackage
-        if source_path.lower().endswith('.gpkg'):
-            if is_valid_geopackage(source_path):
-                logger.debug(f"Detected valid GeoPackage: {source_path}")
-                return 'spatialite'
-            else:
-                logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
-                return 'ogr'
-        
-        # For .sqlite files, assume Spatialite
-        if source_path.lower().endswith('.sqlite'):
-            return 'spatialite'
-        
-        capabilities = layer.capabilitiesString().split(', ')
-        if 'Transactions' in capabilities:
+    
+    # For OGR or other providers, check if it's Spatialite-based
+    return _detect_spatialite_or_ogr(layer)
+
+
+def _detect_spatialite_or_ogr(layer):
+    """
+    Helper to detect if an OGR-type layer is actually Spatialite-based.
+    
+    Checks file extension (.gpkg, .sqlite) and layer capabilities.
+    
+    Args:
+        layer (QgsVectorLayer): QGIS vector layer
+    
+    Returns:
+        str: 'spatialite' or 'ogr'
+    """
+    source = layer.source()
+    source_path = source.split('|')[0] if '|' in source else source
+    
+    # Check for GeoPackage files
+    if source_path.lower().endswith('.gpkg'):
+        if is_valid_geopackage(source_path):
+            logger.debug(f"Detected valid GeoPackage: {source_path}")
             return 'spatialite'
         else:
+            logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
             return 'ogr'
+    
+    # Check for SQLite files
+    if source_path.lower().endswith('.sqlite'):
+        return 'spatialite'
+    
+    # Check for 'Transactions' capability (indicates Spatialite support)
+    capabilities = layer.capabilitiesString().split(', ')
+    if 'Transactions' in capabilities:
+        return 'spatialite'
+    
+    return 'ogr'
 
 
 def geometry_type_to_string(layer):
@@ -551,7 +543,7 @@ def get_source_table_name(layer):
             
             # Fallback: regex extraction from connection string
             # Format: table="schema"."table_name" or table="table_name"
-            import re
+            # Note: 're' is imported at module level
             match = re.search(r'table="(?:[^"]+"\.")?([^"]+)"', source)
             if match:
                 return match.group(1)
@@ -614,7 +606,7 @@ def sanitize_sql_identifier(name: str) -> str:
     if not name:
         return ""
     
-    import re
+    # Note: 're' is imported at module level
     # Replace any non-alphanumeric character (except underscore) with underscore
     # This handles em-dash (—), en-dash (–), spaces, and other special characters
     sanitized = re.sub(r'[^\w]', '_', name, flags=re.UNICODE)
@@ -651,8 +643,7 @@ def sanitize_filename(name: str, replacement: str = '_') -> str:
     if not name:
         return ""
     
-    import re
-    
+    # Note: 're' is imported at module level
     # Characters forbidden in Windows filenames: \ / : * ? " < > |
     # Also handle em-dash (—) and en-dash (–) which can cause encoding issues
     forbidden_chars = r'[\\/:*?"<>|]'
