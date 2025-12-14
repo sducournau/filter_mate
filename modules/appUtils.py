@@ -4,12 +4,16 @@ import os
 import re  # Import at module level for performance (avoid repeated imports in functions)
 import sqlite3  # Import at module level for GeoPackage validation
 
-# Import logging configuration - use get_logger() to avoid file I/O at import time
-# CRITICAL: Do not use setup_logger() at module level with ENV_VARS as it causes QGIS freeze
-from .logging_config import get_logger
+# Import logging configuration
+from .logging_config import setup_logger
+from ..config.config import ENV_VARS
 
-# Get logger without file I/O (console only at import time)
-logger = get_logger('FilterMate.Utils')
+# Setup logger with rotation
+logger = setup_logger(
+    'FilterMate.Utils',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_utils.log'),
+    level=logging.INFO
+)
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:

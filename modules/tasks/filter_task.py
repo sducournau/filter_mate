@@ -56,12 +56,16 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.utils import iface
 from qgis import processing
 
-# Import logging configuration - use get_logger() to avoid file I/O at import time
-# CRITICAL: Do not use setup_logger() at module level with ENV_VARS as it causes QGIS freeze
-from ..logging_config import get_logger, safe_log
+# Import logging configuration
+from ..logging_config import setup_logger, safe_log
+from ...config.config import ENV_VARS
 
-# Get logger without file I/O (console only at import time)
-logger = get_logger('FilterMate.Tasks.Filter')
+# Setup logger with rotation
+logger = setup_logger(
+    'FilterMate.Tasks.Filter',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:
@@ -194,8 +198,8 @@ class FilterEngineTask(QgsTask):
             "covers": "ST_Covers",
             "coveredby": "ST_CoveredBy"
         }
-        # Use QgsProject.instance() instead of global ENV_VARS to avoid import issues
-        self.PROJECT = QgsProject.instance()
+        global ENV_VARS
+        self.PROJECT = ENV_VARS["PROJECT"]
         self.current_materialized_view_schema = 'filter_mate_temp'
         
         # Track active database connections for cleanup on cancellation

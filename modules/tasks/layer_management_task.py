@@ -38,12 +38,16 @@ import uuid
 from collections import OrderedDict
 import re
 
-# Import logging configuration - use get_logger() to avoid file I/O at import time
-# CRITICAL: Do not use setup_logger() at module level with ENV_VARS as it causes QGIS freeze
-from ..logging_config import get_logger, safe_log
+# Import logging configuration
+from ..logging_config import setup_logger, safe_log
+from ...config.config import ENV_VARS
 
-# Get logger without file I/O (console only at import time)
-logger = get_logger('FilterMate.LayerManagementTask')
+# Setup logger
+logger = setup_logger(
+    'FilterMate.LayerManagementTask',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 # Import constants
 from ..constants import (
@@ -140,8 +144,8 @@ class LayersManagementEngineTask(QgsTask):
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"current_exploring_groupbox":"single_selection","single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
         self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round" }'
         
-        # Use QgsProject.instance() instead of global ENV_VARS to avoid import issues
-        self.PROJECT = QgsProject.instance()
+        global ENV_VARS
+        self.PROJECT = ENV_VARS["PROJECT"]
 
     
     def _ensure_db_directory_exists(self):

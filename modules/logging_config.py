@@ -132,12 +132,7 @@ def setup_logger(name, log_file, level=logging.INFO):
 
 def get_logger(name):
     """
-    Get existing logger or create a default one with minimal overhead.
-    
-    CRITICAL: This function is called at module import time, so it MUST NOT
-    perform any file I/O operations that could block QGIS startup.
-    Only adds a console handler - file handlers are added later by setup_logger()
-    when ENV_VARS is properly initialized.
+    Get existing logger or create a default one.
     
     Args:
         name (str): Logger name
@@ -147,18 +142,8 @@ def get_logger(name):
     """
     logger = logging.getLogger(name)
     if not logger.handlers:
-        # ONLY add console handler to avoid file I/O at import time
-        # File handlers will be added later when setup_logger() is called
-        # with a valid path after ENV_VARS is initialized
-        console_handler = SafeStreamHandler(sys.stderr)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(logging.WARNING)  # Only WARNING+ to console
-        logger.addHandler(console_handler)
-        logger.setLevel(logging.INFO)
+        # Create default logger if not configured
+        logger = setup_logger(name, f'filtermate_{name.split(".")[-1].lower()}.log')
     return logger
 
 

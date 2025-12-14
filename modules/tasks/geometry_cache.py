@@ -22,12 +22,15 @@ import logging
 import os
 import threading
 
-# Import logging configuration - use get_logger() to avoid file I/O at import time
-# CRITICAL: Do not use setup_logger() at module level with ENV_VARS as it causes QGIS freeze
-from ..logging_config import get_logger
+from ..logging_config import setup_logger
+from ...config.config import ENV_VARS
 
-# Get logger without file I/O (console only at import time)
-logger = get_logger('FilterMate.Tasks.Cache')
+# Setup logger
+logger = setup_logger(
+    'FilterMate.Tasks.Cache',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 
 class SourceGeometryCache:
