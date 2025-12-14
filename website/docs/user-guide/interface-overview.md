@@ -192,6 +192,7 @@ FilterMate organizes features into 3 main tabs:
 - **JSON Tree View:** Edit full configuration
 - **Theme Selector:** Choose UI theme (default/dark/light/auto)
 - **Advanced Options:** Plugin settings
+- **Feedback Level:** Control message verbosity (Minimal/Normal/Verbose)
 
 **See:** [Configuration](../advanced/configuration.md)
 
@@ -209,6 +210,20 @@ Always visible regardless of active tab:
 | **RESET** | <img src="/filter_mate/icons/reset.png" alt="Reset" width="32"/> | Clear all filters | Ctrl+Shift+C |
 | **EXPORT** | <img src="/filter_mate/icons/export.png" alt="Export" width="32"/> | Quick export | Ctrl+E |
 | **ABOUT** | <img src="/filter_mate/icons/icon.png" alt="Icon" width="32"/> | Plugin information | - |
+
+### Intelligent Undo/Redo (v2.3.0)
+
+:::tip Context-Aware Undo/Redo
+The Undo/Redo buttons automatically adapt based on your current configuration:
+- **Source Layer Only**: When "Layers to Filter" is unchecked, undo affects only the source layer
+- **Global Mode**: When "Layers to Filter" is checked with remote layers selected, undo restores ALL affected layers simultaneously
+:::
+
+**Button States:**
+- **Enabled** (clickable): History available
+- **Disabled** (grayed out): No history in that direction
+
+**See:** [Filter History & Undo/Redo](./filter-history.md) for detailed documentation.
 
 ---
 

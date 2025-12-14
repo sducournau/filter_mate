@@ -243,7 +243,7 @@
         },
         "OPTIONS": {
             "LAYERS": {
-                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,
+                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
                 "LAYER_PROPERTIES_COUNT": 35,
                 "FEATURE_COUNT_LIMIT": 10000
             },

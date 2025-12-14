@@ -34,7 +34,7 @@ That's it! FilterMate is now ready to use with OGR and Spatialite backends.
 For optimal performance with PostgreSQL/PostGIS layers, install the `psycopg2` package.
 
 :::tip Performance Boost
-PostgreSQL backend provides **10-50× faster filtering** on large datasets (&>;50,000 features) compared to other backends.
+PostgreSQL backend provides **10-50× faster filtering** on large datasets (>50,000 features) compared to other backends.
 :::
 
 ### Method 1: pip (Recommended)

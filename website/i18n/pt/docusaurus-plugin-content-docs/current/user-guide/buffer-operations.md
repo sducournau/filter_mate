@@ -47,7 +47,7 @@ O **algoritmo padrão** cria buffers precisos adequados para a maioria dos casos
 - Análise geral de proximidade
 - Aplicações de planejamento
 - Conformidade regulatória (precisão necessária)
-- Conjuntos de dados médios (<10k feições)
+- Conjuntos de dados médios (`<10k` feições)
 
 **Exemplo de Configuração:**
 ```
@@ -263,9 +263,9 @@ distância = 5000
    - Publicação: Segmento
 
 2. **Considere o tamanho do dataset**
-   - <10k feições: Qualquer tipo funciona
+   - `<10k` feições: Qualquer tipo funciona
    - 10k-50k: Prefira Rápido para exploração
-   - >50k: Use Rápido, otimize depois
+   - `>50k`: Use Rápido, otimize depois
 
 3. **Ajuste a contagem de segmentos**
    - Menos segmentos = mais rápido, menos suave

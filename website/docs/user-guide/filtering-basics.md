@@ -20,6 +20,20 @@ This page focuses on **attribute filtering** using QGIS expressions.
 All filtering operations are configured in the **FILTERING** tab at the top of the FilterMate panel. Don't confuse this with the EXPLORING tab, which works on the current active layer only.
 :::
 
+:::info Automatic Filter Preservation (v2.3.0)
+FilterMate v2.3.0 automatically preserves existing filters when applying new ones. New filters are combined with the previous filter using the selected operator (AND by default). This prevents accidental filter loss when building complex queries step by step.
+
+**Example:**
+1. Apply geometric filter → 150 features
+2. Apply attribute filter `"population" > 5000`
+3. Result: `(geometric_filter) AND ("population" > 5000)` → 23 features
+
+**Available Operators:**
+- **AND** (default): Intersection of filters
+- **OR**: Union of filters  
+- **AND NOT**: Exclusion filter
+:::
+
 ## FILTERING Tab Components
 
 ### Layer Selection
