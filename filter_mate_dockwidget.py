@@ -3148,11 +3148,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Safely disconnect all widget signals.
         
         Critical for preventing Qt access violations during task execution.
-        Processes Qt event queue between disconnections to avoid overflow.
         
         Notes:
             - CRITICAL FIX: Prevents crashes during task execution
-            - Processes events between disconnects to avoid Qt queue overflow
             - Handles already-deleted widgets gracefully
             - Called before long-running tasks or layer removal
             - Essential for plugin stability
@@ -3161,15 +3159,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Raises:
             No exceptions propagated - all errors caught and logged
         """
-        # CRITICAL FIX: Protect against Qt access violations during task execution
-        from qgis.PyQt.QtCore import QCoreApplication
-        
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
                 for widget in self.widgets[widget_group]:
                     try:
-                        # Process events to avoid Qt queue overflow during signal disconnect
-                        QCoreApplication.processEvents()
                         self.manageSignal([widget_group, widget], 'disconnect')
                     except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
                         # Widget may not exist, already deleted, or signal not connected

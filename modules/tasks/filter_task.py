@@ -57,15 +57,13 @@ from qgis.utils import iface
 from qgis import processing
 
 # Import logging configuration
-from ..logging_config import setup_logger, safe_log
-from ...config.config import ENV_VARS
+from ..logging_config import get_logger, safe_log
 
-# Setup logger with rotation
-logger = setup_logger(
-    'FilterMate.Tasks.Filter',
-    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
-    level=logging.INFO
-)
+# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
+logger = get_logger('FilterMate.Tasks.Filter')
+
+# Import config (used later in class methods, NOT at module level)
+from ...config.config import ENV_VARS
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:

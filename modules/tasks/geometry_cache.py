@@ -19,18 +19,12 @@ Thread-Safety:
 """
 
 import logging
-import os
 import threading
 
-from ..logging_config import setup_logger
-from ...config.config import ENV_VARS
+from ..logging_config import get_logger
 
-# Setup logger
-logger = setup_logger(
-    'FilterMate.Tasks.Cache',
-    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
-    level=logging.INFO
-)
+# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
+logger = get_logger('FilterMate.Tasks.Cache')
 
 
 class SourceGeometryCache:

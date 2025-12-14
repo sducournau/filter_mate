@@ -5,15 +5,10 @@ import re  # Import at module level for performance (avoid repeated imports in f
 import sqlite3  # Import at module level for GeoPackage validation
 
 # Import logging configuration
-from .logging_config import setup_logger
-from ..config.config import ENV_VARS
+from .logging_config import get_logger
 
-# Setup logger with rotation
-logger = setup_logger(
-    'FilterMate.Utils',
-    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_utils.log'),
-    level=logging.INFO
-)
+# Get logger (deferred initialization to avoid issues when ENV_VARS is empty at import time)
+logger = get_logger('FilterMate.Utils')
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:

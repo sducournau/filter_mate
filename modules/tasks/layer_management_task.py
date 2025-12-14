@@ -39,15 +39,13 @@ from collections import OrderedDict
 import re
 
 # Import logging configuration
-from ..logging_config import setup_logger, safe_log
-from ...config.config import ENV_VARS
+from ..logging_config import get_logger, safe_log
 
-# Setup logger
-logger = setup_logger(
-    'FilterMate.LayerManagementTask',
-    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
-    level=logging.INFO
-)
+# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
+logger = get_logger('FilterMate.LayerManagementTask')
+
+# Import config (used later in class methods, NOT at module level)
+from ...config.config import ENV_VARS
 
 # Import constants
 from ..constants import (
