@@ -669,8 +669,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Setup backend indicator (right-aligned label showing current backend)
         self._setup_backend_indicator()
         
-        # Setup action bar layout based on configuration
-        self._setup_action_bar_layout()
+        # CRITICAL FIX: Defer action bar layout to prevent blocking during startup
+        # Side layouts (left/right) involve complex splitter operations that can freeze QGIS
+        QTimer.singleShot(0, self._setup_action_bar_layout)
 
     def _setup_main_splitter(self):
         """
@@ -1605,6 +1606,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Args:
             position: str - 'left' or 'right'
         """
+        # NOTE: Do NOT call processEvents() here - it causes QGIS freeze
+        # by allowing re-entrant event processing during layout creation
+        
         # Get alignment from config
         alignment = self._get_action_bar_vertical_alignment()
         
@@ -3134,6 +3138,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Called after layers are loaded or project changes
             - Pairs with disconnect_widgets_signals()
         """
+        # Guard: widgets may be None during early initialization
+        if self.widgets is None:
+            logger.debug("connect_widgets_signals called but widgets is None")
+            return
+        
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
                 for widget in self.widgets[widget_group]:
@@ -3148,11 +3157,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Safely disconnect all widget signals.
         
         Critical for preventing Qt access violations during task execution.
-        Processes Qt event queue between disconnections to avoid overflow.
         
         Notes:
             - CRITICAL FIX: Prevents crashes during task execution
-            - Processes events between disconnects to avoid Qt queue overflow
             - Handles already-deleted widgets gracefully
             - Called before long-running tasks or layer removal
             - Essential for plugin stability
@@ -3161,15 +3168,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Raises:
             No exceptions propagated - all errors caught and logged
         """
-        # CRITICAL FIX: Protect against Qt access violations during task execution
-        from qgis.PyQt.QtCore import QCoreApplication
+        # NOTE: Do NOT call processEvents() here - it causes QGIS freeze
+        # by allowing re-entrant event processing during signal disconnection
+        
+        # Guard: widgets may be None during early initialization
+        if self.widgets is None:
+            logger.debug("disconnect_widgets_signals called but widgets is None")
+            return
         
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
                 for widget in self.widgets[widget_group]:
                     try:
-                        # Process events to avoid Qt queue overflow during signal disconnect
-                        QCoreApplication.processEvents()
                         self.manageSignal([widget_group, widget], 'disconnect')
                     except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
                         # Widget may not exist, already deleted, or signal not connected
