@@ -7,7 +7,17 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.0 - Global Undo/Redo System
+## 🎉 What's New in v2.3.1 - Stability & Performance Improvements
+
+### Enhancements
+- 🐛 **Critical Bug Fixes** - Enhanced stability across all operations
+- ⚡ **Performance Optimization** - Faster filter operations for large datasets
+- 🛠️ **Code Quality** - Improved error handling and logging
+- 📝 **Documentation** - Updated guides and version synchronization
+
+## Previous Updates
+
+### v2.3.0 - Global Undo/Redo System (December 13, 2025)
 
 ### Major Features
 - ⭐ **Intelligent Undo/Redo** - Smart context-aware undo/redo for all filter operations
@@ -29,8 +39,6 @@ slug: /
 - ✅ **Code Quality** - PEP 8 95%, 26 automated tests, CI/CD active
 - 🚀 **5× Performance** - Geometry caching for multi-layer operations
 - 🐛 **Bug Fixes** - QSplitter freeze fixed, project load race conditions resolved
-
-## Previous Updates
 
 ### v2.2.4 - Color Harmonization & Accessibility (December 8, 2025)
 - ✅ **Color Harmonization** - Enhanced visual distinction with +300% frame contrast

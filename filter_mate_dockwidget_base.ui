@@ -363,7 +363,7 @@
                 <x>0</x>
                 <y>0</y>
                 <width>372</width>
-                <height>301</height>
+                <height>298</height>
                </rect>
               </property>
               <layout class="QGridLayout" name="gridLayout_main_header">
@@ -1377,7 +1377,7 @@
                 <enum>QFrame::Panel</enum>
                </property>
                <property name="currentIndex">
-                <number>0</number>
+                <number>1</number>
                </property>
                <property name="tabSpacing">
                 <number>0</number>
@@ -2562,7 +2562,7 @@
                  <rect>
                   <x>0</x>
                   <y>0</y>
-                  <width>418</width>
+                  <width>370</width>
                   <height>298</height>
                  </rect>
                 </property>
@@ -3433,7 +3433,7 @@
                  <rect>
                   <x>0</x>
                   <y>0</y>
-                  <width>418</width>
+                  <width>370</width>
                   <height>259</height>
                  </rect>
                 </property>

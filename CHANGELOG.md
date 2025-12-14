@@ -2,6 +2,24 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.3.1] - 2025-12-14 - Stability & Performance Improvements
+
+### 🐛 Bug Fixes
+- **Critical stability improvements** - Enhanced error handling across all modules
+- **Filter operation optimization** - Improved performance for large datasets
+- **Memory management** - Better resource cleanup and connection handling
+
+### 🛠️ Code Quality
+- **Enhanced logging** - More detailed debug information for troubleshooting
+- **Error recovery** - Improved graceful degradation in edge cases
+- **Test coverage** - Additional test cases for stability scenarios
+
+### 📝 Documentation
+- **Version updates** - Synchronized version across all documentation files
+- **Configuration guides** - Updated setup instructions
+
+---
+
 ## [2.3.0] - 2025-12-13 - Global Undo/Redo & Automatic Filter Preservation
 
 ### 🛠️ Code Quality

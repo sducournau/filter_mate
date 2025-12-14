@@ -6,11 +6,11 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.0
+version=2.3.1
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.0 - Global Undo/Redo System!
+about=FilterMate v2.3.1 - Stability & Performance Improvements!
 
  NEW in v2.3.0:
  - ⭐ FEATURE: Intelligent Undo/Redo with automatic context detection
