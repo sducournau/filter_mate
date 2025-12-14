@@ -52,7 +52,7 @@
                     "top",
                     "bottom"
                 ],
-                "value": "top"
+                "value": "bottom"
             },
             "_ACTION_BAR_VERTICAL_ALIGNMENT_META": {
                 "description": "Vertical alignment of action buttons when action bar is in vertical mode (left/right): 'top' (buttons at top), 'bottom' (buttons at bottom). Use the splitter handle to adjust position."
@@ -243,7 +243,7 @@
         },
         "OPTIONS": {
             "LAYERS": {
-                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
+                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,
                 "LAYER_PROPERTIES_COUNT": 35,
                 "FEATURE_COUNT_LIMIT": 10000
             },

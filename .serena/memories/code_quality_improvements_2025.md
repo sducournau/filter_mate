@@ -146,6 +146,42 @@ All changes verified with `python -m py_compile` - no syntax errors.
 
 ---
 
+## Release v2.3.0 Published (December 13, 2025)
+
+### Release Contents
+- **Tag**: v2.3.0 pushed to GitHub
+- **Commit**: 6befacd - "Release v2.3.0 - Global Undo/Redo & Filter Preservation"
+- **Files Updated**: 14 files, +1159/-1139 lines
+
+### Code Quality Audit Results (December 13, 2025)
+
+**Overall Score: 4.2/5 ⭐⭐⭐⭐**
+
+| Critère | Note |
+|---------|------|
+| Architecture | 4.5/5 |
+| PEP 8 Compliance | 4.5/5 |
+| Exception Handling | 4/5 |
+| Organization | 4.5/5 |
+| Documentation | 4/5 |
+| Test Coverage | 3.5/5 |
+
+### Key Findings
+- ✅ Multi-backend factory pattern well implemented
+- ✅ POSTGRESQL_AVAILABLE flag correctly used everywhere
+- ✅ Task modules well extracted (Phase 3 complete)
+- ✅ No `!= None` or `== True/False` patterns in active code
+- ⚠️ ~100 `except Exception` remaining (all logged appropriately)
+- ⚠️ Nomenclature `connexion` vs `connection` inconsistent (~70 vs ~150)
+- ⚠️ Test coverage ~25% (6 test files)
+
+### Recommendations for Future
+1. Increase test coverage to 60%+
+2. Standardize `connexion` → `connection`
+3. Consider splitting `filter_mate_dockwidget.py` (~5800 lines)
+
+---
+
 ## Comprehensive Audit Session (January 2025)
 
 ### Scope

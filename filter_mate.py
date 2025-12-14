@@ -201,8 +201,9 @@ class FilterMate:
             add_to_toolbar=False,
             status_tip=self.tr(u'Réinitialiser la configuration par défaut et supprimer la base de données SQLite'))
         
-        # Connect signals for auto-activation when layers are added or project is loaded
-        self._connect_auto_activation_signals()
+        # Auto-activation disabled - user must manually click the toolbar button to open the plugin
+        # To re-enable auto-activation when layers are added or project is loaded, uncomment the line below:
+        # self._connect_auto_activation_signals()
 
     #--------------------------------------------------------------------------
 

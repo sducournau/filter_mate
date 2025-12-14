@@ -135,6 +135,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         return ""
     
+    # Threshold for logging performance recommendations
+    SMALL_DATASET_THRESHOLD = 10000
+    LARGE_DATASET_THRESHOLD = 100000
+    
     def apply_filter(
         self,
         layer: QgsVectorLayer,
@@ -144,6 +148,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     ) -> bool:
         """
         Apply filter to PostgreSQL layer using setSubsetString.
+        
+        Adapts messaging based on dataset size:
+        - Small datasets (< 10k): Direct filter is optimal
+        - Medium datasets (10k-100k): Direct filter works well
+        - Large datasets (≥ 100k): Recommends materialized views if slow
         
         Args:
             layer: PostgreSQL layer to filter
@@ -161,6 +170,26 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
                 return False
+            
+            # Get feature count for strategy logging
+            feature_count = layer.featureCount()
+            
+            # Log filtering strategy based on dataset size
+            if feature_count < self.SMALL_DATASET_THRESHOLD:
+                self.log_debug(
+                    f"Small dataset ({feature_count:,} features). "
+                    f"Using direct setSubsetString for simplicity."
+                )
+            elif feature_count < self.LARGE_DATASET_THRESHOLD:
+                self.log_info(
+                    f"Medium dataset ({feature_count:,} features). "
+                    f"Using direct setSubsetString (consider materialized views for complex spatial queries)."
+                )
+            else:
+                self.log_info(
+                    f"Large dataset ({feature_count:,} features). "
+                    f"Using direct setSubsetString. For repeated queries, materialized views may offer better performance."
+                )
             
             # Combine with existing filter if specified
             # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
@@ -182,11 +211,23 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             elapsed = time.time() - start_time
             
             if result:
-                feature_count = layer.featureCount()
-                self.log_info(f"Filter applied successfully in {elapsed:.2f}s. {feature_count} features match.")
+                new_feature_count = layer.featureCount()
+                self.log_info(f"Filter applied successfully in {elapsed:.2f}s. {new_feature_count} features match.")
                 
+                # Performance recommendations based on elapsed time and dataset size
                 if elapsed > 5.0:
-                    self.log_warning(f"Slow filter operation ({elapsed:.2f}s) - consider optimizing query or adding spatial indexes")
+                    if feature_count >= self.LARGE_DATASET_THRESHOLD:
+                        self.log_warning(
+                            f"Slow filter operation ({elapsed:.2f}s) on large dataset. "
+                            f"Consider: 1) Adding spatial indexes (CREATE INDEX ... USING GIST), "
+                            f"2) Using materialized views for repeated queries, "
+                            f"3) Simplifying the filter expression."
+                        )
+                    else:
+                        self.log_warning(
+                            f"Slow filter operation ({elapsed:.2f}s) - "
+                            f"consider optimizing query or adding spatial indexes"
+                        )
             else:
                 self.log_error(f"Failed to apply filter to {layer.name()}")
             

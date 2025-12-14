@@ -341,24 +341,38 @@ class FilterEngineTask(QgsTask):
         for layer_props in self.task_parameters["task"]["layers"]:
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
-            logger.info(f"  Processing layer: {layer_name} ({provider_type})")
+            layer_id = layer_props.get("layer_id", "unknown")
+            logger.info(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
             
             # Initialize provider list if needed
             if provider_type not in self.layers:
                 self.layers[provider_type] = []
             
-            # Find layer by name and ID
+            # Find layer by name and ID (preferred method)
             layers = [
                 layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"])
                 if layer.id() == layer_props["layer_id"]
             ]
+            
+            # Fallback: If not found by name, try by ID only (layer may have been renamed)
+            if not layers:
+                logger.debug(f"    Layer not found by name '{layer_name}', trying by ID...")
+                layer_by_id = self.PROJECT.mapLayer(layer_id)
+                if layer_by_id:
+                    layers = [layer_by_id]
+                    logger.info(f"    Found layer by ID (name may have changed to '{layer_by_id.name()}')")
+                    # Update layer_props with current name
+                    layer_props["layer_name"] = layer_by_id.name()
             
             if layers:
                 self.layers[provider_type].append([layers[0], layer_props])
                 self.layers_count += 1
                 logger.info(f"    ✓ Added to filter list (total: {self.layers_count})")
             else:
-                logger.warning(f"    ⚠️ Layer not found in project: {layer_name} (id: {layer_props.get('layer_id', 'unknown')})")
+                logger.warning(f"    ⚠️ Layer not found in project: {layer_name} (id: {layer_id})")
+                # Log all layer IDs in project for debugging
+                all_layer_ids = list(self.PROJECT.mapLayers().keys())
+                logger.debug(f"    Available layer IDs in project: {all_layer_ids[:10]}{'...' if len(all_layer_ids) > 10 else ''}")
         
         self.provider_list = list(self.layers.keys())
         logger.info(f"  📊 Final organized layers count: {self.layers_count}, providers: {self.provider_list}")
@@ -996,6 +1010,16 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all layers processed successfully, False on error or cancellation
         """
+        # Log source layer state for debugging
+        logger.info("=" * 60)
+        logger.info("🔍 manage_distant_layers_geometric_filtering() - SOURCE LAYER STATE")
+        logger.info("=" * 60)
+        logger.info(f"  Source layer name: {self.source_layer.name()}")
+        logger.info(f"  Source layer subset: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else ''}'...")
+        logger.info(f"  Source layer feature count: {self.source_layer.featureCount()}")
+        logger.info(f"  is_field_expression: {getattr(self, 'is_field_expression', None)}")
+        logger.info("=" * 60)
+        
         # CRITICAL: Initialize source subset and buffer parameters FIRST
         # This sets self.param_buffer_value which is needed by prepare_*_source_geom()
         self._initialize_source_subset_and_buffer()
@@ -1201,6 +1225,7 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  Source layer has active filter: {self.source_layer.subsetString()[:100]}")
             logger.info(f"  Using {self.source_layer.featureCount()} filtered features from source layer")
             features = list(self.source_layer.getFeatures())
+            logger.debug(f"  Retrieved {len(features)} features from getFeatures()")
         elif has_selection:
             # Multi-selection mode - use selected features
             logger.info(f"=== prepare_spatialite_source_geom (MULTI-SELECTION MODE) ===")
@@ -1217,8 +1242,8 @@ class FilterEngineTask(QgsTask):
         else:
             # Get features from task parameters (single selection or expression mode)
             features = self.task_parameters["task"]["features"]
-            logger.info(f"=== prepare_spatialite_source_geom START ===")
-            logger.info(f"  Features: {len(features)} features")
+            logger.debug(f"=== prepare_spatialite_source_geom START ===")
+            logger.debug(f"  Features: {len(features)} features")
         
         # FALLBACK: If features list is empty, use all visible features from source layer
         if not features or len(features) == 0:
@@ -1226,8 +1251,8 @@ class FilterEngineTask(QgsTask):
             features = list(self.source_layer.getFeatures())
             logger.info(f"  → Fallback: Using {len(features)} features from source layer")
         
-        logger.info(f"  Buffer value: {self.param_buffer_value}")
-        logger.info(f"  Target CRS: {self.source_layer_crs_authid}")
+        logger.debug(f"  Buffer value: {self.param_buffer_value}")
+        logger.debug(f"  Target CRS: {self.source_layer_crs_authid}")
         logger.debug(f"prepare_spatialite_source_geom: Processing {len(features)} features")
         
         # Check cache first
@@ -2861,6 +2886,7 @@ class FilterEngineTask(QgsTask):
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
         has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
         has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
+        
         logger.info(f"\n🔍 Checking if distant layers should be filtered...")
         logger.info(f"  has_geometric_predicates: {has_geom_predicates}")
         logger.info(f"  has_layers_to_filter: {has_layers_to_filter}")
@@ -4039,6 +4065,11 @@ class FilterEngineTask(QgsTask):
         """
         Execute filter action using PostgreSQL backend.
         
+        Adapts filtering strategy based on dataset size:
+        - Small datasets (< 10k features): Uses direct setSubsetString for simplicity
+        - Large datasets (≥ 10k features): Uses materialized views for performance
+        - Custom buffer expressions: Always uses materialized views
+        
         Args:
             layer: QgsVectorLayer to filter
             sql_subset_string: SQL SELECT statement
@@ -4053,6 +4084,172 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
+        # Get feature count to determine strategy
+        feature_count = layer.featureCount()
+        
+        # Threshold for using materialized views (10,000 features)
+        MATERIALIZED_VIEW_THRESHOLD = 10000
+        
+        # Decide on strategy based on dataset size and filter type
+        # Custom buffer filters always need materialized views for geometry operations
+        use_materialized_view = custom or feature_count >= MATERIALIZED_VIEW_THRESHOLD
+        
+        if use_materialized_view:
+            # Log strategy decision
+            if custom:
+                logger.info(f"PostgreSQL: Using materialized views for custom buffer expression")
+            elif feature_count >= 100000:
+                logger.info(
+                    f"PostgreSQL: Very large dataset ({feature_count:,} features). "
+                    f"Using materialized views with spatial index for optimal performance."
+                )
+            else:
+                logger.info(
+                    f"PostgreSQL: Large dataset ({feature_count:,} features ≥ {MATERIALIZED_VIEW_THRESHOLD:,}). "
+                    f"Using materialized views for better performance."
+                )
+            
+            return self._filter_action_postgresql_materialized(
+                layer, sql_subset_string, primary_key_name, geom_key_name, 
+                name, custom, cur, conn, seq_order
+            )
+        else:
+            # Small dataset - use direct setSubsetString
+            logger.info(
+                f"PostgreSQL: Small dataset ({feature_count:,} features < {MATERIALIZED_VIEW_THRESHOLD:,}). "
+                f"Using direct setSubsetString for simplicity."
+            )
+            
+            return self._filter_action_postgresql_direct(
+                layer, sql_subset_string, primary_key_name, cur, conn, seq_order
+            )
+    
+    
+    def _filter_action_postgresql_direct(self, layer, sql_subset_string, primary_key_name, cur, conn, seq_order):
+        """
+        Execute PostgreSQL filter using direct setSubsetString (for small datasets).
+        
+        This method is simpler and faster for small datasets because it:
+        - Avoids creating/dropping materialized views
+        - Avoids creating spatial indexes
+        - Uses PostgreSQL's query optimizer directly
+        
+        Args:
+            layer: QgsVectorLayer to filter
+            sql_subset_string: SQL SELECT statement
+            primary_key_name: Primary key field name
+            cur: Database cursor
+            conn: Database connection
+            seq_order: Sequence order number
+            
+        Returns:
+            bool: True if successful
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            # Extract WHERE clause from SELECT statement
+            # sql_subset_string format: SELECT * FROM "schema"."table" WHERE condition
+            where_clause = self._extract_where_clause_from_select(sql_subset_string)
+            
+            if where_clause:
+                # Get existing subset to preserve filter chain
+                old_subset = layer.subsetString()
+                
+                if old_subset:
+                    # Combine with existing filter using AND
+                    final_expression = f"({old_subset}) AND ({where_clause})"
+                    logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
+                else:
+                    final_expression = where_clause
+                
+                logger.debug(f"Direct filter expression: {final_expression[:200]}...")
+                
+                # Apply filter directly
+                result = safe_set_subset_string(layer, final_expression)
+                
+                if result:
+                    elapsed = time.time() - start_time
+                    feature_count = layer.featureCount()
+                    logger.info(
+                        f"Direct PostgreSQL filter applied in {elapsed:.3f}s. "
+                        f"{feature_count} features match."
+                    )
+                    
+                    # Insert history
+                    self._insert_subset_history(cur, conn, layer, sql_subset_string, seq_order)
+                    return True
+                else:
+                    logger.error(f"Failed to apply direct filter to {layer.name()}")
+                    return False
+            else:
+                logger.warning(f"Could not extract WHERE clause from: {sql_subset_string[:100]}...")
+                # Fallback to materialized view approach
+                logger.info("Falling back to materialized view approach")
+                return self._filter_action_postgresql_materialized(
+                    layer, sql_subset_string, primary_key_name, None, 
+                    layer.name(), False, cur, conn, seq_order
+                )
+                
+        except Exception as e:
+            logger.error(f"Error applying direct PostgreSQL filter: {str(e)}")
+            import traceback
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+            return False
+    
+    
+    def _extract_where_clause_from_select(self, sql_select):
+        """
+        Extract WHERE clause from a SQL SELECT statement.
+        
+        Args:
+            sql_select: SQL SELECT statement (e.g., 'SELECT * FROM "schema"."table" WHERE condition')
+            
+        Returns:
+            str: WHERE clause condition, or None if not found
+        """
+        import re
+        
+        # Find WHERE clause (case-insensitive)
+        match = re.search(r'\bWHERE\b\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|\s+GROUP\s+BY|\s*$)', 
+                         sql_select, re.IGNORECASE | re.DOTALL)
+        
+        if match:
+            where_clause = match.group(1).strip()
+            # Remove trailing semicolon if present
+            where_clause = where_clause.rstrip(';').strip()
+            return where_clause
+        
+        return None
+    
+    
+    def _filter_action_postgresql_materialized(self, layer, sql_subset_string, primary_key_name, geom_key_name, name, custom, cur, conn, seq_order):
+        """
+        Execute PostgreSQL filter using materialized views (for large datasets or custom buffers).
+        
+        This method provides optimal performance for large datasets by:
+        - Creating indexed materialized views on the server
+        - Using GIST spatial indexes for fast spatial queries
+        - Clustering data for sequential read optimization
+        
+        Args:
+            layer: QgsVectorLayer to filter
+            sql_subset_string: SQL SELECT statement
+            primary_key_name: Primary key field name
+            geom_key_name: Geometry field name
+            name: Layer identifier
+            custom: Whether this is a custom buffer filter
+            cur: Database cursor
+            conn: Database connection
+            seq_order: Sequence order number
+            
+        Returns:
+            bool: True if successful
+        """
+        import time
+        start_time = time.time()
+        
         schema = self.current_materialized_view_schema
         
         # Build SQL commands
@@ -4105,6 +4302,13 @@ class FilterEngineTask(QgsTask):
         layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
         logger.debug(f"Layer subset string: {layer_subset_string}")
         safe_set_subset_string(layer, layer_subset_string)
+        
+        elapsed = time.time() - start_time
+        feature_count = layer.featureCount()
+        logger.info(
+            f"Materialized view created and filter applied in {elapsed:.2f}s. "
+            f"{feature_count} features match."
+        )
         
         return True
 

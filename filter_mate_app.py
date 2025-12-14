@@ -279,7 +279,8 @@ class FilterMateApp:
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
             if init_layers is not None and len(init_layers) > 0:
                 # Increased delay to 500ms to ensure complete initialization
-                QTimer.singleShot(500, lambda: self.manage_task('add_layers', init_layers))
+                # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
+                QTimer.singleShot(500, lambda layers=init_layers: self.manage_task('add_layers', layers))
                 
                 # SAFETY: Force UI update after 2 seconds if task hasn't completed
                 # This ensures UI is never left in disabled state on startup
@@ -318,12 +319,14 @@ class FilterMateApp:
                 
                 if new_layers:
                     logger.info(f"FilterMate: Found {len(new_layers)} new layers to add")
-                    QTimer.singleShot(300, lambda: self.manage_task('add_layers', new_layers))
+                    # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
+                    QTimer.singleShot(300, lambda layers=new_layers: self.manage_task('add_layers', layers))
                 else:
                     # No new layers, but update UI if it's empty
                     if len(self.PROJECT_LAYERS) == 0 and len(current_project_layers) > 0:
                         logger.info("FilterMate: PROJECT_LAYERS is empty but project has layers, refreshing")
-                        QTimer.singleShot(300, lambda: self.manage_task('add_layers', current_project_layers))
+                        # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
+                        QTimer.singleShot(300, lambda layers=current_project_layers: self.manage_task('add_layers', layers))
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
@@ -380,15 +383,42 @@ class FilterMateApp:
             return None
     
     def _handle_remove_all_layers(self):
-        """Handle remove all layers task."""
+        """Handle remove all layers task.
+        
+        Safely cleans up all layer state when all layers are removed from project.
+        STABILITY FIX: Properly resets current_layer and has_loaded_layers to prevent
+        crashes when accessing invalid layer references.
+        """
         self._safe_cancel_all_tasks()
         
         # CRITICAL: Check if dockwidget exists before accessing its methods
         if self.dockwidget is not None:
+            # STABILITY FIX: Disconnect LAYER_TREE_VIEW signal to prevent callbacks to invalid layers
+            try:
+                self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
+            except Exception as e:
+                logger.debug(f"Could not disconnect LAYER_TREE_VIEW signal: {e}")
+            
             self.dockwidget.disconnect_widgets_signals()
             self.dockwidget.reset_multiple_checkable_combobox()
+            
+            # STABILITY FIX: Reset current_layer to prevent access to deleted objects
+            self.dockwidget.current_layer = None
+            self.dockwidget.has_loaded_layers = False
+            self.dockwidget._plugin_busy = False  # Ensure not stuck in busy state
+            
+            # Update backend indicator to show waiting state
+            if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                self.dockwidget.backend_indicator_label.setText("Backend: En attente de couches...")
+                self.dockwidget.backend_indicator_label.setStyleSheet("color: #95a5a6; font-size: 8pt; font-style: italic; padding: 1px 4px;")
         
         self.layer_management_engine_task_completed({}, 'remove_all_layers')
+        
+        # Inform user that plugin is waiting for layers
+        iface.messageBar().pushInfo(
+            "FilterMate",
+            "Toutes les couches ont été supprimées. Ajoutez des couches vectorielles pour réactiver le plugin."
+        )
     
     def _handle_project_initialization(self, task_name):
         """Handle project read/new project initialization.
@@ -414,6 +444,10 @@ class FilterMateApp:
             return
         
         self._initializing_project = True
+        
+        # STABILITY FIX: Set dockwidget busy flag to prevent concurrent layer changes
+        if self.dockwidget is not None:
+            self.dockwidget._plugin_busy = True
         
         try:
             # Verify project is valid
@@ -487,7 +521,8 @@ class FilterMateApp:
             if len(init_layers) > 0:
                 logger.info(f"FilterMate: Loading {len(init_layers)} layers from {task_name}")
                 # CRITICAL: Use QTimer to defer add_layers to prevent blocking during project load
-                QTimer.singleShot(100, lambda: self.manage_task('add_layers', init_layers))
+                # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
+                QTimer.singleShot(100, lambda layers=init_layers: self.manage_task('add_layers', layers))
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -503,6 +538,9 @@ class FilterMateApp:
                 )
         finally:
             self._initializing_project = False
+            # STABILITY FIX: Release dockwidget busy flag
+            if self.dockwidget is not None:
+                self.dockwidget._plugin_busy = False
 
     def manage_task(self, task_name, data=None):
         """
@@ -550,7 +588,8 @@ class FilterMateApp:
         if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
                 logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 300ms...")
-                QTimer.singleShot(300, lambda: self.manage_task(task_name, data))
+                # STABILITY FIX: Use explicit lambda captures to prevent variable mutation issues
+                QTimer.singleShot(300, lambda tn=task_name, d=data: self.manage_task(tn, d))
                 return
 
         if self.dockwidget is not None:
@@ -666,16 +705,11 @@ class FilterMateApp:
             if not task_manager:
                 return
             
-            # Get list of task IDs first (avoid iterating while modifying)
-            task_ids = []
-            for task_id in range(task_manager.count()):
-                task = task_manager.task(task_id)
-                if task:
-                    task_ids.append(task.taskId())
-            
-            # Cancel each task individually
-            for task_id in task_ids:
-                task = task_manager.task(task_id)
+            # Get all active tasks and cancel them
+            # Note: QgsTask doesn't have taskId() method, we iterate by index
+            count = task_manager.count()
+            for i in range(count - 1, -1, -1):  # Iterate backwards to avoid index issues
+                task = task_manager.task(i)
                 if task and task.canCancel():
                     task.cancel()
                     
@@ -709,22 +743,110 @@ class FilterMateApp:
                 missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
                 if missing_keys:
                     logger.warning(f"Layer {key} missing required keys: {missing_keys}")
-                    # Try to fill in missing keys if possible
+                    # Try to fill in missing keys from QGIS layer object
                     layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
                     if layer_obj:
                         layer = layer_obj[0]
+                        # Fill basic info
                         if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
                             layer_info['layer_name'] = layer.name()
                         if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
                             layer_info['layer_id'] = layer.id()
-                        # Log what couldn't be filled
+                        
+                        # Fill layer_geometry_field from data provider
+                        if 'layer_geometry_field' not in layer_info or layer_info['layer_geometry_field'] is None:
+                            try:
+                                geom_col = layer.dataProvider().geometryColumn()
+                                if geom_col:
+                                    layer_info['layer_geometry_field'] = geom_col
+                                    logger.info(f"Auto-filled layer_geometry_field='{geom_col}' for layer {layer.name()}")
+                                else:
+                                    # Default geometry field names by provider
+                                    provider = layer.providerType()
+                                    if provider == 'postgres':
+                                        layer_info['layer_geometry_field'] = 'geom'
+                                    elif provider == 'spatialite':
+                                        layer_info['layer_geometry_field'] = 'geometry'
+                                    else:
+                                        layer_info['layer_geometry_field'] = 'geom'
+                                    logger.info(f"Using default layer_geometry_field='{layer_info['layer_geometry_field']}' for layer {layer.name()}")
+                            except Exception as e:
+                                layer_info['layer_geometry_field'] = 'geom'
+                                logger.warning(f"Could not detect geometry column for {layer.name()}, using 'geom': {e}")
+                        
+                        # Fill layer_provider_type
+                        if 'layer_provider_type' not in layer_info or layer_info['layer_provider_type'] is None:
+                            provider = layer.providerType()
+                            if provider == 'postgres':
+                                layer_info['layer_provider_type'] = 'postgresql'
+                            elif provider == 'spatialite':
+                                layer_info['layer_provider_type'] = 'spatialite'
+                            elif provider == 'ogr':
+                                layer_info['layer_provider_type'] = 'ogr'
+                            else:
+                                layer_info['layer_provider_type'] = 'ogr'
+                            logger.info(f"Auto-filled layer_provider_type='{layer_info['layer_provider_type']}' for layer {layer.name()}")
+                        
+                        # Fill layer_schema (NULL for non-PostgreSQL layers)
+                        if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
+                            if layer_info.get('layer_provider_type') == 'postgresql':
+                                # Try to extract schema from source
+                                import re
+                                source = layer.source()
+                                match = re.search(r'table="([^"]+)"\.', source)
+                                if match:
+                                    layer_info['layer_schema'] = match.group(1)
+                                else:
+                                    layer_info['layer_schema'] = 'public'
+                                logger.info(f"Auto-filled layer_schema='{layer_info['layer_schema']}' for layer {layer.name()}")
+                            else:
+                                layer_info['layer_schema'] = 'NULL'
+                        
+                        # Fill primary_key_name by searching for a unique field
+                        if 'primary_key_name' not in layer_info or layer_info['primary_key_name'] is None:
+                            pk_found = False
+                            # Check declared primary key
+                            pk_attrs = layer.primaryKeyAttributes()
+                            if pk_attrs:
+                                field = layer.fields()[pk_attrs[0]]
+                                layer_info['primary_key_name'] = field.name()
+                                pk_found = True
+                                logger.info(f"Auto-filled primary_key_name='{field.name()}' from primary key for layer {layer.name()}")
+                            
+                            # Fallback: look for 'id' field
+                            if not pk_found:
+                                for field in layer.fields():
+                                    if 'id' in field.name().lower():
+                                        layer_info['primary_key_name'] = field.name()
+                                        pk_found = True
+                                        logger.info(f"Auto-filled primary_key_name='{field.name()}' (contains 'id') for layer {layer.name()}")
+                                        break
+                            
+                            # Last resort: use first numeric field
+                            if not pk_found:
+                                for field in layer.fields():
+                                    if field.isNumeric():
+                                        layer_info['primary_key_name'] = field.name()
+                                        logger.info(f"Auto-filled primary_key_name='{field.name()}' (first numeric) for layer {layer.name()}")
+                                        break
+                        
+                        # Log what still couldn't be filled
                         still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
                         if still_missing:
-                            logger.error(f"Cannot filter layer {key}: still missing {still_missing}")
+                            logger.error(f"Cannot filter layer {layer.name()} (id={key}): still missing {still_missing}")
                             continue
+                        else:
+                            logger.info(f"Successfully auto-filled missing properties for layer {layer.name()}")
+                            # Update PROJECT_LAYERS with auto-filled values
+                            self.PROJECT_LAYERS[key]["infos"].update(layer_info)
+                    else:
+                        logger.error(f"Cannot filter layer {key}: layer not found in project")
+                        continue
                 
                 layers_to_filter.append(layer_info)
+                logger.debug(f"Added layer to filter list: {layer_info.get('layer_name', key)}")
         
+        logger.info(f"Built layers_to_filter list with {len(layers_to_filter)} layers")
         return layers_to_filter
     
     def _initialize_filter_history(self, current_layer, layers_to_filter, task_parameters):

@@ -176,6 +176,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._updating_groupbox = False  # Prevents infinite loop in groupbox collapse/expand signals
         self._signals_connected = False
         self._pending_layers_update = False  # Flag to track if layers were updated before widgets_initialized
+        self._plugin_busy = False  # Global flag to block operations during critical changes (project load, etc.)
         
         # Flag to track if LAYER_TREE_VIEW signal is connected (for bidirectional sync)
         self._layer_tree_view_signal_connected = False
@@ -1155,7 +1156,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Create backend indicator label with horizontal layout for right alignment
         self.backend_indicator_label = QtWidgets.QLabel(self)
         self.backend_indicator_label.setObjectName("label_backend_indicator")
-        self.backend_indicator_label.setText("Backend: Detecting...")
+        # Display waiting message if no layers loaded
+        if self.has_loaded_layers:
+            self.backend_indicator_label.setText("Backend: Detecting...")
+        else:
+            self.backend_indicator_label.setText("Backend: En attente de couches...")
+            self.backend_indicator_label.setStyleSheet("color: #95a5a6; font-size: 8pt; font-style: italic; padding: 1px 4px;")
         self.backend_indicator_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
         # Create horizontal layout for backend indicator (right-aligned)
@@ -1192,7 +1198,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if isinstance(position_config, dict):
                 return position_config.get('value', 'top')
             return position_config if position_config else 'top'
-        except Exception:
+        except (KeyError, TypeError, AttributeError):
             return 'top'
 
     def _get_action_bar_vertical_alignment(self):
@@ -1209,7 +1215,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if isinstance(alignment_config, dict):
                 return alignment_config.get('value', 'top')
             return alignment_config if alignment_config else 'top'
-        except Exception:
+        except (KeyError, TypeError, AttributeError):
             return 'top'
 
     def _apply_action_bar_position(self, position):
@@ -1848,8 +1854,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"Pending layers update detected - refreshing UI with {len(self.PROJECT_LAYERS)} layers")
             self._pending_layers_update = False
             # Use QTimer to ensure the event loop has processed widgets_initialized
+            # STABILITY FIX: Use explicit lambda captures to prevent variable mutation issues
             from qgis.PyQt.QtCore import QTimer
-            QTimer.singleShot(50, lambda: self.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT))
+            QTimer.singleShot(50, lambda pl=self.PROJECT_LAYERS, pr=self.PROJECT: self.get_project_layers_from_app(pl, pr))
 
     def data_changed_configuration_model(self, input_data=None):
         """Track configuration changes without applying them immediately"""
@@ -4096,9 +4103,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - layer: The validated layer object
         - layer_props: Layer properties from PROJECT_LAYERS
         """
+        # STABILITY FIX: Check if plugin is busy with critical operations
+        if self._plugin_busy:
+            logger.debug("Plugin is busy, deferring layer validation")
+            return (False, None, None)
+        
+        # STABILITY FIX: Verify PROJECT_LAYERS is not empty
+        if not self.PROJECT_LAYERS:
+            logger.debug("PROJECT_LAYERS is empty, cannot validate layer")
+            return (False, None, None)
+        
         # Skip raster layers - FilterMate only handles vector layers
         if layer is not None and not isinstance(layer, QgsVectorLayer):
             return (False, None, None)
+        
+        # STABILITY FIX: Verify the layer C++ object is still valid
+        if layer is not None:
+            try:
+                # Test if the layer is still valid (not a deleted C++ object)
+                _ = layer.id()
+            except RuntimeError:
+                logger.warning("Layer object was deleted (C++ object invalid), skipping")
+                return (False, None, None)
         
         # Note: Recursive call check is now done at the beginning of current_layer_changed()
         
@@ -4237,6 +4263,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         for widget_path in widgets_to_stop:
             self.manageSignal(widget_path, 'disconnect')
+        
+        # STABILITY FIX: Clear expressions before layer change to prevent residual values
+        try:
+            if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression("")
+            if "MULTIPLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression("")
+            if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression("")
+        except Exception as e:
+            logger.debug(f"Could not clear expressions before layer change: {e}")
         
         if self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] is True:
             widget_path = ["QGIS","LAYER_TREE_VIEW"]
@@ -4576,10 +4613,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Orchestrates layer change by validating, disconnecting signals, 
         synchronizing widgets, and reconnecting signals.
+        
+        STABILITY FIX: Added checks for plugin busy state and deferred processing
+        to prevent crashes during project load operations.
         """
         # CRITICAL: Check lock BEFORE any processing
         if self._updating_current_layer:
             return
+        
+        # STABILITY FIX: If plugin is busy (loading project, etc.), defer the layer change
+        if self._plugin_busy:
+            from qgis.PyQt.QtCore import QTimer
+            logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
+            # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
+            QTimer.singleShot(150, lambda l=layer: self.current_layer_changed(l))
+            return
+        
+        # STABILITY FIX: Verify layer is valid before accessing properties
+        if layer is not None:
+            try:
+                # Test if the layer C++ object is still valid
+                layer_name = layer.name()
+                layer_id = layer.id()
+            except (RuntimeError, AttributeError):
+                logger.warning("current_layer_changed received invalid layer object, ignoring")
+                return
         
         # DEBUG: Log layer information
         logger.debug(f"current_layer_changed called with layer: {layer.name() if layer else 'None'} (id: {layer.id() if layer else 'None'})")
@@ -5503,6 +5561,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
             
         self._updating_layers = True
+        self._plugin_busy = True  # STABILITY FIX: Block other operations during layer update
         
         logger.info(f"get_project_layers_from_app called: widgets_initialized={self.widgets_initialized}, PROJECT_LAYERS count={len(project_layers)}")
         
@@ -5534,9 +5593,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # No project or no layers - disable UI
                     logger.warning(f"Cannot update UI: PROJECT is None={self.PROJECT is None}, PROJECT_LAYERS empty={len(list(self.PROJECT_LAYERS)) == 0}")
                     self.has_loaded_layers = False
+                    self.current_layer = None  # STABILITY FIX: Reset current_layer when no layers
                     self.disconnect_widgets_signals()
                     self._signals_connected = False
                     self.set_widgets_enabled_state(False)
+                    # Update backend indicator to show waiting state
+                    if self.backend_indicator_label:
+                        self.backend_indicator_label.setText("Backend: En attente de couches...")
+                        self.backend_indicator_label.setStyleSheet("color: #95a5a6; font-size: 8pt; font-style: italic; padding: 1px 4px;")
                     return
             else:
                 # Widgets not initialized yet - set flag to refresh later
@@ -5545,6 +5609,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         finally:
             # CRITICAL: Always release the lock, even if an error occurred
             self._updating_layers = False
+            self._plugin_busy = False  # STABILITY FIX: Release busy flag
 
 
     def open_project_page(self):
@@ -5711,8 +5776,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             style = "color: #e74c3c; font-size: 8pt; padding: 1px 4px;"
         else:
             backend_text = f"Backend: {provider_type}"
+            style = "color: #7f8c8d; font-size: 8pt; padding: 1px 4px;"
         
         self.backend_indicator_label.setText(backend_text)
+        self.backend_indicator_label.setStyleSheet(style)
 
     def getProjectLayersEvent(self, event):
 
