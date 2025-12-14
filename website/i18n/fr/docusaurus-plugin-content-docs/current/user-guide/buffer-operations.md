@@ -56,7 +56,7 @@ graph LR
 - Analyse de proximité générale
 - Applications de planification
 - Conformité réglementaire (précision requise)
-- Ensembles de données de taille moyenne (`<10k` entités)
+- Ensembles de données de taille moyenne (<10k entités)
 
 **Exemple de configuration :**
 ```

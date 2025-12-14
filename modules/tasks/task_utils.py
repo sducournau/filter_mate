@@ -22,10 +22,15 @@ from qgis.core import (
 )
 
 # Import logging configuration
-from ..logging_config import get_logger
+from ..logging_config import setup_logger
+from ...config.config import ENV_VARS
 
-# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
-logger = get_logger('FilterMate.Tasks.Utils')
+# Setup logger with rotation
+logger = setup_logger(
+    'FilterMate.Tasks.Utils',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 # SQLite connection timeout in seconds (60 seconds to handle concurrent access)
 SQLITE_TIMEOUT = 60.0

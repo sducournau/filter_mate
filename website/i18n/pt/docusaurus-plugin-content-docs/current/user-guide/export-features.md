@@ -327,7 +327,7 @@ Formato baseado em texto para **aplicações web**.
 **Quando Usar:**
 - Mapeamento web (Leaflet, Mapbox)
 - APIs REST
-- Pequenos a médios conjuntos de dados (`<10k` feições)
+- Pequenos a médios conjuntos de dados (<10k feições)
 - Controle de versão Git
 
 **Exemplo de Exportação:**

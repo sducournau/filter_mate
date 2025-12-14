@@ -7,7 +7,6 @@ This module provides a tree-based JSON viewer with support for:
 - Multiple color themes
 - Context menu actions
 - Type-specific editors
-- Configurable settings via dictionary
 
 Quick Start:
     from modules.qt_json_view import view, model
@@ -16,16 +15,6 @@ Quick Start:
     json_view = view.JsonView(json_model)
     json_view.set_theme('monokai')
     json_view.show()
-
-With settings:
-    settings = {
-        'theme': 'dracula',
-        'font_size': 10,
-        'alternating_rows': True,
-        'column_width_key': 200,
-        'column_width_value': 300,
-    }
-    json_view = view.JsonView(json_model, settings=settings)
 
 Available themes:
     - default: Black text for all types
@@ -40,7 +29,7 @@ Available themes:
 For more information, see README.md and THEMES.md
 """
 
-__version__ = '1.2.0'
+__version__ = '1.1.0'
 __author__ = 'FilterMate Team'
 
 # Import main components
@@ -51,7 +40,7 @@ from . import delegate
 from . import themes
 
 # Expose commonly used classes
-from .view import JsonView, DEFAULT_JSON_VIEW_SETTINGS
+from .view import JsonView
 from .model import JsonModel
 from .datatypes import (
     DataType,
@@ -111,7 +100,4 @@ __all__ = [
     'set_theme',
     'get_available_themes',
     'get_theme_display_names',
-    
-    # Settings
-    'DEFAULT_JSON_VIEW_SETTINGS',
 ]

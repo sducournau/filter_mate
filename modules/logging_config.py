@@ -17,7 +17,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 import sys
-import tempfile
 
 
 class SafeStreamHandler(logging.StreamHandler):
@@ -67,35 +66,15 @@ def setup_logger(name, log_file, level=logging.INFO):
     if logger.handlers:
         return logger
     
-    # Normalize and validate log file path
-    # Handle case when ENV_VARS is empty at module load time
-    log_file = os.path.normpath(log_file) if log_file else ''
-    
-    # If log_file starts with './' or is relative without proper base, use safe fallback
-    if not log_file or log_file.startswith('.') or not os.path.isabs(log_file):
-        # Use system temp directory as safe fallback
+    # Ensure log directory exists
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
         try:
-            fallback_dir = os.path.join(tempfile.gettempdir(), 'filtermate_logs')
-            os.makedirs(fallback_dir, exist_ok=True)
-            log_basename = os.path.basename(log_file) if log_file else 'filtermate.log'
-            log_file = os.path.join(fallback_dir, log_basename)
-        except OSError:
-            # Ultimate fallback: no file logging, console only
-            log_file = None
-    else:
-        # Ensure log directory exists for absolute paths
-        log_dir = os.path.dirname(log_file)
-        if log_dir and not os.path.exists(log_dir):
-            try:
-                os.makedirs(log_dir, exist_ok=True)
-            except OSError as e:
-                # Fallback to temp directory
-                try:
-                    fallback_dir = os.path.join(tempfile.gettempdir(), 'filtermate_logs')
-                    os.makedirs(fallback_dir, exist_ok=True)
-                    log_file = os.path.join(fallback_dir, os.path.basename(log_file))
-                except OSError:
-                    log_file = None
+            os.makedirs(log_dir, exist_ok=True)
+        except OSError as e:
+            print(f"Warning: Could not create log directory {log_dir}: {e}")
+            # Fallback to file in current directory
+            log_file = os.path.basename(log_file)
     
     # Create formatter
     formatter = logging.Formatter(
@@ -104,21 +83,18 @@ def setup_logger(name, log_file, level=logging.INFO):
     )
     
     # File handler with rotation (10 MB max, 5 backup files)
-    # Only create file handler if we have a valid log file path
-    if log_file:
-        try:
-            file_handler = RotatingFileHandler(
-                log_file,
-                maxBytes=10*1024*1024,  # 10 MB
-                backupCount=5,
-                encoding='utf-8'
-            )
-            file_handler.setFormatter(formatter)
-            file_handler.setLevel(level)
-            logger.addHandler(file_handler)
-        except (OSError, PermissionError, TypeError) as e:
-            # Log file creation failed - continue with console only
-            pass
+    try:
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10 MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(level)
+        logger.addHandler(file_handler)
+    except (OSError, PermissionError) as e:
+        print(f"Warning: Could not create log file {log_file}: {e}")
     
     # Console handler for development (only WARNING and above)
     # Use SafeStreamHandler to prevent crashes during QGIS shutdown

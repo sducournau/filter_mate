@@ -13,18 +13,20 @@ Example:
     User selects 2000 features and filters 5 layers:
     - Without cache: 5 × 2s calculation = 10s wasted
     - With cache: 1 × 2s + 4 × 0.01s = 2.04s total
-
-Thread-Safety:
-    Uses threading.Lock() for safe concurrent access from multiple QgsTasks.
 """
 
 import logging
-import threading
+import os
 
-from ..logging_config import get_logger
+from ..logging_config import setup_logger
+from ...config.config import ENV_VARS
 
-# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
-logger = get_logger('FilterMate.Tasks.Cache')
+# Setup logger
+logger = setup_logger(
+    'FilterMate.Tasks.Cache',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 
 class SourceGeometryCache:
@@ -46,8 +48,7 @@ class SourceGeometryCache:
         self._cache = {}
         self._max_cache_size = 10  # Limite mémoire: max 10 entrées
         self._access_order = []  # FIFO: First In, First Out
-        self._lock = threading.Lock()  # Thread-safety for concurrent QgsTask access
-        logger.info("✓ SourceGeometryCache initialized (max size: 10, thread-safe)")
+        logger.info("✓ SourceGeometryCache initialized (max size: 10)")
     
     def get_cache_key(self, features, buffer_value, target_crs_authid):
         """
@@ -76,8 +77,6 @@ class SourceGeometryCache:
         """
         Récupère une géométrie du cache si elle existe.
         
-        Thread-safe: Uses internal lock for concurrent access.
-        
         Args:
             features: Liste de features ou IDs
             buffer_value: Distance de buffer
@@ -88,15 +87,14 @@ class SourceGeometryCache:
         """
         key = self.get_cache_key(features, buffer_value, target_crs_authid)
         
-        with self._lock:
-            if key in self._cache:
-                # Update access order (move to end)
-                if key in self._access_order:
-                    self._access_order.remove(key)
-                self._access_order.append(key)
-                
-                logger.info("✓ Cache HIT: Geometry retrieved from cache")
-                return self._cache[key]
+        if key in self._cache:
+            # Update access order (move to end)
+            if key in self._access_order:
+                self._access_order.remove(key)
+            self._access_order.append(key)
+            
+            logger.info("✓ Cache HIT: Geometry retrieved from cache")
+            return self._cache[key]
         
         logger.debug("Cache MISS: Geometry not in cache")
         return None
@@ -104,8 +102,6 @@ class SourceGeometryCache:
     def put(self, features, buffer_value, target_crs_authid, geometry_data):
         """
         Stocke une géométrie dans le cache.
-        
-        Thread-safe: Uses internal lock for concurrent access.
         
         Args:
             features: Liste de features ou IDs
@@ -115,25 +111,23 @@ class SourceGeometryCache:
         """
         key = self.get_cache_key(features, buffer_value, target_crs_authid)
         
-        with self._lock:
-            # Vérifier limite de cache
-            if len(self._cache) >= self._max_cache_size:
-                # Supprimer l'entrée la plus ancienne (FIFO)
-                if self._access_order:
-                    oldest_key = self._access_order.pop(0)
-                    if oldest_key in self._cache:
-                        del self._cache[oldest_key]
-                        logger.debug(f"Cache full: Removed oldest entry (size: {self._max_cache_size})")
-            
-            # Stocker dans le cache
-            self._cache[key] = geometry_data
-            self._access_order.append(key)
+        # Vérifier limite de cache
+        if len(self._cache) >= self._max_cache_size:
+            # Supprimer l'entrée la plus ancienne (FIFO)
+            if self._access_order:
+                oldest_key = self._access_order.pop(0)
+                if oldest_key in self._cache:
+                    del self._cache[oldest_key]
+                    logger.debug(f"Cache full: Removed oldest entry (size: {self._max_cache_size})")
+        
+        # Stocker dans le cache
+        self._cache[key] = geometry_data
+        self._access_order.append(key)
         
         logger.info(f"✓ Cached geometry (cache size: {len(self._cache)}/{self._max_cache_size})")
     
     def clear(self):
-        """Vide le cache. Thread-safe."""
-        with self._lock:
-            self._cache.clear()
-            self._access_order.clear()
+        """Vide le cache"""
+        self._cache.clear()
+        self._access_order.clear()
         logger.info("Cache cleared")

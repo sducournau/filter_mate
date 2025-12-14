@@ -39,13 +39,15 @@ from collections import OrderedDict
 import re
 
 # Import logging configuration
-from ..logging_config import get_logger, safe_log
-
-# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
-logger = get_logger('FilterMate.LayerManagementTask')
-
-# Import config (used later in class methods, NOT at module level)
+from ..logging_config import setup_logger, safe_log
 from ...config.config import ENV_VARS
+
+# Setup logger
+logger = setup_logger(
+    'FilterMate.LayerManagementTask',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 # Import constants
 from ..constants import (
@@ -174,42 +176,6 @@ class LayersManagementEngineTask(QgsTask):
             sqlite3.OperationalError: If database cannot be opened
         """
         return safe_spatialite_connect(self.db_file_path)
-    
-    def _execute_db_operation(self, sql, params=None, operation_name="database operation"):
-        """
-        Execute a database operation with proper connection handling.
-        
-        Uses context manager pattern to ensure connections are always closed,
-        even if an exception occurs. This prevents connection leaks.
-        
-        Args:
-            sql (str): SQL statement to execute
-            params (tuple): Parameters for SQL statement (optional)
-            operation_name (str): Description for logging
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        conn = None
-        try:
-            conn = self._safe_spatialite_connect()
-            cur = conn.cursor()
-            if params:
-                cur.execute(sql, params)
-            else:
-                cur.execute(sql)
-            conn.commit()
-            cur.close()
-            return True
-        except Exception as e:
-            logger.warning(f"Could not execute {operation_name}: {e}")
-            return False
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass  # Ignore close errors
 
 
     def run(self):
@@ -394,16 +360,24 @@ class LayersManagementEngineTask(QgsTask):
             if prop_name not in exploring:
                 exploring[prop_name] = str(primary_key)
                 logger.info(f"Added missing '{prop_name}' property for layer {layer.id()}")
-        
-        # Update database with new key name (once, not in loop)
-        self._execute_db_operation(
-            """UPDATE fm_project_layers_properties 
-               SET meta_key = 'layer_geometry_field'
-               WHERE fk_project = ? AND layer_id = ? 
-               AND meta_type = 'infos' AND meta_key = 'geometry_field'""",
-            (str(self.project_uuid), layer.id()),
-            f"migrate geometry_field for layer {layer.id()}"
-        )
+            
+            # Update database with new key name
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """UPDATE fm_project_layers_properties 
+                       SET meta_key = 'layer_geometry_field'
+                       WHERE fk_project = ? AND layer_id = ? 
+                       AND meta_type = 'infos' AND meta_key = 'geometry_field'""",
+                    (str(self.project_uuid), layer.id())
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.debug(f"Updated database for layer {layer.id()}")
+            except Exception as e:
+                logger.warning(f"Could not update database for migration: {e}")
         
         # Add layer_table_name if missing
         if "layer_table_name" not in infos:
@@ -411,13 +385,20 @@ class LayersManagementEngineTask(QgsTask):
             infos["layer_table_name"] = source_table_name
             logger.info(f"Added layer_table_name='{source_table_name}' for layer {layer.id()}")
             
-            self._execute_db_operation(
-                """INSERT INTO fm_project_layers_properties 
-                   (fk_project, layer_id, meta_type, meta_key, meta_value)
-                   VALUES (?, ?, 'infos', 'layer_table_name', ?)""",
-                (str(self.project_uuid), layer.id(), source_table_name),
-                f"add layer_table_name for layer {layer.id()}"
-            )
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_table_name', ?)""",
+                    (str(self.project_uuid), layer.id(), source_table_name)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not add layer_table_name to database: {e}")
         
         # Add layer_provider_type if missing
         if "layer_provider_type" not in infos:
@@ -425,13 +406,20 @@ class LayersManagementEngineTask(QgsTask):
             infos["layer_provider_type"] = layer_provider_type
             logger.info(f"Added layer_provider_type='{layer_provider_type}' for layer {layer.id()}")
             
-            self._execute_db_operation(
-                """INSERT INTO fm_project_layers_properties 
-                   (fk_project, layer_id, meta_type, meta_key, meta_value)
-                   VALUES (?, ?, 'infos', 'layer_provider_type', ?)""",
-                (str(self.project_uuid), layer.id(), layer_provider_type),
-                f"add layer_provider_type for layer {layer.id()}"
-            )
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_provider_type', ?)""",
+                    (str(self.project_uuid), layer.id(), layer_provider_type)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not add layer_provider_type to database: {e}")
             
             # Set as QGIS layer variable
             QgsExpressionContextUtils.setLayerVariable(layer, "filterMate_infos_layer_table_name", infos.get("layer_table_name", ""))
@@ -442,13 +430,20 @@ class LayersManagementEngineTask(QgsTask):
             infos["layer_geometry_type"] = layer_geometry_type
             logger.info(f"Added layer_geometry_type='{layer_geometry_type}' for layer {layer.id()}")
             
-            self._execute_db_operation(
-                """INSERT INTO fm_project_layers_properties 
-                   (fk_project, layer_id, meta_type, meta_key, meta_value)
-                   VALUES (?, ?, 'infos', 'layer_geometry_type', ?)""",
-                (str(self.project_uuid), layer.id(), layer_geometry_type),
-                f"add layer_geometry_type for layer {layer.id()}"
-            )
+            try:
+                conn = self._safe_spatialite_connect()
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO fm_project_layers_properties 
+                       (fk_project, layer_id, meta_type, meta_key, meta_value)
+                       VALUES (?, ?, 'infos', 'layer_geometry_type', ?)""",
+                    (str(self.project_uuid), layer.id(), layer_geometry_type)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not add layer_geometry_type to database: {e}")
 
     def _detect_layer_metadata(self, layer, layer_provider_type):
         """
@@ -821,19 +816,41 @@ class LayersManagementEngineTask(QgsTask):
             layer_all_properties_flag = True
 
         if layer.id() in self.PROJECT_LAYERS.keys():
-            conn = None
-            try:
-                conn = self._safe_spatialite_connect()
-                cur = conn.cursor()
+            conn = self._safe_spatialite_connect()
+            cur = conn.cursor()
 
-                if layer_all_properties_flag is True:
-                    for key_group in ("infos", "exploring", "filtering"):
-                        for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
+            if layer_all_properties_flag is True:
+                for key_group in ("infos", "exploring", "filtering"):
+                    for key, value in self.PROJECT_LAYERS[layer.id()][key_group].items():
+                        value_typped, type_returned = self.return_typped_value(value, 'save')
+                        if type_returned in (list, dict):
+                            value_typped = json.dumps(value_typped)
+                        variable_key = f"filterMate_{key_group}_{key}"
+                        QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' + key, value_typped)
+                        self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
+                        cur.execute(
+                            """INSERT INTO fm_project_layers_properties 
+                               VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
+                            (
+                                str(uuid.uuid4()),
+                                str(self.project_uuid),
+                                layer.id(),
+                                key_group,
+                                key,
+                                value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
+                            )
+                        )
+                        conn.commit()
+            else:
+                for layer_property in layer_properties:
+                    if layer_property[0] in ("infos", "exploring", "filtering"):
+                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                            value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
                             value_typped, type_returned = self.return_typped_value(value, 'save')
                             if type_returned in (list, dict):
                                 value_typped = json.dumps(value_typped)
                             variable_key = f"filterMate_{key_group}_{key}"
-                            QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' + key, value_typped)
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
                             self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                             cur.execute(
                                 """INSERT INTO fm_project_layers_properties 
@@ -842,46 +859,15 @@ class LayersManagementEngineTask(QgsTask):
                                     str(uuid.uuid4()),
                                     str(self.project_uuid),
                                     layer.id(),
-                                    key_group,
-                                    key,
+                                    layer_property[0],
+                                    layer_property[1],
                                     value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
                                 )
                             )
                             conn.commit()
-                else:
-                    for layer_property in layer_properties:
-                        if layer_property[0] in ("infos", "exploring", "filtering"):
-                            if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                                value = self.PROJECT_LAYERS[layer.id()][layer_property[0]][layer_property[1]]
-                                value_typped, type_returned = self.return_typped_value(value, 'save')
-                                if type_returned in (list, dict):
-                                    value_typped = json.dumps(value_typped)
-                                variable_key = f"filterMate_{key_group}_{key}"
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
-                                self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
-                                cur.execute(
-                                    """INSERT INTO fm_project_layers_properties 
-                                       VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
-                                    (
-                                        str(uuid.uuid4()),
-                                        str(self.project_uuid),
-                                        layer.id(),
-                                        layer_property[0],
-                                        layer_property[1],
-                                        value_typped.replace("\'", "\'\'") if type_returned in (str, dict, list) else value_typped
-                                    )
-                                )
-                                conn.commit()
 
-                cur.close()
-            except Exception as e:
-                logger.error(f"Error saving variables for layer {layer.name()}: {e}")
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
+            cur.close()
+            conn.close()
 
     def remove_variables_from_layer(self, layer, layer_properties=[]):
         """
@@ -900,42 +886,33 @@ class LayersManagementEngineTask(QgsTask):
             layer_all_properties_flag = True
 
         if layer.id() in self.PROJECT_LAYERS.keys():
-            conn = None
-            try:
-                conn = self._safe_spatialite_connect()
-                cur = conn.cursor()
+            conn = self._safe_spatialite_connect()
+            cur = conn.cursor()
 
-                if layer_all_properties_flag is True:
-                    cur.execute(
-                        """DELETE FROM fm_project_layers_properties 
-                           WHERE fk_project = ? AND layer_id = ?""",
-                        (str(self.project_uuid), layer.id())
-                    )
-                    conn.commit()
-                    QgsExpressionContextUtils.setLayerVariables(layer, {})
-                else:
-                    for layer_property in layer_properties:
-                        if layer_property[0] in ("infos", "exploring", "filtering"):
-                            if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
-                                cur.execute(
-                                    """DELETE FROM fm_project_layers_properties  
-                                       WHERE fk_project = ? AND layer_id = ? AND meta_type = ? AND meta_key = ?""",
-                                    (str(self.project_uuid), layer.id(), layer_property[0], layer_property[1])
-                                )
-                                conn.commit()
-                                variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
-                                self.removingLayerVariable.emit(layer, variable_key)
+            if layer_all_properties_flag is True:
+                cur.execute(
+                    """DELETE FROM fm_project_layers_properties 
+                       WHERE fk_project = ? AND layer_id = ?""",
+                    (str(self.project_uuid), layer.id())
+                )
+                conn.commit()
+                QgsExpressionContextUtils.setLayerVariables(layer, {})
+            else:
+                for layer_property in layer_properties:
+                    if layer_property[0] in ("infos", "exploring", "filtering"):
+                        if layer_property[0] in self.PROJECT_LAYERS[layer.id()] and layer_property[1] in self.PROJECT_LAYERS[layer.id()][layer_property[0]]:
+                            cur.execute(
+                                """DELETE FROM fm_project_layers_properties  
+                                   WHERE fk_project = ? AND layer_id = ? AND meta_type = ? AND meta_key = ?""",
+                                (str(self.project_uuid), layer.id(), layer_property[0], layer_property[1])
+                            )
+                            conn.commit()
+                            variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
+                            QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
+                            self.removingLayerVariable.emit(layer, variable_key)
 
-                cur.close()
-            except Exception as e:
-                logger.error(f"Error removing variables for layer {layer.name()}: {e}")
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
+            cur.close()
+            conn.close()
 
     def save_style_from_layer_id(self, layer_id):
         """

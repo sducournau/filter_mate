@@ -2,301 +2,489 @@
 sidebar_position: 7
 ---
 
-# Historique des Filtres & Annuler/Rétablir
+# Historique des Filtres
 
-FilterMate v2.3.0 propose un système d'historique intelligent avec des capacités d'annulation/rétablissement contextuelles.
+Suivez, gérez et réutilisez vos filtres grâce au puissant système d'historique de FilterMate avec capacités d'annulation/rétablissement.
 
-:::info Version 2.3.0
-Cette page documente le nouveau système Global Undo/Redo introduit dans la v2.3.0. Les versions précédentes avaient un système d'annulation plus simple pour une seule couche.
+:::tip Nouveau dans v2.3.0
+Le système **Global Undo/Redo** capture maintenant atomiquement l'état de toutes les couches à chaque opération de filtrage, permettant une restauration parfaite des états précédents. La détection intelligente distingue automatiquement le mode "source-only" du mode "global".
 :::
 
 ## Vue d'ensemble
 
 Le système d'**Historique des Filtres** enregistre automatiquement chaque filtre appliqué, vous permettant de :
-- **Annuler/Rétablir** les filtres avec détection intelligente du contexte
-- **Restauration Couche Source** ou **Globale** selon votre sélection
-- **Naviguer** à travers les états de filtres de manière fluide
-- **Préserver** automatiquement les filtres (combinés avec AND par défaut)
+- **Annuler/Rétablir** les filtres rapidement
+- **Consulter** les opérations de filtrage passées
+- **Réutiliser** les modèles de filtres courants
+- **Comparer** différents résultats de filtrage
+- **Sauvegarder** vos filtres favoris pour plus tard
 
 ### Fonctionnalités Clés
 
-- ✅ **Historique Automatique** - Chaque filtre est enregistré (jusqu'à 100 états)
-- ✅ **Annuler/Rétablir Intelligent** - Restauration contextuelle des couches
-- ✅ **Mode Global** - Restaurer plusieurs couches simultanément
-- ✅ **Mode Source** - Annuler uniquement la couche active
-- ✅ **Boutons Intelligents** - Activation/désactivation automatique selon l'historique disponible
+- ✅ **Historique Automatique** - Chaque filtre est enregistré
+- ✅ **Annuler/Rétablir** - Naviguez entre les états des filtres
+- ✅ **Recherche** - Trouvez les filtres passés par expression
+- ✅ **Favoris** - Marquez les filtres fréquemment utilisés
+- ✅ **Export/Import** - Partagez les configurations de filtres
 - ✅ **Spécifique par Couche** - Historique séparé par couche
 
-## Boutons Annuler/Rétablir
+## Interface de l'Historique
 
-Les boutons Annuler et Rétablir sont situés dans la **Barre d'Actions** en haut du panneau FilterMate :
+```mermaid
+graph TD
+    A[Interface FilterMate] --> B[Panneau Historique]
+    B --> C[Vue Chronologique]
+    B --> D[Boîte de Recherche]
+    B --> E[Liste des Favoris]
+    
+    C --> F[Filtre 1: population > 100k]
+    C --> G[Filtre 2: zone = 'residential']
+    C --> H[Filtre 3: Buffer 500m]
+    
+    F --> I[Restaurer]
+    F --> J[Ajouter aux Favoris]
+    F --> K[Supprimer]
+    
+    style B fill:#87CEEB
+    style E fill:#FFD700
+```
 
-| Bouton | Icône | Action |
-|--------|-------|--------|
-| **ANNULER** | ↩️ | Revenir à l'état de filtre précédent |
-| **RÉTABLIR** | ↪️ | Réappliquer le filtre annulé |
+### Composants du Panneau
 
-### États des Boutons
+1. **Vue Chronologique** - Liste chronologique des filtres
+2. **Boîte de Recherche** - Rechercher des filtres par mot-clé ou expression
+3. **Indicateur de Filtre Actuel** - Met en évidence le filtre actif
+4. **Section Favoris** - Accès rapide aux filtres sauvegardés
+5. **Boutons Annuler/Rétablir** - Navigation dans l'historique
 
-Les boutons **s'activent/désactivent automatiquement** selon la disponibilité de l'historique :
-- **Activé** (cliquable) : Historique disponible dans cette direction
-- **Désactivé** (grisé) : Pas d'historique à naviguer
+## Utilisation de l'Historique
 
-## Deux Modes Annuler/Rétablir
+### Annuler/Rétablir les Filtres
 
-FilterMate choisit intelligemment entre deux modes selon votre configuration actuelle :
+**Raccourcis Clavier :**
+- **Annuler** : `Ctrl+Z` (Windows/Linux) ou `Cmd+Z` (Mac)
+- **Rétablir** : `Ctrl+Y` ou `Ctrl+Shift+Z`
 
-### 🎯 Mode Couche Source Uniquement
+**Actions des Boutons :**
+1. Cliquez sur le bouton **Annuler** (⟲) pour revenir au filtre précédent
+2. Cliquez sur le bouton **Rétablir** (⟳) pour réappliquer le filtre annulé
 
-**Quand activé :**
-- Le bouton **"Couches à Filtrer"** est **décoché** OU
-- Aucune couche distante n'est sélectionnée
+**Exemple de Flux de Travail :**
+```
+1. Appliquer filtre : population > 100000
+   → 1 234 entités affichées
 
-**Comportement :**
-- Annuler/Rétablir n'affecte **que la couche source**
-- Rapide et simple pour les workflows mono-couche
+2. Appliquer filtre : population > 100000 AND zone = 'residential'
+   → 856 entités affichées
+
+3. Annuler (Ctrl+Z)
+   → Retour à 1 234 entités (premier filtre restauré)
+
+4. Rétablir (Ctrl+Y)
+   → Retour à 856 entités (second filtre réappliqué)
+```
+
+### Navigation dans l'Historique
 
 ```mermaid
 sequenceDiagram
     participant U as Utilisateur
-    participant H as Système Historique
-    participant S as Couche Source
+    participant H as Système d'Historique
+    participant L as Couche
     
-    U->>H: Appliquer Filtre "population > 10000"
-    H->>S: Filtrer couche source (150 entités)
+    U->>H: Appliquer Filtre A
+    H->>H: Enregistrer dans l'historique
+    H->>L: Appliquer Filtre A
     
-    U->>H: Appliquer Filtre "AND type = 'city'"
-    H->>S: Filtrer couche source (45 entités)
+    U->>H: Appliquer Filtre B
+    H->>H: Enregistrer dans l'historique
+    H->>L: Appliquer Filtre B
     
-    U->>H: Annuler
-    H->>S: Restaurer "population > 10000" (150 entités)
+    U->>H: Annuler (Ctrl+Z)
+    H->>H: Reculer dans l'historique
+    H->>L: Restaurer Filtre A
     
-    U->>H: Rétablir
-    H->>S: Réappliquer "AND type = 'city'" (45 entités)
+    U->>H: Rétablir (Ctrl+Y)
+    H->>H: Avancer dans l'historique
+    H->>L: Réappliquer Filtre B
 ```
 
-### 🌐 Mode Global
+## Gestion de l'Historique
 
-**Quand activé :**
-- Le bouton **"Couches à Filtrer"** est **coché** ET
-- Une ou plusieurs couches distantes sont sélectionnées
+### Vue Chronologique
 
-**Comportement :**
-- Annuler/Rétablir restaure **toutes les couches affectées simultanément**
-- Couche source + toutes les couches distantes sont restaurées à leur état précédent
+La **Chronologie** affiche tous les filtres par ordre chronologique :
+
+```
+┌─────────────────────────────────────┐
+│  Historique des Filtres - parcelles │
+├─────────────────────────────────────┤
+│ ⭐ [14:23] zone = 'commercial'      │ ← Favori
+│ ▶ [14:15] population > 50000        │ ← Actuel
+│   [14:10] area > 10000              │
+│   [14:05] status = 'active'         │
+│   [14:00] Pas de filtre (toutes)    │
+└─────────────────────────────────────┘
+```
+
+**Icônes :**
+- ⭐ **Favori** - Sauvegardé pour accès rapide
+- ▶ **Actuel** - Filtre actif
+- 🔍 **Complexe** - Expression multi-conditions
+- 📍 **Spatial** - Filtre géométrique
+
+### Recherche dans l'Historique
+
+Trouvez les filtres passés par mots-clés :
+
+```
+Recherche : "population"
+
+Résultats :
+  [14:15] population > 50000
+  [Hier] population BETWEEN 10000 AND 100000
+  [2024-12-05] population > 100000 AND density > 50
+```
+
+**Astuces de Recherche :**
+- Recherche par fragments d'expression
+- Recherche par date/heure
+- Recherche par nombre d'entités
+- Utilisez les jokers : `pop*` correspond à `population`
+
+### Gestion des Éléments de l'Historique
+
+**Menu Clic Droit :**
+- **Restaurer** - Appliquer ce filtre
+- **Ajouter aux Favoris** ⭐ - Marquer pour accès rapide
+- **Copier l'Expression** - Copier le texte du filtre
+- **Modifier** - Modifier le filtre avant application
+- **Supprimer** - Retirer de l'historique
+- **Exporter** - Sauvegarder dans un fichier
+
+## Système de Favoris
+
+### Créer des Favoris
+
+**Méthode 1 : Depuis l'Historique**
+1. Clic droit sur un élément de l'historique
+2. Sélectionnez **Ajouter aux Favoris**
+3. Entrez un nom descriptif
+4. (Optionnel) Ajoutez des tags pour l'organisation
+
+**Méthode 2 : Depuis le Filtre Actuel**
+1. Appliquez un filtre
+2. Cliquez sur le bouton **⭐ Ajouter aux Favoris**
+3. Nommez et taguez le filtre
+
+**Exemples de Favoris :**
+```
+⭐ Grandes Parcelles
+   Expression : area > 10000
+
+⭐ Bâtiments Récents
+   Expression : year_built >= 2020
+
+⭐ Couverture Transport
+   Expression : distance($geometry, @transit_stations) < 400
+
+⭐ Sites Haute Priorité
+   Expression : priority = 'high' AND status != 'complete'
+```
+
+### Utiliser les Favoris
+
+**Accès Rapide :**
+1. Ouvrez le panneau **Favoris**
+2. Double-cliquez sur un favori pour l'appliquer
+3. Ou glissez-déposez sur la couche
+
+**Raccourcis Clavier :**
+- `Ctrl+1` à `Ctrl+9` - Appliquer le favori 1-9
+- `Ctrl+F` - Ouvrir le panneau des favoris
+
+### Organisation des Favoris
+
+**Tags :**
+```
+Urbanisme
+  ⭐ Grandes Parcelles
+  ⭐ Zones Mixtes
+  ⭐ Opportunités de Développement
+
+Environnement
+  ⭐ Zones Protégées
+  ⭐ Zones Tampon Riveraines
+  ⭐ Proximité Zones Humides
+
+Analyse
+  ⭐ Couverture Transport
+  ⭐ Lacunes de Services
+  ⭐ Zones Haute Densité
+```
+
+**Options de Tri :**
+- Par nom (A-Z)
+- Par fréquence d'utilisation
+- Par date de création
+- Par ordre personnalisé (glisser-déposer)
+
+## Flux de Travail avec l'Historique
+
+### Affinage Itératif
 
 ```mermaid
-sequenceDiagram
-    participant U as Utilisateur
-    participant H as Système Historique
-    participant S as Couche Source
-    participant R1 as Couche Distante 1
-    participant R2 as Couche Distante 2
+graph LR
+    A[Filtre Initial] --> B[Examiner Résultats]
+    B --> C{Satisfaisant ?}
+    C -->|Non| D[Affiner le Filtre]
+    D --> E[Appliquer Nouveau Filtre]
+    E --> B
+    C -->|Oui| F[Ajouter aux Favoris]
     
-    U->>H: Appliquer filtre géométrique (intersecte)
-    H->>S: Filtrer source (500 → 150 entités)
-    H->>R1: Filtrer distante 1 (1000 → 320 entités)
-    H->>R2: Filtrer distante 2 (800 → 210 entités)
+    D -.Annuler si nécessaire.-> A
     
-    U->>H: Annuler Global
-    H->>S: Restaurer (150 → 500 entités)
-    H->>R1: Restaurer (320 → 1000 entités)
-    H->>R2: Restaurer (210 → 800 entités)
+    style F fill:#90EE90
 ```
 
-## Comment Ça Fonctionne
+**Exemple :**
+```
+Étape 1 : zone = 'residential'
+          → Trop large (10 000 entités)
 
-### Capture d'État
+Étape 2 : zone = 'residential' AND area > 5000
+          → Mieux (3 200 entités)
 
-Quand vous appliquez un filtre, FilterMate capture :
+Étape 3 : zone = 'residential' AND area > 5000 AND year_built > 2000
+          → Parfait (1 200 entités) ⭐ Ajouter aux Favoris
+```
 
-**Historique Couche Source :**
-- Expression de filtre (subset string)
-- Nombre d'entités après filtre
-- Horodatage
-- Métadonnées de l'opération
+### Flux de Travail de Comparaison
 
-**Historique Global (quand couches distantes sélectionnées) :**
-- État de la couche source
-- États de toutes les couches distantes (expression + nombre)
-- Instantané combiné pour restauration atomique
+Comparez différentes approches de filtrage :
 
-### Détection de Contexte
+```
+Approche A : Basée sur les attributs
+  population > 100000
+  → 45 entités
 
-FilterMate vérifie l'état de l'interface avant chaque annulation/rétablissement :
+Annuler (Ctrl+Z)
 
+Approche B : Basée sur le spatial
+  distance($geometry, @center) < 10000
+  → 62 entités
+
+Annuler (Ctrl+Z)
+
+Approche C : Combinée
+  population > 50000 AND distance($geometry, @center) < 10000
+  → 38 entités ✓ Meilleur équilibre
+```
+
+## Exemples Pratiques
+
+### Session d'Urbanisme
+
+```
+Session du Matin :
+  [09:15] Pas de filtre (toutes les parcelles)
+  [09:30] zone = 'commercial' ⭐ Sauvegardé
+  [09:45] zone = 'commercial' AND available = 'yes'
+  [10:00] zone = 'commercial' AND available = 'yes' AND area > 5000 ⭐ Sauvegardé
+  
+Session de l'Après-midi :
+  [14:00] Récupéré : "Commercial disponible >5000 m²"
+  [14:30] Modifié : + "AND price < 500000"
+  [15:00] Nouveau favori : "Sites commerciaux abordables" ⭐
+```
+
+### Analyse Environnementale
+
+```
+Analyse Zone Tampon Zone Humide :
+  [10:00] Toutes les entités
+  [10:15] habitat_type = 'wetland'
+  [10:30] + buffer 100m ⭐ "Zone humide buffer 100m"
+  [10:45] + buffer 300m ⭐ "Zone humide buffer 300m"
+  [11:00] Comparaison : impact 100m vs 300m
+  [11:15] Final : buffer 300m + restrictions ⭐
+```
+
+### Intervention d'Urgence
+
+```
+Planification d'Évacuation :
+  [12:00] Tous les bâtiments
+  [12:05] intersects(@hazard_zone) ⭐ "Bâtiments en zone de danger"
+  [12:15] + occupancy > 50 ⭐ "Forte occupation en zone de danger"
+  [12:30] + NOT exits >= 3 ⭐ "Bâtiments à risque d'évacuation"
+  [12:45] Exporter résultats → Partager avec l'équipe
+```
+
+## Persistance de l'Historique
+
+### Sauvegarde Automatique
+
+L'historique est **automatiquement sauvegardé** :
+- Chaque application de filtre est enregistrée
+- L'historique persiste entre les sessions
+- Historique séparé par couche
+- Survit au redémarrage de QGIS
+
+### Emplacement de Stockage
+
+```
+Windows : %APPDATA%/QGIS/QGIS3/profiles/default/FilterMate/history/
+Linux :   ~/.local/share/QGIS/QGIS3/profiles/default/FilterMate/history/
+Mac :     ~/Library/Application Support/QGIS/QGIS3/profiles/default/FilterMate/history/
+```
+
+### Limites de l'Historique
+
+**Paramètres par Défaut :**
+- Maximum d'éléments : **100** par couche
+- Rétention : **30 jours**
+- Favoris : **Illimités**
+
+**Configurable :**
 ```python
-# Logique simplifiée
-bouton_coche = bouton "Couches à Filtrer" est coché
-a_couches_distantes = des couches distantes sont sélectionnées
-
-if bouton_coche AND a_couches_distantes:
-    utiliser_mode_global()  # Restaurer toutes les couches
-else:
-    utiliser_mode_source()  # Restaurer source uniquement
+# Dans les paramètres FilterMate
+max_history_items = 100
+history_retention_days = 30
+auto_cleanup = True
 ```
 
-## Exemples de Workflows
+## Export/Import
 
-### Workflow Mono-Couche
+### Exporter l'Historique
 
-1. Sélectionnez une couche dans QGIS
-2. Appliquez filtre : `"population" > 10000` → 150 entités
-3. Appliquez filtre : `"type" = 'residential'` → 45 entités
-4. Cliquez **Annuler** → Retour à 150 entités
-5. Cliquez **Annuler** → Retour à toutes les entités (pas de filtre)
-6. Cliquez **Rétablir** → 150 entités à nouveau
+Partagez les configurations de filtres avec vos collègues :
 
-### Workflow Multi-Couches
+**Options d'Export :**
+1. **Filtre Unique** - Clic droit → Exporter
+2. **Filtres Multiples** - Sélectionner → Exporter Sélection
+3. **Tout l'Historique** - Exporter → Tout l'Historique
+4. **Favoris Uniquement** - Exporter → Favoris
 
-1. Sélectionnez la couche source (ex: "bâtiments")
-2. Activez le bouton **"Couches à Filtrer"**
-3. Sélectionnez les couches distantes : "parcelles", "routes"
-4. Appliquez filtre géométrique : intersecte avec sélection
-   - bâtiments : 500 → 150 entités
-   - parcelles : 1000 → 320 entités
-   - routes : 800 → 210 entités
-5. Cliquez **Annuler** → **Les 3 couches** restaurées simultanément
-6. Cliquez **Rétablir** → **Les 3 couches** filtrées à nouveau
-
-### Filtrage Progressif avec Préservation
-
-:::tip Préservation des Filtres (v2.3.0)
-Les nouveaux filtres sont automatiquement combinés avec les filtres existants en utilisant AND par défaut.
-:::
-
-```
-Étape 1 : Filtre géométrique (intersecte polygone)
-          → Source : 150 entités
-
-Étape 2 : Filtre attributaire : "population" > 5000
-          → Combiné : (géométrique) AND (population > 5000)
-          → Source : 23 entités
-
-Étape 3 : Annuler
-          → Retour à : 150 entités (géométrique uniquement)
-
-Étape 4 : Rétablir
-          → Avancer à : 23 entités (combiné)
+**Format d'Export (JSON) :**
+```json
+{
+  "filter_history_export": {
+    "version": "1.0",
+    "layer": "parcelles",
+    "filters": [
+      {
+        "expression": "zone = 'commercial' AND area > 5000",
+        "timestamp": "2024-12-08T14:30:00",
+        "feature_count": 1234,
+        "favorite": true,
+        "name": "Grandes Parcelles Commerciales",
+        "tags": ["commercial", "urbanisme"]
+      }
+    ]
+  }
+}
 ```
 
-## Configuration
+### Importer l'Historique
 
-### Taille de l'Historique
+Importez des filtres depuis des collègues ou une sauvegarde :
 
-Historique maximum par défaut : **100 états** par couche
+1. **Fichier → Importer Historique**
+2. Sélectionnez le fichier `.json`
+3. Choisissez fusionner ou remplacer
+4. Confirmez l'import
 
-Configuré dans `modules/filter_history.py` :
-```python
-def __init__(self, layer_id: str, max_size: int = 100):
-```
-
-### Historique Global
-
-L'historique global stocke également jusqu'à 100 états pour les opérations multi-couches.
-
-## Détails Techniques
-
-### Classe FilterState
-
-Représente un état de filtre unique :
-```python
-class FilterState:
-    expression: str      # Expression de filtre (subset string)
-    feature_count: int   # Entités visibles après filtre
-    description: str     # Description lisible
-    timestamp: datetime  # Date d'application
-    metadata: dict       # Infos additionnelles (backend, etc.)
-```
-
-### Classe GlobalFilterState
-
-Représente un état multi-couches :
-```python
-class GlobalFilterState:
-    source_layer_id: str                    # ID couche source
-    source_expression: str                  # Filtre source
-    remote_layers: Dict[str, Tuple[str, int]]  # {layer_id: (expression, count)}
-    timestamp: datetime                     # Date de capture
-    description: str                        # Description lisible
-```
-
-### Classe HistoryManager
-
-Gère l'historique mono-couche et global :
-```python
-class HistoryManager:
-    - get_history(layer_id) -> FilterHistory
-    - push_global_state(source_id, source_expr, remote_layers, desc)
-    - undo_global() -> GlobalFilterState
-    - redo_global() -> GlobalFilterState
-    - can_undo_global() -> bool
-    - can_redo_global() -> bool
-```
-
-## Dépannage
-
-### Boutons Annuler/Rétablir Désactivés
-
-**Cause :** Pas d'historique disponible dans cette direction
-
-**Solutions :**
-- Appliquez au moins un filtre pour activer Annuler
-- Annulez au moins une fois pour activer Rétablir
-- Vérifiez si vous êtes au début/fin de l'historique
-
-### Annuler Global Ne Restaure Pas Toutes les Couches
-
-**Cause :** Les couches distantes peuvent avoir été supprimées du projet
-
-**Solution :** FilterMate journalise des avertissements pour les couches manquantes :
-```
-FilterMate: Remote layer {id} no longer exists, skipping
-```
-
-### Historique Perdu Après Rechargement
-
-**Comportement actuel :** L'historique est **en mémoire uniquement** et se réinitialise quand :
-- QGIS est fermé
-- Le plugin est rechargé
-- Le projet est changé
-
-**Note :** L'historique persistant entre sessions est une amélioration future potentielle.
+**Options d'Import :**
+- **Fusionner** - Ajouter à l'historique existant
+- **Remplacer** - Effacer et importer
+- **Favoris Uniquement** - Importer seulement les marque-pages
 
 ## Bonnes Pratiques
 
-### 1. Utilisez le Mode Global pour les Opérations Multi-Couches
+### 1. Nommez les Favoris Clairement
 
-Quand vous filtrez plusieurs couches ensemble, toujours :
-1. Activez "Couches à Filtrer"
-2. Sélectionnez toutes les couches distantes affectées
-3. Appliquez le filtre une fois → toutes les couches filtrées
-4. Utilisez Annuler Global pour tout restaurer d'un coup
-
-### 2. Affinage Progressif
-
-Construisez des filtres complexes étape par étape :
 ```
-Étape 1 : Filtre géométrique large
-Étape 2 : Ajoutez contrainte attributaire
-Étape 3 : Ajoutez une autre contrainte
-→ Chaque étape enregistrée, facilement réversible
+✅ Bon :
+  "Parcelles commerciales >5000 m²"
+  "Résidentiel près du transport <400m"
+  "Projets haute priorité incomplets"
+
+❌ Mauvais :
+  "Filtre 1"
+  "Test"
+  "Filtre temp"
 ```
 
-### 3. Vérifiez les États des Boutons
+### 2. Utilisez les Tags Efficacement
 
-Avant de cliquer Annuler/Rétablir :
-- Bouton activé = action disponible
-- Bouton désactivé = pas d'historique dans cette direction
+```
+Tags : "commercial", "urbanisme", "grandes-parcelles"
+Tags : "environnement", "protégé", "analyse"
+Tags : "urgence", "évacuation", "haut-risque"
+```
 
-### 4. Comprenez le Contexte
+### 3. Nettoyez Régulièrement
 
-Avant d'annuler :
-- **Décoché** "Couches à Filtrer" = annuler source uniquement
-- **Coché** + couches distantes = annuler global (toutes les couches)
+- Supprimez les filtres expérimentaux
+- Archivez les anciennes sessions
+- Exportez les flux de travail importants
+- Gardez les favoris organisés
+
+### 4. Documentez les Filtres Complexes
+
+Ajoutez des commentaires aux favoris :
+```
+Nom : "Opportunités de Développement"
+Expression : zone = 'mixed-use' AND area > 10000 AND NOT protected
+Commentaire : "Grandes parcelles à usage mixte hors zones protégées.
+              Utilisé pour l'analyse trimestrielle des opportunités."
+Tags : "urbanisme", "développement", "rapport-trimestriel"
+```
+
+## Raccourcis Clavier
+
+| Action | Windows/Linux | Mac |
+|--------|---------------|-----|
+| Annuler | `Ctrl+Z` | `Cmd+Z` |
+| Rétablir | `Ctrl+Y` | `Cmd+Y` |
+| Ouvrir Historique | `Ctrl+H` | `Cmd+H` |
+| Ouvrir Favoris | `Ctrl+F` | `Cmd+F` |
+| Ajouter aux Favoris | `Ctrl+D` | `Cmd+D` |
+| Appliquer Favori 1-9 | `Ctrl+1` à `Ctrl+9` | `Cmd+1` à `Cmd+9` |
+| Rechercher Historique | `Ctrl+Shift+F` | `Cmd+Shift+F` |
+
+## Dépannage
+
+### L'Historique ne se Sauvegarde Pas
+
+**Solutions :**
+1. Vérifiez les permissions d'écriture dans le dossier historique
+2. Vérifiez le chemin du profil QGIS
+3. Vérifiez l'espace disque
+4. Réinitialisez la base de données de l'historique
+
+### Éléments d'Historique Manquants
+
+**Causes :**
+- Limite d'historique atteinte (100 éléments par défaut)
+- Période de rétention expirée (30 jours par défaut)
+- Suppression manuelle
+
+**Solutions :**
+- Augmentez la limite dans les paramètres
+- Exportez les filtres importants en favoris
+- Sauvegardes régulières
+
+### Annuler/Rétablir ne Fonctionne Pas
+
+**Vérifiez :**
+1. L'historique est activé dans les paramètres
+2. La couche a un historique de filtres
+3. Vous n'êtes pas au début/fin de l'historique
+4. QGIS n'est pas en mode édition
 
 ## Sujets Connexes
 
-- [Bases du Filtrage](filtering-basics.md) - Créer des filtres
-- [Filtrage Géométrique](geometric-filtering.md) - Opérations spatiales
+- [Bases du Filtrage](filtering-basics.md) - Créer des filtres à ajouter à l'historique
 - [Aperçu de l'Interface](interface-overview.md) - Naviguer dans l'interface

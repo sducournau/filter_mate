@@ -57,13 +57,15 @@ from qgis.utils import iface
 from qgis import processing
 
 # Import logging configuration
-from ..logging_config import get_logger, safe_log
-
-# Get logger (deferred initialization to avoid issues when ENV_VARS is empty)
-logger = get_logger('FilterMate.Tasks.Filter')
-
-# Import config (used later in class methods, NOT at module level)
+from ..logging_config import setup_logger, safe_log
 from ...config.config import ENV_VARS
+
+# Setup logger with rotation
+logger = setup_logger(
+    'FilterMate.Tasks.Filter',
+    os.path.join(ENV_VARS.get("PATH_ABSOLUTE_PROJECT", "."), 'logs', 'filtermate_tasks.log'),
+    level=logging.INFO
+)
 
 # Import conditionnel de psycopg2 pour support PostgreSQL optionnel
 try:
@@ -727,15 +729,11 @@ class FilterEngineTask(QgsTask):
             is_simple_field = qgs_expr.isField() and not any(
                 op in task_expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
             )
-            logger.debug(f"  is_simple_field check: isField()={qgs_expr.isField()}, result={is_simple_field}")
         
         # Check if geometric filtering is enabled
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
         geom_predicates_list = self.task_parameters["filtering"].get("geometric_predicates", [])
         has_geometric_filtering = has_geom_predicates and len(geom_predicates_list) > 0
-        
-        logger.debug(f"  has_geom_predicates={has_geom_predicates}, geom_predicates_list={geom_predicates_list}")
-        logger.debug(f"  has_geometric_filtering={has_geometric_filtering}, is_simple_field={is_simple_field}")
         
         # OPTIMIZATION: If expression is a simple field name AND geometric filtering is enabled,
         # do NOT filter the source layer - keep existing subset and use selected features

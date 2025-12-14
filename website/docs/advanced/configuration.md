@@ -258,53 +258,6 @@ Top-level application settings.
 
 UI-related configuration.
 
-#### Feedback Level (v2.3.0)
-
-:::info New in v2.3.0
-Control the verbosity of user feedback messages to reduce notification fatigue.
-:::
-
-```json
-"FEEDBACK_LEVEL": {
-    "choices": ["minimal", "normal", "verbose"],
-    "value": "normal"
-}
-```
-
-**Options:**
-
-| Level | Description | Use Case |
-|-------|-------------|----------|
-| `minimal` | Only critical errors and performance warnings | Production use, experienced users |
-| `normal` | Balanced feedback, essential information | General use (default) |
-| `verbose` | All messages including debug info | Development, troubleshooting |
-
-**Message Reduction:**
-- **Minimal mode**: ~92% fewer messages (7 vs 90 per session)
-- **Normal mode**: ~42% fewer messages (52 vs 90 per session)
-
-**Categories Affected:**
-- `filter_count` - Filter result messages
-- `undo_redo` - Undo/redo confirmation messages
-- `backend_info` - Backend selection messages
-- `config_changes` - Configuration change notifications
-- `progress_info` - Progress indicators
-- `history_status` - History state messages
-
-**Example:**
-```json
-{
-    "APP": {
-        "DOCKWIDGET": {
-            "FEEDBACK_LEVEL": {
-                "choices": ["minimal", "normal", "verbose"],
-                "value": "minimal"  // Quiet mode for production
-            }
-        }
-    }
-}
-```
-
 #### UI Profile
 
 ```json

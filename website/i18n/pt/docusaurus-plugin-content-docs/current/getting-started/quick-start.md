@@ -6,10 +6,6 @@ sidebar_position: 2
 
 Comece com o FilterMate em 5 minutos! Este guia cobre o fluxo de trabalho essencial.
 
-:::info Versão 2.3.0
-Este guia está atualizado para o FilterMate v2.3.0 com Desfazer/Refazer inteligente e preservação automática de filtros.
-:::
-
 ## Passo 1: Abrir o FilterMate
 
 1. No QGIS, carregue uma camada vetorial (qualquer formato: Shapefile, GeoPackage, PostGIS, etc.)
@@ -24,14 +20,14 @@ Este guia está atualizado para o FilterMate v2.3.0 com Desfazer/Refazer intelig
 
 *Abrindo o FilterMate da barra de ferramentas*
 
-3. O painel acoplável do FilterMate aparecerá (ativa automaticamente quando camadas são adicionadas!)
+3. O painel acoplável do FilterMate aparecerá
 
 <img src="/filter_mate/img/quickstart-3.png" alt="quickstart-3" width="500"/>
 
 *Painel do FilterMate acoplado no lado direito do QGIS*
 
 :::tip Primeira vez?
-O FilterMate detectará automaticamente o tipo da sua camada e selecionará o backend ideal (PostgreSQL, Spatialite ou OGR). Para SRC geográficos (EPSG:4326), operações métricas são automaticamente convertidas para EPSG:3857 para maior precisão.
+O FilterMate detectará automaticamente o tipo da sua camada e selecionará o backend ideal (PostgreSQL, Spatialite ou OGR).
 :::
 
 ## Passo 2: Selecione sua camada
@@ -42,44 +38,28 @@ O FilterMate detectará automaticamente o tipo da sua camada e selecionará o ba
 
 *Camada selecionada com expressão de filtro pronta para aplicar*
 
-## Passo 3: Explorar e selecionar feições
+## Passo 3: Criar um filtro
 
-O FilterMate oferece vários métodos de seleção na seção **Exploração**:
+### Opção A: Filtro de atributos
 
-### Seleção simples
-Use o widget **Seletor de feições** para selecionar feições individuais clicando no mapa ou escolhendo de um menu suspenso.
+Para filtrar por atributos (por ex., população > 10.000):
 
-### Seleção múltipla
-Expanda o grupo **Seleção múltipla** para selecionar várias feições de uma vez usando caixas de seleção.
+1. Vá para a aba **Filtro de atributos**
+2. Digite uma expressão QGIS como:
+   ```
+   "population" > 10000
+   ```
+3. Clique em **Aplicar filtro**
 
-### Expressão personalizada
-Expanda o grupo **Expressão personalizada** para criar expressões QGIS complexas para filtragem:
+### Opção B: Filtro geométrico
 
-```sql
-"population" > 10000 AND "type" = 'residential'
-```
+Para filtragem espacial (por ex., edifícios a 100m de uma estrada):
 
-## Passo 4: Aplicar filtros
-
-### Opções de filtragem
-
-Na seção **Filtragem**, configure seu filtro:
-
-1. **Camadas a filtrar**: Selecione quais camadas serão filtradas (origem + camadas remotas)
-2. **Operador de combinação**: Escolha como novos filtros interagem com os existentes:
-   - **AND** (padrão): Combina filtros (interseção)
-   - **OR**: União de filtros
-   - **AND NOT**: Filtro de exclusão
-3. **Predicados geométricos**: Selecione relações espaciais (intersecta, dentro, contém, etc.)
-4. **Buffer**: Adicione uma distância de buffer ao seu filtro geométrico
-
-### Aplicar o filtro
-
-Clique no botão **Filtrar** (ícone de funil) na barra de ações. O filtro é aplicado a todas as camadas selecionadas.
-
-:::info Preservação automática de filtros ⭐ NOVO na v2.3.0
-O FilterMate agora preserva automaticamente filtros existentes! Quando você aplica um novo filtro, ele é combinado com filtros anteriores usando o operador selecionado (AND por padrão). Não há mais filtros perdidos ao alternar entre filtragem por atributos e geométrica.
-:::
+1. Vá para a aba **Filtro geométrico**
+2. Selecione uma **camada de referência** (por ex., estradas)
+3. Escolha um **predicado espacial** (por ex., "dentro da distância")
+4. Defina uma **distância de buffer** (por ex., 100 metros)
+5. Clique em **Aplicar filtro**
 
 :::info Seleção de backend
 O FilterMate usa automaticamente o melhor backend para seus dados:
@@ -88,58 +68,49 @@ O FilterMate usa automaticamente o melhor backend para seus dados:
 - **OGR**: Para Shapefiles, GeoPackage, etc.
 :::
 
-## Passo 5: Revisar resultados
+## Passo 4: Revisar resultados
 
 Após aplicar o filtro:
 
-- Feições filtradas são **exibidas** no mapa
-- A **contagem de feições** atualiza na lista de camadas
-- **Botões Desfazer/Refazer** ficam ativos na barra de ações
+- Feições filtradas são **destacadas** no mapa
+- A **contagem de feições** atualiza no painel
+- Use a aba **Histórico** para desfazer/refazer filtros
 
-## Passo 6: Desfazer/Refazer filtros
-
-:::tip Desfazer/Refazer inteligente ⭐ NOVO na v2.3.0
-FilterMate v2.3.0 apresenta desfazer/refazer contextual:
-- **Apenas camada de origem**: Sem camadas remotas selecionadas, desfazer/refazer afeta apenas a camada de origem
-- **Modo global**: Com camadas remotas filtradas, desfazer/refazer restaura o estado completo de todas as camadas simultaneamente
-:::
-
-Use os botões **Desfazer** (↩️) e **Refazer** (↪️) na barra de ações para navegar pelo histórico de filtros. Os botões ativam/desativam automaticamente com base na disponibilidade do histórico.
-
-## Passo 7: Exportar (Opcional)
+## Passo 5: Exportar (Opcional)
 
 Para exportar feições filtradas:
 
-1. Vá para a seção **Exportar**
+1. Vá para a aba **Exportar**
 2. Escolha o **formato de exportação** (GeoPackage, Shapefile, PostGIS, etc.)
 3. Configure o **SRC** e outras opções
 4. Clique em **Exportar**
 
 ## Fluxos de trabalho comuns
 
-### Filtragem progressiva (Preservação de filtros)
+### Filtrar por múltiplos critérios
 
-Construa filtros complexos passo a passo:
+Combine filtros de atributos e geométricos:
 
 ```python
-# Passo 1: Filtro geométrico - seleção por polígono
-# Resultado: 150 feições
+# Filtro de atributos
+"population" > 10000 AND "type" = 'residential'
 
-# Passo 2: Adicionar filtro de atributos com operador AND
-"population" > 10000
-# Resultado: 23 feições (interseção preservada!)
+# Depois aplicar filtro geométrico
+# dentro de 500m do centro da cidade
 ```
 
-### Filtragem multicamada
+### Desfazer/Refazer filtros
 
-1. Selecione feições na sua camada de origem
-2. Ative **Camadas a filtrar** e selecione camadas remotas
-3. Aplique o filtro - todas as camadas selecionadas são filtradas simultaneamente
-4. Use **Desfazer global** para restaurar todas as camadas de uma vez
+1. Vá para a aba **Histórico**
+2. Clique em **Desfazer** para reverter o último filtro
+3. Clique em **Refazer** para reaplicar
 
-### Redefinir filtros
+### Salvar configurações de filtro
 
-Clique no botão **Redefinir** para limpar todos os filtros das camadas selecionadas.
+O FilterMate salva automaticamente configurações por camada:
+- Expressões de filtro
+- Distâncias de buffer
+- Preferências de exportação
 
 ## Dicas de desempenho
 
@@ -162,15 +133,6 @@ pip install psycopg2-binary
 - Qualquer backend funcionará bem
 - O backend OGR é suficiente
 
-## Feedback configurável
-
-FilterMate v2.3.0 inclui um sistema de feedback configurável para reduzir a fadiga de notificações:
-- **Minimal**: Apenas erros críticos (produção)
-- **Normal** (padrão): Equilibrado, informações essenciais
-- **Verbose**: Todas as mensagens (desenvolvimento)
-
-Configure em `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
-
 ## Próximos passos
 
 - **[Tutorial do primeiro filtro](./first-filter.md)** - Exemplo detalhado passo a passo
@@ -185,19 +147,16 @@ Configure em `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
 Verifique:
 - ✅ A sintaxe da expressão está correta (use o construtor de expressões do QGIS)
 - ✅ Os nomes dos campos estão entre aspas corretamente: `"nome_campo"`
-- ✅ A camada tem feições que correspondem aos critérios
+- ✅ A camada é editável (desbloqueie se necessário)
+- ✅ Nenhum outro filtro já está aplicado
 
 ### Desempenho lento?
 
-- Para grandes conjuntos de dados, considere [instalar o backend PostgreSQL](../installation.md#optional-postgresql-backend-recommended-for-large-datasets)
-- Consulte o guia de [Ajuste de desempenho](../advanced/performance-tuning.md)
-
-### Backend não detectado?
-
-O FilterMate mostrará qual backend está sendo usado. Se PostgreSQL não estiver disponível:
-1. Verifique se psycopg2 está instalado: `import psycopg2`
-2. Verifique se a fonte da camada é PostgreSQL/PostGIS
-3. Veja [Solução de problemas de instalação](../installation.md#troubleshooting)
+Soluções:
+- ⚡ Mude para uma camada PostGIS com psycopg2 instalado
+- 🔧 Simplifique expressões de filtro complexas
+- 📊 Crie índices espaciais nas suas camadas
+- 💾 Reduza o tamanho do conjunto de dados se possível
 
 ## Precisa de ajuda?
 

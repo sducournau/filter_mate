@@ -327,7 +327,7 @@ Format texte pour les **applications web**.
 **Quand l'utiliser :**
 - Cartographie web (Leaflet, Mapbox)
 - APIs REST
-- Petits à moyens jeux de données (`<10k` entités)
+- Petits à moyens jeux de données (<10k entités)
 - Contrôle de version Git
 
 **Exemple d'export :**

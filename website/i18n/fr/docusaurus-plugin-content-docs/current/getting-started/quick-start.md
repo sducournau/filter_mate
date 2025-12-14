@@ -6,10 +6,6 @@ sidebar_position: 2
 
 Démarrez avec FilterMate en 5 minutes ! Ce guide couvre le flux de travail essentiel.
 
-:::info Version 2.3.0
-Ce guide est mis à jour pour FilterMate v2.3.0 avec Annuler/Rétablir intelligent et préservation automatique des filtres.
-:::
-
 ## Étape 1 : Ouvrir FilterMate
 
 1. Dans QGIS, chargez une couche vectorielle (n'importe quel format : Shapefile, GeoPackage, PostGIS, etc.)
@@ -24,14 +20,14 @@ Ce guide est mis à jour pour FilterMate v2.3.0 avec Annuler/Rétablir intellige
 
 *Ouverture de FilterMate depuis la barre d'outils*
 
-3. Le panneau ancrable FilterMate apparaîtra (s'active automatiquement quand des couches sont ajoutées !)
+3. Le panneau ancrable FilterMate apparaîtra
 
 <img src="/filter_mate/img/quickstart-3.png" alt="quickstart-3" width="500"/>
 
 *Panneau FilterMate ancré sur le côté droit de QGIS*
 
 :::tip Première fois ?
-FilterMate détectera automatiquement le type de votre couche et sélectionnera le backend optimal (PostgreSQL, Spatialite ou OGR). Pour les SCR géographiques (EPSG:4326), les opérations métriques sont automatiquement converties en EPSG:3857 pour plus de précision.
+FilterMate détectera automatiquement le type de votre couche et sélectionnera le backend optimal (PostgreSQL, Spatialite ou OGR).
 :::
 
 ## Étape 2 : Sélectionnez votre couche
@@ -42,44 +38,28 @@ FilterMate détectera automatiquement le type de votre couche et sélectionnera 
 
 *Couche sélectionnée avec expression de filtre prête à être appliquée*
 
-## Étape 3 : Explorer et sélectionner des entités
+## Étape 3 : Créer un filtre
 
-FilterMate offre plusieurs méthodes de sélection dans la section **Exploration** :
+### Option A : Filtre d'attributs
 
-### Sélection simple
-Utilisez le widget **Sélecteur d'entités** pour sélectionner des entités individuelles en cliquant sur la carte ou en choisissant dans un menu déroulant.
+Pour filtrer par attributs (par ex., population > 10 000) :
 
-### Sélection multiple
-Développez le groupe **Sélection multiple** pour sélectionner plusieurs entités à la fois à l'aide de cases à cocher.
+1. Allez dans l'onglet **Filtre d'attributs**
+2. Entrez une expression QGIS comme :
+   ```
+   "population" > 10000
+   ```
+3. Cliquez sur **Appliquer le filtre**
 
-### Expression personnalisée
-Développez le groupe **Expression personnalisée** pour créer des expressions QGIS complexes pour le filtrage :
+### Option B : Filtre géométrique
 
-```sql
-"population" > 10000 AND "type" = 'residential'
-```
+Pour le filtrage spatial (par ex., bâtiments à moins de 100m d'une route) :
 
-## Étape 4 : Appliquer les filtres
-
-### Options de filtrage
-
-Dans la section **Filtrage**, configurez votre filtre :
-
-1. **Couches à filtrer** : Sélectionnez les couches qui seront filtrées (source + couches distantes)
-2. **Opérateur de combinaison** : Choisissez comment les nouveaux filtres interagissent avec les existants :
-   - **AND** (par défaut) : Combine les filtres (intersection)
-   - **OR** : Union des filtres
-   - **AND NOT** : Filtre d'exclusion
-3. **Prédicats géométriques** : Sélectionnez les relations spatiales (intersecte, à l'intérieur, contient, etc.)
-4. **Tampon** : Ajoutez une distance de tampon à votre filtre géométrique
-
-### Appliquer le filtre
-
-Cliquez sur le bouton **Filtrer** (icône entonnoir) dans la barre d'actions. Le filtre est appliqué à toutes les couches sélectionnées.
-
-:::info Préservation automatique des filtres ⭐ NOUVEAU dans v2.3.0
-FilterMate préserve maintenant automatiquement les filtres existants ! Lorsque vous appliquez un nouveau filtre, il est combiné avec les filtres précédents en utilisant l'opérateur sélectionné (AND par défaut). Plus de filtres perdus lors du passage entre filtrage par attributs et géométrique.
-:::
+1. Allez dans l'onglet **Filtre géométrique**
+2. Sélectionnez une **couche de référence** (par ex., routes)
+3. Choisissez un **prédicat spatial** (par ex., "à distance de")
+4. Définissez une **distance de tampon** (par ex., 100 mètres)
+5. Cliquez sur **Appliquer le filtre**
 
 :::info Sélection du backend
 FilterMate utilise automatiquement le meilleur backend pour vos données :
@@ -88,58 +68,49 @@ FilterMate utilise automatiquement le meilleur backend pour vos données :
 - **OGR** : Pour les Shapefiles, GeoPackage, etc.
 :::
 
-## Étape 5 : Examiner les résultats
+## Étape 4 : Examiner les résultats
 
 Après avoir appliqué le filtre :
 
-- Les entités filtrées sont **affichées** sur la carte
-- Le **nombre d'entités** se met à jour dans la liste des couches
-- Les **boutons Annuler/Rétablir** deviennent actifs dans la barre d'actions
+- Les entités filtrées sont **mises en surbrillance** sur la carte
+- Le **nombre d'entités** se met à jour dans le panneau
+- Utilisez l'onglet **Historique** pour annuler/rétablir les filtres
 
-## Étape 6 : Annuler/Rétablir les filtres
-
-:::tip Annuler/Rétablir intelligent ⭐ NOUVEAU dans v2.3.0
-FilterMate v2.3.0 propose un annuler/rétablir contextuel :
-- **Couche source uniquement** : Sans couches distantes sélectionnées, annuler/rétablir n'affecte que la couche source
-- **Mode global** : Avec des couches distantes filtrées, annuler/rétablir restaure l'état complet de toutes les couches simultanément
-:::
-
-Utilisez les boutons **Annuler** (↩️) et **Rétablir** (↪️) dans la barre d'actions pour naviguer dans l'historique de vos filtres. Les boutons s'activent/désactivent automatiquement selon la disponibilité de l'historique.
-
-## Étape 7 : Exporter (Optionnel)
+## Étape 5 : Exporter (Optionnel)
 
 Pour exporter les entités filtrées :
 
-1. Allez dans la section **Export**
+1. Allez dans l'onglet **Export**
 2. Choisissez le **format d'export** (GeoPackage, Shapefile, PostGIS, etc.)
 3. Configurez le **SCR** et autres options
 4. Cliquez sur **Exporter**
 
 ## Flux de travail courants
 
-### Filtrage progressif (Préservation des filtres)
+### Filtrer par plusieurs critères
 
-Construisez des filtres complexes étape par étape :
+Combinez les filtres d'attributs et géométriques :
 
 ```python
-# Étape 1 : Filtre géométrique - sélection par polygone
-# Résultat : 150 entités
+# Filtre d'attributs
+"population" > 10000 AND "type" = 'residential'
 
-# Étape 2 : Ajouter un filtre d'attributs avec opérateur AND
-"population" > 10000
-# Résultat : 23 entités (intersection préservée !)
+# Puis appliquer le filtre géométrique
+# à moins de 500m du centre-ville
 ```
 
-### Filtrage multi-couches
+### Annuler/Rétablir les filtres
 
-1. Sélectionnez des entités dans votre couche source
-2. Activez **Couches à filtrer** et sélectionnez les couches distantes
-3. Appliquez le filtre - toutes les couches sélectionnées sont filtrées simultanément
-4. Utilisez **Annuler global** pour restaurer toutes les couches en une fois
+1. Allez dans l'onglet **Historique**
+2. Cliquez sur **Annuler** pour annuler le dernier filtre
+3. Cliquez sur **Rétablir** pour réappliquer
 
-### Réinitialiser les filtres
+### Enregistrer les paramètres de filtre
 
-Cliquez sur le bouton **Réinitialiser** pour effacer tous les filtres des couches sélectionnées.
+FilterMate enregistre automatiquement les paramètres par couche :
+- Expressions de filtre
+- Distances de tampon
+- Préférences d'export
 
 ## Conseils de performance
 
@@ -162,15 +133,6 @@ pip install psycopg2-binary
 - N'importe quel backend fonctionnera bien
 - Le backend OGR est suffisant
 
-## Feedback configurable
-
-FilterMate v2.3.0 inclut un système de feedback configurable pour réduire la fatigue des notifications :
-- **Minimal** : Erreurs critiques uniquement (production)
-- **Normal** (par défaut) : Équilibré, infos essentielles
-- **Verbose** : Tous les messages (développement)
-
-Configurez dans `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
-
 ## Prochaines étapes
 
 - **[Tutoriel premier filtre](./first-filter.md)** - Exemple détaillé étape par étape
@@ -185,19 +147,16 @@ Configurez dans `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
 Vérifiez :
 - ✅ La syntaxe de l'expression est correcte (utilisez le constructeur d'expressions QGIS)
 - ✅ Les noms de champs sont correctement entre guillemets : `"nom_champ"`
-- ✅ La couche contient des entités correspondant aux critères
+- ✅ La couche est modifiable (déverrouillez si nécessaire)
+- ✅ Aucun autre filtre n'est déjà appliqué
 
 ### Performances lentes ?
 
-- Pour les grands jeux de données, envisagez d'[installer le backend PostgreSQL](../installation.md#optional-postgresql-backend-recommended-for-large-datasets)
-- Consultez le guide [Optimisation des performances](../advanced/performance-tuning.md)
-
-### Backend non détecté ?
-
-FilterMate affichera quel backend est utilisé. Si PostgreSQL n'est pas disponible :
-1. Vérifiez si psycopg2 est installé : `import psycopg2`
-2. Vérifiez que la source de la couche est PostgreSQL/PostGIS
-3. Voir [Dépannage de l'installation](../installation.md#troubleshooting)
+Solutions :
+- ⚡ Passez à une couche PostGIS avec psycopg2 installé
+- 🔧 Simplifiez les expressions de filtre complexes
+- 📊 Créez des index spatiaux sur vos couches
+- 💾 Réduisez la taille du jeu de données si possible
 
 ## Besoin d'aide ?
 
