@@ -50,11 +50,11 @@ class UIConfig:
             
             # Action buttons (filter, export, etc.)
             "action_button": {
-                "height": 54,
-                "icon_size": 33,
-                "padding": {"top": 9, "right": 15, "bottom": 9, "left": 15},
-                "border_radius": 12,
-                "min_width": 150
+                "height": 38,
+                "icon_size": 28,
+                "padding": {"top": 5, "right": 8, "bottom": 5, "left": 8},
+                "border_radius": 6,
+                "min_width": 38
             },
             
             # Tool buttons (identify, zoom, etc.)
@@ -73,11 +73,11 @@ class UIConfig:
                 "border_width": 1
             },
             
-            # Action frame (top buttons area)
+            # Action frame (top buttons area) - Compact
             "action_frame": {
-                "min_height": 35,
-                "max_height": 35,
-                "padding": 2
+                "min_height": 56,
+                "max_height": 70,
+                "padding": 6
             },
             
             # Splitter dimensions
@@ -101,17 +101,27 @@ class UIConfig:
                 "border_radius": 6
             },
             
-            # Layout dimensions (NEW)
+            # Header bar dimensions
+            "header": {
+                "height": 28,
+                "min_height": 24,
+                "padding": {"top": 4, "right": 8, "bottom": 4, "left": 8},
+                "title_font_size": 11,
+                "indicator_font_size": 8
+            },
+            
+            # Layout dimensions - Harmonized spacing
             "layout": {
-                "spacing_main": 4,       # Ratio 2.0x - confortable pour conteneur principal
-                "spacing_section": 4,    # Ratio 2.0x - entre sections (exploring, filtering, etc.)
-                "spacing_content": 4,    # Ratio 2.0x - dans les contenus (keys, values)
-                "spacing_buttons": 6,    # Ratio 2.0x - entre boutons
-                "spacing_frame": 6,      # Ratio 2.0x - spacing interne des frames
-                "margins_main": 4,       # Ratio 2.0x - marges confortables pour conteneur
-                "margins_section": 4,    # Ratio 2.0x - marges pour sections
-                "margins_content": 4,    # Ratio 2.0x - marges pour contenus
-                "margins_frame": {"left": 6, "top": 8, "right": 6, "bottom": 8}  # Ratio 2.0x - marges des frames groupbox
+                "spacing_main": 6,       # Harmonized - main container spacing
+                "spacing_section": 6,    # Harmonized - between sections
+                "spacing_content": 6,    # Harmonized - within content areas
+                "spacing_buttons": 8,    # Harmonized - between buttons
+                "spacing_frame": 8,      # Harmonized - internal frame spacing
+                "margins_main": 6,       # Harmonized - main container margins
+                "margins_section": 6,    # Harmonized - section margins
+                "margins_content": 6,    # Harmonized - content margins
+                "margins_frame": {"left": 8, "top": 8, "right": 8, "bottom": 10},  # Harmonized - frame margins with extra bottom
+                "margins_actions": {"left": 8, "top": 6, "right": 8, "bottom": 12}  # Action bar margins with extra bottom
             },
             
             # Frame exploring dimensions (NEW)
@@ -139,14 +149,15 @@ class UIConfig:
                 "padding": 3
             },
             
-            # Spacer dimensions (NEW) - Compact mode
+            # Spacer dimensions - Harmonized spacing values
             "spacer": {
-                "default_size": 6,      # Ratio 2.0x (3→6)
-                "section_main": 8,      # Ratio 2.0x (4→8)
-                "section_exploring": 3, # Réduit pour moins d'espace au-dessus
-                "section_filtering": 6, # Ratio 2.0x (3→6)
-                "section_exporting": 6, # Ratio 2.0x (3→6)
-                "section_config": 12    # Ratio 2.0x (6→12)
+                "default_size": 8,      # Harmonized base spacer
+                "section_main": 10,     # Main section spacer
+                "section_exploring": 6, # Exploring section spacer
+                "section_filtering": 8, # Filtering section spacer
+                "section_exporting": 8, # Exporting section spacer
+                "section_config": 12,   # Config section spacer
+                "after_actions": 12     # Extra spacing after action buttons
             },
             
             # Labels and text
@@ -220,11 +231,11 @@ class UIConfig:
             
             # Action buttons (filter, export, etc.)
             "action_button": {
-                "height": 54,
-                "icon_size": 33,
-                "padding": {"top": 9, "right": 15, "bottom": 9, "left": 15},
-                "border_radius": 12,
-                "min_width": 150
+                "height": 42,
+                "icon_size": 30,
+                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
+                "border_radius": 6,
+                "min_width": 42
             },
             
             # Tool buttons (identify, zoom, etc.)
@@ -251,9 +262,9 @@ class UIConfig:
                 "border_width": 1
             },
             
-            # Action frame (top buttons area)
+            # Action frame (top buttons area) - Normal profile
             "action_frame": {
-                "min_height": 75,
+                "min_height": 60,
                 "max_height": 75,
                 "padding": 8
             },
@@ -279,17 +290,27 @@ class UIConfig:
                 "border_radius": 6
             },
             
-            # Layout dimensions (NEW)
+            # Header bar dimensions
+            "header": {
+                "height": 32,
+                "min_height": 28,
+                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
+                "title_font_size": 12,
+                "indicator_font_size": 9
+            },
+            
+            # Layout dimensions - Harmonized spacing (Normal profile)
             "layout": {
-                "spacing_main": 4,       # Ratio 2.0x - confortable pour conteneur principal
-                "spacing_section": 1,    # Réduit au minimum pour moins d'espace au-dessus des frames
-                "spacing_content": 4,    # Ratio 2.0x - dans les contenus (keys, values)
-                "spacing_buttons": 6,    # Ratio 2.0x - entre boutons
-                "spacing_frame": 6,      # Ratio 2.0x - spacing interne des frames
-                "margins_main": 4,       # Ratio 2.0x - marges confortables pour conteneur
-                "margins_section": 4,    # Ratio 2.0x - marges pour sections
-                "margins_content": 4,    # Ratio 2.0x - marges pour contenus
-                "margins_frame": {"left": 6, "top": 8, "right": 6, "bottom": 8}  # Ratio 2.0x - marges des frames groupbox
+                "spacing_main": 8,       # Harmonized - main container spacing
+                "spacing_section": 8,    # Harmonized - between sections
+                "spacing_content": 8,    # Harmonized - within content areas
+                "spacing_buttons": 10,   # Harmonized - between buttons
+                "spacing_frame": 10,     # Harmonized - internal frame spacing
+                "margins_main": 8,       # Harmonized - main container margins
+                "margins_section": 8,    # Harmonized - section margins
+                "margins_content": 8,    # Harmonized - content margins
+                "margins_frame": {"left": 10, "top": 10, "right": 10, "bottom": 12},  # Harmonized - frame margins
+                "margins_actions": {"left": 10, "top": 8, "right": 10, "bottom": 14}  # Action bar margins with extra bottom
             },
             
             # Frame exploring dimensions (NEW)
@@ -317,14 +338,15 @@ class UIConfig:
                 "padding": 6
             },
             
-            # Spacer dimensions (NEW) - Normal mode
+            # Spacer dimensions - Harmonized spacing values (Normal profile)
             "spacer": {
-                "default_size": 6,       # Ratio 2.0x (3→6)
-                "section_main": 8,       # Ratio 2.0x (4→8)
-                "section_exploring": 1,  # Minimal pour réduire l'espace au-dessus
-                "section_filtering": 6,  # Ratio 2.0x (3→6)
-                "section_exporting": 6,  # Ratio 2.0x (3→6)
-                "section_config": 12     # Ratio 2.0x (6→12)
+                "default_size": 10,     # Harmonized base spacer
+                "section_main": 12,     # Main section spacer
+                "section_exploring": 8, # Exploring section spacer
+                "section_filtering": 10, # Filtering section spacer
+                "section_exporting": 10, # Exporting section spacer
+                "section_config": 14,   # Config section spacer
+                "after_actions": 14     # Extra spacing after action buttons
             },
             
             # Labels and text

@@ -206,10 +206,37 @@ QFrame {
     border: none;
 }
 
+/* ========================================================================
+   HEADER BAR - Backend indicator only (minimal, transparent)
+   ======================================================================== */
+QFrame#frame_header {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 2px 10px;
+    margin: 0px;
+    min-height: 18px;
+    max-height: 24px;
+}
+
+/* label_plugin_title removed - title no longer displayed */
+
+QLabel#label_backend_indicator {
+    font-size: 8pt;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid {color_2};
+    color: {color_font_1};
+    background-color: {color_1};
+}
+
+/* ACTION BAR - Bottom action buttons */
 QFrame#frame_actions {
     min-height: {action_frame_height};
-    max-height: {action_frame_height};
-    padding: {spacing_medium};
+    padding: 6px 8px 4px 8px;
+    border-top: 1px solid {color_2};
+    margin: 0px;
 }
 
 /* ========================================================================
@@ -458,16 +485,19 @@ QRadioButton:disabled {
 }
 
 /* ========================================================================
-   TOOLTIPS - Dynamic padding and font
+   TOOLTIPS - Dynamic padding and font - Improved height and readability
    ======================================================================== */
 
 QToolTip {
     background-color: {color_accent_light_bg};
     color: {color_accent_dark};
-    border: 1px solid {color_accent};
-    padding: {spacing_medium};
+    border: 2px solid {color_accent};
+    padding: 8px 12px;
     font-size: {label_font_size}pt;
-    border-radius: 3px;
+    font-weight: 500;
+    border-radius: 4px;
+    min-height: 24px;
+    line-height: 1.4;
 }
 
 /* ========================================================================

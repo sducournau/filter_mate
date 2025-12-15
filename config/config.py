@@ -21,11 +21,17 @@ def merge(a, b, path=None):
 
 
 def init_env_vars():
+    """
+    Initialize environment variables and configuration paths.
+    
+    Now reads config.json from PLUGIN_CONFIG_DIRECTORY (same as SQLite database)
+    instead of the plugin directory. If config.json doesn't exist there,
+    copies config.default.json from the plugin directory.
+    """
     PROJECT = QgsProject.instance()
-
     PLATFORM = sys.platform
 
-
+    # Plugin directory (where config.default.json is located)
     DIR_CONFIG = os.path.normpath(os.path.dirname(__file__))
     PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
     if PATH_ABSOLUTE_PROJECT =='./':
@@ -34,85 +40,13 @@ def init_env_vars():
         else:
             PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.environ['HOME'])
 
-    CONFIG_DATA = None
-
-    with open(DIR_CONFIG +  os.sep + 'config.json') as f:
-        CONFIG_DATA = json.load(f)
-
     QGIS_SETTINGS_PATH = QgsApplication.qgisSettingsDirPath()
     # Remove trailing separator if present
     QGIS_SETTINGS_PATH = QGIS_SETTINGS_PATH.rstrip(os.sep).rstrip('/')
-
-    # Determine the plugin config directory
-    if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != '':
-        configured_path = os.path.normpath(CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"])
-        
-        # Validate that parent directories exist and are accessible
-        parent_dir = os.path.dirname(configured_path)
-        path_is_valid = False
-        
-        if parent_dir and os.path.exists(parent_dir):
-            # Check if parent directory is accessible
-            try:
-                if os.access(parent_dir, os.W_OK):
-                    path_is_valid = True
-                else:
-                    QgsMessageLog.logMessage(
-                        f"Configured path parent directory is not writable: {parent_dir}. Falling back to current profile.",
-                        "FilterMate",
-                        Qgis.Warning
-                    )
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Cannot access configured path: {configured_path}. Error: {e}. Falling back to current profile.",
-                    "FilterMate",
-                    Qgis.Warning
-                )
-        else:
-            QgsMessageLog.logMessage(
-                f"Configured path parent directory does not exist: {parent_dir}. Falling back to current profile.",
-                "FilterMate",
-                Qgis.Warning
-            )
-        
-        if path_is_valid:
-            PLUGIN_CONFIG_DIRECTORY = configured_path
-        else:
-            # Fall back to current profile
-            PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
-            CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
-            try:
-                with open(DIR_CONFIG + os.sep + 'config.json', 'w') as outfile:
-                    outfile.write(json.dumps(CONFIG_DATA, indent=4))
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Could not update config.json with new path: {e}",
-                    "FilterMate",
-                    Qgis.Warning
-                )
-    else:
-        # Use os.path.join for proper cross-platform path construction
-        PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
-        CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
-        try:
-            with open(DIR_CONFIG + os.sep + 'config.json', 'w') as outfile:
-                outfile.write(json.dumps(CONFIG_DATA, indent=4))
-        except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Could not update config.json: {e}",
-                "FilterMate",
-                Qgis.Warning
-            )
-
-    global ENV_VARS
-    ENV_VARS["PROJECT"] = PROJECT
-    ENV_VARS["PLATFORM"] = PLATFORM
-    ENV_VARS["DIR_CONFIG"] = DIR_CONFIG
-    ENV_VARS["PATH_ABSOLUTE_PROJECT"] = PATH_ABSOLUTE_PROJECT
-    ENV_VARS["CONFIG_DATA"] = CONFIG_DATA
-    ENV_VARS["QGIS_SETTINGS_PATH"] = QGIS_SETTINGS_PATH
-    ENV_VARS["PLUGIN_CONFIG_DIRECTORY"] = PLUGIN_CONFIG_DIRECTORY
-
+    
+    # Start with default PLUGIN_CONFIG_DIRECTORY
+    PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
+    
     # Create the plugin config directory if it doesn't exist
     if not os.path.isdir(PLUGIN_CONFIG_DIRECTORY):
         try:
@@ -128,5 +62,167 @@ def init_env_vars():
                 "FilterMate",
                 Qgis.Critical
             )
+    
+    # Path to config.json in PLUGIN_CONFIG_DIRECTORY
+    config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
+    config_default_path = os.path.join(DIR_CONFIG, 'config.default.json')
+    
+    # If config.json doesn't exist in PLUGIN_CONFIG_DIRECTORY, copy default
+    if not os.path.exists(config_json_path):
+        try:
+            import shutil
+            shutil.copy2(config_default_path, config_json_path)
+            QgsMessageLog.logMessage(
+                f"Copied default configuration to: {config_json_path}",
+                "FilterMate",
+                Qgis.Info
+            )
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Could not copy default config: {e}. Using config from plugin directory.",
+                "FilterMate",
+                Qgis.Warning
+            )
+            # Fallback: use config.json from plugin directory
+            config_json_path = os.path.join(DIR_CONFIG, 'config.json')
+    
+    # Load configuration
+    CONFIG_DATA = None
+    try:
+        with open(config_json_path) as f:
+            CONFIG_DATA = json.load(f)
+    except Exception as e:
+        QgsMessageLog.logMessage(
+            f"Failed to load config from {config_json_path}: {e}",
+            "FilterMate",
+            Qgis.Critical
+        )
+        # Try to load default config as last resort
+        try:
+            with open(config_default_path) as f:
+                CONFIG_DATA = json.load(f)
+        except Exception as e2:
+            QgsMessageLog.logMessage(
+                f"Failed to load default config: {e2}",
+                "FilterMate",
+                Qgis.Critical
+            )
+            raise
+
+    # Validate APP_SQLITE_PATH from config
+    if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != '':
+        configured_path = os.path.normpath(CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"])
+        
+        # Validate that parent directories exist and are accessible
+        parent_dir = os.path.dirname(configured_path)
+        path_is_valid = False
+        
+        if parent_dir and os.path.exists(parent_dir):
+            # Check if parent directory is accessible
+            try:
+                if os.access(parent_dir, os.W_OK):
+                    path_is_valid = True
+                else:
+                    QgsMessageLog.logMessage(
+                        f"Configured path parent directory is not writable: {parent_dir}. Using default profile.",
+                        "FilterMate",
+                        Qgis.Warning
+                    )
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Cannot access configured path: {configured_path}. Error: {e}. Using default profile.",
+                    "FilterMate",
+                    Qgis.Warning
+                )
+        else:
+            QgsMessageLog.logMessage(
+                f"Configured path parent directory does not exist: {parent_dir}. Using default profile.",
+                "FilterMate",
+                Qgis.Warning
+            )
+        
+        if path_is_valid:
+            PLUGIN_CONFIG_DIRECTORY = configured_path
+            # Update config_json_path if directory changed
+            config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
+    
+    # Update APP_SQLITE_PATH in config if needed
+    if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != PLUGIN_CONFIG_DIRECTORY:
+        CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
+        try:
+            with open(config_json_path, 'w') as outfile:
+                outfile.write(json.dumps(CONFIG_DATA, indent=4))
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Could not update config.json with path: {e}",
+                "FilterMate",
+                Qgis.Warning
+            )
+
+    global ENV_VARS
+    ENV_VARS["PROJECT"] = PROJECT
+    ENV_VARS["PLATFORM"] = PLATFORM
+    ENV_VARS["DIR_CONFIG"] = DIR_CONFIG
+    ENV_VARS["PATH_ABSOLUTE_PROJECT"] = PATH_ABSOLUTE_PROJECT
+    ENV_VARS["CONFIG_DATA"] = CONFIG_DATA
+    ENV_VARS["QGIS_SETTINGS_PATH"] = QGIS_SETTINGS_PATH
+    ENV_VARS["PLUGIN_CONFIG_DIRECTORY"] = PLUGIN_CONFIG_DIRECTORY
+    ENV_VARS["CONFIG_JSON_PATH"] = config_json_path  # Store active config path
 
 
+def reset_config_to_default():
+    """
+    Reset configuration to default by copying config.default.json 
+    to the active config location (PLUGIN_CONFIG_DIRECTORY/config.json).
+    
+    Use this when reinitializing the config and SQLite database.
+    
+    Returns:
+        bool: True if reset successful, False otherwise
+    """
+    try:
+        import shutil
+        
+        if "DIR_CONFIG" not in ENV_VARS or "CONFIG_JSON_PATH" not in ENV_VARS:
+            QgsMessageLog.logMessage(
+                "Environment variables not initialized. Call init_env_vars() first.",
+                "FilterMate",
+                Qgis.Critical
+            )
+            return False
+        
+        config_default_path = os.path.join(ENV_VARS["DIR_CONFIG"], 'config.default.json')
+        config_json_path = ENV_VARS["CONFIG_JSON_PATH"]
+        
+        # Backup existing config if it exists
+        if os.path.exists(config_json_path):
+            backup_path = config_json_path + '.backup'
+            shutil.copy2(config_json_path, backup_path)
+            QgsMessageLog.logMessage(
+                f"Backed up existing config to: {backup_path}",
+                "FilterMate",
+                Qgis.Info
+            )
+        
+        # Copy default config
+        shutil.copy2(config_default_path, config_json_path)
+        
+        # Reload config
+        with open(config_json_path) as f:
+            ENV_VARS["CONFIG_DATA"] = json.load(f)
+        
+        QgsMessageLog.logMessage(
+            f"Configuration reset to default: {config_json_path}",
+            "FilterMate",
+            Qgis.Info
+        )
+        
+        return True
+        
+    except Exception as e:
+        QgsMessageLog.logMessage(
+            f"Failed to reset configuration: {e}",
+            "FilterMate",
+            Qgis.Critical
+        )
+        return False

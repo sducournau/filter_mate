@@ -5,6 +5,7 @@ import os
 from shutil import copyfile
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets
+from qgis.gui import QgsColorButton
 from . import themes
 
 
@@ -119,6 +120,108 @@ class StrType(DataType):
 
     def matches(self, data):
         return isinstance(data, str) or isinstance(data, unicode)
+
+
+class ColorType(DataType):
+    """Hex color strings displayed with QgsColorButton."""
+    THEME_COLOR_KEY = 'string'
+    
+    # Pattern to match hex colors: #RGB, #RRGGBB, #RRGGBBAA
+    HEX_COLOR_PATTERN = re.compile(r'^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?([0-9A-Fa-f]{2})?$')
+
+    def matches(self, data):
+        """Check if data is a hex color string."""
+        if not isinstance(data, str):
+            return False
+        return bool(self.HEX_COLOR_PATTERN.match(data))
+
+    def createEditor(self, parent, option, index):
+        """Create a QgsColorButton editor for color selection."""
+        color_button = QgsColorButton(parent)
+        color_button.setAllowOpacity(True)
+        color_button.setShowNoColor(False)
+        color_button.setMinimumSize(30, 22)
+        color_button.setMaximumHeight(30)
+        
+        # Set initial color from current value
+        current_color = index.data(QtCore.Qt.DisplayRole)
+        if current_color:
+            qcolor = QtGui.QColor(current_color)
+            if qcolor.isValid():
+                color_button.setColor(qcolor)
+        
+        # Connect signal to update immediately on color change
+        color_button.colorChanged.connect(
+            lambda: self.setModelData(color_button, index.model(), index)
+        )
+        
+        return color_button
+    
+    def setEditorData(self, editor, index):
+        """Set the editor data from the model."""
+        if isinstance(editor, QgsColorButton):
+            color_str = index.data(QtCore.Qt.DisplayRole)
+            if color_str:
+                qcolor = QtGui.QColor(color_str)
+                if qcolor.isValid():
+                    editor.setColor(qcolor)
+
+    def setModelData(self, editor, model, index):
+        """Update model with selected color from QgsColorButton."""
+        if isinstance(editor, QgsColorButton):
+            color = editor.color()
+            # Format color as hex string with alpha if present
+            if color.alpha() < 255:
+                hex_color = color.name(QtGui.QColor.HexArgb)
+            else:
+                hex_color = color.name(QtGui.QColor.HexRgb)
+            
+            model.setData(index, hex_color, QtCore.Qt.EditRole)
+
+    def paint(self, painter, option, index):
+        """Paint a color preview rectangle next to the color value."""
+        painter.save()
+        
+        # Get color value
+        color_str = index.data(QtCore.Qt.DisplayRole)
+        qcolor = QtGui.QColor(color_str)
+        
+        if qcolor.isValid():
+            # Draw color rectangle
+            rect = option.rect
+            color_rect = QtCore.QRect(
+                rect.left() + 2,
+                rect.top() + 2,
+                20,
+                rect.height() - 4
+            )
+            painter.fillRect(color_rect, qcolor)
+            painter.setPen(QtGui.QPen(QtCore.Qt.black, 1))
+            painter.drawRect(color_rect)
+            
+            # Draw text after color rectangle
+            text_rect = QtCore.QRect(
+                color_rect.right() + 5,
+                rect.top(),
+                rect.width() - color_rect.width() - 7,
+                rect.height()
+            )
+            painter.setPen(self.get_color())
+            painter.drawText(
+                text_rect,
+                QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft,
+                color_str
+            )
+        else:
+            # Fallback to default painting if color is invalid
+            painter.setPen(self.get_color())
+            painter.drawText(
+                option.rect,
+                QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft,
+                " " + color_str
+            )
+        
+        painter.restore()
 
 
 class IntType(DataType):
@@ -526,6 +629,7 @@ DATA_TYPES = [
     UrlType(),
     FilepathTypeImages(),
     FilepathType(),
+    ColorType(),  # Must be before StrType to match color strings first
     StrType(),
     IntType(),
     FloatType(),

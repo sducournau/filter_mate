@@ -52,7 +52,7 @@
                     "top",
                     "bottom"
                 ],
-                "value": "bottom"
+                "value": "top"
             },
             "_ACTION_BAR_VERTICAL_ALIGNMENT_META": {
                 "description": "Vertical alignment of action buttons when action bar is in vertical mode (left/right): 'top' (buttons at top), 'bottom' (buttons at bottom). Use the splitter handle to adjust position."
@@ -124,7 +124,7 @@
                         "dark",
                         "light"
                     ],
-                    "value": "default"
+                    "value": "auto"
                 },
                 "THEME_SOURCE": {
                     "choices": [
@@ -140,7 +140,7 @@
                             "#F5F5F5",
                             "#FFFFFF",
                             "#E0E0E0",
-                            "#2196F3"
+                            "#616161"
                         ],
                         "FONT": [
                             "#212121",
@@ -148,11 +148,11 @@
                             "#BDBDBD"
                         ],
                         "ACCENT": {
-                            "PRIMARY": "#1976D2",
-                            "HOVER": "#2196F3",
-                            "PRESSED": "#0D47A1",
-                            "LIGHT_BG": "#E3F2FD",
-                            "DARK": "#01579B"
+                            "PRIMARY": "#424242",
+                            "HOVER": "#616161",
+                            "PRESSED": "#212121",
+                            "LIGHT_BG": "#F5F5F5",
+                            "DARK": "#000000"
                         }
                     },
                     "dark": {
@@ -160,18 +160,18 @@
                             "#1E1E1E",
                             "#2D2D30",
                             "#3E3E42",
-                            "#007ACC"
+                            "#4A4A4F"
                         ],
                         "FONT": [
-                            "#EFF0F1",
-                            "#D0D0D0",
-                            "#808080"
+                            "#F5F5F5",
+                            "#E0E0E0",
+                            "#A0A0A0"
                         ],
                         "ACCENT": {
                             "PRIMARY": "#007ACC",
                             "HOVER": "#1E90FF",
                             "PRESSED": "#005A9E",
-                            "LIGHT_BG": "#1E3A5F",
+                            "LIGHT_BG": "#2D4A6B",
                             "DARK": "#003D66"
                         }
                     },
@@ -180,7 +180,7 @@
                             "#FFFFFF",
                             "#F5F5F5",
                             "#E0E0E0",
-                            "#2196F3"
+                            "#616161"
                         ],
                         "FONT": [
                             "#000000",
@@ -188,11 +188,11 @@
                             "#9E9E9E"
                         ],
                         "ACCENT": {
-                            "PRIMARY": "#2196F3",
-                            "HOVER": "#64B5F6",
-                            "PRESSED": "#1976D2",
-                            "LIGHT_BG": "#E3F2FD",
-                            "DARK": "#0D47A1"
+                            "PRIMARY": "#424242",
+                            "HOVER": "#616161",
+                            "PRESSED": "#212121",
+                            "LIGHT_BG": "#F5F5F5",
+                            "DARK": "#000000"
                         }
                     }
                 },
@@ -200,7 +200,7 @@
                     "#FAFAFA",
                     "#E0E0E0",
                     "#BDBDBD",
-                    "#2196F3"
+                    "#616161"
                 ],
                 "FONT": [
                     "#212121",
@@ -208,11 +208,11 @@
                     "#9E9E9E"
                 ],
                 "ACCENT": {
-                    "PRIMARY": "#2196F3",
-                    "HOVER": "#64B5F6",
-                    "PRESSED": "#1976D2",
-                    "LIGHT_BG": "#E3F2FD",
-                    "DARK": "#0D47A1"
+                    "PRIMARY": "#424242",
+                    "HOVER": "#616161",
+                    "PRESSED": "#212121",
+                    "LIGHT_BG": "#F5F5F5",
+                    "DARK": "#000000"
                 }
             }
         },
@@ -220,7 +220,7 @@
             "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
             "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
             "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
-            "APP_SQLITE_PATH": "C:\\Users\\Simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\imagodata\\FilterMate",
+            "APP_SQLITE_PATH": "C:\\Users\\SimonDucorneau\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\FilterMate",
             "FRESH_RELOAD_FLAG": false
         }
     },

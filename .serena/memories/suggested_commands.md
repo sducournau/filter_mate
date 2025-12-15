@@ -98,19 +98,80 @@ layer = QgsVectorLayer("C:/path/to/file.shp", "test", "ogr")
 C:\Users\Simon\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\filter_mate
 ```
 
-## Linting and Formatting (Future - Phase 3)
+## Linting and Formatting
 ```cmd
-# Pylint (to be added)
-pylint filter_mate_app.py
+# Pylint
+pylint filter_mate_app.py modules/*.py
 
-# Black formatter (to be added)
-black filter_mate_app.py
+# Black formatter
+black filter_mate_app.py modules/
+
+# Flake8
+flake8 filter_mate_app.py --max-line-length=120
+
+# All linters via CI
+pytest tests/ -v && black --check . && flake8
+```
+
+## Testing (pytest)
+```cmd
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=modules --cov-report=html
+
+# Run specific test file
+pytest tests/test_backends.py -v
+
+# Run specific test
+pytest tests/test_undo_redo.py::test_global_filter_state -v
+
+# Quick tests only (no slow markers)
+pytest tests/ -v -k "not slow"
 ```
 
 ## Building/Packaging
 ```cmd
-# Create plugin zip
-# (Manual process: zip the plugin directory excluding .git, .github, .serena)
+# Create plugin zip (using tools script)
+cd tools/build
+python create_release_zip.py
+```
+
+## Translation Workflow
+```cmd
+# Compile translations
+cd tools/i18n
+python compile_ts_to_qm.py
+
+# Verify translations
+python verify_translations.py
+
+# Or use batch file (Windows)
+compile_translations.bat
+```
+
+## UI Development
+```cmd
+# After modifying .ui file, regenerate .py
+compile_ui.bat
+
+# Fix widget naming issues
+cd tools/ui
+python fix_ui_suffixes.py
+
+# Verify UI changes
+python verify_ui_fix.py
+```
+
+## Diagnostic Tools
+```cmd
+# Test plugin loading without QGIS
+cd tools/diagnostic
+python test_load_simple.py
+
+# Debug freezes (run in QGIS console)
+exec(open('tools/diagnostic/diagnose_freeze.py').read())
 ```
 
 ## Performance Profiling (Development)

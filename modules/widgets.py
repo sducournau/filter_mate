@@ -633,10 +633,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.context_menu.addAction(self.action_uncheck_all_non_subset)
         self.context_menu.addAction(self.action_uncheck_all_subset)
 
-        self.font_by_state = {'unChecked':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
-                              'checked':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][0]))),
-                              'unCheckedFiltered':(QFont("Segoe UI", 8, QFont.Medium),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][2]))),
-                              'checkedFiltered':(QFont("Segoe UI", 8, QFont.Bold),(QColor(self.config_data["APP"]["DOCKWIDGET"]["COLORS"]["FONT"][2])))}
+        # Use config helpers for color access
+        from .config_helpers import get_font_colors
+        font_colors = get_font_colors(self.config_data)
+        self.font_by_state = {'unChecked':(QFont("Segoe UI", 8, QFont.Medium),(QColor(font_colors[0]))),
+                              'checked':(QFont("Segoe UI", 8, QFont.Bold),(QColor(font_colors[0]))),
+                              'unCheckedFiltered':(QFont("Segoe UI", 8, QFont.Medium),(QColor(font_colors[2]))),
+                              'checkedFiltered':(QFont("Segoe UI", 8, QFont.Bold),(QColor(font_colors[2])))}
 
 
         self.list_widgets = {}

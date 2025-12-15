@@ -1927,7 +1927,7 @@ class FilterMateApp:
                 try: 
                     os.remove(self.db_file_path)
                     self.CONFIG_DATA["APP"]["OPTIONS"]["FRESH_RELOAD_FLAG"] = False
-                    with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
+                    with open(ENV_VARS["CONFIG_JSON_PATH"], 'w') as outfile:
                         outfile.write(json.dumps(self.CONFIG_DATA, indent=4))  
                 except OSError as error: 
                     logger.error(f"Failed to remove database file: {error}")
@@ -2040,7 +2040,7 @@ class FilterMateApp:
                 if conn:
                     conn.close()
 
-            with open(ENV_VARS["DIR_CONFIG"] +  os.sep + 'config.json', 'w') as outfile:
+            with open(ENV_VARS["CONFIG_JSON_PATH"], 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
 
 

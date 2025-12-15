@@ -6,7 +6,8 @@ A Qt-based JSON viewer and editor widget for QGIS plugins, with support for colo
 
 - **Tree-based JSON visualization** - Display JSON data in an expandable tree structure
 - **Editable keys and values** - Optionally allow editing of JSON content
-- **Custom data types** - Special handling for URLs, file paths, ranges, and choices
+- **Custom data types** - Special handling for URLs, file paths, ranges, choices, and colors
+- **Color picker integration** - QgsColorButton for hex color values with live preview
 - **Color themes** - 8 built-in themes plus support for custom themes
 - **Context menu actions** - Add, remove, rename, and modify JSON elements
 - **Type-specific editors** - Specialized editors for different data types
@@ -122,6 +123,20 @@ data = {
     }
 }
 # Displayed as a combobox
+```
+
+### Hex Colors
+```python
+data = {
+    "theme": {
+        "background": "#F5F5F5",
+        "primary": "#2196F3",
+        "accent": "#FF5722CC"  # With alpha/transparency
+    }
+}
+# Automatically detected and displayed with color preview
+# Click to open QgsColorButton color picker
+# Supports RGB (#RRGGBB) and RGBA (#RRGGBBAA) formats
 ```
 
 ## Creating Custom Themes

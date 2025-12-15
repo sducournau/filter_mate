@@ -81,7 +81,7 @@ QgsCheckableComboBoxLayer:focus {
     background-color: {color_accent_light_bg};
     padding: 0px 2px; /* Minimal padding for focus state */
     outline: none;
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25); /* Reduced external halo */
+    box-shadow: 0 0 0 2px rgba(66, 66, 66, 0.25); /* Reduced external halo */
     /* Enhanced focus ring: 3px border + external halo for accessibility */
 }
 
@@ -349,18 +349,18 @@ QScrollBar:vertical {
 
 QScrollBar::handle:vertical {
     border: none;
-    background: #bdc3c7;
+    background: {color_font_2};
     width: 5px;
     border-radius: 2px;
     min-height: 30px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #95a5a6;
+    background: {color_font_1};
 }
 
 QScrollBar::handle:vertical:pressed {
-    background: #7f8c8d;
+    background: {color_accent};
 }
 
 QScrollBar::add-line:vertical {
@@ -391,18 +391,18 @@ QScrollBar:horizontal {
 }
 
 QScrollBar::handle:horizontal {
-    background: #bdc3c7;
+    background: {color_font_2};
     min-width: 30px;
     border-radius: 6px;
     margin: 2px;
 }
 
 QScrollBar::handle:horizontal:hover {
-    background: #95a5a6;
+    background: {color_font_1};
 }
 
 QScrollBar::handle:horizontal:pressed {
-    background: #7f8c8d;
+    background: {color_accent};
 }
 
 QScrollBar::add-line:horizontal,
@@ -523,7 +523,7 @@ QPushButton:checkable:checked {
     color: white;
     font-weight: 700;
     padding: 6px 12px;
-    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(33, 33, 33, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* État checked + hover - effet lumineux accentué */
@@ -533,7 +533,7 @@ QPushButton:checkable:checked:hover {
     color: white;
     font-weight: 700;
     padding: 6px 12px;
-    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.6), inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(97, 97, 97, 0.6), inset 0 -2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* État pressed non-checked - feedback tactile immédiat */
@@ -552,7 +552,7 @@ QPushButton:checkable:checked:pressed {
     color: white;
     font-weight: 700;
     padding: 6px 12px;
-    box-shadow: 0 1px 4px rgba(25, 118, 210, 0.3), inset 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 4px rgba(33, 33, 33, 0.3), inset 0 2px 4px rgba(0, 0, 0, 0.2);
     transform: translateY(1px);
 }
 
@@ -718,11 +718,14 @@ QTabBar::tab:hover:!selected {
 
 /* Labels - Base style (détails ci-dessous) */
 
-/* Backend Indicator Label */
+/* Backend Indicator Badge - Compact design */
 QLabel#label_backend_indicator {
-    font-size: 8pt;
-    padding: 1px 4px;
-    text-align: right;
+    font-size: 7pt;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 8px;
+    min-width: 28px;
+    max-height: 18px;
 }
 
 /* Progress Bar */
@@ -762,6 +765,10 @@ QWidget#widget_exploring_keys QPushButton:!checkable {
     min-height: 36px;
 }
 
+QWidget#widget_exploring_keys QPushButton:!checkable::icon {
+    filter: {icon_filter};
+}
+
 QWidget#widget_exploring_keys QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
@@ -785,6 +792,10 @@ QWidget#widget_exploring_keys QPushButton:checkable {
     max-width: 40px;
     min-height: 40px;
     max-height: 40px;
+}
+
+QWidget#widget_exploring_keys QPushButton:checkable::icon {
+    filter: {icon_filter};
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked {
@@ -834,6 +845,10 @@ QWidget#widget_filtering_keys QPushButton:checkable {
     max-height: 40px;
 }
 
+QWidget#widget_filtering_keys QPushButton:checkable::icon {
+    filter: {icon_filter};
+}
+
 QWidget#widget_filtering_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 3px solid {color_accent};
@@ -881,6 +896,10 @@ QWidget#widget_exporting_keys QPushButton:checkable {
     max-height: 40px;
 }
 
+QWidget#widget_exporting_keys QPushButton:checkable::icon {
+    filter: {icon_filter};
+}
+
 QWidget#widget_exporting_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 3px solid {color_accent};
@@ -916,28 +935,58 @@ QWidget#widget_exporting_keys QPushButton:checkable:checked:pressed {
     transform: translateY(1px);
 }
 
+/* ========================================================================
+   HEADER BAR - Backend indicator only (minimal, transparent)
+   ======================================================================== */
+QFrame#frame_header {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 2px 10px;
+    margin: 0px;
+    min-height: 18px;
+    max-height: 24px;
+}
+
+/* label_plugin_title removed - title no longer displayed */
+
+QLabel#label_backend_indicator {
+    font-size: 8pt;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid {color_2};
+    color: {color_font_1};
+    background-color: {color_1};
+}
+
 /* Frame Actions - Bottom action buttons */
 QFrame#frame_actions {
     background-color: transparent;
     border-top: 1px solid {color_2};
     border-radius: 0px;
-    padding: 6px 4px;
+    padding: 6px 8px 4px 8px;
     margin: 0px;
 }
 
 QFrame#frame_actions QPushButton:!checkable {
     background-color: transparent;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    padding: 8px;
-    min-width: 40px;
-    min-height: 40px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px;
+    min-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+}
+
+QFrame#frame_actions QPushButton:!checkable::icon {
+    filter: {icon_filter};
 }
 
 QFrame#frame_actions QPushButton:!checkable:hover,
 QFrame#frame_actions QPushButton:!checkable:pressed {
-    border: 2px solid {color_accent};
-    padding: 8px;
+    border: 1px solid {color_accent};
+    padding: 4px;
 }
 
 QFrame#frame_actions QPushButton:!checkable:hover {
@@ -947,7 +996,6 @@ QFrame#frame_actions QPushButton:!checkable:hover {
 QFrame#frame_actions QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border-color: {color_accent_dark};
-    transform: scale(0.95);
 }
 
 QFrame#frame_actions QPushButton:!checkable:disabled {

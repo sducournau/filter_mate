@@ -8,7 +8,7 @@ echo ============================================================
 echo.
 
 REM Chemin vers OSGeo4W.bat
-set OSGEO4W_BAT="C:\Program Files\QGIS 3.44.5\OSGeo4W.bat"
+set OSGEO4W_BAT="C:\Program Files\QGIS 3.44.2\OSGeo4W.bat"
 
 REM Vérifier que OSGeo4W.bat existe
 if not exist %OSGEO4W_BAT% (

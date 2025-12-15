@@ -59,8 +59,25 @@ class FilterMate:
         self.plugin_dir = os.path.dirname(__file__)
 
         # initialize locale
-        locale_setting = QSettings().value('locale/userLocale')
-        locale = locale_setting[0:2] if locale_setting else 'en'
+        # Try to load config to check for forced language setting
+        config_language = None
+        try:
+            import json
+            config_path = os.path.join(self.plugin_dir, 'config', 'config.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                    config_language = config_data.get('APP', {}).get('DOCKWIDGET', {}).get('LANGUAGE', {}).get('value', 'auto')
+        except Exception as e:
+            logger.warning(f"Could not load language from config: {e}")
+        
+        # Determine locale: use config if not 'auto', otherwise use QGIS setting
+        if config_language and config_language != 'auto':
+            locale = config_language
+        else:
+            locale_setting = QSettings().value('locale/userLocale')
+            locale = locale_setting[0:2] if locale_setting else 'en'
+        
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
@@ -70,6 +87,9 @@ class FilterMate:
             self.translator = QTranslator()
             self.translator.load(locale_path)
             QCoreApplication.installTranslator(self.translator)
+            logger.info(f"Loaded translation: {locale}")
+        else:
+            logger.warning(f"Translation file not found: {locale_path}")
 
         # Declare instance attributes
         self.actions = []
@@ -201,9 +221,9 @@ class FilterMate:
             add_to_toolbar=False,
             status_tip=self.tr(u'Réinitialiser la configuration par défaut et supprimer la base de données SQLite'))
         
-        # Auto-activation disabled - user must manually click the toolbar button to open the plugin
-        # To re-enable auto-activation when layers are added or project is loaded, uncomment the line below:
-        # self._connect_auto_activation_signals()
+        # Connect signals to handle project changes and automatically reload layers
+        # Note: layersAdded signal is NOT connected to avoid freeze issues
+        self._connect_auto_activation_signals()
 
     #--------------------------------------------------------------------------
 
@@ -244,29 +264,30 @@ class FilterMate:
             return path
     
     def _connect_auto_activation_signals(self):
-        """Connect signals to auto-activate plugin when layers are added or project is loaded."""
+        """Connect signals to handle project changes and reload layers.
+        
+        Connects projectRead and newProjectCreated signals to automatically
+        reload layers when the project changes. The layersAdded signal is
+        intentionally NOT connected here to avoid potential freeze issues.
+        """
         if not self._auto_activation_signals_connected:
             from qgis.core import QgsProject
             from qgis.PyQt.QtCore import QTimer
-            from qgis.utils import iface as qgis_iface
-            
-            project = QgsProject.instance()
-            layer_store = project.layerStore()
-            
-            # Auto-activate when layers are added
-            layer_store.layersAdded.connect(self._auto_activate_plugin)
             
             # Store lambda references for proper disconnection
+            # FIXED: Connect to _auto_activate_plugin instead of _handle_project_change
+            # _auto_activate_plugin handles both inactive (activates) and active (reinitializes) states
             self._project_read_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
             self._new_project_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
             
-            # Auto-activate when a project is opened
+            # Auto-reload when a project is opened
             self.iface.projectRead.connect(self._project_read_connection)
-            # Auto-activate when a new project is created with layers
+            # Auto-reload when a new project is created
             self.iface.newProjectCreated.connect(self._new_project_connection)
             
             self._auto_activation_signals_connected = True
-            logger.info("FilterMate: Auto-activation signals connected")
+            logger.info("FilterMate: Project change signals connected (projectRead, newProjectCreated)")
+            logger.info("FilterMate: layersAdded signal NOT connected to avoid freeze issues")
             # Message bar notification removed - too verbose for UX
     
     def _auto_activate_plugin(self, layers=None):
@@ -384,24 +405,17 @@ class FilterMate:
 
         #print "** UNLOAD FilterMate"
         
-        # Disconnect auto-activation signals
+        # Disconnect project change signals
         if self._auto_activation_signals_connected:
-            from qgis.core import QgsProject
-            
             try:
-                project = QgsProject.instance()
-                layer_store = project.layerStore()
-                
-                layer_store.layersAdded.disconnect(self._auto_activate_plugin)
-                
                 if self._project_read_connection:
                     self.iface.projectRead.disconnect(self._project_read_connection)
                 if self._new_project_connection:
                     self.iface.newProjectCreated.disconnect(self._new_project_connection)
                 
-                logger.info("FilterMate: Auto-activation signals disconnected")
+                logger.info("FilterMate: Project change signals disconnected")
             except Exception as e:
-                logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
+                logger.warning(f"FilterMate: Error disconnecting project change signals: {e}")
         
         # Nettoyer les ressources de l'application FilterMate
         if self.app:

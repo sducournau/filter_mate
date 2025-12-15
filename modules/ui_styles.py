@@ -51,7 +51,8 @@ class StyleLoader:
             'color_accent_hover': '#1E88E5',     # Accent hover (lighter for feedback)
             'color_accent_pressed': '#0D47A1',   # Accent pressed (very dark blue)
             'color_accent_light_bg': '#E3F2FD', # Accent light background
-            'color_accent_dark': '#01579B'      # Accent dark border
+            'color_accent_dark': '#01579B',     # Accent dark border
+            'icon_filter': 'none'               # No icon inversion for light theme
         },
         'dark': {
             'color_bg_0': '#1E1E1E',    # Dark frame background (harmonisé avec JsonView)
@@ -66,7 +67,8 @@ class StyleLoader:
             'color_accent_hover': '#1177BB',    # Hover plus subtil
             'color_accent_pressed': '#005A9E',  # Pressed reste sombre
             'color_accent_light_bg': '#264F78', # Background accentué plus visible (harmonisé)
-            'color_accent_dark': '#FFFFFF'      # Text sur fond accentué (blanc pour contraste)
+            'color_accent_dark': '#FFFFFF',     # Text sur fond accentué (blanc pour contraste)
+            'icon_filter': 'invert(100%)'       # Invert icons to white for dark theme
         },
         'light': {
             'color_bg_0': '#FFFFFF',    # Pure white frame background (maximum brightness)
@@ -81,7 +83,8 @@ class StyleLoader:
             'color_accent_hover': '#2196F3',    # Accent hover (lighter blue)
             'color_accent_pressed': '#0D47A1',  # Accent pressed (dark blue)
             'color_accent_light_bg': '#E3F2FD', # Accent light background
-            'color_accent_dark': '#0D47A1'      # Accent dark border
+            'color_accent_dark': '#0D47A1',     # Accent dark border
+            'icon_filter': 'none'               # No icon inversion for light theme
         }
     }
     
@@ -185,28 +188,20 @@ class StyleLoader:
         if not stylesheet:
             return ""
         
-        # Extract colors from config
+        # Extract colors from config using helpers
         try:
-            colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
+            from .config_helpers import (
+                get_active_theme, get_theme_colors,
+                get_background_colors, get_font_colors, get_accent_colors
+            )
             
-            # Check if new THEMES structure exists
-            if "THEMES" in colors_config and "ACTIVE_THEME" in colors_config:
-                # Use new theme system
-                # Extract value if ACTIVE_THEME is a dict with 'value' key, otherwise use as-is
-                active_theme_config = colors_config["ACTIVE_THEME"]
-                if isinstance(active_theme_config, dict) and "value" in active_theme_config:
-                    active_theme = theme if theme else active_theme_config["value"]
-                else:
-                    active_theme = theme if theme else active_theme_config
-                theme_colors = colors_config["THEMES"].get(active_theme, colors_config["THEMES"]["default"])
-                bg = theme_colors["BACKGROUND"]
-                font = theme_colors["FONT"]
-                accent = theme_colors.get("ACCENT", {})
-            else:
-                # Fallback to old structure (backward compatibility)
-                bg = colors_config["BACKGROUND"]
-                font = colors_config["FONT"]
-                accent = colors_config.get("ACCENT", {})
+            # Determine active theme
+            active_theme = theme if theme else get_active_theme(config_data)
+            
+            # Get colors for theme
+            bg = get_background_colors(config_data) if not theme else get_theme_colors(config_data, active_theme).get("background", get_background_colors(config_data))
+            font = get_font_colors(config_data) if not theme else get_theme_colors(config_data, active_theme).get("font", get_font_colors(config_data))
+            accent = get_accent_colors(config_data) if not theme else get_theme_colors(config_data, active_theme).get("accent", get_accent_colors(config_data))
             
             # Map config colors to stylesheet placeholders
             color_map = {
@@ -296,9 +291,15 @@ class StyleLoader:
         """
         if config_data:
             try:
-                colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
-                if "THEMES" in colors_config:
-                    return list(colors_config["THEMES"].keys())
+                from .config_helpers import get_config_value
+                # Try new structure
+                themes = get_config_value(config_data, "app", "themes")
+                if themes:
+                    return list(themes.keys())
+                # Try old structure
+                themes = get_config_value(config_data, "APP", "DOCKWIDGET", "COLORS", "THEMES")
+                if themes:
+                    return list(themes.keys())
             except (KeyError, TypeError):
                 pass
         
@@ -350,14 +351,8 @@ class StyleLoader:
             str: Active theme name or 'default'
         """
         try:
-            colors_config = config_data["APP"]["DOCKWIDGET"]["COLORS"]
-            active_theme_config = colors_config.get("ACTIVE_THEME", "default")
-            
-            # Extract value if ACTIVE_THEME is a dict with 'value' key, otherwise use as-is
-            if isinstance(active_theme_config, dict) and "value" in active_theme_config:
-                active_theme = active_theme_config["value"]
-            else:
-                active_theme = active_theme_config
+            from .config_helpers import get_active_theme as get_active_theme_helper
+            active_theme = get_active_theme_helper(config_data)
             
             # Auto-detect from QGIS if set to 'auto'
             if active_theme == "auto":

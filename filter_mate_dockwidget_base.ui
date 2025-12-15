@@ -266,11 +266,13 @@
     <item>
      <layout class="QVBoxLayout" name="verticalLayout_main">
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_frame_exploring">
-        <item>
-         <widget class="QFrame" name="frame_exploring">
+       <widget class="QSplitter" name="splitter_main">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <widget class="QFrame" name="frame_exploring">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -278,19 +280,19 @@
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>100</height>
+            <height>50</height>
            </size>
           </property>
           <property name="maximumSize">
            <size>
             <width>16777215</width>
-            <height>16777215</height>
+            <height>300</height>
            </size>
           </property>
           <property name="baseSize">
            <size>
             <width>0</width>
-            <height>350</height>
+            <height>150</height>
            </size>
           </property>
           <property name="font">
@@ -363,7 +365,7 @@
                 <x>0</x>
                 <y>0</y>
                 <width>372</width>
-                <height>298</height>
+                <height>301</height>
                </rect>
               </property>
               <layout class="QGridLayout" name="gridLayout_main_header">
@@ -1263,12 +1265,6 @@
            </item>
           </layout>
          </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_frame_toolset">
-        <item>
          <widget class="QFrame" name="frame_toolset">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
@@ -1313,7 +1309,7 @@
           <property name="lineWidth">
            <number>0</number>
           </property>
-          <layout class="QVBoxLayout" name="verticalLayout_filtering_section_3">
+          <layout class="QVBoxLayout" name="verticalLayout_filtering_section">
            <property name="spacing">
             <number>2</number>
            </property>
@@ -1330,9 +1326,9 @@
             <number>2</number>
            </property>
            <item>
-            <layout class="QVBoxLayout" name="verticalLayout_filtering_container_3">
+            <layout class="QVBoxLayout" name="verticalLayout_filtering_container">
              <item>
-              <widget class="QToolBox" name="toolBox_tabTools_3">
+              <widget class="QToolBox" name="toolBox_tabTools">
                <property name="sizePolicy">
                 <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                  <horstretch>0</horstretch>
@@ -1377,12 +1373,12 @@
                 <enum>QFrame::Panel</enum>
                </property>
                <property name="currentIndex">
-                <number>1</number>
+                <number>0</number>
                </property>
                <property name="tabSpacing">
                 <number>0</number>
                </property>
-               <widget class="QWidget" name="FILTERING_3">
+               <widget class="QWidget" name="FILTERING">
                 <property name="geometry">
                  <rect>
                   <x>0</x>
@@ -1398,11 +1394,11 @@
                 <attribute name="label">
                  <string>FILTERING</string>
                 </attribute>
-                <layout class="QHBoxLayout" name="horizontalLayout_filtering_main_3">
+                <layout class="QHBoxLayout" name="horizontalLayout_filtering_main">
                  <item>
-                  <layout class="QHBoxLayout" name="horizontalLayout_filtering_content_3">
+                  <layout class="QHBoxLayout" name="horizontalLayout_filtering_content">
                    <item>
-                    <widget class="QWidget" name="widget_filtering_keys_3" native="true">
+                    <widget class="QWidget" name="widget_filtering_keys" native="true">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                        <horstretch>0</horstretch>
@@ -1427,7 +1423,7 @@
                        <height>0</height>
                       </size>
                      </property>
-                     <layout class="QVBoxLayout" name="verticalLayout_filtering_keys_container_3">
+                     <layout class="QVBoxLayout" name="verticalLayout_filtering_keys_container">
                       <property name="leftMargin">
                        <number>4</number>
                       </property>
@@ -1441,9 +1437,9 @@
                        <number>8</number>
                       </property>
                       <item>
-                       <layout class="QVBoxLayout" name="verticalLayout_filtering_keys_3" stretch="0,0,0,0,0,0,0,0,0,0,0">
+                       <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer_3">
+                         <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -1511,7 +1507,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_filtering_keys_field_top_3">
+                         <spacer name="verticalSpacer_filtering_keys_field_top">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -1527,7 +1523,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter_3">
+                         <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -1598,7 +1594,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_filtering_keys_field_middle1_3">
+                         <spacer name="verticalSpacer_filtering_keys_field_middle1">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -1614,7 +1610,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator_3">
+                         <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -1685,7 +1681,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_filtering_keys_field_middle2_3">
+                         <spacer name="verticalSpacer_filtering_keys_field_middle2">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -1701,7 +1697,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_filtering_geometric_predicates_3">
+                         <widget class="QPushButton" name="pushButton_checkable_filtering_geometric_predicates">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -1971,7 +1967,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_filtering_keys_field_middle3_3">
+                         <spacer name="verticalSpacer_filtering_keys_field_middle3">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -1987,7 +1983,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_value_3">
+                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_value">
                           <property name="enabled">
                            <bool>false</bool>
                           </property>
@@ -2061,7 +2057,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_filtering_keys_field_bottom_3">
+                         <spacer name="verticalSpacer_filtering_keys_field_bottom">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -2077,7 +2073,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type_3">
+                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type">
                           <property name="text">
                            <string/>
                           </property>
@@ -2101,9 +2097,9 @@
                     </widget>
                    </item>
                    <item>
-                    <layout class="QVBoxLayout" name="verticalLayout_filtering_values_3">
+                    <layout class="QVBoxLayout" name="verticalLayout_filtering_values">
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_top_3">
+                      <spacer name="verticalSpacer_filtering_values_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2119,7 +2115,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer_3">
+                      <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -2160,7 +2156,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_search_top_3">
+                      <spacer name="verticalSpacer_filtering_values_search_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2176,7 +2172,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_search_bottom_3">
+                      <spacer name="verticalSpacer_filtering_values_search_bottom">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2192,9 +2188,9 @@
                       </spacer>
                      </item>
                      <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_filtering_values_search_3">
+                      <layout class="QHBoxLayout" name="horizontalLayout_filtering_values_search">
                        <item>
-                        <widget class="QComboBox" name="comboBox_filtering_source_layer_combine_operator_3">
+                        <widget class="QComboBox" name="comboBox_filtering_source_layer_combine_operator">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -2255,7 +2251,7 @@
                         </widget>
                        </item>
                        <item>
-                        <widget class="QComboBox" name="comboBox_filtering_other_layers_combine_operator_3">
+                        <widget class="QComboBox" name="comboBox_filtering_other_layers_combine_operator">
                          <property name="font">
                           <font>
                            <family>Segoe UI Semibold</family>
@@ -2303,7 +2299,7 @@
                       </layout>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_buttons_top_3">
+                      <spacer name="verticalSpacer_filtering_values_buttons_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2319,7 +2315,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates_3">
+                      <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -2366,7 +2362,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_buttons_middle_3">
+                      <spacer name="verticalSpacer_filtering_values_buttons_middle">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2382,12 +2378,12 @@
                       </spacer>
                      </item>
                      <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_filtering_values_buttons_3">
+                      <layout class="QHBoxLayout" name="horizontalLayout_filtering_values_buttons">
                        <property name="spacing">
                         <number>2</number>
                        </property>
                        <item>
-                        <widget class="QgsPropertyOverrideButton" name="mPropertyOverrideButton_filtering_buffer_value_property_3">
+                        <widget class="QgsPropertyOverrideButton" name="mPropertyOverrideButton_filtering_buffer_value_property">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -2443,7 +2439,7 @@
                         </widget>
                        </item>
                        <item>
-                        <widget class="QgsDoubleSpinBox" name="mQgsDoubleSpinBox_filtering_buffer_value_3">
+                        <widget class="QgsDoubleSpinBox" name="mQgsDoubleSpinBox_filtering_buffer_value">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -2501,7 +2497,7 @@
                       </layout>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_buttons_bottom1_3">
+                      <spacer name="verticalSpacer_filtering_values_buttons_bottom1">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2517,7 +2513,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <widget class="QComboBox" name="comboBox_filtering_buffer_type_3">
+                      <widget class="QComboBox" name="comboBox_filtering_buffer_type">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -2536,7 +2532,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_filtering_values_buttons_bottom2_3">
+                      <spacer name="verticalSpacer_filtering_values_buttons_bottom2">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -2557,7 +2553,7 @@
                  </item>
                 </layout>
                </widget>
-               <widget class="QWidget" name="EXPORTING_3">
+               <widget class="QWidget" name="EXPORTING">
                 <property name="geometry">
                  <rect>
                   <x>0</x>
@@ -2577,7 +2573,7 @@
                  <item>
                   <layout class="QHBoxLayout" name="horizontalLayout_8">
                    <item>
-                    <widget class="QWidget" name="widget_exporting_keys_3" native="true">
+                    <widget class="QWidget" name="widget_exporting_keys" native="true">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                        <horstretch>0</horstretch>
@@ -2602,7 +2598,7 @@
                        <height>0</height>
                       </size>
                      </property>
-                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container_3">
+                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
                       <property name="leftMargin">
                        <number>4</number>
                       </property>
@@ -2616,9 +2612,9 @@
                        <number>8</number>
                       </property>
                       <item>
-                       <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_3" stretch="0,0,0,0,0,0,0,0,0,0,0">
+                       <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_exporting_layers_3">
+                         <widget class="QPushButton" name="pushButton_checkable_exporting_layers">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -2680,7 +2676,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_exporting_keys_field_top_3">
+                         <spacer name="verticalSpacer_exporting_keys_field_top">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -2696,7 +2692,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_exporting_projection_3">
+                         <widget class="QPushButton" name="pushButton_checkable_exporting_projection">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -2770,7 +2766,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_exporting_keys_field_middle1_3">
+                         <spacer name="verticalSpacer_exporting_keys_field_middle1">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -2786,7 +2782,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_exporting_styles_3">
+                         <widget class="QPushButton" name="pushButton_checkable_exporting_styles">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -2857,7 +2853,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_exporting_keys_field_middle2_3">
+                         <spacer name="verticalSpacer_exporting_keys_field_middle2">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -2873,7 +2869,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_exporting_datatype_3">
+                         <widget class="QPushButton" name="pushButton_checkable_exporting_datatype">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -2944,7 +2940,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_exporting_keys_field_middle3_3">
+                         <spacer name="verticalSpacer_exporting_keys_field_middle3">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -2960,7 +2956,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_exporting_output_folder_3">
+                         <widget class="QPushButton" name="pushButton_checkable_exporting_output_folder">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -3031,7 +3027,7 @@
                          </widget>
                         </item>
                         <item>
-                         <spacer name="verticalSpacer_exporting_keys_field_bottom_3">
+                         <spacer name="verticalSpacer_exporting_keys_field_bottom">
                           <property name="orientation">
                            <enum>Qt::Vertical</enum>
                           </property>
@@ -3047,7 +3043,7 @@
                          </spacer>
                         </item>
                         <item>
-                         <widget class="QPushButton" name="pushButton_checkable_exporting_zip_3">
+                         <widget class="QPushButton" name="pushButton_checkable_exporting_zip">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                             <horstretch>0</horstretch>
@@ -3122,7 +3118,7 @@
                    <item>
                     <layout class="QVBoxLayout" name="verticalLayout_6">
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_top_3">
+                      <spacer name="verticalSpacer_exporting_values_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3138,7 +3134,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_crs_top_3">
+                      <spacer name="verticalSpacer_exporting_values_crs_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3154,7 +3150,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <widget class="QgsProjectionSelectionWidget" name="mQgsProjectionSelectionWidget_exporting_projection_3">
+                      <widget class="QgsProjectionSelectionWidget" name="mQgsProjectionSelectionWidget_exporting_projection">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3186,7 +3182,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_crs_middle_3">
+                      <spacer name="verticalSpacer_exporting_values_crs_middle">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3202,7 +3198,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <widget class="QComboBox" name="comboBox_exporting_styles_3">
+                      <widget class="QComboBox" name="comboBox_exporting_styles">
                        <property name="font">
                         <font>
                          <family>Segoe UI Semibold</family>
@@ -3244,7 +3240,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_format_top_3">
+                      <spacer name="verticalSpacer_exporting_values_format_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3260,7 +3256,7 @@
                       </spacer>
                      </item>
                      <item>
-                      <widget class="QComboBox" name="comboBox_exporting_datatype_3">
+                      <widget class="QComboBox" name="comboBox_exporting_datatype">
                        <property name="font">
                         <font>
                          <family>Segoe UI Semibold</family>
@@ -3292,7 +3288,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_format_middle_3">
+                      <spacer name="verticalSpacer_exporting_values_format_middle">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3310,14 +3306,14 @@
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_9">
                        <item>
-                        <widget class="QCheckBox" name="checkBox_batch_exporting_output_folder_3">
+                        <widget class="QCheckBox" name="checkBox_batch_exporting_output_folder">
                          <property name="text">
                           <string>Mode batch</string>
                          </property>
                         </widget>
                        </item>
                        <item>
-                        <widget class="QLineEdit" name="lineEdit_exporting_output_folder_3">
+                        <widget class="QLineEdit" name="lineEdit_exporting_output_folder">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -3348,7 +3344,7 @@
                       </layout>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_destination_top_3">
+                      <spacer name="verticalSpacer_exporting_values_destination_top">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3366,14 +3362,14 @@
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_10">
                        <item>
-                        <widget class="QCheckBox" name="checkBox_batch_exporting_zip_3">
+                        <widget class="QCheckBox" name="checkBox_batch_exporting_zip">
                          <property name="text">
                           <string>Mode batch</string>
                          </property>
                         </widget>
                        </item>
                        <item>
-                        <widget class="QLineEdit" name="lineEdit_exporting_zip_3">
+                        <widget class="QLineEdit" name="lineEdit_exporting_zip">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -3407,7 +3403,7 @@
                       </layout>
                      </item>
                      <item>
-                      <spacer name="verticalSpacer_exporting_values_destination_bottom_3">
+                      <spacer name="verticalSpacer_exporting_values_destination_bottom">
                        <property name="orientation">
                         <enum>Qt::Vertical</enum>
                        </property>
@@ -3428,13 +3424,13 @@
                  </item>
                 </layout>
                </widget>
-               <widget class="QWidget" name="CONFIGURATION_3">
+               <widget class="QWidget" name="CONFIGURATION">
                 <property name="geometry">
                  <rect>
                   <x>0</x>
                   <y>0</y>
-                  <width>370</width>
-                  <height>259</height>
+                  <width>166</width>
+                  <height>31</height>
                  </rect>
                 </property>
                 <attribute name="icon">
@@ -3444,7 +3440,7 @@
                 <attribute name="label">
                  <string>CONFIGURATION</string>
                 </attribute>
-                <layout class="QVBoxLayout" name="verticalLayout_config_section_3">
+                <layout class="QVBoxLayout" name="verticalLayout_config_section">
                  <property name="spacing">
                   <number>4</number>
                  </property>
@@ -3461,7 +3457,7 @@
                   <number>0</number>
                  </property>
                  <item>
-                  <layout class="QVBoxLayout" name="verticalLayout_configurationPanel_3">
+                  <layout class="QVBoxLayout" name="verticalLayout_configurationPanel">
                    <property name="spacing">
                     <number>2</number>
                    </property>
@@ -3478,7 +3474,7 @@
                     <number>0</number>
                    </property>
                    <item>
-                    <widget class="QDialogButtonBox" name="buttonBox_3">
+                    <widget class="QDialogButtonBox" name="buttonBox">
                      <property name="standardButtons">
                       <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
                      </property>
@@ -3497,15 +3493,14 @@
            </item>
           </layout>
          </widget>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_actions_container">
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_actions_container">
         <item>
          <widget class="QFrame" name="frame_actions">
           <property name="frameShape">
-           <enum>QFrame::NoFrame</enum>
+           <enum>QFrame::Panel</enum>
           </property>
           <property name="frameShadow">
            <enum>QFrame::Plain</enum>
@@ -3773,9 +3768,9 @@
       </item>
      </layout>
     </item>
-   </layout>
+    </layout>
+   </widget>
   </widget>
- </widget>
  <customwidgets>
   <customwidget>
    <class>QgsCheckableComboBox</class>

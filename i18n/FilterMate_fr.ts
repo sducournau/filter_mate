@@ -103,6 +103,34 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
         <translation>CONFIGURATION</translation>
     </message>
     <message>
+        <source>Identify feature - Display feature attributes</source>
+        <translation>Identifier l&apos;entité - Afficher les attributs de l&apos;entité</translation>
+    </message>
+    <message>
+        <source>Zoom to feature - Center the map on the selected feature</source>
+        <translation>Zoomer sur l&apos;entité - Centrer la carte sur l&apos;entité sélectionnée</translation>
+    </message>
+    <message>
+        <source>Enable selection - Select features on map</source>
+        <translation>Activer la sélection - Sélectionner des entités sur la carte</translation>
+    </message>
+    <message>
+        <source>Enable tracking - Follow the selected feature on the map</source>
+        <translation>Activer le suivi - Suivre l&apos;entité sélectionnée sur la carte</translation>
+    </message>
+    <message>
+        <source>Link widgets - Synchronize selection between widgets</source>
+        <translation>Lier les widgets - Synchroniser la sélection entre les widgets</translation>
+    </message>
+    <message>
+        <source>Reset layer properties - Restore default layer settings</source>
+        <translation>Réinitialiser les propriétés - Restaurer les paramètres par défaut de la couche</translation>
+    </message>
+    <message>
+        <source>Auto-sync with current layer - Automatically update when layer changes</source>
+        <translation>Synchronisation auto avec la couche - Mise à jour automatique lors des changements de couche</translation>
+    </message>
+    <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
         <translation>Activer le filtrage multicouche - Appliquer le filtre à plusieurs couches simultanément</translation>
     </message>
@@ -119,8 +147,20 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
         <translation>Activer le tampon - Ajouter une zone tampon autour des entités sélectionnées</translation>
     </message>
     <message>
+        <source>Buffer type - Select the buffer calculation method</source>
+        <translation>Type de tampon - Sélectionner la méthode de calcul du tampon</translation>
+    </message>
+    <message>
+        <source>Current layer - Select the layer to filter</source>
+        <translation>Couche courante - Sélectionner la couche à filtrer</translation>
+    </message>
+    <message>
         <source>Logical operator for combining filters on the source layer</source>
         <translation>Opérateur logique pour combiner les filtres sur la couche source</translation>
+    </message>
+    <message>
+        <source>Logical operator for combining filters on other layers</source>
+        <translation>Opérateur logique pour combiner les filtres sur les autres couches</translation>
     </message>
     <message>
         <source>Select geometric predicate(s) for spatial filtering</source>
@@ -129,6 +169,10 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
     <message>
         <source>Buffer distance in meters</source>
         <translation>Distance du tampon en mètres</translation>
+    </message>
+    <message>
+        <source>Buffer type - Define how the buffer is calculated</source>
+        <translation>Type de tampon - Définir comment le tampon est calculé</translation>
     </message>
     <message>
         <source>Select layers to export</source>
@@ -151,36 +195,112 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
         <translation>Configurer l&apos;emplacement et le nom du fichier de sortie</translation>
     </message>
     <message>
+        <source>Enable ZIP compression - Create a compressed archive of exported files</source>
+        <translation>Activer la compression ZIP - Créer une archive compressée des fichiers exportés</translation>
+    </message>
+    <message>
         <source>Select CRS for export</source>
         <translation>Sélectionner le SCR pour l&apos;export</translation>
+    </message>
+    <message>
+        <source>Style format - Select QML or SLD format</source>
+        <translation>Format de style - Sélectionner le format QML ou SLD</translation>
     </message>
     <message>
         <source>Output file format</source>
         <translation>Format du fichier de sortie</translation>
     </message>
     <message>
+        <source>Output folder name - Enter the name of the export folder</source>
+        <translation>Nom du dossier de sortie - Entrez le nom du dossier d&apos;export</translation>
+    </message>
+    <message>
+        <source>Enter folder name...</source>
+        <translation>Entrez le nom du dossier...</translation>
+    </message>
+    <message>
+        <source>Batch mode - Export each layer to a separate folder</source>
+        <translation>Mode batch - Exporter chaque couche dans un dossier séparé</translation>
+    </message>
+    <message>
         <source>Batch mode</source>
         <translation>Mode batch</translation>
+    </message>
+    <message>
+        <source>ZIP filename - Enter the name for the compressed archive</source>
+        <translation>Nom du fichier ZIP - Entrez le nom de l&apos;archive compressée</translation>
+    </message>
+    <message>
+        <source>Enter ZIP filename...</source>
+        <translation>Entrez le nom du fichier ZIP...</translation>
+    </message>
+    <message>
+        <source>Batch mode - Create a separate ZIP for each layer</source>
+        <translation>Mode batch - Créer un ZIP séparé pour chaque couche</translation>
     </message>
     <message>
         <source>Apply Filter - Execute the current filter on selected layers</source>
         <translation>Appliquer le filtre - Exécuter le filtre actuel sur les couches sélectionnées</translation>
     </message>
     <message>
+        <source>Apply Filter</source>
+        <translation>Appliquer le filtre</translation>
+    </message>
+    <message>
+        <source>Apply the current filter expression to filter features on the selected layer(s)</source>
+        <translation>Appliquer l&apos;expression de filtre actuelle pour filtrer les entités sur la ou les couches sélectionnées</translation>
+    </message>
+    <message>
         <source>Undo Filter - Restore the previous filter state</source>
         <translation>Annuler le filtre - Restaurer l&apos;état de filtre précédent</translation>
+    </message>
+    <message>
+        <source>Undo Filter</source>
+        <translation>Annuler le filtre</translation>
+    </message>
+    <message>
+        <source>Undo the last filter operation and restore the previous state</source>
+        <translation>Annuler la dernière opération de filtre et restaurer l&apos;état précédent</translation>
     </message>
     <message>
         <source>Redo Filter - Reapply the previously undone filter</source>
         <translation>Rétablir le filtre - Réappliquer le filtre précédemment annulé</translation>
     </message>
     <message>
+        <source>Redo Filter</source>
+        <translation>Rétablir le filtre</translation>
+    </message>
+    <message>
+        <source>Redo the previously undone filter operation</source>
+        <translation>Rétablir l&apos;opération de filtre précédemment annulée</translation>
+    </message>
+    <message>
         <source>Clear All Filters - Remove all filters from all layers</source>
         <translation>Effacer tous les filtres - Supprimer tous les filtres de toutes les couches</translation>
     </message>
     <message>
+        <source>Clear All Filters</source>
+        <translation>Effacer tous les filtres</translation>
+    </message>
+    <message>
+        <source>Remove all active filters from all layers in the project</source>
+        <translation>Supprimer tous les filtres actifs de toutes les couches du projet</translation>
+    </message>
+    <message>
         <source>Export - Save filtered layers to the specified location</source>
         <translation>Exporter - Enregistrer les couches filtrées à l&apos;emplacement spécifié</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>Exporter</translation>
+    </message>
+    <message>
+        <source>Export the filtered layers to the configured output location and format</source>
+        <translation>Exporter les couches filtrées vers l&apos;emplacement et le format de sortie configurés</translation>
+    </message>
+    <message>
+        <source>About FilterMate - Display plugin information and help</source>
+        <translation>À propos de FilterMate - Afficher les informations et l&apos;aide du plugin</translation>
     </message>
     <message>
         <source>AND</source>
@@ -201,6 +321,74 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
     <message>
         <source>SLD</source>
         <translation>SLD</translation>
+    </message>
+    <message>
+        <source> m</source>
+        <translation> m</translation>
+    </message>
+    <message>
+        <source>, </source>
+        <translation>, </translation>
+    </message>
+    <message>
+        <source>Multi-layer filtering</source>
+        <translation>Filtrage multicouche</translation>
+    </message>
+    <message>
+        <source>Additive filtering for the selected layer</source>
+        <translation>Filtrage additif pour la couche sélectionnée</translation>
+    </message>
+    <message>
+        <source>Geospatial filtering</source>
+        <translation>Filtrage géospatial</translation>
+    </message>
+    <message>
+        <source>Buffer</source>
+        <translation>Tampon</translation>
+    </message>
+    <message>
+        <source>Expression layer</source>
+        <translation>Couche de l&apos;expression</translation>
+    </message>
+    <message>
+        <source>Geometric predicate</source>
+        <translation>Prédicat géométrique</translation>
+    </message>
+    <message>
+        <source>Value in meters</source>
+        <translation>Valeur en mètres</translation>
+    </message>
+    <message>
+        <source>Output format</source>
+        <translation>Format de sortie</translation>
+    </message>
+    <message>
+        <source>Filter</source>
+        <translation>Filtrer</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Réinitialiser</translation>
+    </message>
+    <message>
+        <source>Layers to export</source>
+        <translation>Couches à exporter</translation>
+    </message>
+    <message>
+        <source>Layers projection</source>
+        <translation>Projection des couches</translation>
+    </message>
+    <message>
+        <source>Save styles</source>
+        <translation>Enregistrer les styles</translation>
+    </message>
+    <message>
+        <source>Datatype export</source>
+        <translation>Export du type de données</translation>
+    </message>
+    <message>
+        <source>Name of file/directory</source>
+        <translation>Nom du fichier/répertoire</translation>
     </message>
 </context>
 <context>
@@ -252,6 +440,36 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
     <message>
         <source>Feature ID: {id}</source>
         <translation>ID de l&apos;entité : {id}</translation>
+    </message>
+    <message>
+        <source>Current layer: {0}</source>
+        <translation>Couche actuelle : {0}</translation>
+    </message>
+    <message>
+        <source>Selected layers:
+{0}</source>
+        <translation>Couches sélectionnées :
+{0}</translation>
+    </message>
+    <message>
+        <source>Expression:
+{0}</source>
+        <translation>Expression :
+{0}</translation>
+    </message>
+    <message>
+        <source>Expression: {0}</source>
+        <translation>Expression : {0}</translation>
+    </message>
+    <message>
+        <source>Display expression: {0}</source>
+        <translation>Expression d&apos;affichage : {0}</translation>
+    </message>
+    <message>
+        <source>Feature ID: {0}
+First attribute: {1}</source>
+        <translation>ID de l&apos;entité : {0}
+Premier attribut : {1}</translation>
     </message>
 </context>
 <context>

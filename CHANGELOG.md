@@ -2,6 +2,13 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.3.2] - 2025-12-15 - Project Loading Auto-Activation Fix
+
+### 🐛 Bug Fixes
+- **CRITICAL: Fixed plugin auto-activation on project load** - Plugin now correctly activates when loading a QGIS project containing vector layers, even if it was activated in a previous empty project. The `projectRead` and `newProjectCreated` signals are now properly connected to `_auto_activate_plugin()` instead of `_handle_project_change()`, enabling automatic detection and activation for new projects.
+
+---
+
 ## [2.3.1] - 2025-12-14 - Stability & Performance Improvements
 
 ### 🐛 Bug Fixes

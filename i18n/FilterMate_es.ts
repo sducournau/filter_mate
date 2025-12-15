@@ -103,6 +103,34 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
         <translation>CONFIGURACIÓN</translation>
     </message>
     <message>
+        <source>Identify feature - Display feature attributes</source>
+        <translation>Identificar entidad - Mostrar atributos de la entidad</translation>
+    </message>
+    <message>
+        <source>Zoom to feature - Center the map on the selected feature</source>
+        <translation>Zoom a la entidad - Centrar el mapa en la entidad seleccionada</translation>
+    </message>
+    <message>
+        <source>Enable selection - Select features on map</source>
+        <translation>Activar selección - Seleccionar entidades en el mapa</translation>
+    </message>
+    <message>
+        <source>Enable tracking - Follow the selected feature on the map</source>
+        <translation>Activar seguimiento - Seguir la entidad seleccionada en el mapa</translation>
+    </message>
+    <message>
+        <source>Link widgets - Synchronize selection between widgets</source>
+        <translation>Vincular widgets - Sincronizar selección entre widgets</translation>
+    </message>
+    <message>
+        <source>Reset layer properties - Restore default layer settings</source>
+        <translation>Restablecer propiedades de capa - Restaurar configuración por defecto de la capa</translation>
+    </message>
+    <message>
+        <source>Auto-sync with current layer - Automatically update when layer changes</source>
+        <translation>Auto-sincronizar con capa actual - Actualizar automáticamente cuando la capa cambie</translation>
+    </message>
+    <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
         <translation>Activar filtrado multicapa - Aplicar filtro a varias capas simultáneamente</translation>
     </message>
@@ -119,8 +147,20 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
         <translation>Activar búfer - Añadir una zona de búfer alrededor de las entidades seleccionadas</translation>
     </message>
     <message>
+        <source>Buffer type - Select the buffer calculation method</source>
+        <translation>Tipo de búfer - Seleccionar el método de cálculo del búfer</translation>
+    </message>
+    <message>
+        <source>Current layer - Select the layer to filter</source>
+        <translation>Capa actual - Seleccionar la capa a filtrar</translation>
+    </message>
+    <message>
         <source>Logical operator for combining filters on the source layer</source>
         <translation>Operador lógico para combinar filtros en la capa de origen</translation>
+    </message>
+    <message>
+        <source>Logical operator for combining filters on other layers</source>
+        <translation>Operador lógico para combinar filtros en otras capas</translation>
     </message>
     <message>
         <source>Select geometric predicate(s) for spatial filtering</source>
@@ -129,6 +169,10 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
     <message>
         <source>Buffer distance in meters</source>
         <translation>Distancia del búfer en metros</translation>
+    </message>
+    <message>
+        <source>Buffer type - Define how the buffer is calculated</source>
+        <translation>Tipo de búfer - Definir cómo se calcula el búfer</translation>
     </message>
     <message>
         <source>Select layers to export</source>
@@ -151,36 +195,112 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
         <translation>Configurar ubicación de salida y nombre de archivo</translation>
     </message>
     <message>
+        <source>Enable ZIP compression - Create a compressed archive of exported files</source>
+        <translation>Activar compresión ZIP - Crear un archivo comprimido de los archivos exportados</translation>
+    </message>
+    <message>
         <source>Select CRS for export</source>
         <translation>Seleccionar SRC para exportación</translation>
+    </message>
+    <message>
+        <source>Style format - Select QML or SLD format</source>
+        <translation>Formato de estilo - Seleccionar formato QML o SLD</translation>
     </message>
     <message>
         <source>Output file format</source>
         <translation>Formato del archivo de salida</translation>
     </message>
     <message>
+        <source>Output folder name - Enter the name of the export folder</source>
+        <translation>Nombre de carpeta de salida - Introducir el nombre de la carpeta de exportación</translation>
+    </message>
+    <message>
+        <source>Enter folder name...</source>
+        <translation>Introducir nombre de carpeta...</translation>
+    </message>
+    <message>
+        <source>Batch mode - Export each layer to a separate folder</source>
+        <translation>Modo por lotes - Exportar cada capa a una carpeta separada</translation>
+    </message>
+    <message>
         <source>Batch mode</source>
         <translation>Modo por lotes</translation>
+    </message>
+    <message>
+        <source>ZIP filename - Enter the name for the compressed archive</source>
+        <translation>Nombre de archivo ZIP - Introducir el nombre para el archivo comprimido</translation>
+    </message>
+    <message>
+        <source>Enter ZIP filename...</source>
+        <translation>Introducir nombre de archivo ZIP...</translation>
+    </message>
+    <message>
+        <source>Batch mode - Create a separate ZIP for each layer</source>
+        <translation>Modo por lotes - Crear un ZIP separado para cada capa</translation>
     </message>
     <message>
         <source>Apply Filter - Execute the current filter on selected layers</source>
         <translation>Aplicar Filtro - Ejecutar el filtro actual en las capas seleccionadas</translation>
     </message>
     <message>
+        <source>Apply Filter</source>
+        <translation>Aplicar Filtro</translation>
+    </message>
+    <message>
+        <source>Apply the current filter expression to filter features on the selected layer(s)</source>
+        <translation>Aplicar la expresión de filtro actual para filtrar entidades en la(s) capa(s) seleccionada(s)</translation>
+    </message>
+    <message>
         <source>Undo Filter - Restore the previous filter state</source>
         <translation>Deshacer Filtro - Restaurar el estado de filtro anterior</translation>
+    </message>
+    <message>
+        <source>Undo Filter</source>
+        <translation>Deshacer Filtro</translation>
+    </message>
+    <message>
+        <source>Undo the last filter operation and restore the previous state</source>
+        <translation>Deshacer la última operación de filtro y restaurar el estado anterior</translation>
     </message>
     <message>
         <source>Redo Filter - Reapply the previously undone filter</source>
         <translation>Rehacer Filtro - Reaplicar el filtro anteriormente deshecho</translation>
     </message>
     <message>
+        <source>Redo Filter</source>
+        <translation>Rehacer Filtro</translation>
+    </message>
+    <message>
+        <source>Redo the previously undone filter operation</source>
+        <translation>Rehacer la operación de filtro anteriormente deshecha</translation>
+    </message>
+    <message>
         <source>Clear All Filters - Remove all filters from all layers</source>
         <translation>Borrar Todos los Filtros - Eliminar todos los filtros de todas las capas</translation>
     </message>
     <message>
+        <source>Clear All Filters</source>
+        <translation>Borrar Todos los Filtros</translation>
+    </message>
+    <message>
+        <source>Remove all active filters from all layers in the project</source>
+        <translation>Eliminar todos los filtros activos de todas las capas del proyecto</translation>
+    </message>
+    <message>
         <source>Export - Save filtered layers to the specified location</source>
         <translation>Exportar - Guardar capas filtradas en la ubicación especificada</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>Exportar</translation>
+    </message>
+    <message>
+        <source>Export the filtered layers to the configured output location and format</source>
+        <translation>Exportar las capas filtradas a la ubicación y formato de salida configurados</translation>
+    </message>
+    <message>
+        <source>About FilterMate - Display plugin information and help</source>
+        <translation>Acerca de FilterMate - Mostrar información del plugin y ayuda</translation>
     </message>
     <message>
         <source>AND</source>
@@ -201,6 +321,74 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
     <message>
         <source>SLD</source>
         <translation>SLD</translation>
+    </message>
+    <message>
+        <source> m</source>
+        <translation> m</translation>
+    </message>
+    <message>
+        <source>, </source>
+        <translation>, </translation>
+    </message>
+    <message>
+        <source>Multi-layer filtering</source>
+        <translation>Filtrado multicapa</translation>
+    </message>
+    <message>
+        <source>Additive filtering for the selected layer</source>
+        <translation>Filtrado aditivo para la capa seleccionada</translation>
+    </message>
+    <message>
+        <source>Geospatial filtering</source>
+        <translation>Filtrado geoespacial</translation>
+    </message>
+    <message>
+        <source>Buffer</source>
+        <translation>Búfer</translation>
+    </message>
+    <message>
+        <source>Expression layer</source>
+        <translation>Capa de expresión</translation>
+    </message>
+    <message>
+        <source>Geometric predicate</source>
+        <translation>Predicado geométrico</translation>
+    </message>
+    <message>
+        <source>Value in meters</source>
+        <translation>Valor en metros</translation>
+    </message>
+    <message>
+        <source>Output format</source>
+        <translation>Formato de salida</translation>
+    </message>
+    <message>
+        <source>Filter</source>
+        <translation>Filtrar</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Restablecer</translation>
+    </message>
+    <message>
+        <source>Layers to export</source>
+        <translation>Capas a exportar</translation>
+    </message>
+    <message>
+        <source>Layers projection</source>
+        <translation>Proyección de capas</translation>
+    </message>
+    <message>
+        <source>Save styles</source>
+        <translation>Guardar estilos</translation>
+    </message>
+    <message>
+        <source>Datatype export</source>
+        <translation>Exportar tipo de datos</translation>
+    </message>
+    <message>
+        <source>Name of file/directory</source>
+        <translation>Nombre de archivo/directorio</translation>
     </message>
 </context>
 <context>
@@ -252,6 +440,36 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
     <message>
         <source>Feature ID: {id}</source>
         <translation>ID de la entidad: {id}</translation>
+    </message>
+    <message>
+        <source>Current layer: {0}</source>
+        <translation>Capa actual: {0}</translation>
+    </message>
+    <message>
+        <source>Selected layers:
+{0}</source>
+        <translation>Capas seleccionadas:
+{0}</translation>
+    </message>
+    <message>
+        <source>Expression:
+{0}</source>
+        <translation>Expresión:
+{0}</translation>
+    </message>
+    <message>
+        <source>Expression: {0}</source>
+        <translation>Expresión: {0}</translation>
+    </message>
+    <message>
+        <source>Display expression: {0}</source>
+        <translation>Expresión de visualización: {0}</translation>
+    </message>
+    <message>
+        <source>Feature ID: {0}
+First attribute: {1}</source>
+        <translation>ID de entidad: {0}
+Primer atributo: {1}</translation>
     </message>
 </context>
 <context>

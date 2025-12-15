@@ -1,5 +1,37 @@
 # Qt JSON View - Changelog
 
+## [1.2.0] - 2025-12-15
+
+### Added
+- **QgsColorButton Integration for Hex Colors**
+  - New `ColorType` data type for automatic hex color detection
+  - Visual color preview rectangles displayed inline with color values
+  - Interactive color picker using QGIS `QgsColorButton` widget
+  - Support for RGB (`#RRGGBB`) and RGBA (`#RRGGBBAA`) hex formats
+  - Automatic detection of short hex colors (`#RGB`)
+  - Transparency/alpha channel editing support
+  - Immediate color update on selection
+  - Color validation and formatting
+  
+- **User Experience Improvements**
+  - Click any hex color value to open color picker dialog
+  - See live color previews in the tree view
+  - Ensure valid color codes through visual selection
+  - Intuitive color editing without typing hex values
+  
+- **Documentation**
+  - `COLOR_PICKER.md` - Complete color picker documentation
+  - `test_color_picker.py` - Test script demonstrating functionality
+  - Usage examples and integration guide
+
+### Technical Details
+- `ColorType` placed before `StrType` in `DATA_TYPES` for priority matching
+- Regex pattern for hex color detection: `^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?([0-9A-Fa-f]{2})?$`
+- Custom `paint()` method for inline color preview rendering
+- Custom `createEditor()` for `QgsColorButton` instantiation
+- Custom `setModelData()` for color-to-hex conversion
+- Graceful fallback for invalid color strings
+
 ## [1.1.0] - 2025-01-05
 
 ### Added

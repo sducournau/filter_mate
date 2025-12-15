@@ -103,6 +103,34 @@ Please restart QGIS to apply all changes.</translation>
         <translation>CONFIGURATION</translation>
     </message>
     <message>
+        <source>Identify feature - Display feature attributes</source>
+        <translation>Identify feature - Display feature attributes</translation>
+    </message>
+    <message>
+        <source>Zoom to feature - Center the map on the selected feature</source>
+        <translation>Zoom to feature - Center the map on the selected feature</translation>
+    </message>
+    <message>
+        <source>Enable selection - Select features on map</source>
+        <translation>Enable selection - Select features on map</translation>
+    </message>
+    <message>
+        <source>Enable tracking - Follow the selected feature on the map</source>
+        <translation>Enable tracking - Follow the selected feature on the map</translation>
+    </message>
+    <message>
+        <source>Link widgets - Synchronize selection between widgets</source>
+        <translation>Link widgets - Synchronize selection between widgets</translation>
+    </message>
+    <message>
+        <source>Reset layer properties - Restore default layer settings</source>
+        <translation>Reset layer properties - Restore default layer settings</translation>
+    </message>
+    <message>
+        <source>Auto-sync with current layer - Automatically update when layer changes</source>
+        <translation>Auto-sync with current layer - Automatically update when layer changes</translation>
+    </message>
+    <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
         <translation>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</translation>
     </message>
@@ -119,8 +147,20 @@ Please restart QGIS to apply all changes.</translation>
         <translation>Enable buffer - Add a buffer zone around selected features</translation>
     </message>
     <message>
+        <source>Buffer type - Select the buffer calculation method</source>
+        <translation>Buffer type - Select the buffer calculation method</translation>
+    </message>
+    <message>
+        <source>Current layer - Select the layer to filter</source>
+        <translation>Current layer - Select the layer to filter</translation>
+    </message>
+    <message>
         <source>Logical operator for combining filters on the source layer</source>
         <translation>Logical operator for combining filters on the source layer</translation>
+    </message>
+    <message>
+        <source>Logical operator for combining filters on other layers</source>
+        <translation>Logical operator for combining filters on other layers</translation>
     </message>
     <message>
         <source>Select geometric predicate(s) for spatial filtering</source>
@@ -129,6 +169,10 @@ Please restart QGIS to apply all changes.</translation>
     <message>
         <source>Buffer distance in meters</source>
         <translation>Buffer distance in meters</translation>
+    </message>
+    <message>
+        <source>Buffer type - Define how the buffer is calculated</source>
+        <translation>Buffer type - Define how the buffer is calculated</translation>
     </message>
     <message>
         <source>Select layers to export</source>
@@ -151,36 +195,112 @@ Please restart QGIS to apply all changes.</translation>
         <translation>Configure output location and filename</translation>
     </message>
     <message>
+        <source>Enable ZIP compression - Create a compressed archive of exported files</source>
+        <translation>Enable ZIP compression - Create a compressed archive of exported files</translation>
+    </message>
+    <message>
         <source>Select CRS for export</source>
         <translation>Select CRS for export</translation>
+    </message>
+    <message>
+        <source>Style format - Select QML or SLD format</source>
+        <translation>Style format - Select QML or SLD format</translation>
     </message>
     <message>
         <source>Output file format</source>
         <translation>Output file format</translation>
     </message>
     <message>
+        <source>Output folder name - Enter the name of the export folder</source>
+        <translation>Output folder name - Enter the name of the export folder</translation>
+    </message>
+    <message>
+        <source>Enter folder name...</source>
+        <translation>Enter folder name...</translation>
+    </message>
+    <message>
+        <source>Batch mode - Export each layer to a separate folder</source>
+        <translation>Batch mode - Export each layer to a separate folder</translation>
+    </message>
+    <message>
         <source>Batch mode</source>
         <translation>Batch mode</translation>
+    </message>
+    <message>
+        <source>ZIP filename - Enter the name for the compressed archive</source>
+        <translation>ZIP filename - Enter the name for the compressed archive</translation>
+    </message>
+    <message>
+        <source>Enter ZIP filename...</source>
+        <translation>Enter ZIP filename...</translation>
+    </message>
+    <message>
+        <source>Batch mode - Create a separate ZIP for each layer</source>
+        <translation>Batch mode - Create a separate ZIP for each layer</translation>
     </message>
     <message>
         <source>Apply Filter - Execute the current filter on selected layers</source>
         <translation>Apply Filter - Execute the current filter on selected layers</translation>
     </message>
     <message>
+        <source>Apply Filter</source>
+        <translation>Apply Filter</translation>
+    </message>
+    <message>
+        <source>Apply the current filter expression to filter features on the selected layer(s)</source>
+        <translation>Apply the current filter expression to filter features on the selected layer(s)</translation>
+    </message>
+    <message>
         <source>Undo Filter - Restore the previous filter state</source>
         <translation>Undo Filter - Restore the previous filter state</translation>
+    </message>
+    <message>
+        <source>Undo Filter</source>
+        <translation>Undo Filter</translation>
+    </message>
+    <message>
+        <source>Undo the last filter operation and restore the previous state</source>
+        <translation>Undo the last filter operation and restore the previous state</translation>
     </message>
     <message>
         <source>Redo Filter - Reapply the previously undone filter</source>
         <translation>Redo Filter - Reapply the previously undone filter</translation>
     </message>
     <message>
+        <source>Redo Filter</source>
+        <translation>Redo Filter</translation>
+    </message>
+    <message>
+        <source>Redo the previously undone filter operation</source>
+        <translation>Redo the previously undone filter operation</translation>
+    </message>
+    <message>
         <source>Clear All Filters - Remove all filters from all layers</source>
         <translation>Clear All Filters - Remove all filters from all layers</translation>
     </message>
     <message>
+        <source>Clear All Filters</source>
+        <translation>Clear All Filters</translation>
+    </message>
+    <message>
+        <source>Remove all active filters from all layers in the project</source>
+        <translation>Remove all active filters from all layers in the project</translation>
+    </message>
+    <message>
         <source>Export - Save filtered layers to the specified location</source>
         <translation>Export - Save filtered layers to the specified location</translation>
+    </message>
+    <message>
+        <source>Export</source>
+        <translation>Export</translation>
+    </message>
+    <message>
+        <source>Export the filtered layers to the configured output location and format</source>
+        <translation>Export the filtered layers to the configured output location and format</translation>
+    </message>
+    <message>
+        <source>About FilterMate - Display plugin information and help</source>
+        <translation>About FilterMate - Display plugin information and help</translation>
     </message>
     <message>
         <source>AND</source>
@@ -201,6 +321,74 @@ Please restart QGIS to apply all changes.</translation>
     <message>
         <source>SLD</source>
         <translation>SLD</translation>
+    </message>
+    <message>
+        <source> m</source>
+        <translation> m</translation>
+    </message>
+    <message>
+        <source>, </source>
+        <translation>, </translation>
+    </message>
+    <message>
+        <source>Multi-layer filtering</source>
+        <translation>Multi-layer filtering</translation>
+    </message>
+    <message>
+        <source>Additive filtering for the selected layer</source>
+        <translation>Additive filtering for the selected layer</translation>
+    </message>
+    <message>
+        <source>Geospatial filtering</source>
+        <translation>Geospatial filtering</translation>
+    </message>
+    <message>
+        <source>Buffer</source>
+        <translation>Buffer</translation>
+    </message>
+    <message>
+        <source>Expression layer</source>
+        <translation>Expression layer</translation>
+    </message>
+    <message>
+        <source>Geometric predicate</source>
+        <translation>Geometric predicate</translation>
+    </message>
+    <message>
+        <source>Value in meters</source>
+        <translation>Value in meters</translation>
+    </message>
+    <message>
+        <source>Output format</source>
+        <translation>Output format</translation>
+    </message>
+    <message>
+        <source>Filter</source>
+        <translation>Filter</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Reset</translation>
+    </message>
+    <message>
+        <source>Layers to export</source>
+        <translation>Layers to export</translation>
+    </message>
+    <message>
+        <source>Layers projection</source>
+        <translation>Layers projection</translation>
+    </message>
+    <message>
+        <source>Save styles</source>
+        <translation>Save styles</translation>
+    </message>
+    <message>
+        <source>Datatype export</source>
+        <translation>Datatype export</translation>
+    </message>
+    <message>
+        <source>Name of file/directory</source>
+        <translation>Name of file/directory</translation>
     </message>
 </context>
 <context>
@@ -252,6 +440,36 @@ Please restart QGIS to apply all changes.</translation>
     <message>
         <source>Feature ID: {id}</source>
         <translation>Feature ID: {id}</translation>
+    </message>
+    <message>
+        <source>Current layer: {0}</source>
+        <translation>Current layer: {0}</translation>
+    </message>
+    <message>
+        <source>Selected layers:
+{0}</source>
+        <translation>Selected layers:
+{0}</translation>
+    </message>
+    <message>
+        <source>Expression:
+{0}</source>
+        <translation>Expression:
+{0}</translation>
+    </message>
+    <message>
+        <source>Expression: {0}</source>
+        <translation>Expression: {0}</translation>
+    </message>
+    <message>
+        <source>Display expression: {0}</source>
+        <translation>Display expression: {0}</translation>
+    </message>
+    <message>
+        <source>Feature ID: {0}
+First attribute: {1}</source>
+        <translation>Feature ID: {0}
+First attribute: {1}</translation>
     </message>
 </context>
 <context>

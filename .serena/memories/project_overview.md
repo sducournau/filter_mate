@@ -21,27 +21,28 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 ```
 filter_mate/
 ├── filter_mate.py              # Plugin entry point (QGIS integration)
-├── filter_mate_app.py          # Main application orchestrator (~1376 lines after Phase 5a)
-├── filter_mate_dockwidget.py   # UI dockwidget management (~4438 lines)
+├── filter_mate_app.py          # Main application orchestrator (~2048 lines)
+├── filter_mate_dockwidget.py   # UI dockwidget management (~5077 lines)
 ├── filter_mate_dockwidget_base.py  # Base UI class (auto-generated)
 ├── filter_mate_dockwidget_base.ui  # Qt Designer UI file
 ├── config/
 │   ├── config.json             # Plugin configuration (dynamic, reactive)
 │   └── config.py               # Configuration loader
 ├── modules/
-│   ├── appTasks.py             # Async filtering tasks (QgsTask) (~5678 lines)
-│   ├── appUtils.py             # Database connections and utilities
+│   ├── appTasks.py             # Re-exports for backwards compatibility (~58 lines)
+│   ├── appUtils.py             # Database connections and utilities (~800 lines)
 │   ├── backends/               # Multi-backend architecture
-│   │   ├── base_backend.py    # Abstract base class
-│   │   ├── factory.py         # Backend factory (auto-selection)
+│   │   ├── base_backend.py     # Abstract base class
+│   │   ├── factory.py          # Backend factory (auto-selection)
 │   │   ├── postgresql_backend.py  # PostgreSQL/PostGIS backend
 │   │   ├── spatialite_backend.py  # Spatialite backend
-│   │   └── ogr_backend.py     # OGR universal fallback
-│   ├── tasks/                  # Task modules (NEW in v2.3.0-alpha)
+│   │   └── ogr_backend.py      # OGR universal fallback
+│   ├── tasks/                  # Task modules (refactored in v2.3.0)
 │   │   ├── __init__.py         # Re-exports & backwards compatibility
-│   │   ├── task_utils.py       # Common utilities (328 lines)
-│   │   ├── geometry_cache.py   # SourceGeometryCache (146 lines)
-│   │   ├── layer_management_task.py  # LayersManagementEngineTask (1125 lines)
+│   │   ├── task_utils.py       # Common utilities (~328 lines)
+│   │   ├── geometry_cache.py   # SourceGeometryCache (~146 lines)
+│   │   ├── layer_management_task.py  # LayersManagementEngineTask (~1125 lines)
+│   │   ├── filter_task.py      # FilterEngineTask (~950 lines)
 │   │   └── README.md           # Task module documentation
 │   ├── config_helpers.py       # Configuration utilities (v2.2.2)
 │   ├── constants.py            # Application constants
@@ -52,6 +53,7 @@ filter_mate/
 │   ├── prepared_statements.py  # SQL prepared statements
 │   ├── signal_utils.py         # Qt signal management utilities
 │   ├── state_manager.py        # Application state management
+│   ├── type_utils.py           # Type conversion utilities (NEW in v2.3.0)
 │   ├── ui_config.py            # Dynamic UI dimensions
 │   ├── ui_elements.py          # UI element creation
 │   ├── ui_elements_helpers.py  # UI helper functions
@@ -62,33 +64,39 @@ filter_mate/
 ├── resources/
 │   └── styles/                 # QSS theme files
 ├── icons/                      # Plugin icons
-├── i18n/                       # Translations
-├── tests/                      # Unit tests (26+ tests)
-├── docs/                       # Comprehensive documentation
+├── i18n/                       # Translations (7 languages)
+├── tests/                      # Unit tests (30+ tests)
+├── docs/                       # Documentation
+│   └── archive/                # Archived documentation
+├── tools/                      # Development utilities (NEW - December 2025)
+│   ├── build/                  # Build and release scripts
+│   ├── diagnostic/             # Diagnostic tools
+│   ├── i18n/                   # Translation utilities
+│   └── ui/                     # UI modification utilities
 ├── website/                    # Docusaurus documentation site
 ├── .github/
 │   ├── copilot-instructions.md # GitHub Copilot guidelines
-│   └── workflows/
-│       └── test.yml            # CI/CD pipeline
+│   └── workflows/              # CI/CD pipeline
 ├── .editorconfig               # Editor configuration
 └── .serena/                    # Serena MCP configuration
 ```
 
 ## Current Status
-- **Version**: 2.2.5 (December 8, 2025)
-- **Development Version**: 2.3.0-alpha (Phase 5d refactoring complete, Undo/Redo implemented)
+- **Version**: 2.3.0 (December 15, 2025)
 - **Status**: Production - Global Undo/Redo with intelligent context detection
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
-- **Refactoring Progress**: Phase 1-5d complete, code extracted to modules/tasks/
+- **Refactoring Progress**: All phases complete, code extracted to modules/tasks/
+- **Repository Cleanup**: December 15, 2025 - tools/ directory created, scripts organized
 
-## File Sizes (as of December 12, 2025)
-- `filter_mate_app.py`: 2048 lines (with new undo/redo features)
-- `filter_mate_dockwidget.py`: 5077 lines
-- `modules/appTasks.py`: 58 lines (most code extracted to modules/tasks/)
+## File Sizes (as of December 15, 2025)
+- `filter_mate_app.py`: ~2048 lines (with undo/redo features)
+- `filter_mate_dockwidget.py`: ~5077 lines
+- `modules/appTasks.py`: 58 lines (re-exports only - code moved to modules/tasks/)
 - `modules/tasks/layer_management_task.py`: ~1125 lines
 - `modules/tasks/filter_task.py`: ~950 lines
 - `modules/tasks/task_utils.py`: ~328 lines
+- `modules/type_utils.py`: ~126 lines (NEW)
 
 ## Recent Development (December 12, 2025)
 

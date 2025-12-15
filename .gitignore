@@ -43,3 +43,20 @@ website/.docusaurus/
 website/build/
 website/.cache-loader/
 website/package-lock.json
+
+# Generated files
+*.backup
+*.bak
+*.orig
+
+# Temporary diagnostic files
+diagnose_*.py
+test_*.py
+!tests/test_*.py
+
+# SQLite temporary files
+*.sqlite-wal
+*.sqlite-shm
+
+# Compiled translations (keep .ts source files)
+# Note: .qm files are compiled from .ts and should be versioned

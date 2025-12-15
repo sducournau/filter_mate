@@ -20,6 +20,31 @@
                     "history_status"
                 ]
             },
+            "LANGUAGE": {
+                "choices": [
+                    "auto",
+                    "en",
+                    "fr",
+                    "de",
+                    "es",
+                    "it",
+                    "nl",
+                    "pt"
+                ],
+                "value": "auto"
+            },
+            "_LANGUAGE_META": {
+                "description": "Interface language: 'auto' (use QGIS locale), or force specific language",
+                "available_translations": [
+                    "en (English)",
+                    "fr (Français)",
+                    "de (Deutsch)",
+                    "es (Español)",
+                    "it (Italiano)",
+                    "nl (Nederlands)",
+                    "pt (Português)"
+                ]
+            },
             "UI_PROFILE": {
                 "choices": [
                     "auto",
@@ -42,7 +67,7 @@
                     "left",
                     "right"
                 ],
-                "value": "left"
+                "value": "bottom"
             },
             "_ACTION_BAR_POSITION_META": {
                 "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
@@ -160,18 +185,18 @@
                             "#1E1E1E",
                             "#2D2D30",
                             "#3E3E42",
-                            "#007ACC"
+                            "#4A4A4F"
                         ],
                         "FONT": [
-                            "#EFF0F1",
-                            "#D0D0D0",
-                            "#808080"
+                            "#F5F5F5",
+                            "#E0E0E0",
+                            "#A0A0A0"
                         ],
                         "ACCENT": {
                             "PRIMARY": "#007ACC",
                             "HOVER": "#1E90FF",
                             "PRESSED": "#005A9E",
-                            "LIGHT_BG": "#1E3A5F",
+                            "LIGHT_BG": "#2D4A6B",
                             "DARK": "#003D66"
                         }
                     },
