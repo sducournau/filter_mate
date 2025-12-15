@@ -80,10 +80,16 @@ class UIConfig:
                 "padding": 6
             },
             
-            # Splitter dimensions
+            # Splitter dimensions - Enhanced configuration
             "splitter": {
-                "handle_width": 3,
-                "margin": 2
+                "handle_width": 4,
+                "handle_margin": 30,  # Horizontal margin for the handle bar
+                "exploring_stretch": 2,  # Stretch factor for frame_exploring
+                "toolset_stretch": 5,    # Stretch factor for frame_toolset (larger = more priority)
+                "collapsible": False,    # Whether frames can be collapsed
+                "opaque_resize": True,   # Whether to show live resize
+                "initial_exploring_ratio": 0.30,  # Initial ratio for exploring (30%)
+                "initial_toolset_ratio": 0.70     # Initial ratio for toolset (70%)
             },
             
             # ComboBox dimensions
@@ -124,16 +130,29 @@ class UIConfig:
                 "margins_actions": {"left": 8, "top": 6, "right": 8, "bottom": 12}  # Action bar margins with extra bottom
             },
             
-            # Frame exploring dimensions (NEW)
+            # Frame exploring dimensions - Enhanced with size policy
             "frame_exploring": {
-                "min_height": 200,
-                "base_height": 250,
-                "max_height": 400
+                "min_height": 120,
+                "base_height": 180,
+                "max_height": 350,
+                "size_policy_h": "Preferred",
+                "size_policy_v": "Minimum",  # Can shrink but has minimum
+                "preferred_height": 200
             },
             
-            # Frame filtering dimensions (NEW)
+            # Frame toolset dimensions
+            "frame_toolset": {
+                "min_height": 200,
+                "max_height": 16777215,  # QWIDGETSIZE_MAX
+                "size_policy_h": "Preferred",
+                "size_policy_v": "Expanding",  # Takes remaining space
+                "preferred_height": 400
+            },
+            
+            # Frame filtering dimensions (inside toolset/toolbox)
             "frame_filtering": {
-                "min_height": 250
+                "min_height": 180,
+                "preferred_height": 300
             },
             
             # Widget keys dimensions (NEW)
@@ -269,10 +288,16 @@ class UIConfig:
                 "padding": 8
             },
             
-            # Splitter dimensions
+            # Splitter dimensions - Enhanced configuration
             "splitter": {
-                "handle_width": 5,
-                "margin": 3
+                "handle_width": 6,
+                "handle_margin": 40,  # Horizontal margin for the handle bar
+                "exploring_stretch": 2,  # Stretch factor for frame_exploring
+                "toolset_stretch": 5,    # Stretch factor for frame_toolset (larger = more priority)
+                "collapsible": False,    # Whether frames can be collapsed
+                "opaque_resize": True,   # Whether to show live resize
+                "initial_exploring_ratio": 0.30,  # Initial ratio for exploring (30%)
+                "initial_toolset_ratio": 0.70     # Initial ratio for toolset (70%)
             },
             
             # ComboBox dimensions
@@ -313,16 +338,29 @@ class UIConfig:
                 "margins_actions": {"left": 10, "top": 8, "right": 10, "bottom": 14}  # Action bar margins with extra bottom
             },
             
-            # Frame exploring dimensions (NEW)
+            # Frame exploring dimensions - Enhanced with size policy
             "frame_exploring": {
-                "min_height": 280,
-                "base_height": 350,
-                "max_height": 550
+                "min_height": 150,
+                "base_height": 220,
+                "max_height": 450,
+                "size_policy_h": "Preferred",
+                "size_policy_v": "Minimum",  # Can shrink but has minimum
+                "preferred_height": 250
             },
             
-            # Frame filtering dimensions (NEW)
+            # Frame toolset dimensions
+            "frame_toolset": {
+                "min_height": 250,
+                "max_height": 16777215,  # QWIDGETSIZE_MAX
+                "size_policy_h": "Preferred",
+                "size_policy_v": "Expanding",  # Takes remaining space
+                "preferred_height": 500
+            },
+            
+            # Frame filtering dimensions (inside toolset/toolbox)
             "frame_filtering": {
-                "min_height": 300
+                "min_height": 220,
+                "preferred_height": 350
             },
             
             # Widget keys dimensions (NEW)

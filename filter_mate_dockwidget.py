@@ -121,7 +121,8 @@ from .modules.qt_json_view.view import JsonView
 from .modules.appUtils import (
     get_datasource_connexion_from_layer,
     get_primary_key_name,
-    POSTGRESQL_AVAILABLE
+    POSTGRESQL_AVAILABLE,
+    is_layer_source_available
 )
 from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
@@ -248,30 +249,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.pending_config_changes = []
         self.config_changes_pending = False
 
-        print(">>> FilterMate DEBUG: Starting setupUi()")
         logger.info("FilterMate DockWidget: Starting setupUi()")
         self.setupUi(self)
-        print(">>> FilterMate DEBUG: setupUi() complete")
         logger.info("FilterMate DockWidget: setupUi() complete, starting setupUiCustom()")
-        print(">>> FilterMate DEBUG: Starting setupUiCustom()")
         self.setupUiCustom()
-        print(">>> FilterMate DEBUG: setupUiCustom() complete")
         logger.info("FilterMate DockWidget: setupUiCustom() complete, starting manage_ui_style()")
-        print(">>> FilterMate DEBUG: Starting manage_ui_style()")
         self.manage_ui_style()
-        print(">>> FilterMate DEBUG: manage_ui_style() complete")
         logger.info("FilterMate DockWidget: manage_ui_style() complete")
         
-        # DIAGNOSTIC: Call manage_interactions() SYNCHRONOUSLY instead of deferred
-        # This helps identify if QTimer is the cause of freeze
-        print(">>> FilterMate DEBUG: Calling manage_interactions() SYNCHRONOUSLY")
-        logger.info("FilterMate DockWidget: Calling manage_interactions() synchronously for debug")
+        # Call manage_interactions() synchronously
+        logger.info("FilterMate DockWidget: Calling manage_interactions() synchronously")
         try:
             self.manage_interactions()
-            print(">>> FilterMate DEBUG: manage_interactions() completed successfully")
             logger.info("FilterMate DockWidget: manage_interactions() complete")
         except Exception as e:
-            print(f">>> FilterMate DEBUG ERROR in manage_interactions(): {e}")
             logger.error(f"FilterMate DockWidget: Error in manage_interactions(): {e}", exc_info=True)
     
     def _deferred_manage_interactions(self):
@@ -527,109 +518,94 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def setupUiCustom(self):
-        print(">>> setupUiCustom() STEP 1: set_multiple_checkable_combobox()")
         self.set_multiple_checkable_combobox()
         
-        print(">>> setupUiCustom() STEP 2: _setup_main_splitter()")
         # Setup splitter between frame_exploring and frame_toolset
         self._setup_main_splitter()
         
-        print(">>> setupUiCustom() STEP 3: apply_dynamic_dimensions()")
         # Apply dynamic dimensions based on active profile
         self.apply_dynamic_dimensions()
         
-        print(">>> setupUiCustom() STEP 4: _fix_toolbox_icons()")
         # Fix toolBox icons with absolute paths
         self._fix_toolbox_icons()
 
-        print(">>> setupUiCustom() STEP 5: _setup_backend_indicator()")
         # Setup backend indicator (right-aligned label showing current backend)
         self._setup_backend_indicator()
         
-        print(">>> setupUiCustom() STEP 6: _setup_action_bar_layout()")
         # Setup action bar layout based on configuration
         self._setup_action_bar_layout()
-        
-        print(">>> setupUiCustom() COMPLETE")
 
     def _setup_main_splitter(self):
         """
-        Setup a QSplitter between frame_exploring and frame_toolset.
+        Setup the main splitter between frame_exploring and frame_toolset.
         
-        This allows users to resize the exploring and toolset sections
-        by dragging a splitter handle between them.
+        The splitter already exists as 'splitter_main' from the .ui file.
+        This method configures it using UIConfig settings for optimal behavior.
         
-        The splitter replaces horizontalLayout_frame_exploring and 
-        horizontalLayout_frame_toolset in verticalLayout_main.
-        
-        OPTIMIZATION: If ACTION_BAR_POSITION is 'left' or 'right', skip creating
-        the splitter here because _create_horizontal_wrapper_for_side_action_bar()
-        will create its own splitter.
+        Configuration includes:
+        - Handle width and margins
+        - Stretch factors for proportional sizing
+        - Collapsible behavior
+        - Size policies for child frames
+        - Initial size distribution
         """
-        # Check if action bar will be on the side - if so, skip splitter creation here
-        action_bar_position = self._get_action_bar_position()
-        skip_splitter = action_bar_position in ('left', 'right')
+        from .modules.ui_config import UIConfig
+        from qgis.PyQt.QtWidgets import QSizePolicy
         
-        if skip_splitter:
-            logger.debug(f"Skipping main_splitter creation - action bar position is '{action_bar_position}', splitter will be created in side layout")
+        try:
+            # The splitter already exists from the .ui file as splitter_main
+            # Just reference it as main_splitter for consistency
+            self.main_splitter = self.splitter_main
+            
+            # Get splitter configuration from UIConfig
+            splitter_config = UIConfig.get_config('splitter')
+            handle_width = splitter_config.get('handle_width', 6)
+            handle_margin = splitter_config.get('handle_margin', 40)
+            exploring_stretch = splitter_config.get('exploring_stretch', 2)
+            toolset_stretch = splitter_config.get('toolset_stretch', 5)
+            collapsible = splitter_config.get('collapsible', False)
+            opaque_resize = splitter_config.get('opaque_resize', True)
+            
+            # Configure splitter properties
+            self.main_splitter.setChildrenCollapsible(collapsible)
+            self.main_splitter.setHandleWidth(handle_width)
+            self.main_splitter.setOpaqueResize(opaque_resize)
+            
+            # Style the splitter handle - subtle and minimal
+            self.main_splitter.setStyleSheet(f"""
+                QSplitter::handle:vertical {{
+                    background-color: #d0d0d0;
+                    height: {handle_width - 2}px;
+                    margin: 2px {handle_margin}px;
+                    border-radius: {(handle_width - 2) // 2}px;
+                }}
+                QSplitter::handle:vertical:hover {{
+                    background-color: #3498db;
+                }}
+            """)
+            
+            # Configure size policies for frames
+            self._apply_splitter_frame_policies()
+            
+            # Set stretch factors for proportional sizing
+            self.main_splitter.setStretchFactor(0, exploring_stretch)
+            self.main_splitter.setStretchFactor(1, toolset_stretch)
+            
+            # Set initial sizes based on available height
+            self._set_initial_splitter_sizes()
+            
+            logger.debug(f"Main splitter setup: handle={handle_width}px, "
+                        f"stretch={exploring_stretch}:{toolset_stretch}, "
+                        f"collapsible={collapsible}")
+            
+        except Exception as e:
+            logger.error(f"Error setting up main splitter: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             self.main_splitter = None
-        else:
-            try:
-                # Get the parent layout (verticalLayout_main contains the horizontal layouts)
-                parent_layout = self.verticalLayout_main
-                
-                # Remove the horizontal layouts from verticalLayout_main
-                # horizontalLayout_frame_exploring contains frame_exploring
-                # horizontalLayout_frame_toolset contains frame_toolset
-                parent_layout.removeItem(self.horizontalLayout_frame_exploring)
-                parent_layout.removeItem(self.horizontalLayout_frame_toolset)
-                
-                # Remove frames from their horizontal layouts
-                self.horizontalLayout_frame_exploring.removeWidget(self.frame_exploring)
-                self.horizontalLayout_frame_toolset.removeWidget(self.frame_toolset)
-                
-                # Create vertical splitter
-                self.main_splitter = QSplitter(Qt.Vertical)
-                self.main_splitter.setObjectName("main_splitter")
-                self.main_splitter.setChildrenCollapsible(False)
-                self.main_splitter.setHandleWidth(8)
-                
-                # Style the splitter handle - more visible
-                self.main_splitter.setStyleSheet("""
-                    QSplitter::handle:vertical {
-                        background-color: #95a5a6;
-                        height: 8px;
-                        margin: 4px 30px;
-                        border-radius: 4px;
-                        border: 1px solid #7f8c8d;
-                    }
-                    QSplitter::handle:vertical:hover {
-                        background-color: #3498db;
-                        border-color: #2980b9;
-                    }
-                    QSplitter::handle:vertical:pressed {
-                        background-color: #2980b9;
-                    }
-                """)
-                
-                # Add frames to splitter
-                self.main_splitter.addWidget(self.frame_exploring)
-                self.main_splitter.addWidget(self.frame_toolset)
-                
-                # Set initial sizes (exploring: 40%, toolset: 60%)
-                self.main_splitter.setStretchFactor(0, 2)
-                self.main_splitter.setStretchFactor(1, 3)
-                
-                # Insert splitter at position 0 in verticalLayout_main (before actions container)
-                parent_layout.insertWidget(0, self.main_splitter)
-                
-                logger.debug("Main splitter setup completed successfully")
-                
-            except Exception as e:
-                logger.error(f"Error setting up main splitter: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-                self.main_splitter = None
+        
+        # Setup action bar layout
+        self._setup_action_bar_layout()
         
         # Setup tab-specific widgets (always needed regardless of splitter)
         self._setup_exploring_tab_widgets()
@@ -645,6 +621,72 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Setup anti-truncation tooltips for widgets with potentially long text
         self._setup_truncation_tooltips()
+    
+    def _apply_splitter_frame_policies(self):
+        """
+        Apply size policies to frames within the splitter.
+        
+        This ensures proper behavior when resizing:
+        - frame_exploring: Minimum policy (can shrink to min but prefers base)
+        - frame_toolset: Expanding policy (takes remaining space)
+        """
+        from .modules.ui_config import UIConfig
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        
+        # Map string policies to Qt enum values
+        policy_map = {
+            'Fixed': QSizePolicy.Fixed,
+            'Minimum': QSizePolicy.Minimum,
+            'Maximum': QSizePolicy.Maximum,
+            'Preferred': QSizePolicy.Preferred,
+            'Expanding': QSizePolicy.Expanding,
+            'MinimumExpanding': QSizePolicy.MinimumExpanding,
+            'Ignored': QSizePolicy.Ignored
+        }
+        
+        # Configure frame_exploring
+        if hasattr(self, 'frame_exploring'):
+            exploring_config = UIConfig.get_config('frame_exploring')
+            if exploring_config:
+                h_policy = policy_map.get(exploring_config.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred)
+                v_policy = policy_map.get(exploring_config.get('size_policy_v', 'Minimum'), QSizePolicy.Minimum)
+                self.frame_exploring.setSizePolicy(h_policy, v_policy)
+                logger.debug(f"frame_exploring policy: {exploring_config.get('size_policy_h')}/{exploring_config.get('size_policy_v')}")
+        
+        # Configure frame_toolset
+        if hasattr(self, 'frame_toolset'):
+            toolset_config = UIConfig.get_config('frame_toolset')
+            if toolset_config:
+                h_policy = policy_map.get(toolset_config.get('size_policy_h', 'Preferred'), QSizePolicy.Preferred)
+                v_policy = policy_map.get(toolset_config.get('size_policy_v', 'Expanding'), QSizePolicy.Expanding)
+                self.frame_toolset.setSizePolicy(h_policy, v_policy)
+                logger.debug(f"frame_toolset policy: {toolset_config.get('size_policy_h')}/{toolset_config.get('size_policy_v')}")
+    
+    def _set_initial_splitter_sizes(self):
+        """
+        Set initial splitter sizes based on configuration ratios.
+        
+        Uses the available height to distribute space between frames
+        according to the configured ratios.
+        """
+        from .modules.ui_config import UIConfig
+        
+        splitter_config = UIConfig.get_config('splitter')
+        exploring_ratio = splitter_config.get('initial_exploring_ratio', 0.30)
+        toolset_ratio = splitter_config.get('initial_toolset_ratio', 0.70)
+        
+        # Get frame configurations for constraints
+        exploring_config = UIConfig.get_config('frame_exploring')
+        toolset_config = UIConfig.get_config('frame_toolset')
+        
+        # Calculate initial sizes based on preferred heights
+        exploring_preferred = exploring_config.get('preferred_height', 200) if exploring_config else 200
+        toolset_preferred = toolset_config.get('preferred_height', 400) if toolset_config else 400
+        
+        # Set sizes - Qt will adjust based on actual available space
+        self.main_splitter.setSizes([exploring_preferred, toolset_preferred])
+        
+        logger.debug(f"Initial splitter sizes: exploring={exploring_preferred}px, toolset={toolset_preferred}px")
 
 
     def apply_dynamic_dimensions(self):
@@ -753,43 +795,82 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _apply_frame_dimensions(self):
         """
-        Apply dimensions to frames and widget key containers.
+        Apply dimensions and size policies to frames and widget key containers.
         
-        Sets min/max widths for widget key containers and heights for main frames.
+        This method configures:
+        - Widget key containers (sidebar buttons area)
+        - Main frames (exploring, toolset)
+        - Sub-frames (filtering)
+        
+        Size policies work in conjunction with the splitter configuration
+        to ensure proper resize behavior.
         """
         from .modules.ui_config import UIConfig
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        
+        # Map string policies to Qt enum values
+        policy_map = {
+            'Fixed': QSizePolicy.Fixed,
+            'Minimum': QSizePolicy.Minimum,
+            'Maximum': QSizePolicy.Maximum,
+            'Preferred': QSizePolicy.Preferred,
+            'Expanding': QSizePolicy.Expanding,
+            'MinimumExpanding': QSizePolicy.MinimumExpanding,
+            'Ignored': QSizePolicy.Ignored
+        }
         
         # Get widget_keys dimensions
         widget_keys_min_width = UIConfig.get_config('widget_keys', 'min_width')
         widget_keys_max_width = UIConfig.get_config('widget_keys', 'max_width')
         
-        # Get frame dimensions
-        frame_exploring_min = UIConfig.get_config('frame_exploring', 'min_height')
-        frame_exploring_max = UIConfig.get_config('frame_exploring', 'max_height')
-        frame_filtering_min = UIConfig.get_config('frame_filtering', 'min_height')
+        # Get frame exploring configuration
+        exploring_config = UIConfig.get_config('frame_exploring')
+        exploring_min = exploring_config.get('min_height', 120) if exploring_config else 120
+        exploring_max = exploring_config.get('max_height', 350) if exploring_config else 350
+        exploring_h_policy = exploring_config.get('size_policy_h', 'Preferred') if exploring_config else 'Preferred'
+        exploring_v_policy = exploring_config.get('size_policy_v', 'Minimum') if exploring_config else 'Minimum'
+        
+        # Get frame toolset configuration
+        toolset_config = UIConfig.get_config('frame_toolset')
+        toolset_min = toolset_config.get('min_height', 200) if toolset_config else 200
+        toolset_max = toolset_config.get('max_height', 16777215) if toolset_config else 16777215
+        toolset_h_policy = toolset_config.get('size_policy_h', 'Preferred') if toolset_config else 'Preferred'
+        toolset_v_policy = toolset_config.get('size_policy_v', 'Expanding') if toolset_config else 'Expanding'
+        
+        # Get frame filtering configuration
+        filtering_config = UIConfig.get_config('frame_filtering')
+        filtering_min = filtering_config.get('min_height', 180) if filtering_config else 180
         
         # Apply to widget keys containers
-        if hasattr(self, 'widget_exploring_keys'):
-            self.widget_exploring_keys.setMinimumWidth(widget_keys_min_width)
-            self.widget_exploring_keys.setMaximumWidth(widget_keys_max_width)
+        for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                widget.setMinimumWidth(widget_keys_min_width)
+                widget.setMaximumWidth(widget_keys_max_width)
         
-        if hasattr(self, 'widget_filtering_keys'):
-            self.widget_filtering_keys.setMinimumWidth(widget_keys_min_width)
-            self.widget_filtering_keys.setMaximumWidth(widget_keys_max_width)
-        
-        if hasattr(self, 'widget_exporting_keys'):
-            self.widget_exporting_keys.setMinimumWidth(widget_keys_min_width)
-            self.widget_exporting_keys.setMaximumWidth(widget_keys_max_width)
-        
-        # Apply to main frames
+        # Apply to frame_exploring with size policy
         if hasattr(self, 'frame_exploring'):
-            self.frame_exploring.setMinimumHeight(frame_exploring_min)
-            self.frame_exploring.setMaximumHeight(frame_exploring_max)
+            self.frame_exploring.setMinimumHeight(exploring_min)
+            self.frame_exploring.setMaximumHeight(exploring_max)
+            h_policy = policy_map.get(exploring_h_policy, QSizePolicy.Preferred)
+            v_policy = policy_map.get(exploring_v_policy, QSizePolicy.Minimum)
+            self.frame_exploring.setSizePolicy(h_policy, v_policy)
         
+        # Apply to frame_toolset with size policy
+        if hasattr(self, 'frame_toolset'):
+            self.frame_toolset.setMinimumHeight(toolset_min)
+            self.frame_toolset.setMaximumHeight(toolset_max)
+            h_policy = policy_map.get(toolset_h_policy, QSizePolicy.Preferred)
+            v_policy = policy_map.get(toolset_v_policy, QSizePolicy.Expanding)
+            self.frame_toolset.setSizePolicy(h_policy, v_policy)
+        
+        # Apply to frame_filtering (if it exists inside toolbox)
         if hasattr(self, 'frame_filtering'):
-            self.frame_filtering.setMinimumHeight(frame_filtering_min)
+            self.frame_filtering.setMinimumHeight(filtering_min)
         
-        logger.debug(f"Applied frame dimensions: widget_keys={widget_keys_min_width}-{widget_keys_max_width}px")
+        logger.debug(f"Applied frame dimensions: exploring={exploring_min}-{exploring_max}px ({exploring_v_policy}), "
+                    f"toolset={toolset_min}px+ ({toolset_v_policy}), "
+                    f"widget_keys={widget_keys_min_width}-{widget_keys_max_width}px")
     
     def _harmonize_checkable_pushbuttons(self):
         """
@@ -1263,16 +1344,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             self.backend_indicator_label.setText("...")
         
-        # Modern badge style with better contrast
+        # Modern badge style matching _update_backend_indicator design (OGR style as default)
         self.backend_indicator_label.setStyleSheet("""
             QLabel#label_backend_indicator {
-                color: #666666;
-                font-size: 8pt;
-                font-weight: 500;
-                padding: 2px 8px;
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                background-color: #f5f5f5;
+                color: white;
+                font-size: 9pt;
+                font-weight: 600;
+                padding: 3px 10px;
+                border-radius: 12px;
+                border: none;
+                background-color: #3498db;
             }
         """)
         self.backend_indicator_label.setAlignment(Qt.AlignCenter)
@@ -1291,17 +1372,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Setup the action bar layout based on configuration.
         
-        TEMPORARILY SIMPLIFIED for debugging freeze issue.
-        Uses default 'top' position without complex layout manipulation.
+        Reads ACTION_BAR_POSITION from config and applies the appropriate layout:
+        - 'top': Action bar at top (default horizontal layout)
+        - 'bottom': Action bar at bottom (horizontal layout)
+        - 'left': Action bar on left side (vertical layout)
+        - 'right': Action bar on right side (vertical layout)
         """
-        print(">>> _setup_action_bar_layout(): Using simplified version (no layout changes)")
-        # DIAGNOSTIC: Skip complex layout manipulation that causes freeze
-        # Just ensure action bar is visible in its default position
-        if hasattr(self, 'frame_actions'):
+        if not hasattr(self, 'frame_actions'):
+            return
+        
+        # Get configured position
+        position = self._get_action_bar_position()
+        logger.info(f"Setting up action bar with position: {position}")
+        
+        # Initialize tracking attributes
+        self._side_action_bar_active = False
+        self._side_action_bar_position = None
+        self._side_action_bar_alignment = None
+        self._vertical_action_spacer = None
+        self._side_action_wrapper = None
+        
+        # Apply the position
+        if position in ('left', 'right'):
+            # For side positions, we need to set up the wrapper layout
+            self._apply_action_bar_position(position)
+        else:
+            # For top/bottom, use the default horizontal layout
             self.frame_actions.show()
-            self._current_action_bar_position = 'top'
-            logger.info("Action bar: Using default 'top' position (simplified for debugging)")
-        print(">>> _setup_action_bar_layout(): COMPLETE")
+            self._current_action_bar_position = position
+            logger.info(f"Action bar: Using '{position}' position")
 
     def _get_action_bar_position(self):
         """
@@ -1351,6 +1450,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         logger.info(f"Applying action bar position: {position}")
         
+        # First, restore from any previous side action bar setup
+        if hasattr(self, '_side_action_bar_active') and self._side_action_bar_active:
+            self._restore_side_action_bar_layout()
+        
         # Get all action buttons
         action_buttons = [
             self.pushButton_action_filter,
@@ -1361,29 +1464,140 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.pushButton_action_about
         ]
         
-        # Step 1: Remove frame_actions from its current parent layout
-        parent = self.frame_actions.parent()
-        if parent and parent.layout():
-            parent.layout().removeWidget(self.frame_actions)
-        
-        # Step 2: Completely delete the old layout
+        # Step 1: Completely delete the old layout and create new one
         self._clear_action_bar_layout()
         
-        # Step 3: Create new layout based on position (horizontal or vertical)
+        # Step 2: Create new layout based on position (horizontal or vertical)
         is_horizontal = position in ('top', 'bottom')
         if is_horizontal:
             self._create_horizontal_action_layout(action_buttons)
         else:
             self._create_vertical_action_layout(action_buttons)
         
-        # Step 4: Apply size constraints based on orientation
+        # Step 3: Apply size constraints based on orientation
         self._apply_action_bar_size_constraints(position)
         
-        # Step 5: Reposition frame_actions in the main layout
+        # Step 4: Reposition frame_actions in the main layout
         self._reposition_action_bar_in_main_layout(position)
+        
+        # Step 5: Adjust header for side positions (left/right)
+        self._adjust_header_for_side_position(position)
         
         # Store current position for reference
         self._current_action_bar_position = position
+
+    def _adjust_header_for_side_position(self, position):
+        """
+        Adjust header layout when action bar is in side position (left/right).
+        
+        Creates a wrapper with spacer to align the header with the main content.
+        
+        Args:
+            position: str - 'top', 'bottom', 'left', 'right'
+        """
+        if not hasattr(self, 'frame_header') or not self.frame_header:
+            return
+        
+        # Calculate the width of the action bar
+        if UI_CONFIG_AVAILABLE:
+            action_button_size = UIConfig.get_button_height("action_button")
+            spacer_width = int(action_button_size * 1.3)
+        else:
+            spacer_width = 54  # Fallback width
+        
+        if position in ('left', 'right'):
+            # Check if wrapper already exists
+            if hasattr(self, '_header_wrapper') and self._header_wrapper:
+                return  # Already wrapped
+            
+            # Get the parent layout of frame_header
+            parent_layout = None
+            if hasattr(self, 'verticalLayout_8'):
+                parent_layout = self.verticalLayout_8
+            
+            if not parent_layout:
+                return
+            
+            # Find frame_header's index in parent layout
+            header_idx = parent_layout.indexOf(self.frame_header)
+            if header_idx < 0:
+                return
+            
+            # Remove frame_header from parent layout
+            parent_layout.removeWidget(self.frame_header)
+            
+            # Create wrapper widget
+            self._header_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
+            self._header_wrapper.setObjectName("header_wrapper")
+            wrapper_layout = QtWidgets.QHBoxLayout(self._header_wrapper)
+            wrapper_layout.setContentsMargins(0, 0, 0, 0)
+            wrapper_layout.setSpacing(0)
+            
+            # Create spacer widget matching action bar width
+            self._header_spacer = QtWidgets.QWidget(self._header_wrapper)
+            self._header_spacer.setFixedWidth(spacer_width)
+            self._header_spacer.setObjectName("header_spacer")
+            
+            # Add spacer and header in correct order
+            if position == 'left':
+                wrapper_layout.addWidget(self._header_spacer, 0)
+                wrapper_layout.addWidget(self.frame_header, 1)
+            else:  # right
+                wrapper_layout.addWidget(self.frame_header, 1)
+                wrapper_layout.addWidget(self._header_spacer, 0)
+            
+            # Insert wrapper at same position as original header
+            parent_layout.insertWidget(header_idx, self._header_wrapper)
+            
+            logger.debug(f"Header wrapped with spacer for {position} side action bar (spacer_width={spacer_width})")
+        else:
+            # Restore original header position for top/bottom
+            self._restore_header_from_wrapper()
+
+    def _restore_header_from_wrapper(self):
+        """
+        Restore header from wrapper when switching away from side position.
+        """
+        if not hasattr(self, '_header_wrapper') or not self._header_wrapper:
+            return
+        
+        if not hasattr(self, 'frame_header') or not self.frame_header:
+            return
+        
+        # Get parent layout
+        parent_layout = None
+        if hasattr(self, 'verticalLayout_8'):
+            parent_layout = self.verticalLayout_8
+        
+        if not parent_layout:
+            return
+        
+        # Find wrapper's index
+        wrapper_idx = parent_layout.indexOf(self._header_wrapper)
+        if wrapper_idx < 0:
+            return
+        
+        # Remove frame_header from wrapper
+        wrapper_layout = self._header_wrapper.layout()
+        if wrapper_layout:
+            wrapper_layout.removeWidget(self.frame_header)
+        
+        # Remove wrapper from parent
+        parent_layout.removeWidget(self._header_wrapper)
+        
+        # Re-add frame_header at same position
+        self.frame_header.setParent(self.dockWidgetContents)
+        parent_layout.insertWidget(wrapper_idx, self.frame_header)
+        
+        # Delete wrapper and spacer
+        if hasattr(self, '_header_spacer') and self._header_spacer:
+            self._header_spacer.deleteLater()
+            self._header_spacer = None
+        
+        self._header_wrapper.deleteLater()
+        self._header_wrapper = None
+        
+        logger.debug("Header restored from wrapper")
 
 
     def _clear_action_bar_layout(self):
@@ -1511,42 +1725,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Args:
             position: str - 'top', 'bottom', 'left', 'right'
         """
-        # First, clean up any existing side action bar setup
-        if hasattr(self, '_side_action_bar_active') and self._side_action_bar_active:
-            # Restore original layout first
-            self._restore_original_layout()
-        
-        # Remove frame_actions from any current layout
-        parent = self.frame_actions.parent()
-        if parent and parent.layout():
-            idx = parent.layout().indexOf(self.frame_actions)
-            if idx >= 0:
-                parent.layout().removeWidget(self.frame_actions)
+        # Remove frame_actions from horizontalLayout_actions_container (its original position)
+        if self.horizontalLayout_actions_container.indexOf(self.frame_actions) >= 0:
+            self.horizontalLayout_actions_container.removeWidget(self.frame_actions)
         
         if position == 'top':
-            # Insert at the beginning of main content
+            # Insert at the beginning of verticalLayout_main (before splitter)
             self.frame_actions.setParent(self.dockWidgetContents)
-            self.verticalLayout_main_content.insertWidget(0, self.frame_actions)
+            self.verticalLayout_main.insertWidget(0, self.frame_actions)
             logger.info("Action bar positioned at TOP")
         elif position == 'bottom':
-            # Add at the end of main content
+            # Re-add to horizontalLayout_actions_container (its original position at bottom)
             self.frame_actions.setParent(self.dockWidgetContents)
-            self.verticalLayout_main_content.addWidget(self.frame_actions)
+            self.horizontalLayout_actions_container.addWidget(self.frame_actions)
             logger.info("Action bar positioned at BOTTOM")
         elif position in ('left', 'right'):
-            # Use existing layouts for side positioning
+            # Use wrapper for side positioning
             self._create_horizontal_wrapper_for_side_action_bar(position)
             logger.info(f"Action bar positioned at {position.upper()}")
 
     def _create_horizontal_wrapper_for_side_action_bar(self, position):
         """
-        Position action bar vertically on left or right side using existing layouts.
+        Position action bar vertically on left or right side.
         
-        When action bar is on left/right:
-        - If alignment is 'top': action bar is placed in horizontalLayout_frame_exploring
-          and a spacer of equal width is added to horizontalLayout_actions_container
-        - If alignment is 'bottom': action bar is placed in horizontalLayout_actions_container
-          and a spacer of equal width is added to horizontalLayout_frame_exploring
+        Alignment determines the vertical extent:
+        - 'top': Action bar spans the full height (next to splitter)
+        - 'bottom': Action bar is only in the bottom actions area
         
         Args:
             position: str - 'left' or 'right'
@@ -1554,10 +1758,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Get alignment from config
         alignment = self._get_action_bar_vertical_alignment()
         
-        # First clean up any previous side action bar setup
-        self._restore_side_action_bar_layout()
-        
-        # Calculate the width of frame_actions for the spacer
+        # Calculate the width of frame_actions
         if UI_CONFIG_AVAILABLE:
             action_button_size = UIConfig.get_button_height("action_button")
             spacer_width = int(action_button_size * 1.3)
@@ -1568,46 +1769,92 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.horizontalLayout_actions_container.indexOf(self.frame_actions) >= 0:
             self.horizontalLayout_actions_container.removeWidget(self.frame_actions)
         
+        self.frame_actions.setParent(self.dockWidgetContents)
+        
         if alignment == 'top':
-            # Move frame_actions to horizontalLayout_frame_exploring
-            self.frame_actions.setParent(self.dockWidgetContents)
+            # 'top' alignment: Action bar spans full height, next to splitter
+            if self.main_splitter is not None:
+                parent_layout = self.verticalLayout_main
+                splitter_idx = parent_layout.indexOf(self.main_splitter)
+                
+                if splitter_idx >= 0:
+                    # Remove splitter from its current position
+                    parent_layout.removeWidget(self.main_splitter)
+                    
+                    # Create a horizontal wrapper widget
+                    self._side_action_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
+                    self._side_action_wrapper.setObjectName("side_action_wrapper")
+                    wrapper_layout = QtWidgets.QHBoxLayout(self._side_action_wrapper)
+                    wrapper_layout.setContentsMargins(0, 0, 0, 0)
+                    wrapper_layout.setSpacing(0)
+                    
+                    # Add action bar and splitter in correct order
+                    if position == 'left':
+                        wrapper_layout.addWidget(self.frame_actions, 0)
+                        wrapper_layout.addWidget(self.main_splitter, 1)
+                    else:  # right
+                        wrapper_layout.addWidget(self.main_splitter, 1)
+                        wrapper_layout.addWidget(self.frame_actions, 0)
+                    
+                    # Insert wrapper at same position
+                    parent_layout.insertWidget(splitter_idx, self._side_action_wrapper)
+                    
+                    # Add spacer to actions_container to align with action bar above
+                    self._vertical_action_spacer = QtWidgets.QSpacerItem(
+                        spacer_width, 0, 
+                        QtWidgets.QSizePolicy.Fixed, 
+                        QtWidgets.QSizePolicy.Minimum
+                    )
+                    if position == 'left':
+                        self.horizontalLayout_actions_container.insertItem(0, self._vertical_action_spacer)
+                    else:
+                        self.horizontalLayout_actions_container.addItem(self._vertical_action_spacer)
+                    
+                    logger.info(f"Created side action bar wrapper (position={position}, alignment=top)")
+        
+        else:  # alignment == 'bottom'
+            # 'bottom' alignment: Action bar only in actions container area
+            # Place frame_actions in horizontalLayout_actions_container
             if position == 'left':
-                self.horizontalLayout_frame_exploring.insertWidget(0, self.frame_actions, 0)
+                self.horizontalLayout_actions_container.insertWidget(0, self.frame_actions)
             else:  # right
-                self.horizontalLayout_frame_exploring.addWidget(self.frame_actions, 0)
+                self.horizontalLayout_actions_container.addWidget(self.frame_actions)
             
-            # Add a spacer to horizontalLayout_actions_container with the same width
-            self._vertical_action_spacer = QtWidgets.QSpacerItem(
-                spacer_width, 0, 
-                QtWidgets.QSizePolicy.Fixed, 
-                QtWidgets.QSizePolicy.Minimum
-            )
-            if position == 'left':
-                self.horizontalLayout_actions_container.insertItem(0, self._vertical_action_spacer)
-            else:  # right
-                self.horizontalLayout_actions_container.addItem(self._vertical_action_spacer)
-            
-            logger.info(f"Moved action bar to horizontalLayout_frame_exploring (position={position}, alignment={alignment})")
-        else:  # bottom
-            # Keep frame_actions in horizontalLayout_actions_container (re-add at correct position)
-            self.frame_actions.setParent(self.dockWidgetContents)
-            if position == 'left':
-                self.horizontalLayout_actions_container.insertWidget(0, self.frame_actions, 0)
-            else:  # right
-                self.horizontalLayout_actions_container.addWidget(self.frame_actions, 0)
-            
-            # Add a spacer to horizontalLayout_frame_exploring with the same width
-            self._vertical_action_spacer = QtWidgets.QSpacerItem(
-                spacer_width, 0, 
-                QtWidgets.QSizePolicy.Fixed, 
-                QtWidgets.QSizePolicy.Minimum
-            )
-            if position == 'left':
-                self.horizontalLayout_frame_exploring.insertItem(0, self._vertical_action_spacer)
-            else:  # right
-                self.horizontalLayout_frame_exploring.addItem(self._vertical_action_spacer)
-            
-            logger.info(f"Moved action bar to horizontalLayout_actions_container (position={position}, alignment={alignment})")
+            # Add spacer next to splitter to align with action bar below
+            if self.main_splitter is not None:
+                parent_layout = self.verticalLayout_main
+                splitter_idx = parent_layout.indexOf(self.main_splitter)
+                
+                if splitter_idx >= 0:
+                    # Remove splitter from its current position
+                    parent_layout.removeWidget(self.main_splitter)
+                    
+                    # Create a horizontal wrapper widget with spacer
+                    self._side_action_wrapper = QtWidgets.QWidget(self.dockWidgetContents)
+                    self._side_action_wrapper.setObjectName("side_action_wrapper")
+                    wrapper_layout = QtWidgets.QHBoxLayout(self._side_action_wrapper)
+                    wrapper_layout.setContentsMargins(0, 0, 0, 0)
+                    wrapper_layout.setSpacing(0)
+                    
+                    # Create spacer widget for alignment
+                    spacer_widget = QtWidgets.QWidget(self._side_action_wrapper)
+                    spacer_widget.setFixedWidth(spacer_width)
+                    spacer_widget.setObjectName("side_action_spacer_widget")
+                    
+                    # Add spacer and splitter in correct order
+                    if position == 'left':
+                        wrapper_layout.addWidget(spacer_widget, 0)
+                        wrapper_layout.addWidget(self.main_splitter, 1)
+                    else:  # right
+                        wrapper_layout.addWidget(self.main_splitter, 1)
+                        wrapper_layout.addWidget(spacer_widget, 0)
+                    
+                    # Insert wrapper at same position
+                    parent_layout.insertWidget(splitter_idx, self._side_action_wrapper)
+                    
+                    # Note: Header margin adjustment is handled by _adjust_header_for_side_position
+                    
+                    logger.info(f"Created side action bar wrapper (position={position}, alignment=bottom)")
         
         # Mark that we're in side action bar mode
         self._side_action_bar_active = True
@@ -1618,25 +1865,42 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Restore the layout when switching away from side (left/right) action bar position.
         
-        Removes spacers and moves frame_actions back to its original position
+        Removes spacers, wrapper widgets, and moves frame_actions back to its original position
         in horizontalLayout_actions_container.
         """
+        # Clean up the wrapper widget if it exists
+        if hasattr(self, '_side_action_wrapper') and self._side_action_wrapper:
+            # Move the splitter back to verticalLayout_main
+            if self.main_splitter is not None:
+                wrapper_layout = self._side_action_wrapper.layout()
+                if wrapper_layout:
+                    # Remove splitter from wrapper
+                    wrapper_layout.removeWidget(self.main_splitter)
+                    self.main_splitter.setParent(self.dockWidgetContents)
+                
+                # Get wrapper's position in parent layout
+                parent_layout = self.verticalLayout_main
+                wrapper_idx = parent_layout.indexOf(self._side_action_wrapper)
+                
+                # Remove wrapper and re-add splitter at same position
+                if wrapper_idx >= 0:
+                    parent_layout.removeWidget(self._side_action_wrapper)
+                    parent_layout.insertWidget(wrapper_idx, self.main_splitter)
+            
+            # Delete wrapper widget
+            self._side_action_wrapper.deleteLater()
+            self._side_action_wrapper = None
+        
+        # Restore header from wrapper if it was wrapped
+        self._restore_header_from_wrapper()
+        
         # Remove previously added spacer if exists
         if hasattr(self, '_vertical_action_spacer') and self._vertical_action_spacer:
-            # Remove from horizontalLayout_frame_exploring
-            idx = self.horizontalLayout_frame_exploring.indexOf(self._vertical_action_spacer)
-            if idx >= 0:
-                self.horizontalLayout_frame_exploring.takeAt(idx)
             # Remove from horizontalLayout_actions_container
             idx = self.horizontalLayout_actions_container.indexOf(self._vertical_action_spacer)
             if idx >= 0:
                 self.horizontalLayout_actions_container.takeAt(idx)
             self._vertical_action_spacer = None
-        
-        # Remove frame_actions from horizontalLayout_frame_exploring if present
-        idx = self.horizontalLayout_frame_exploring.indexOf(self.frame_actions)
-        if idx >= 0:
-            self.horizontalLayout_frame_exploring.removeWidget(self.frame_actions)
         
         # Reset tracking flags
         self._side_action_bar_active = False
@@ -2419,7 +2683,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Create reload button
             self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin")
             self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
-            self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Reload the plugin to apply layout changes (action bar position)"))
+            self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMate", "Reload the plugin to apply layout changes (action bar position)"))
             self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
             
             # Style the button
@@ -2600,9 +2864,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         layer_crs_authid = layer_info["layer_crs_authid"]
                         layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
 
-                        # Only add vector layers (skip raster layers)
+                        # Only add usable vector layers (skip raster and broken layers)
                         layer_obj = self.PROJECT.mapLayer(layer_id)
-                        if key != layer.id() and layer_obj and isinstance(layer_obj, QgsVectorLayer):
+                        if (key != layer.id()
+                            and layer_obj and isinstance(layer_obj, QgsVectorLayer)
+                            and is_layer_source_available(layer_obj)):
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             if len(layer_props["filtering"]["layers_to_filter"]) > 0:
@@ -2630,9 +2896,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         layer_crs_authid = layer_info["layer_crs_authid"]
                         layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
                         
-                        # Only add vector layers (skip raster layers)
+                        # Only add usable vector layers (skip raster and broken layers)
                         layer_obj = self.PROJECT.mapLayer(layer_id)
-                        if key != layer.id() and layer_obj and isinstance(layer_obj, QgsVectorLayer):
+                        if (key != layer.id()
+                            and layer_obj and isinstance(layer_obj, QgsVectorLayer)
+                            and is_layer_source_available(layer_obj)):
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             item.setCheckState(Qt.Unchecked)
@@ -2686,9 +2954,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer_crs_authid = layer_info["layer_crs_authid"]
                 layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
                 
-                # Only add vector layers (skip raster layers)
+                # Only add usable vector layers (skip raster and broken layers)
                 layer_obj = self.PROJECT.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer):
+                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj):
                     layer_name = layer_name + ' [%s]' % (layer_crs_authid)
                     self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, key)
                     item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
@@ -3025,51 +3293,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Sets up initial widget states, default values, and connects signals
         if layers are already loaded. Called once during dockwidget construction.
         """
-        print(">>> manage_interactions() STEP 1: Starting")
-
         """INIT"""
-        print(">>> manage_interactions() STEP 2: Creating CRS")
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
-        print(">>> manage_interactions() STEP 3: Configuring BUFFER_VALUE widget")
         self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setExpressionsEnabled(True)
         self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setClearValue(0.0)
         
-        print(">>> manage_interactions() STEP 4: Setting project CRS")
         if self.PROJECT:
             self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].setCrs(self.PROJECT.crs())
         
-        print(">>> manage_interactions() STEP 5: Setting widget enabled states")
         # Only enable widgets if PROJECT_LAYERS is already populated
         # Otherwise, wait for get_project_layers_from_app() to enable them when data is ready
         if self.has_loaded_layers is True and len(self.PROJECT_LAYERS) > 0:
-            print(">>> manage_interactions() STEP 5a: has_loaded_layers=True, enabling widgets")
             self.set_widgets_enabled_state(True)
-            print(">>> manage_interactions() STEP 5b: Connecting widget signals")
             self.connect_widgets_signals()
         else:
-            print(">>> manage_interactions() STEP 5c: No layers, disabling widgets")
             self.set_widgets_enabled_state(False)
             # CRITICAL: Connect DOCK groupbox signals even when no layers loaded
             # These widgets control UI state and don't depend on layer data
-            print(">>> manage_interactions() STEP 5d: Connecting DOCK signals")
             try:
                 self.manageSignal(["DOCK", "SINGLE_SELECTION"], 'connect')
                 self.manageSignal(["DOCK", "MULTIPLE_SELECTION"], 'connect')
                 self.manageSignal(["DOCK", "CUSTOM_SELECTION"], 'connect')
             except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
-                print(f">>> manage_interactions() STEP 5e: Error connecting DOCK signals: {e}")
                 logger.debug(f"Could not connect DOCK groupbox signals (no layers): {type(e).__name__}: {e}")
         
-        print(">>> manage_interactions() STEP 6: Connect groupbox signals directly")
         # CRITICAL FIX: Connect groupbox signals DIRECTLY to ensure they work
         # This bypasses the manageSignal system which may have caching issues
         self._connect_groupbox_signals_directly()
         
-        print(">>> manage_interactions() STEP 7: Populating predicates combobox")
         self.filtering_populate_predicates_chekableCombobox()
         
-        print(">>> manage_interactions() STEP 8: Populating buffer type combobox")
         self.filtering_populate_buffer_type_combobox()
 
         # Note: DOCK widget signals (SINGLE_SELECTION, MULTIPLE_SELECTION, CUSTOM_SELECTION, TOOLS)
@@ -4196,6 +4450,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning("Layer object was deleted (C++ object invalid), skipping")
                 return (False, None, None)
         
+        # Reject invalid/broken-source layers to avoid selection
+        if layer is None:
+            return (False, None, None)
+        try:
+            if not is_layer_source_available(layer):
+                from qgis.utils import iface as _iface
+                logger.warning(f"current_layer_changed: rejecting invalid or missing-source layer '{layer.name()}'")
+                try:
+                    _iface.messageBar().pushWarning(
+                        "FilterMate",
+                        "La couche sélectionnée est invalide ou sa source est introuvable. Sélection annulée."
+                    )
+                except Exception:
+                    pass
+                # Revert combo selection to previous valid layer if possible
+                try:
+                    prev = self.current_layer if isinstance(self.current_layer, QgsVectorLayer) and is_layer_source_available(self.current_layer) else None
+                    self.manageSignal(["FILTERING","CURRENT_LAYER"], 'disconnect')
+                    self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(prev)
+                    self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
+                except Exception as _e:
+                    logger.debug(f"Could not revert current layer selection: {_e}")
+                return (False, None, None)
+        except Exception as _e:
+            logger.debug(f"Error while validating layer availability: {_e}")
+            return (False, None, None)
+
         # Note: Recursive call check is now done at the beginning of current_layer_changed()
         
         if not self.widgets_initialized:
@@ -4209,9 +4490,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except (TypeError, RuntimeError) as e:
                 logger.debug(f"Could not disconnect selectionChanged signal from previous layer: {type(e).__name__}: {e}")
                 self.current_layer_selection_connection = None
-        
-        if layer is None:
-            return (False, None, None)
         
         self.current_layer = layer
         
@@ -4364,10 +4642,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].setLayer(self.current_layer)
             self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
         
-        # Update backend indicator
+        # Update backend indicator with PostgreSQL connection availability flag
         if layer.id() in self.PROJECT_LAYERS:
-            if 'layer_provider_type' in layer_props.get('infos', {}):
-                self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+            infos = layer_props.get('infos', {})
+            if 'layer_provider_type' in infos:
+                provider_type = infos['layer_provider_type']
+                postgresql_conn = infos.get('postgresql_connection_available', None)
+                self._update_backend_indicator(provider_type, postgresql_conn)
         else:
             provider_type = layer.providerType()
             if provider_type == 'postgres':
@@ -5553,8 +5834,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
             if first_layer_id in self.PROJECT_LAYERS:
                 layer_props = self.PROJECT_LAYERS[first_layer_id]
-                if 'layer_provider_type' in layer_props.get('infos', {}):
-                    self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+                infos = layer_props.get('infos', {})
+                if 'layer_provider_type' in infos:
+                    provider_type = infos['layer_provider_type']
+                    postgresql_conn = infos.get('postgresql_connection_available', None)
+                    self._update_backend_indicator(provider_type, postgresql_conn)
         
         # Notify user when transitioning from empty to loaded state
         if was_empty and len(self.PROJECT_LAYERS) > 0:
@@ -5674,10 +5958,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.disconnect_widgets_signals()
                     self._signals_connected = False
                     self.set_widgets_enabled_state(False)
-                    # Update backend indicator to show waiting state
+                    # Update backend indicator to show waiting state (badge style)
                     if self.backend_indicator_label:
-                        self.backend_indicator_label.setText("Backend: En attente de couches...")
-                        self.backend_indicator_label.setStyleSheet("color: #95a5a6; font-size: 8pt; font-style: italic; padding: 1px 4px;")
+                        self.backend_indicator_label.setText("...")
+                        self.backend_indicator_label.setStyleSheet("""
+                            QLabel#label_backend_indicator {
+                                color: #7f8c8d;
+                                font-size: 9pt;
+                                font-weight: 600;
+                                padding: 3px 10px;
+                                border-radius: 12px;
+                                border: none;
+                                background-color: #ecf0f1;
+                            }
+                        """)
                     return
             else:
                 # Widgets not initialized yet - set flag to refresh later
@@ -5826,7 +6120,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.settingProjectVariables.emit()
 
-    def _update_backend_indicator(self, provider_type):
+    def _update_backend_indicator(self, provider_type, postgresql_connection_available=None):
         """
         Update the backend indicator badge based on the layer provider type.
         
@@ -5834,6 +6128,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         Args:
             provider_type: The provider type string ('postgresql', 'spatialite', 'ogr', etc.)
+            postgresql_connection_available: For PostgreSQL layers, whether connection is available
         """
         if not hasattr(self, 'backend_indicator_label') or not self.backend_indicator_label:
             return
@@ -5852,7 +6147,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             }}
         """
         
-        if provider_type == 'postgresql' and POSTGRESQL_AVAILABLE:
+        # CRITICAL FIX: Check both POSTGRESQL_AVAILABLE and postgresql_connection_available
+        postgresql_usable = POSTGRESQL_AVAILABLE and (postgresql_connection_available is not False)
+        
+        if provider_type == 'postgresql' and postgresql_usable:
             backend_text = "PostgreSQL"
             custom = "color: white; background-color: #27ae60;"
         elif provider_type == 'spatialite':
@@ -5861,9 +6159,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         elif provider_type == 'ogr':
             backend_text = "OGR"
             custom = "color: white; background-color: #3498db;"
-        elif provider_type == 'postgresql' and not POSTGRESQL_AVAILABLE:
-            backend_text = "OGR*"
-            custom = "color: white; background-color: #e74c3c;"
+        elif provider_type == 'postgresql' and not postgresql_usable:
+            # PostgreSQL layer but no connection - will use Spatialite fallback
+            backend_text = "Spatialite*"
+            custom = "color: white; background-color: #e67e22;"  # Orange for fallback
         else:
             backend_text = provider_type[:6].upper() if provider_type else "..."
             custom = "color: #7f8c8d; background-color: #ecf0f1;"
@@ -5944,9 +6243,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     combo_widget.setToolTip(text)
                 elif text:
                     # Short text - use descriptive tooltip instead
-                    combo_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Current layer: {0}").format(text))
+                    combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "Current layer: {0}").format(text))
                 else:
-                    combo_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "No layer selected"))
+                    combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "No layer selected"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating combo tooltip: {e}")
     
@@ -5962,11 +6261,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Join item names with line breaks for readability
                     text = "\n".join([item.text() for item in items if hasattr(item, 'text')])
                     if text:
-                        combo_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Selected layers:\n{0}").format(text))
+                        combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "Selected layers:\n{0}").format(text))
                     else:
-                        combo_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Multiple layers selected"))
+                        combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "Multiple layers selected"))
                 else:
-                    combo_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "No layers selected"))
+                    combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "No layers selected"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating checkable combo tooltip: {e}")
     
@@ -5981,11 +6280,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if expr and len(expr) > 40:
                     # For long expressions, format with line breaks at logical points
                     formatted_expr = expr.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
-                    expression_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Expression:\n{0}").format(formatted_expr))
+                    expression_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression:\n{0}").format(formatted_expr))
                 elif expr:
-                    expression_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Expression: {0}").format(expr))
+                    expression_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression: {0}").format(expr))
                 else:
-                    expression_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "No expression defined"))
+                    expression_widget.setToolTip(QCoreApplication.translate("FilterMate", "No expression defined"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating expression tooltip: {e}")
     
@@ -5998,16 +6297,37 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if hasattr(picker_widget, 'displayExpression'):
                 display_expr = picker_widget.displayExpression()
                 if display_expr and len(display_expr) > 30:
-                    picker_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Display expression: {0}").format(display_expr))
+                    picker_widget.setToolTip(QCoreApplication.translate("FilterMate", "Display expression: {0}").format(display_expr))
                 elif hasattr(picker_widget, 'feature'):
                     feature = picker_widget.feature()
                     if feature and feature.isValid():
                         # Show feature ID and first attribute
                         attrs = feature.attributes()
                         if attrs:
-                            picker_widget.setToolTip(QCoreApplication.translate("FilterMateDockWidget", "Feature ID: {0}\nFirst attribute: {1}").format(feature.id(), attrs[0]))
+                            picker_widget.setToolTip(QCoreApplication.translate("FilterMate", "Feature ID: {0}\nFirst attribute: {1}").format(feature.id(), attrs[0]))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating feature picker tooltip: {e}")
+
+    def retranslate_dynamic_tooltips(self):
+        """Refresh all dynamic tooltips after a locale change."""
+        if not getattr(self, 'widgets_initialized', False):
+            return
+
+        tooltip_refreshers = [
+            lambda: self._update_combo_tooltip(self.comboBox_filtering_current_layer),
+            lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_filtering_layers_to_filter),
+            lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers),
+            lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_single_selection),
+            lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_multiple_selection),
+            lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_custom_selection),
+            lambda: self._update_feature_picker_tooltip(self.mFeaturePickerWidget_exploring_single_selection)
+        ]
+
+        for refresh in tooltip_refreshers:
+            try:
+                refresh()
+            except Exception as error:
+                logger.debug(f"FilterMate: Could not refresh dynamic tooltip: {error}")
 
 
 

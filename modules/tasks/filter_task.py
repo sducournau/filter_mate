@@ -342,6 +342,18 @@ class FilterEngineTask(QgsTask):
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
             layer_id = layer_props.get("layer_id", "unknown")
+            
+            # CRITICAL FIX: Check if PostgreSQL connection is available
+            # If not, treat as Spatialite for fallback filtering (better SQL support than OGR)
+            if provider_type == PROVIDER_POSTGRES:
+                postgresql_connection_available = layer_props.get("postgresql_connection_available", False)
+                if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
+                    logger.warning(f"  PostgreSQL layer '{layer_name}' has no connection available - using Spatialite fallback")
+                    provider_type = PROVIDER_SPATIALITE
+                    # Mark in layer_props for later reference
+                    layer_props["_effective_provider_type"] = PROVIDER_SPATIALITE
+                    layer_props["_postgresql_fallback"] = True
+            
             logger.info(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
             
             # Initialize provider list if needed
@@ -504,6 +516,20 @@ class FilterEngineTask(QgsTask):
         
         # Extract basic layer information
         self.param_source_provider_type = infos["layer_provider_type"]
+        
+        # CRITICAL FIX: Check PostgreSQL connection availability for source layer
+        # If PostgreSQL layer but no connection, fallback to Spatialite (better SQL support than OGR)
+        if self.param_source_provider_type == PROVIDER_POSTGRES:
+            postgresql_connection_available = infos.get("postgresql_connection_available", False)
+            if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
+                logger.warning(f"Source layer is PostgreSQL but connection unavailable - using Spatialite fallback")
+                self.param_source_provider_type = PROVIDER_SPATIALITE
+                self._source_postgresql_fallback = True
+            else:
+                self._source_postgresql_fallback = False
+        else:
+            self._source_postgresql_fallback = False
+        
         self.param_source_schema = infos["layer_schema"]
         self.param_source_table = infos["layer_name"]
         self.param_source_layer_id = infos["layer_id"]
@@ -951,9 +977,25 @@ class FilterEngineTask(QgsTask):
             bool: True if all required geometries prepared successfully
         """
         # Prepare PostgreSQL source geometry
+        # Only if we have actual PostgreSQL layers with working connections
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
-            logger.info("Preparing PostgreSQL source geometry...")
-            self.prepare_postgresql_source_geom()
+            # Check if any PostgreSQL layer actually has connection available
+            has_postgresql_with_connection = False
+            if hasattr(self, 'layers') and 'postgresql' in self.layers:
+                for layer, layer_props in self.layers['postgresql']:
+                    if layer_props.get('postgresql_connection_available', False):
+                        has_postgresql_with_connection = True
+                        break
+            
+            if has_postgresql_with_connection:
+                logger.info("Preparing PostgreSQL source geometry...")
+                self.prepare_postgresql_source_geom()
+            else:
+                logger.warning("PostgreSQL in provider list but no layers have connection - will use Spatialite fallback")
+                # Ensure Spatialite geometry is prepared for PostgreSQL fallback
+                if 'spatialite' not in provider_list:
+                    logger.info("Adding Spatialite to provider list for PostgreSQL fallback...")
+                    provider_list.append('spatialite')
         
         # Prepare Spatialite source geometry (WKT string) with fallback to OGR
         if 'spatialite' in provider_list:
@@ -2695,7 +2737,14 @@ class FilterEngineTask(QgsTask):
             bool: True if filtering succeeded, False otherwise
         """
         try:
-            logger.info(f"Executing geometric filtering for {layer.name()} ({layer_provider_type})")
+            # CRITICAL FIX: Use effective provider type if PostgreSQL fallback is active
+            effective_provider_type = layer_props.get("_effective_provider_type", layer_provider_type)
+            is_postgresql_fallback = layer_props.get("_postgresql_fallback", False)
+            
+            if is_postgresql_fallback:
+                logger.info(f"Executing geometric filtering for {layer.name()} (PostgreSQL → OGR fallback)")
+            else:
+                logger.info(f"Executing geometric filtering for {layer.name()} ({effective_provider_type})")
             
             # Validate layer properties
             layer_name, primary_key, geom_field, layer_schema = self._validate_layer_properties(
@@ -2708,11 +2757,11 @@ class FilterEngineTask(QgsTask):
             # Verify spatial index exists before filtering - critical for performance
             self._verify_and_create_spatial_index(layer, layer_name)
             
-            # Get appropriate backend for this layer
-            backend = BackendFactory.get_backend(layer_provider_type, layer, self.task_parameters)
+            # Get appropriate backend for this layer - use effective provider type
+            backend = BackendFactory.get_backend(effective_provider_type, layer, self.task_parameters)
             
-            # Prepare source geometry based on backend type
-            source_geom = self._prepare_source_geometry(layer_provider_type)
+            # Prepare source geometry based on backend type - use effective provider type
+            source_geom = self._prepare_source_geometry(effective_provider_type)
             if not source_geom:
                 logger.error(f"Failed to prepare source geometry for {layer.name()}")
                 return False

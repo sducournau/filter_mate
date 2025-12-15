@@ -460,17 +460,46 @@ class LayersManagementEngineTask(QgsTask):
         geometry_field = 'NULL'
         
         if layer_provider_type == PROVIDER_POSTGRES:
-            layer_source = layer.source()
-            
-            # Extract schema from connection string
-            regexp_match_schema = re.search('(?<=table=\\")[a-zA-Z0-9_-]*(?=\\".)', layer_source)
-            if regexp_match_schema:
-                source_schema = regexp_match_schema.group()
-            
-            # Extract geometry field from connection string
-            regexp_match_geom = re.search('(?<=\\()[a-zA-Z0-9_-]*(?=\\))', layer_source)
-            if regexp_match_geom:
-                geometry_field = regexp_match_geom.group()
+            # IMPROVED: Use QgsDataSourceUri for reliable parsing instead of fragile regex
+            try:
+                from qgis.core import QgsDataSourceUri
+                source_uri = QgsDataSourceUri(layer.source())
+                
+                # Extract schema
+                schema = source_uri.schema()
+                if schema:
+                    source_schema = schema
+                else:
+                    # Fallback to 'public' if no schema specified
+                    source_schema = 'public'
+                
+                # Extract geometry field
+                geom_col = source_uri.geometryColumn()
+                if geom_col:
+                    geometry_field = geom_col
+                else:
+                    # Try from data provider
+                    try:
+                        geom_col = layer.dataProvider().geometryColumn()
+                        if geom_col:
+                            geometry_field = geom_col
+                        else:
+                            geometry_field = 'geom'
+                    except AttributeError:
+                        geometry_field = 'geom'
+                
+                logger.debug(f"PostgreSQL layer metadata: schema={source_schema}, geometry_field={geometry_field}")
+                
+            except Exception as e:
+                logger.warning(f"Error parsing PostgreSQL layer source: {e}, falling back to regex")
+                # Fallback to regex if QgsDataSourceUri fails
+                layer_source = layer.source()
+                regexp_match_schema = re.search(r'(?<=table=")[a-zA-Z0-9_-]*(?="\.)', layer_source)
+                if regexp_match_schema:
+                    source_schema = regexp_match_schema.group()
+                regexp_match_geom = re.search(r'(?<=\()[a-zA-Z0-9_-]*(?=\))', layer_source)
+                if regexp_match_geom:
+                    geometry_field = regexp_match_geom.group()
         
         elif layer_provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR]:
             try:
@@ -507,6 +536,20 @@ class LayersManagementEngineTask(QgsTask):
         # Get actual source table name
         source_table_name = get_source_table_name(layer)
         
+        # Check PostgreSQL connection availability for PostgreSQL layers
+        # This determines if we can use native PostgreSQL backend or need OGR fallback
+        postgresql_connection_available = False
+        if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
+            try:
+                conn, _ = get_datasource_connexion_from_layer(layer)
+                if conn is not None:
+                    postgresql_connection_available = True
+                    conn.close()
+                else:
+                    logger.warning(f"PostgreSQL layer {layer.name()} will use OGR fallback (no connection)")
+            except Exception as e:
+                logger.warning(f"PostgreSQL connection test failed for {layer.name()}: {e}, will use OGR fallback")
+        
         # Build properties from JSON templates
         # CRITICAL: Escape all string values to prevent JSON parsing errors
         # with special characters like em-dash (—), quotes, backslashes
@@ -527,6 +570,10 @@ class LayersManagementEngineTask(QgsTask):
                 str(primary_key_is_numeric).lower()
             )
         )
+        
+        # Add PostgreSQL connection availability flag
+        new_layer_variables["infos"]["postgresql_connection_available"] = postgresql_connection_available
+        
         new_layer_variables["exploring"] = json.loads(
             self.json_template_layer_exploring % (
                 escape_json_string(str(primary_key_name)) if primary_key_name else "",
@@ -561,6 +608,8 @@ class LayersManagementEngineTask(QgsTask):
         """
         Create spatial index for layer based on provider type.
         
+        For PostgreSQL layers without connection, falls back to QGIS spatial index.
+        
         Args:
             layer (QgsVectorLayer): Layer to index
             layer_props (dict): Layer properties dictionary
@@ -571,15 +620,27 @@ class LayersManagementEngineTask(QgsTask):
             layer_provider_type = detect_layer_provider_type(layer)
         
         if layer_provider_type == PROVIDER_POSTGRES:
-            try:
-                self.create_spatial_index_for_postgresql_layer(layer, layer_props)
-            except (AttributeError, KeyError) as e:
-                logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
-            except Exception as e:
-                if POSTGRESQL_AVAILABLE and psycopg2 and isinstance(e, psycopg2.Error):
-                    logger.debug(f"PostgreSQL error creating spatial index: {e}")
-                else:
-                    logger.debug(f"Error creating spatial index: {e}")
+            # Check if PostgreSQL connection is available
+            postgresql_connection_available = layer_props.get("infos", {}).get("postgresql_connection_available", False)
+            
+            if postgresql_connection_available:
+                try:
+                    self.create_spatial_index_for_postgresql_layer(layer, layer_props)
+                except (AttributeError, KeyError) as e:
+                    logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
+                    # Fallback to QGIS spatial index
+                    self.create_spatial_index_for_layer(layer)
+                except Exception as e:
+                    if POSTGRESQL_AVAILABLE and psycopg2 and isinstance(e, psycopg2.Error):
+                        logger.debug(f"PostgreSQL error creating spatial index: {e}")
+                    else:
+                        logger.debug(f"Error creating spatial index: {e}")
+                    # Fallback to QGIS spatial index
+                    self.create_spatial_index_for_layer(layer)
+            else:
+                # PostgreSQL layer but no connection - use QGIS spatial index (OGR fallback)
+                logger.info(f"Using QGIS spatial index for PostgreSQL layer {layer.name()} (no DB connection)")
+                self.create_spatial_index_for_layer(layer)
         else:
             self.create_spatial_index_for_layer(layer)
 
@@ -677,27 +738,49 @@ class LayersManagementEngineTask(QgsTask):
         """
         feature_count = layer.featureCount()
         
+        # CRITICAL FIX: For PostgreSQL layers, featureCount() can return -1 if not yet loaded
+        # or if estimated count is used. In this case, we trust the primary key attributes
+        # without checking uniqueness (PostgreSQL enforces this at DB level).
+        if feature_count == -1:
+            logger.debug(f"Layer {layer.name()} has unknown feature count (-1), using primary key attributes directly")
+        
         primary_key_index = layer.primaryKeyAttributes()
         if len(primary_key_index) > 0:
             for field_id in primary_key_index:
                 if self.isCanceled():
                     return False
-                if len(layer.uniqueValues(field_id)) == feature_count:
-                    field = layer.fields()[field_id]
+                field = layer.fields()[field_id]
+                # For unknown feature count, trust the declared primary key
+                if feature_count == -1:
+                    logger.debug(f"Using declared primary key: {field.name()}")
                     return (field.name(), field_id, field.typeName(), field.isNumeric())
-        else:
-            for field in layer.fields():
-                if self.isCanceled():
-                    return False
-                if 'id' in str(field.name()).lower():
-                    if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
-                        return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
-                    
-            for field in layer.fields():
-                if self.isCanceled():
-                    return False
+                # Otherwise verify uniqueness
+                if len(layer.uniqueValues(field_id)) == feature_count:
+                    return (field.name(), field_id, field.typeName(), field.isNumeric())
+        
+        # If no declared primary key, try to find one
+        # For unknown feature count, just use the first 'id' field
+        for field in layer.fields():
+            if self.isCanceled():
+                return False
+            if 'id' in str(field.name()).lower():
+                if feature_count == -1:
+                    logger.debug(f"Using field with 'id' in name: {field.name()}")
+                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                
+        # For unknown feature count, use first field
+        if feature_count == -1 and layer.fields().count() > 0:
+            field = layer.fields()[0]
+            logger.debug(f"Using first field as fallback: {field.name()}")
+            return (field.name(), 0, field.typeName(), field.isNumeric())
+        
+        for field in layer.fields():
+            if self.isCanceled():
+                return False
+            if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
+                return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 
         # No unique field found - create virtual ID
         new_field = QgsField('virtual_id', QMetaType.Type.LongLong)
@@ -736,18 +819,33 @@ class LayersManagementEngineTask(QgsTask):
         primary_key_name = infos["primary_key_name"]
 
         connexion, source_uri = get_datasource_connexion_from_layer(layer)
+        
+        # CRITICAL FIX: Check if connexion is None (PostgreSQL unavailable or connection failed)
+        if connexion is None:
+            logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection")
+            return False
 
-        sql_statement = (
-            f'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx '
-            f'ON "{schema}"."{table}" USING GIST ({geometry_field});'
-            f'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx '
-            f'ON "{schema}"."{table}" ({primary_key_name});'
-            f'ALTER TABLE "{schema}"."{table}" CLUSTER ON {schema}_{table}_{geometry_field}_idx;'
-            f'ANALYZE VERBOSE "{schema}"."{table}";'
-        )
+        try:
+            sql_statement = (
+                f'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx '
+                f'ON "{schema}"."{table}" USING GIST ({geometry_field});'
+                f'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx '
+                f'ON "{schema}"."{table}" ({primary_key_name});'
+                f'ALTER TABLE "{schema}"."{table}" CLUSTER ON {schema}_{table}_{geometry_field}_idx;'
+                f'ANALYZE VERBOSE "{schema}"."{table}";'
+            )
 
-        with connexion.cursor() as cursor:
-            cursor.execute(sql_statement)
+            with connexion.cursor() as cursor:
+                cursor.execute(sql_statement)
+            connexion.commit()
+        except Exception as e:
+            logger.warning(f"Error creating spatial index for PostgreSQL layer {layer.name()}: {e}")
+            return False
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
 
         if self.isCanceled():
             return False

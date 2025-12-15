@@ -55,6 +55,9 @@ import logging
 # Get FilterMate logger
 logger = logging.getLogger('FilterMate')
 
+# Utilities
+from .appUtils import safe_set_subset_string, is_layer_source_available
+
 
 def get_feature_attribute(feature, field_name):
     """
@@ -183,7 +186,10 @@ class PopulateListEngineTask(QgsTask):
 
         subset_string_init = self.layer.subsetString()
         if subset_string_init != '':
-            self.layer.setSubsetString('')
+            if not is_layer_source_available(self.layer):
+                logger.warning("buildFeaturesList: layer invalid or source missing; aborting list build.")
+                return
+            safe_set_subset_string(self.layer, '')
 
         data_provider_layer = self.layer.dataProvider()
         if data_provider_layer:
@@ -191,7 +197,8 @@ class PopulateListEngineTask(QgsTask):
             layer_features_source = data_provider_layer.featureSource()
 
         if subset_string_init != '':
-            self.layer.setSubsetString(subset_string_init)
+            if is_layer_source_available(self.layer):
+                safe_set_subset_string(self.layer, subset_string_init)
 
         if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
             self.parent.list_widgets[self.layer.id()].setTotalFeaturesListCount(total_features_list_count)

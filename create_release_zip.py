@@ -39,7 +39,6 @@ def get_version_from_metadata():
             if match:
                 return match.group(1).strip()
     except Exception as e:
-        print(f"Warning: Could not read version from metadata.txt: {e}")
     return "unknown"
 
 def should_exclude(file_path):
@@ -108,11 +107,9 @@ def clean_config_json(config_path):
         with open(temp_config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4)
         
-        print("  ✓ Cleaned config.json from local values")
         return temp_config_path
     
     except Exception as e:
-        print(f"  ⚠ Warning: Could not clean config.json: {e}")
         return None
 
 def create_plugin_zip():
@@ -124,8 +121,7 @@ def create_plugin_zip():
     version = get_version_from_metadata()
     zip_path = parent_dir / f'filter_mate_v{version}.zip'
     
-    print(f"Creating ZIP archive: {zip_path}")
-    print(f"From directory: {plugin_dir}")
+    # Quiet mode: avoid verbose progress output
     
     # Clean config.json before packaging
     config_path = plugin_dir / 'config' / 'config.json'
@@ -154,20 +150,16 @@ def create_plugin_zip():
                     # Use cleaned config if this is the config.json file
                     if temp_config_path and file_path == config_path:
                         zipf.write(temp_config_path, rel_path)
-                        print(f"  → Using cleaned config.json")
                     else:
                         # Add to ZIP
                         zipf.write(file_path, rel_path)
                     
                     file_count += 1
                     
-                    if file_count % 10 == 0:
-                        print(f"  Added {file_count} files...")
+                    # No incremental progress output
         
         zip_size = zip_path.stat().st_size / 1024 / 1024  # MB
-        print(f"\n✓ Created {zip_path.name}")
-        print(f"  Total files: {file_count}")
-        print(f"  Size: {zip_size:.2f} MB")
+        print(f"Created {zip_path.name} ({zip_size:.2f} MB, {file_count} files)")
         
         return zip_path
     
@@ -175,7 +167,7 @@ def create_plugin_zip():
         # Clean up temporary config file
         if temp_config_path and temp_config_path.exists():
             temp_config_path.unlink()
-            print("  ✓ Cleaned up temporary files")
+            # Silent cleanup
 
 if __name__ == '__main__':
     create_plugin_zip()

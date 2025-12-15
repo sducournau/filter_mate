@@ -123,16 +123,88 @@ def safe_set_subset_string(layer, expression):
         bool: True if filter applied successfully
     """
     try:
+        # Guard: invalid or missing layer/source
+        if layer is None or not isinstance(layer, QgsVectorLayer) or not layer.isValid():
+            logger.warning("safe_set_subset_string called on invalid or None layer; skipping.")
+            return False
+
         result = layer.setSubsetString(expression)
-        
+
         if not result:
             error_msg = layer.error().message() if layer.error() else 'none'
             logger.warning(f"setSubsetString() returned False for {layer.name()}: {error_msg}")
-        
+
         return result
-        
+
     except Exception as e:
-        logger.error(f"Failed to apply subset string to {layer.name()}: {e}")
+        try:
+            lname = layer.name() if layer else 'None'
+        except Exception:
+            lname = 'Unknown'
+        logger.error(f"Failed to apply subset string to {lname}: {e}")
+        return False
+
+def is_layer_source_available(layer) -> bool:
+    """
+    Check if a layer is usable: valid and its underlying data source is accessible.
+
+    This guards against broken layers or moved/removed sources (e.g., deleted files).
+
+    Args:
+        layer (QgsVectorLayer): Layer to check
+
+    Returns:
+        bool: True if the layer is valid and its source seems available
+    """
+    try:
+        if layer is None or not isinstance(layer, QgsVectorLayer):
+            return False
+
+        if not layer.isValid():
+            return False
+
+        provider = detect_layer_provider_type(layer)
+
+        # Memory layers are always available while project is open
+        if provider == 'memory':
+            return True
+
+        source = layer.source() or ''
+        base = source.split('|')[0] if '|' in source else source
+
+        # Spatialite/OGR: typically filesystem-backed
+        if provider in ('spatialite', 'ogr'):
+            # Quick heuristics for non-file based OGR sources (e.g., WFS/WMS/HTTP)
+            lower = (base or '').lower()
+            if lower.startswith(('http://', 'https://', 'wfs:', 'wms:', 'wcs:')):
+                # Can't synchronously verify remote availability here
+                return True
+
+            # If we have a filesystem path, verify it exists
+            if base:
+                if os.path.isfile(base):
+                    # For GeoPackage, perform extra validation
+                    if lower.endswith('.gpkg'):
+                        return is_valid_geopackage(base)
+                    return True
+                # Shapefile main file check (.shp)
+                if lower.endswith('.shp') and os.path.isfile(base):
+                    return True
+                # SQLite databases (often Spatialite)
+                if lower.endswith('.sqlite') and os.path.isfile(base):
+                    return True
+            # If base is empty or not a file, we cannot confirm; treat as unavailable
+            return False
+
+        # PostgreSQL: rely on QGIS layer validity; avoid opening connections here
+        if provider == 'postgresql':
+            return True
+
+        # Fallback to QGIS validity
+        return True
+
+    except Exception as e:
+        logger.debug(f"Error while checking layer source availability: {e}")
         return False
 
 
@@ -364,14 +436,27 @@ def get_datasource_connexion_from_layer(layer):
             QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, authConfig, True)
             username = authConfig.config("username")
             password = authConfig.config("password")
-    else:
-        return connexion, source_uri
 
-    if password is not None and len(password) > 0:
+    # Attempt connection using available credentials from authcfg or URI
+    # Note: username/password may be empty if the connection relies on other auth methods
+    try:
+        connect_kwargs = {
+            'user': username,
+            'password': password,
+            'host': host,
+            'port': port,
+            'database': dbname
+        }
+        # Remove None values to avoid psycopg2 complaints
+        connect_kwargs = {k: v for k, v in connect_kwargs.items() if v is not None and v != ''}
+
         if ssl_mode is not None:
-            connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname, sslmode=source_uri.encodeSslMode(ssl_mode))
-        else:
-            connexion = psycopg2.connect(user=username, password=password, host=host, port=port, database=dbname)
+            connect_kwargs['sslmode'] = source_uri.encodeSslMode(ssl_mode)
+
+        connexion = psycopg2.connect(**connect_kwargs)
+    except Exception as e:
+        logger.error(f"PostgreSQL connection failed for layer '{layer.name()}' on {host}:{port}/{dbname}: {e}")
+        connexion = None
 
     return connexion, source_uri
 

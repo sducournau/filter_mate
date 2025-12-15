@@ -40,7 +40,14 @@ from .modules.tasks import (
     LayersManagementEngineTask,
     spatialite_connect
 )
-from .modules.appUtils import POSTGRESQL_AVAILABLE, sanitize_sql_identifier, get_data_source_uri, get_datasource_connexion_from_layer
+from .modules.appUtils import (
+    POSTGRESQL_AVAILABLE,
+    sanitize_sql_identifier,
+    get_data_source_uri,
+    get_datasource_connexion_from_layer,
+    is_layer_source_available,
+    safe_set_subset_string,
+)
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
     show_backend_info, show_progress_message, show_success_with_backend,
@@ -73,6 +80,27 @@ MESSAGE_TASKS_CATEGORIES = {
 class FilterMateApp:
 
     PROJECT_LAYERS = {} 
+
+    def _filter_usable_layers(self, layers):
+        """
+        Return only layers that are valid vector layers with available sources.
+        """
+        try:
+            return [
+                l for l in (layers or [])
+                if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)
+            ]
+        except Exception as e:
+            logger.debug(f"_filter_usable_layers error: {e}")
+            return []
+
+    def _on_layers_added(self, layers):
+        """Signal handler for layersAdded: ignore broken/invalid layers."""
+        filtered = self._filter_usable_layers(layers)
+        if not filtered:
+            logger.info("FilterMate: Ignoring layersAdded (no usable layers)")
+            return
+        self.manage_task('add_layers', filtered)
 
     def cleanup(self):
         """
@@ -235,7 +263,7 @@ class FilterMateApp:
 
             QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')    
 
-            init_layers = list(self.PROJECT.mapLayers().values())
+            init_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
             logger.info(f"FilterMate App.run(): Found {len(init_layers)} layers in project")
 
             logger.info("FilterMate App.run(): Starting init_filterMate_db()")
@@ -274,6 +302,9 @@ class FilterMateApp:
                 if hasattr(self.dockwidget, 'retranslateUi'):
                     self.dockwidget.retranslateUi(self.dockwidget)
                     logger.info("FilterMate: DockWidget UI retranslated with active locale")
+                if hasattr(self.dockwidget, 'retranslate_dynamic_tooltips'):
+                    self.dockwidget.retranslate_dynamic_tooltips()
+                    logger.info("FilterMate: Dynamic tooltips refreshed with active locale")
             except Exception as e:
                 logger.warning(f"FilterMate: Failed to retranslate DockWidget UI: {e}")
 
@@ -313,6 +344,14 @@ class FilterMateApp:
             init_env_vars()
             self.PROJECT = ENV_VARS["PROJECT"]
             self.MapLayerStore = self.PROJECT.layerStore()
+
+            try:
+                if hasattr(self.dockwidget, 'retranslateUi'):
+                    self.dockwidget.retranslateUi(self.dockwidget)
+                if hasattr(self.dockwidget, 'retranslate_dynamic_tooltips'):
+                    self.dockwidget.retranslate_dynamic_tooltips()
+            except Exception as e:
+                logger.debug(f"FilterMate: Retranslation skipped for existing dockwidget: {e}")
             
             # Make sure the dockwidget is visible
             if not self.dockwidget.isVisible():
@@ -328,13 +367,13 @@ class FilterMateApp:
                 if new_layers:
                     logger.info(f"FilterMate: Found {len(new_layers)} new layers to add")
                     # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-                    QTimer.singleShot(300, lambda layers=new_layers: self.manage_task('add_layers', layers))
+                    QTimer.singleShot(300, lambda layers=self._filter_usable_layers(new_layers): self.manage_task('add_layers', layers))
                 else:
                     # No new layers, but update UI if it's empty
                     if len(self.PROJECT_LAYERS) == 0 and len(current_project_layers) > 0:
                         logger.info("FilterMate: PROJECT_LAYERS is empty but project has layers, refreshing")
                         # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-                        QTimer.singleShot(300, lambda layers=current_project_layers: self.manage_task('add_layers', layers))
+                        QTimer.singleShot(300, lambda layers=self._filter_usable_layers(current_project_layers): self.manage_task('add_layers', layers))
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
@@ -348,7 +387,7 @@ class FilterMateApp:
             # to avoid double processing which causes freezes during project load.
             
             # Use layersAdded (batch) instead of layerWasAdded (per layer) to avoid duplicate calls
-            self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+            self.MapLayerStore.layersAdded.connect(self._on_layers_added)
             self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
             self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
             self._signals_connected = True
@@ -415,10 +454,20 @@ class FilterMateApp:
             self.dockwidget.has_loaded_layers = False
             self.dockwidget._plugin_busy = False  # Ensure not stuck in busy state
             
-            # Update backend indicator to show waiting state
+            # Update backend indicator to show waiting state (badge style)
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
-                self.dockwidget.backend_indicator_label.setText("Backend: En attente de couches...")
-                self.dockwidget.backend_indicator_label.setStyleSheet("color: #95a5a6; font-size: 8pt; font-style: italic; padding: 1px 4px;")
+                self.dockwidget.backend_indicator_label.setText("...")
+                self.dockwidget.backend_indicator_label.setStyleSheet("""
+                    QLabel#label_backend_indicator {
+                        color: #7f8c8d;
+                        font-size: 9pt;
+                        font-weight: 600;
+                        padding: 3px 10px;
+                        border-radius: 12px;
+                        border: none;
+                        background-color: #ecf0f1;
+                    }
+                """)
         
         self.layer_management_engine_task_completed({}, 'remove_all_layers')
         
@@ -505,7 +554,7 @@ class FilterMateApp:
                 self.MapLayerStore = new_layer_store
                 
                 # Reconnect signals to new layer store
-                self.MapLayerStore.layersAdded.connect(lambda layers: self.manage_task('add_layers', layers))
+                self.MapLayerStore.layersAdded.connect(self._on_layers_added)
                 self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
                 self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
                 logger.info("FilterMate: Layer store signals reconnected to new project")
@@ -514,7 +563,7 @@ class FilterMateApp:
                 logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
                 self.MapLayerStore = new_layer_store
             
-            init_layers = list(self.PROJECT.mapLayers().values())
+            init_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
             
             # Clear old PROJECT_LAYERS when switching projects
             self.PROJECT_LAYERS = {}
@@ -655,12 +704,18 @@ class FilterMateApp:
             layer_count = len(layers) + 1  # +1 for current layer
             provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
             
+            # Check if PostgreSQL layer is using OGR fallback (no connection available)
+            is_fallback = (
+                provider_type == 'postgresql' and 
+                not task_parameters["infos"].get("postgresql_connection_available", False)
+            )
+            
             if task_name == 'filter':
-                show_backend_info(iface, provider_type, layer_count, operation='filter')
+                show_backend_info(iface, provider_type, layer_count, operation='filter', is_fallback=is_fallback)
             elif task_name == 'unfilter':
-                show_backend_info(iface, provider_type, layer_count, operation='unfilter')
+                show_backend_info(iface, provider_type, layer_count, operation='unfilter', is_fallback=is_fallback)
             elif task_name == 'reset':
-                show_backend_info(iface, provider_type, layer_count, operation='reset')
+                show_backend_info(iface, provider_type, layer_count, operation='reset', is_fallback=is_fallback)
 
             self.appTasks[task_name].setDependentLayers(layers + [current_layer])
             self.appTasks[task_name].taskCompleted.connect(lambda task_name=task_name, current_layer=current_layer, task_parameters=task_parameters: self.filter_engine_task_completed(task_name, current_layer, task_parameters))
@@ -745,6 +800,20 @@ class FilterMateApp:
         for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
             if key in self.PROJECT_LAYERS:
                 layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+
+                # Resolve actual QgsVectorLayer by id
+                layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
+                if not layer_obj:
+                    logger.error(f"Cannot filter layer {key}: layer not found in project")
+                    continue
+                layer = layer_obj[0]
+
+                # Skip invalid or unavailable layers (broken source)
+                if not is_layer_source_available(layer):
+                    logger.warning(
+                        f"Skipping layer '{layer.name()}' (id={key}) - invalid or source missing"
+                    )
+                    continue
                 
                 # Validate required keys exist for geometric filtering
                 required_keys = [
@@ -756,7 +825,6 @@ class FilterMateApp:
                 if missing_keys:
                     logger.warning(f"Layer {key} missing required keys: {missing_keys}")
                     # Try to fill in missing keys from QGIS layer object
-                    layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
                     if layer_obj:
                         layer = layer_obj[0]
                         # Fill basic info
@@ -1009,6 +1077,17 @@ class FilterMateApp:
             else:
                 current_layer = self.dockwidget.current_layer 
 
+            # Guard: current layer must be valid and source available
+            if not is_layer_source_available(current_layer):
+                logger.warning(
+                    f"FilterMate: Layer '{current_layer.name() if current_layer else 'Unknown'}' is invalid or source missing."
+                )
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    "La couche sélectionnée est invalide ou sa source est introuvable. Opération annulée."
+                )
+                return None
+
             # CRITICAL: Verify layer is in PROJECT_LAYERS before proceeding
             if current_layer.id() not in self.PROJECT_LAYERS.keys():
                 logger.warning(f"FilterMate: Layer '{current_layer.name()}' (id: {current_layer.id()}) not found in PROJECT_LAYERS. "
@@ -1208,6 +1287,15 @@ class FilterMateApp:
             return
         
         source_layer = self.dockwidget.current_layer
+
+        # Guard: ensure layer is usable
+        if not is_layer_source_available(source_layer):
+            logger.warning("handle_undo: source layer invalid or source missing; aborting.")
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "Impossible d'annuler: couche invalide ou source introuvable."
+            )
+            return
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
         # Check if the "Layers to filter" button is checked and has remote layers selected
@@ -1224,7 +1312,7 @@ class FilterMateApp:
             
             if global_state:
                 # Apply state to source layer
-                source_layer.setSubsetString(global_state.source_expression)
+                safe_set_subset_string(source_layer, global_state.source_expression)
                 self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
                 logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
                 
@@ -1240,7 +1328,12 @@ class FilterMateApp:
                     remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
                     if remote_layers:
                         remote_layer = remote_layers[0]
-                        remote_layer.setSubsetString(expression)
+                        if not is_layer_source_available(remote_layer):
+                            logger.warning(
+                                f"Global undo: skipping remote layer '{remote_layer.name()}' (invalid or missing source)"
+                            )
+                            continue
+                        safe_set_subset_string(remote_layer, expression)
                         self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
                         logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
                         restored_count += 1
@@ -1268,7 +1361,7 @@ class FilterMateApp:
             if history and history.can_undo():
                 previous_state = history.undo()
                 if previous_state:
-                    source_layer.setSubsetString(previous_state.expression)
+                    safe_set_subset_string(source_layer, previous_state.expression)
                     self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_state.expression)
                     logger.info(f"FilterMate: Undo source layer to: {previous_state.description}")
                     
@@ -1293,6 +1386,15 @@ class FilterMateApp:
             return
         
         source_layer = self.dockwidget.current_layer
+
+        # Guard: ensure layer is usable
+        if not is_layer_source_available(source_layer):
+            logger.warning("handle_redo: source layer invalid or source missing; aborting.")
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "Impossible de rétablir: couche invalide ou source introuvable."
+            )
+            return
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
         # Check if the "Layers to filter" button is checked and has remote layers selected
@@ -1309,7 +1411,7 @@ class FilterMateApp:
             
             if global_state:
                 # Apply state to source layer
-                source_layer.setSubsetString(global_state.source_expression)
+                safe_set_subset_string(source_layer, global_state.source_expression)
                 self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(global_state.source_expression)
                 logger.info(f"FilterMate: Restored source layer: {global_state.source_expression[:60] if global_state.source_expression else 'no filter'}")
                 
@@ -1325,7 +1427,12 @@ class FilterMateApp:
                     remote_layers = [l for l in self.PROJECT.mapLayers().values() if l.id() == remote_id]
                     if remote_layers:
                         remote_layer = remote_layers[0]
-                        remote_layer.setSubsetString(expression)
+                        if not is_layer_source_available(remote_layer):
+                            logger.warning(
+                                f"Global redo: skipping remote layer '{remote_layer.name()}' (invalid or missing source)"
+                            )
+                            continue
+                        safe_set_subset_string(remote_layer, expression)
                         self.PROJECT_LAYERS[remote_id]["infos"]["is_already_subset"] = bool(expression)
                         logger.info(f"FilterMate: Restored remote layer {remote_layer.name()}: {expression[:60] if expression else 'no filter'}")
                         restored_count += 1
@@ -1353,7 +1460,7 @@ class FilterMateApp:
             if history and history.can_redo():
                 next_state = history.redo()
                 if next_state:
-                    source_layer.setSubsetString(next_state.expression)
+                    safe_set_subset_string(source_layer, next_state.expression)
                     self.PROJECT_LAYERS[source_layer.id()]["infos"]["is_already_subset"] = bool(next_state.expression)
                     logger.info(f"FilterMate: Redo source layer to: {next_state.description}")
                     
@@ -1492,6 +1599,15 @@ class FilterMateApp:
             - For 'filter': Applies expression from Spatialite database
             - Changes trigger layer refresh automatically
         """
+        # Guard: ensure layer is usable
+        if not is_layer_source_available(layer):
+            logger.warning("apply_subset_filter called on invalid/missing-source layer; skipping.")
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "La couche est invalide ou sa source est introuvable. Opération annulée."
+            )
+            return
+
         if task_name == 'unfilter':
             # Use history manager for proper undo
             history = self.history_manager.get_history(layer.id())
@@ -1499,7 +1615,7 @@ class FilterMateApp:
             if history and history.can_undo():
                 previous_state = history.undo()
                 if previous_state:
-                    layer.setSubsetString(previous_state.expression)
+                    safe_set_subset_string(layer, previous_state.expression)
                     logger.info(f"FilterMate: Undo applied - restored filter: {previous_state.description}")
                     
                     if layer.subsetString() != '':
@@ -1510,7 +1626,7 @@ class FilterMateApp:
             else:
                 # No history available - clear filter
                 logger.info(f"FilterMate: No undo history available, clearing filter")
-                layer.setSubsetString('')
+                safe_set_subset_string(layer, '')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
                 return
         
@@ -1539,7 +1655,7 @@ class FilterMateApp:
                 last_subset_string = result[6].replace("\'\'", "\'")
 
             if task_name == 'filter':
-                layer.setSubsetString(last_subset_string)
+                safe_set_subset_string(layer, last_subset_string)
 
                 if layer.subsetString() != '':
                     self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = True
@@ -1547,7 +1663,7 @@ class FilterMateApp:
                     self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
 
             elif task_name == 'reset':
-                layer.setSubsetString('')
+                safe_set_subset_string(layer, '')
                 self.PROJECT_LAYERS[layer.id()]["infos"]["is_already_subset"] = False
 
     def _save_single_property(self, layer, cursor, key_group, key, value):
@@ -1711,6 +1827,14 @@ class FilterMateApp:
       
 
     def create_spatial_index_for_layer(self, layer):    
+        # Guard invalid/missing-source layers
+        if not is_layer_source_available(layer):
+            logger.warning("create_spatial_index_for_layer: layer invalid or source missing; skipping.")
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                "Impossible de créer un index spatial: couche invalide ou source introuvable."
+            )
+            return
 
         alg_params_createspatialindex = {
             "INPUT": layer
@@ -2000,16 +2124,33 @@ class FilterMateApp:
                         logger.debug(f"Error closing database connection: {e}")
 
     def add_project_datasource(self, layer):
-
+        """
+        Add PostgreSQL datasource and create temp schema if needed.
+        
+        Args:
+            layer: PostgreSQL layer to get connection from
+        """
         connexion, source_uri = get_datasource_connexion_from_layer(layer)
+        
+        # CRITICAL FIX: Check if connexion is None (PostgreSQL unavailable or connection failed)
+        if connexion is None:
+            logger.warning(f"Cannot add project datasource for layer {layer.name()}: no database connection")
+            return
 
-        sql_statement = 'CREATE SCHEMA IF NOT EXISTS {app_temp_schema} AUTHORIZATION postgres;'.format(app_temp_schema=self.app_postgresql_temp_schema)
+        try:
+            sql_statement = 'CREATE SCHEMA IF NOT EXISTS {app_temp_schema} AUTHORIZATION postgres;'.format(app_temp_schema=self.app_postgresql_temp_schema)
+            logger.debug(f"SQL statement: {sql_statement}")
 
-        logger.debug(f"SQL statement: {sql_statement}")
-
-
-        with connexion.cursor() as cursor:
-            cursor.execute(sql_statement)
+            with connexion.cursor() as cursor:
+                cursor.execute(sql_statement)
+            connexion.commit()
+        except Exception as e:
+            logger.warning(f"Error creating temp schema for layer {layer.name()}: {e}")
+        finally:
+            try:
+                connexion.close()
+            except Exception:
+                pass
 
 
 

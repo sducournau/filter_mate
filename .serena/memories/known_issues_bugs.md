@@ -1,5 +1,63 @@
 # Known Issues & Bug Fixes - FilterMate
 
+## Recently Fixed (v2.3.0-alpha - December 15, 2025)
+
+### Plugin Not Auto-Activating When Loading Layer into Empty Project
+**Status:** ✅ FIXED
+
+**Issue:**
+- When QGIS starts with an empty project and user loads a PostgreSQL layer, the plugin would not auto-activate
+- The plugin remained inactive, waiting indefinitely
+- This only happened when loading layers into a project that wasn't opened via projectRead signal
+
+**Root Cause:**
+- The `layersAdded` signal was intentionally disconnected to avoid freeze issues (documented in Session 3-4 fixes)
+- However, this meant there was no trigger when loading a layer into an empty project
+- `projectRead` and `newProjectCreated` signals don't fire in this scenario
+
+**Solution:**
+1. Reconnected the `layersAdded` signal via new method `_auto_activate_for_new_layers()`
+2. The new method has a CRITICAL guard: only triggers when plugin is NOT active
+3. This avoids the freeze issues that occurred before (when layersAdded was processed during active state)
+4. Uses a 200ms delay for stability, especially for PostgreSQL layers which need time to initialize connections
+
+**Code Changes:**
+```python
+# NEW: _auto_activate_for_new_layers() method
+def _auto_activate_for_new_layers(self, layers):
+    # CRITICAL: Only handle when plugin is NOT active
+    if self.pluginIsActive:
+        return  # Skip - prevents freeze issues
+    
+    vector_layers = [layer for layer in layers if isinstance(layer, QgsVectorLayer)]
+    if vector_layers:
+        QTimer.singleShot(200, self.run)  # Activate with delay
+```
+
+**Files Changed:**
+- `filter_mate.py`: 
+  - Modified `_connect_auto_activation_signals()` to connect layersAdded
+  - Added `_auto_activate_for_new_layers()` method with safety guards
+  - Updated `unload()` to disconnect the new signal
+
+**Key Points:**
+- ✅ Plugin now auto-activates when loading layers into empty project
+- ✅ No freeze issues - guard prevents processing when already active
+- ✅ Works with PostgreSQL, Spatialite, and all other layer types
+- ✅ 200ms delay ensures layer connection is fully established
+
+**Testing Required:**
+1. Start QGIS with empty project
+2. Load a PostgreSQL layer
+3. Plugin should auto-activate after ~200ms
+4. Also test with Spatialite/Shapefile/GeoPackage layers
+
+**References:**
+- Fix date: December 15, 2025
+- Related: Session 3-4 freeze fixes (layersAdded signal handling)
+
+---
+
 ## Recently Fixed (v2.3.0-alpha - December 13, 2025 - Session 4)
 
 ### QSplitter Freeze - Optimization Fix

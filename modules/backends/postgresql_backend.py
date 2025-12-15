@@ -52,17 +52,37 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         Check if this backend supports the given layer.
         
+        Tests both provider type AND connection availability. If the layer
+        is PostgreSQL but connection fails (wrong credentials, server down, etc.),
+        returns False to allow fallback to OGR backend.
+        
         Args:
             layer: QGIS vector layer to check
         
         Returns:
-            True if layer is from PostgreSQL provider
+            True if layer is from PostgreSQL provider AND connection works
         """
         if not POSTGRESQL_AVAILABLE:
             self.log_warning("psycopg2 not available, PostgreSQL backend disabled")
             return False
         
-        return layer.providerType() == 'postgres'
+        if layer.providerType() != 'postgres':
+            return False
+        
+        # CRITICAL: Test actual connection - may fail with authcfg or network issues
+        try:
+            conn, source_uri = get_datasource_connexion_from_layer(layer)
+            if conn is None:
+                self.log_warning(f"PostgreSQL connection failed for layer {layer.name()}, will use OGR fallback")
+                return False
+            # Test connection with simple query
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            conn.close()
+            return True
+        except Exception as e:
+            self.log_warning(f"PostgreSQL connection test failed for layer {layer.name()}: {e}, will use OGR fallback")
+            return False
     
     def build_expression(
         self,

@@ -648,15 +648,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 
                 # Try a simple test to see if spatial functions work
                 try:
-                    test_expr = f'"{layer.geometryColumn()}" IS NOT NULL'
-                    self.log_debug(f"Testing simple expression: {test_expr}")
-                    test_result = layer.setSubsetString(test_expr)
-                    if test_result:
-                        self.log_info("Simple geometry test passed - issue is with spatial expression")
-                        # Restore no filter
-                        layer.setSubsetString("")
+                    from ..appUtils import is_layer_source_available, safe_set_subset_string
+                    if not is_layer_source_available(layer):
+                        self.log_warning("Layer invalid or source missing; skipping test expression")
                     else:
-                        self.log_error("Even simple geometry expression failed - layer may not support subset strings")
+                        test_expr = f'"{layer.geometryColumn()}" IS NOT NULL'
+                        self.log_debug(f"Testing simple expression: {test_expr}")
+                        test_result = safe_set_subset_string(layer, test_expr)
+                        if test_result:
+                            self.log_info("Simple geometry test passed - issue is with spatial expression")
+                            # Restore no filter
+                            safe_set_subset_string(layer, "")
+                        else:
+                            self.log_error("Even simple geometry expression failed - layer may not support subset strings")
                 except Exception as test_error:
                     self.log_debug(f"Test expression error: {test_error}")
             

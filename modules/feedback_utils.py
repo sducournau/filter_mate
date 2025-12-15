@@ -69,7 +69,7 @@ def get_backend_display_name(provider_type):
     return f"{backend['icon']} {backend['name']}"
 
 
-def show_backend_info(iface, provider_type, layer_count=1, operation='filter', duration=3):
+def show_backend_info(iface, provider_type, layer_count=1, operation='filter', duration=3, is_fallback=False):
     """
     Show informational message about which backend is being used.
     
@@ -79,6 +79,7 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
         layer_count (int): Number of layers being processed
         operation (str): Operation type ('filter', 'export', 'reset')
         duration (int): Message duration in seconds (default: 3)
+        is_fallback (bool): True if using OGR as fallback for PostgreSQL layer
     
     Example:
         >>> show_backend_info(iface, 'postgresql', layer_count=5)
@@ -93,7 +94,11 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
         'export': f"Exporting {layer_count} layer(s)"
     }.get(operation, f"Processing {layer_count} layer(s)")
     
-    message = f"{backend_name}: {operation_text}..."
+    # Add fallback indicator for PostgreSQL layers using Spatialite
+    if is_fallback:
+        message = f"💾 Spatialite (fallback for PostgreSQL): {operation_text}..."
+    else:
+        message = f"{backend_name}: {operation_text}..."
     
     if should_show_message('backend_info'):
         iface.messageBar().pushInfo("FilterMate", message)

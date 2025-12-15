@@ -266,29 +266,69 @@ class FilterMate:
     def _connect_auto_activation_signals(self):
         """Connect signals to handle project changes and reload layers.
         
-        Connects projectRead and newProjectCreated signals to automatically
-        reload layers when the project changes. The layersAdded signal is
-        intentionally NOT connected here to avoid potential freeze issues.
+        Connects projectRead, newProjectCreated, and layersAdded signals to automatically
+        activate the plugin when layers are available. The layersAdded signal is now
+        connected with proper guards to avoid freeze issues when the plugin is already active.
         """
         if not self._auto_activation_signals_connected:
             from qgis.core import QgsProject
             from qgis.PyQt.QtCore import QTimer
             
             # Store lambda references for proper disconnection
-            # FIXED: Connect to _auto_activate_plugin instead of _handle_project_change
             # _auto_activate_plugin handles both inactive (activates) and active (reinitializes) states
             self._project_read_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
             self._new_project_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
+            
+            # NEW: Connect layersAdded to handle the case where user loads a layer 
+            # into an empty project (no projectRead signal in that case)
+            # The guard in _auto_activate_for_new_layers ensures this only triggers
+            # when plugin is NOT active, avoiding freeze issues
+            self._layers_added_connection = lambda layers: self._auto_activate_for_new_layers(layers)
             
             # Auto-reload when a project is opened
             self.iface.projectRead.connect(self._project_read_connection)
             # Auto-reload when a new project is created
             self.iface.newProjectCreated.connect(self._new_project_connection)
+            # Auto-activate when layers are added to an empty project
+            QgsProject.instance().layersAdded.connect(self._layers_added_connection)
             
             self._auto_activation_signals_connected = True
-            logger.info("FilterMate: Project change signals connected (projectRead, newProjectCreated)")
-            logger.info("FilterMate: layersAdded signal NOT connected to avoid freeze issues")
-            # Message bar notification removed - too verbose for UX
+            logger.info("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded)")
+
+    def _auto_activate_for_new_layers(self, layers):
+        """Handle layersAdded signal specifically for auto-activation.
+        
+        This method is called when layers are added to the project. It only
+        activates the plugin if it's not already active, avoiding the freeze
+        issues that occurred when processing layersAdded during active state.
+        
+        Args:
+            layers: List of QgsMapLayer that were just added
+        """
+        from qgis.core import QgsVectorLayer
+        from qgis.PyQt.QtCore import QTimer
+        
+        # CRITICAL: Only handle this signal when plugin is NOT active
+        # When plugin is active, project changes are handled by projectRead/newProjectCreated
+        # This avoids the freeze issues documented in known_issues_bugs memory
+        if self.pluginIsActive:
+            logger.debug("FilterMate: Plugin already active, skipping layersAdded auto-activation")
+            return
+        
+        # Check if any of the added layers are vector layers
+        vector_layers = [layer for layer in layers if isinstance(layer, QgsVectorLayer)]
+        
+        if not vector_layers:
+            logger.debug("FilterMate: No vector layers in added layers, skipping auto-activation")
+            return
+        
+        # Plugin not active and vector layers were added - activate it
+        # Use QTimer to ensure QGIS is in a stable state before activation
+        logger.info(f"FilterMate: Auto-activating plugin via layersAdded ({len(vector_layers)} vector layer(s))")
+        
+        # Use a longer delay (200ms) for stability, especially with PostgreSQL layers
+        # which may need more time to fully initialize their connections
+        QTimer.singleShot(200, self.run)
     
     def _auto_activate_plugin(self, layers=None):
         """Auto-activate plugin if not already active.
@@ -408,14 +448,18 @@ class FilterMate:
         # Disconnect project change signals
         if self._auto_activation_signals_connected:
             try:
+                from qgis.core import QgsProject
+                
                 if self._project_read_connection:
                     self.iface.projectRead.disconnect(self._project_read_connection)
                 if self._new_project_connection:
                     self.iface.newProjectCreated.disconnect(self._new_project_connection)
+                if hasattr(self, '_layers_added_connection') and self._layers_added_connection:
+                    QgsProject.instance().layersAdded.disconnect(self._layers_added_connection)
                 
-                logger.info("FilterMate: Project change signals disconnected")
+                logger.info("FilterMate: Auto-activation signals disconnected")
             except Exception as e:
-                logger.warning(f"FilterMate: Error disconnecting project change signals: {e}")
+                logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
         
         # Nettoyer les ressources de l'application FilterMate
         if self.app:

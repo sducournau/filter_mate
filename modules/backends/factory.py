@@ -53,6 +53,10 @@ class BackendFactory:
             if backend.supports_layer(layer):
                 logger.info(f"Using PostgreSQL backend for {layer.name()}")
                 return backend
+            else:
+                # PostgreSQL layer but connection failed - fallback to Spatialite (better SQL support)
+                logger.warning(f"PostgreSQL connection unavailable for {layer.name()}, falling back to Spatialite backend")
+                return SpatialiteGeometricFilter(task_params)
         
         # Try Spatialite backend
         if layer_provider_type == PROVIDER_SPATIALITE:
