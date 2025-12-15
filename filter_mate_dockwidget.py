@@ -5644,6 +5644,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info(f"Updating UI: PROJECT is not None={self.PROJECT is not None}, PROJECT_LAYERS count={len(list(self.PROJECT_LAYERS))}")
 
                 if self.PROJECT is not None and len(list(self.PROJECT_LAYERS)) > 0:
+                    # CRITICAL: Force reconnect signals if _signals_connected flag is False
+                    # This can happen after a project change when signals were disconnected
+                    if not self._signals_connected:
+                        logger.info("Reconnecting widget signals after project change")
+                        self.connect_widgets_signals()
+                        self._signals_connected = True
+                    
                     # Determine which layer to use for UI
                     layer = self._determine_active_layer()
                     

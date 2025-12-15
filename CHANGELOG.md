@@ -9,6 +9,12 @@ All notable changes to FilterMate will be documented in this file.
 
 ---
 
+## [2.3.2] - 2025-12-15 - Minor Fixes & Docs
+
+- Update plugin metadata and README to 2.3.2
+- Refresh Docusaurus intro to reflect latest version
+- Small stability tweaks in docs/config (no functional changes)
+
 ## [2.3.1] - 2025-12-14 - Stability & Performance Improvements
 
 ### 🐛 Bug Fixes

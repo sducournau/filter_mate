@@ -269,6 +269,14 @@ class FilterMateApp:
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
             logger.info("FilterMate App.run(): FilterMateDockWidget created")
 
+            # Force retranslation to ensure tooltips/text use current translator
+            try:
+                if hasattr(self.dockwidget, 'retranslateUi'):
+                    self.dockwidget.retranslateUi(self.dockwidget)
+                    logger.info("FilterMate: DockWidget UI retranslated with active locale")
+            except Exception as e:
+                logger.warning(f"FilterMate: Failed to retranslate DockWidget UI: {e}")
+
             # show the dockwidget
             # TODO: fix to allow choice of dock location
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
@@ -481,23 +489,17 @@ class FilterMateApp:
             # ALWAYS reconnect signals on project change - even if layer_store is same object,
             # the project context has changed and signals may be stale
             if self._signals_connected:
-                logger.info(f"FilterMate: Reconnecting layer store signals for {task_name}")
+                logger.info(f"FilterMate: Disconnecting old layer store signals for {task_name}")
                 try:
-                    # Disconnect old signals - use try/except as connections may already be invalid
-                    try:
-                        old_layer_store.layersAdded.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                    try:
-                        old_layer_store.layersWillBeRemoved.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                    try:
-                        old_layer_store.allLayersRemoved.disconnect()
-                    except (TypeError, RuntimeError):
-                        pass
-                except Exception as e:
-                    logger.warning(f"Error disconnecting old layer store signals: {e}")
+                    # Disconnect ALL old signals using disconnect() without arguments
+                    # This ensures all connections are removed
+                    old_layer_store.layersAdded.disconnect()
+                    old_layer_store.layersWillBeRemoved.disconnect()
+                    old_layer_store.allLayersRemoved.disconnect()
+                    logger.info("FilterMate: Old layer store signals disconnected")
+                except (TypeError, RuntimeError) as e:
+                    # Signals may already be invalid after project change
+                    logger.debug(f"Could not disconnect old signals (expected): {e}")
                 
                 # Update to new layer store
                 self.MapLayerStore = new_layer_store
@@ -509,6 +511,7 @@ class FilterMateApp:
                 logger.info("FilterMate: Layer store signals reconnected to new project")
             else:
                 # First time - just update reference, signals will be connected in run()
+                logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
                 self.MapLayerStore = new_layer_store
             
             init_layers = list(self.PROJECT.mapLayers().values())
@@ -523,6 +526,15 @@ class FilterMateApp:
                 # CRITICAL: Use QTimer to defer add_layers to prevent blocking during project load
                 # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
                 QTimer.singleShot(100, lambda layers=init_layers: self.manage_task('add_layers', layers))
+                
+                # CRITICAL: Force UI refresh after layers are loaded
+                # This ensures all widgets and signals are properly updated
+                def refresh_after_load():
+                    if self.dockwidget and self.dockwidget.widgets_initialized:
+                        logger.info(f"Forcing UI refresh after {task_name} layer load")
+                        self._refresh_ui_after_project_load()
+                
+                QTimer.singleShot(1000, refresh_after_load)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -2250,12 +2262,29 @@ class FilterMateApp:
         Force complete UI refresh after project load.
         
         Called when a new project is loaded while the plugin was already active.
-        Ensures all widgets and comboboxes are properly updated with new project layers.
+        Ensures all widgets, comboboxes, and signals are properly updated with new project layers.
         """
         if self.dockwidget is None or not self.dockwidget.widgets_initialized:
+            logger.debug("Cannot refresh UI: dockwidget not initialized")
             return
             
         logger.info("Forcing complete UI refresh after project load")
+        
+        # CRITICAL: Reconnect dockwidget signals that depend on PROJECT
+        # The PROJECT reference has changed and signals need to be refreshed
+        try:
+            # Disconnect old PROJECT signal
+            try:
+                # Find and disconnect old fileNameChanged signal
+                self.PROJECT.fileNameChanged.disconnect()
+            except (TypeError, RuntimeError):
+                pass  # Signal may not be connected yet
+            
+            # Reconnect with new PROJECT
+            self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
+            logger.info("Dockwidget signals reconnected to new PROJECT")
+        except Exception as e:
+            logger.warning(f"Error reconnecting dockwidget signals: {e}")
         
         # Ensure PROJECT_LAYERS is up to date
         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
@@ -2266,6 +2295,8 @@ class FilterMateApp:
             if isinstance(active_layer, QgsVectorLayer) and active_layer.id() in self.PROJECT_LAYERS:
                 self.dockwidget.current_layer_changed(active_layer)
                 logger.info(f"UI refreshed with active layer: {active_layer.name()}")
+        else:
+            logger.info("No active layer after project load, UI refreshed without layer selection")
             
     def update_datasource(self):
         # POSTGRESQL_AVAILABLE est maintenant importé au niveau du module

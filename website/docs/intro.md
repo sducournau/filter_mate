@@ -7,7 +7,7 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.1 - Stability & Performance Improvements
+## 🎉 What's New in v2.3.2 - Minor Fixes & Docs
 
 ### Enhancements
 - 🐛 **Critical Bug Fixes** - Enhanced stability across all operations
