@@ -38,7 +38,9 @@ class GeometricFilterBackend(ABC):
         predicates: Dict,
         source_geom: Optional[str] = None,
         buffer_value: Optional[float] = None,
-        buffer_expression: Optional[str] = None
+        buffer_expression: Optional[str] = None,
+        source_filter: Optional[str] = None,
+        **kwargs
     ) -> str:
         """
         Build a filter expression for this backend.
@@ -48,7 +50,9 @@ class GeometricFilterBackend(ABC):
             predicates: Dictionary of spatial predicates to apply
             source_geom: Source geometry for spatial filtering (optional)
             buffer_value: Buffer distance value (optional)
+            source_filter: Source layer filter expression (optional, for EXISTS subqueries)
             buffer_expression: Expression for dynamic buffer (optional)
+            **kwargs: Additional backend-specific parameters (e.g., source_wkt, source_srid)
         
         Returns:
             Filter expression as a string suitable for this backend

@@ -6160,8 +6160,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             backend_text = "OGR"
             custom = "color: white; background-color: #3498db;"
         elif provider_type == 'postgresql' and not postgresql_usable:
-            # PostgreSQL layer but no connection - will use Spatialite fallback
-            backend_text = "Spatialite*"
+            # PostgreSQL layer but no connection - will use OGR fallback
+            backend_text = "OGR*"
             custom = "color: white; background-color: #e67e22;"  # Orange for fallback
         else:
             backend_text = provider_type[:6].upper() if provider_type else "..."

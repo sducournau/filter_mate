@@ -1,5 +1,37 @@
 # Known Issues & Bug Fixes - FilterMate
 
+## Repository Cleanup (December 16, 2025)
+
+**Actions Performed:**
+- ✅ Removed backup files: `filter_mate_dockwidget_base.py.backup`, `filter_mate_dockwidget_base.ui.backup`
+- ✅ Moved `test_import.py`, `test_plugin_load.py`, `reload_plugin.py` → `tools/diagnostic/`
+- ✅ Moved `fix_pyuic5_imports.py`, `remove_ui_suffixes.py` → `tools/ui/`
+- ✅ Moved `create_release_zip.py` → `tools/build/`
+- ✅ Moved `TEST_POSTGRESQL_FIX.md` → `docs/fixes/`
+- ✅ Cleaned all `__pycache__` and `.pytest_cache` directories
+
+---
+
+## Recently Fixed (v2.3.0-alpha - December 16, 2025)
+
+### PostgreSQL Layer Freeze on Loading
+**Status:** ✅ FIXED
+
+**Issue:**
+- QGIS would freeze when loading PostgreSQL layers without primary key
+- `uniqueValues()` called on large tables caused memory exhaustion
+
+**Solution:**
+- Skip uniqueness verification for PostgreSQL layers
+- Trust declared PRIMARY KEY constraints
+- Fallback to 'ctid' for tables without primary key
+- Clear warning messages to users
+
+**Files Changed:**
+- `modules/tasks/layer_management_task.py`: `search_primary_key_from_layer()`
+
+---
+
 ## Recently Fixed (v2.3.0-alpha - December 15, 2025)
 
 ### Plugin Not Auto-Activating When Loading Layer into Empty Project

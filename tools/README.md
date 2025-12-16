@@ -7,6 +7,7 @@ These scripts are not part of the plugin runtime and are used for build, transla
 
 ```
 tools/
+├── cleanup_postgresql_virtual_id.py  # 🆕 Fix corrupted PostgreSQL layers
 ├── build/              # Build and release scripts
 │   └── create_release_zip.py
 ├── diagnostic/         # Diagnostic and testing utilities
@@ -29,6 +30,38 @@ tools/
     ├── update_ui_tooltips.py
     └── verify_ui_fix.py
 ```
+
+## Maintenance Scripts
+
+### cleanup_postgresql_virtual_id.py 🆕
+**Purpose:** Fix corrupted PostgreSQL layers that were incorrectly configured with `virtual_id` as their primary key field.
+
+**Problem:** 
+- Older versions of FilterMate allowed PostgreSQL layers without unique fields to use virtual_id
+- Virtual fields only exist in QGIS memory, not in the PostgreSQL database
+- This causes "column virtual_id does not exist" errors when filtering
+
+**Usage:**
+```bash
+# From command line
+python cleanup_postgresql_virtual_id.py
+
+# From QGIS Python console
+exec(open('/path/to/cleanup_postgresql_virtual_id.py').read())
+```
+
+**What it does:**
+1. Scans FilterMate's database for PostgreSQL layers with virtual_id
+2. Creates a backup of the database
+3. Removes corrupted layer properties
+4. Shows which PostgreSQL tables need PRIMARY KEY constraints
+
+**After running:**
+- Restart QGIS
+- Add PRIMARY KEY to your PostgreSQL tables
+- Re-add the layers to FilterMate
+
+See `docs/fixes/POSTGRESQL_VIRTUAL_ID_FIX_2025-12-16.md` for full details.
 
 ## Build Scripts
 

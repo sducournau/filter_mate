@@ -308,7 +308,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         predicates: Dict,
         source_geom: Optional[str] = None,
         buffer_value: Optional[float] = None,
-        buffer_expression: Optional[str] = None
+        buffer_expression: Optional[str] = None,
+        source_filter: Optional[str] = None,
+        **kwargs
     ) -> str:
         """
         Build Spatialite filter expression.
@@ -327,6 +329,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             source_geom: Source geometry (WKT string)
             buffer_value: Buffer distance
             buffer_expression: Expression for dynamic buffer
+            source_filter: Source layer filter (not used in Spatialite)
         
         Returns:
             Spatialite SQL expression string

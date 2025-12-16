@@ -196,8 +196,18 @@ def is_layer_source_available(layer) -> bool:
             # If base is empty or not a file, we cannot confirm; treat as unavailable
             return False
 
-        # PostgreSQL: rely on QGIS layer validity; avoid opening connections here
+        # PostgreSQL: verify connectivity
         if provider == 'postgresql':
+            # Check if psycopg2 is available first
+            if not POSTGRESQL_AVAILABLE:
+                logger.warning(
+                    f"PostgreSQL layer detected but psycopg2 not available: {layer.name() if layer else 'Unknown'}"
+                )
+                return False
+            
+            # For PostgreSQL, we rely on QGIS validity as connection test is expensive
+            # The actual connection test will happen in get_datasource_connexion_from_layer()
+            # when the layer is actually used for filtering
             return True
 
         # Fallback to QGIS validity

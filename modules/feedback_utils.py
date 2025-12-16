@@ -94,9 +94,9 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
         'export': f"Exporting {layer_count} layer(s)"
     }.get(operation, f"Processing {layer_count} layer(s)")
     
-    # Add fallback indicator for PostgreSQL layers using Spatialite
+    # Add fallback indicator for PostgreSQL layers using OGR
     if is_fallback:
-        message = f"💾 Spatialite (fallback for PostgreSQL): {operation_text}..."
+        message = f"💾 OGR (fallback for PostgreSQL): {operation_text}..."
     else:
         message = f"{backend_name}: {operation_text}..."
     

@@ -130,7 +130,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
         predicates: Dict,
         source_geom: Optional[str] = None,
         buffer_value: Optional[float] = None,
-        buffer_expression: Optional[str] = None
+        buffer_expression: Optional[str] = None,
+        source_filter: Optional[str] = None,
+        **kwargs
     ) -> str:
         """
         Build expression for OGR backend.
@@ -144,6 +146,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             source_geom: Source geometry (layer reference)
             buffer_value: Buffer distance
             buffer_expression: Expression for dynamic buffer
+            source_filter: Source layer filter (not used in OGR)
+            **kwargs: Additional backend-specific parameters (ignored)
         
         Returns:
             JSON string with processing parameters

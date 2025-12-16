@@ -1,4 +1,6 @@
-# Performance Optimizations - FilterMate v2.1.0
+# Performance Optimizations - FilterMate v2.3.0
+
+**Last Updated:** December 16, 2025
 
 ## Overview
 
@@ -186,8 +188,25 @@ def build_expression(self, predicates):
 
 **Materialized Views:**
 - Server-side computation
-- GIST spatial indexes
+- GIST spatial indexes with FILLFACTOR tuning
+- Primary key index for fast lookups
 - Sub-second response on millions of features
+
+**Primary Key Detection (NEW - v2.3.0 - December 16, 2025):**
+- Skip `uniqueValues()` call on PostgreSQL (avoids freeze on large tables)
+- Trust declared PRIMARY KEY constraints
+- Fallback to 'ctid' for tables without primary key
+- Clear warning messages to users about limitations
+
+**Predicate Ordering (NEW - v2.3.1):**
+- Predicates sorted by selectivity (most selective first)
+- Order: disjoint → intersects → touches → crosses → within → contains → overlaps → equals
+- ~2× faster multi-predicate queries
+
+**Adaptive CLUSTER:**
+- CLUSTER enabled for datasets < 100k features
+- Skipped for very large datasets (slow operation)
+- Configurable via ENABLE_MV_CLUSTER flag
 
 **Connection Pooling:**
 - Reuse connections

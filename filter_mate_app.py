@@ -96,6 +96,23 @@ class FilterMateApp:
 
     def _on_layers_added(self, layers):
         """Signal handler for layersAdded: ignore broken/invalid layers."""
+        # Check if any PostgreSQL layers are being added without psycopg2
+        postgres_layers = [l for l in layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
+        if postgres_layers and not POSTGRESQL_AVAILABLE:
+            layer_names = ', '.join([l.name() for l in postgres_layers[:3]])  # Show first 3
+            if len(postgres_layers) > 3:
+                layer_names += f" (+{len(postgres_layers) - 3} autres)"
+            
+            iface.messageBar().pushWarning(
+                "FilterMate",
+                f"Couches PostgreSQL détectées ({layer_names}) mais psycopg2 n'est pas installé. "
+                "Le plugin ne peut pas utiliser ces couches. "
+                "Installez psycopg2 pour activer le support PostgreSQL."
+            )
+            logger.warning(
+                f"FilterMate: Cannot use {len(postgres_layers)} PostgreSQL layer(s) - psycopg2 not available"
+            )
+        
         filtered = self._filter_usable_layers(layers)
         if not filtered:
             logger.info("FilterMate: Ignoring layersAdded (no usable layers)")
@@ -190,6 +207,16 @@ class FilterMateApp:
         # Initialize filter history manager for undo/redo functionality
         self.history_manager = HistoryManager(max_size=100)
         logger.info("FilterMate: HistoryManager initialized for undo/redo functionality")
+        
+        # Log PostgreSQL availability status
+        if POSTGRESQL_AVAILABLE:
+            logger.info("FilterMate: PostgreSQL support enabled (psycopg2 available)")
+        else:
+            logger.warning(
+                "FilterMate: PostgreSQL support DISABLED - psycopg2 not installed. "
+                "Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. "
+                "For PostgreSQL layers, install psycopg2."
+            )
         
         init_env_vars()
         

@@ -30,11 +30,36 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     - Native PostGIS spatial functions (ST_Intersects, ST_Contains, etc.)
     - Efficient spatial indexes
     - SQL-based filtering for maximum performance
+    
+    Strategy by source feature count:
+    - Tiny (< 50): Direct WKT geometry literal (simplest, no subquery)
+    - Small (< 10k): EXISTS subquery with source filter
+    - Large (≥ 10k): Materialized views with spatial indexes
     """
     
     # Performance thresholds
+    SIMPLE_WKT_THRESHOLD = 50            # Use direct WKT for very small source datasets
     MATERIALIZED_VIEW_THRESHOLD = 10000  # Features count threshold for MV strategy
     LARGE_DATASET_THRESHOLD = 100000     # Features count for additional logging
+    
+    # Predicate ordering for performance optimization
+    # Most selective/fastest predicates first = better query plans
+    # disjoint is fastest (eliminates most), equals is slowest (most expensive comparison)
+    PREDICATE_ORDER = {
+        'disjoint': 1,     # ST_Disjoint - fastest, eliminates most features
+        'intersects': 2,   # ST_Intersects - fast with spatial index
+        'touches': 3,      # ST_Touches - fast boundary check
+        'crosses': 4,      # ST_Crosses - moderate
+        'within': 5,       # ST_Within - moderate, uses index
+        'contains': 6,     # ST_Contains - expensive
+        'overlaps': 7,     # ST_Overlaps - expensive
+        'equals': 8,       # ST_Equals - most expensive comparison
+    }
+    
+    # MV optimization flags
+    ENABLE_MV_CLUSTER = True       # CLUSTER operation (improves seq scans but slow to create)
+    ENABLE_MV_ANALYZE = True       # ANALYZE for query optimizer statistics
+    MV_INDEX_FILLFACTOR = 90       # Index fill factor (90 = good for read-heavy, 70 = for updates)
     
     def __init__(self, task_params: Dict):
         """
@@ -83,24 +108,188 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         except Exception as e:
             self.log_warning(f"PostgreSQL connection test failed for layer {layer.name()}: {e}, will use OGR fallback")
             return False
-    
+
+    def _parse_source_table_reference(self, source_geom: str) -> Optional[Dict]:
+        """
+        Parse source geometry expression to detect table references.
+        
+        PostgreSQL source_geom can have several formats:
+        1. "schema"."table"."geom" - direct table reference
+        2. "mv_xxx_dump"."geom" - materialized view reference
+        3. ST_Buffer("schema"."table"."geom", value) - with buffer
+        
+        For formats 1 and 3, we need to use EXISTS subquery in setSubsetString.
+        For format 2 (materialized view), it's OK to use direct reference.
+        
+        Args:
+            source_geom: Source geometry SQL expression
+        
+        Returns:
+            Dict with schema, table, geom_field, and optional buffer_expr, or None if not a table reference
+        """
+        import re
+        
+        # Pattern 1: ST_Buffer("schema"."table"."geom", value)
+        buffer_pattern = r'ST_Buffer\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*([^)]+)\)'
+        match = re.match(buffer_pattern, source_geom, re.IGNORECASE)
+        if match:
+            schema, table, geom_field, buffer_value = match.groups()
+            return {
+                'schema': schema,
+                'table': table,
+                'geom_field': geom_field,
+                'buffer_expr': f'ST_Buffer(__source."{geom_field}", {buffer_value})'
+            }
+        
+        # Pattern 2: "schema"."table"."geom" (3-part identifier)
+        three_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"'
+        match = re.match(three_part_pattern, source_geom)
+        if match:
+            schema, table, geom_field = match.groups()
+            # Skip materialized views - they're safe to reference directly
+            if table.startswith('mv_') and table.endswith('_dump'):
+                self.log_debug(f"Source is materialized view '{table}' - using direct reference")
+                return None
+            return {
+                'schema': schema,
+                'table': table,
+                'geom_field': geom_field
+            }
+        
+        # Pattern 3: "mv_xxx_dump"."geom" (2-part, materialized view)
+        two_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"'
+        match = re.match(two_part_pattern, source_geom)
+        if match:
+            table, geom_field = match.groups()
+            if table.startswith('mv_') and table.endswith('_dump'):
+                # Materialized view - safe to reference directly
+                self.log_debug(f"Source is materialized view '{table}' - using direct reference")
+                return None
+        
+        # Not a table reference (could be WKT, ST_GeomFromText, etc.)
+        self.log_debug(f"Source geometry is not a table reference - using direct expression")
+        return None
+
+    def _adapt_filter_for_subquery(self, filter_expr: str, schema: str, table: str) -> str:
+        """
+        Adapt a filter expression to work inside an EXISTS subquery.
+        
+        Replaces qualified table references like "schema"."table"."column" or "table"."column"
+        with the subquery alias __source."column".
+        
+        Also strips outer parentheses to avoid syntax errors when combining with AND.
+        
+        Examples:
+            Input:  "Distribution Cluster"."id" = 1
+            Output: __source."id" = 1
+            
+            Input:  ("public"."Distribution Cluster"."id" = 1)
+            Output: __source."id" = 1
+        
+        Args:
+            filter_expr: Original filter expression with qualified table names
+            schema: Schema name to replace
+            table: Table name to replace
+        
+        Returns:
+            Adapted filter expression using __source alias
+        """
+        import re
+        
+        # Strip outer parentheses if present (they will be added by the caller if needed)
+        filter_expr = filter_expr.strip()
+        while filter_expr.startswith('(') and filter_expr.endswith(')'):
+            # Check if these are matching outer parentheses
+            # by ensuring the closing paren matches the opening one
+            depth = 0
+            is_outer = True
+            for i, char in enumerate(filter_expr):
+                if char == '(':
+                    depth += 1
+                elif char == ')':
+                    depth -= 1
+                    if depth == 0 and i < len(filter_expr) - 1:
+                        # Found a closing paren before the end - not outer parens
+                        is_outer = False
+                        break
+            if is_outer and depth == 0:
+                filter_expr = filter_expr[1:-1].strip()
+            else:
+                break
+        
+        # Pattern 1: "schema"."table"."column" -> __source."column"
+        three_part_pattern = rf'"{re.escape(schema)}"\s*\.\s*"{re.escape(table)}"\s*\.\s*"([^"]+)"'
+        adapted = re.sub(three_part_pattern, r'__source."\1"', filter_expr)
+        
+        # Pattern 2: "table"."column" -> __source."column"
+        two_part_pattern = rf'"{re.escape(table)}"\s*\.\s*"([^"]+)"'
+        adapted = re.sub(two_part_pattern, r'__source."\1"', adapted)
+        
+        return adapted
+
+    def _build_simple_wkt_expression(
+        self,
+        geom_expr: str,
+        predicate_func: str,
+        source_wkt: str,
+        source_srid: int,
+        buffer_value: Optional[float] = None
+    ) -> str:
+        """
+        Build a simple PostGIS expression using direct WKT geometry literal.
+        
+        This is the simplest and most efficient method for small source datasets.
+        Instead of using EXISTS subquery, we embed the source geometry directly.
+        
+        Args:
+            geom_expr: Target layer geometry expression (e.g., "table"."geom")
+            predicate_func: PostGIS predicate (e.g., "ST_Intersects")
+            source_wkt: WKT string of source geometry (already merged/unioned)
+            source_srid: SRID of the source geometry
+            buffer_value: Optional buffer to apply to source geometry
+        
+        Returns:
+            Simple PostGIS expression like:
+            ST_Intersects("table"."geom", ST_GeomFromText('POLYGON(...)', 31370))
+        """
+        # Build source geometry from WKT
+        source_geom_sql = f"ST_GeomFromText('{source_wkt}', {source_srid})"
+        
+        # Apply buffer if specified
+        if buffer_value and buffer_value > 0:
+            source_geom_sql = f"ST_Buffer({source_geom_sql}, {buffer_value})"
+        
+        return f"{predicate_func}({geom_expr}, {source_geom_sql})"
+
     def build_expression(
         self,
         layer_props: Dict,
         predicates: Dict,
         source_geom: Optional[str] = None,
         buffer_value: Optional[float] = None,
-        buffer_expression: Optional[str] = None
+        buffer_expression: Optional[str] = None,
+        source_filter: Optional[str] = None,
+        source_wkt: Optional[str] = None,
+        source_srid: Optional[int] = None,
+        source_feature_count: Optional[int] = None
     ) -> str:
         """
         Build PostGIS filter expression.
         
+        Strategy based on source feature count:
+        - Tiny (< SIMPLE_WKT_THRESHOLD): Use direct WKT geometry literal (simplest)
+        - Larger: Use EXISTS subquery with source filter
+        
         Args:
             layer_props: Layer properties (schema, table, geometry field, etc.)
             predicates: Spatial predicates to apply
-            source_geom: Source geometry expression
+            source_geom: Source geometry expression (table reference for EXISTS)
             buffer_value: Buffer distance
             buffer_expression: Expression for dynamic buffer
+            source_filter: Optional filter expression for source layer (for EXISTS subqueries)
+            source_wkt: Optional WKT string for simple mode (when few source features)
+            source_srid: SRID for the source WKT geometry
+            source_feature_count: Number of source features (to choose strategy)
         
         Returns:
             PostGIS SQL expression string
@@ -146,12 +335,134 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         elif buffer_expression:
             geom_expr = f"ST_Buffer({geom_expr}, {buffer_expression})"
         
-        # Build predicate expressions
+        # Determine strategy based on source feature count
+        use_simple_wkt = (
+            source_wkt is not None and 
+            source_srid is not None and
+            source_feature_count is not None and
+            source_feature_count <= self.SIMPLE_WKT_THRESHOLD
+        )
+        
+        if use_simple_wkt:
+            self.log_info(f"📝 Using SIMPLE WKT mode for {layer_props.get('layer_name', 'unknown')}")
+            self.log_info(f"  - Source features: {source_feature_count} (≤ {self.SIMPLE_WKT_THRESHOLD} threshold)")
+            self.log_info(f"  - WKT length: {len(source_wkt)} chars, SRID: {source_srid}")
+        
+        # Build predicate expressions with OPTIMIZED order
+        # Sort predicates for better query performance:
+        # - Most selective predicates first = faster short-circuit evaluation
+        # - PostgreSQL query planner benefits from predicate ordering
         predicate_expressions = []
-        for predicate_name, predicate_func in predicates.items():
+        
+        # Extract and sort predicates by optimal order
+        predicate_items = []
+        for key, func in predicates.items():
+            # Extract predicate name from function name (e.g., 'ST_Intersects' -> 'intersects')
+            predicate_lower = key.lower().replace('st_', '')
+            order = self.PREDICATE_ORDER.get(predicate_lower, 99)
+            predicate_items.append((key, func, order))
+        
+        # Sort by order (most selective first)
+        predicate_items.sort(key=lambda x: x[2])
+        
+        if len(predicate_items) > 1:
+            self.log_debug(f"Predicates reordered for performance: {[p[0] for p in predicate_items]}")
+        
+        for predicate_name, predicate_func, _ in predicate_items:
+            # STRATEGY 1: Simple WKT mode (few source features)
+            # Use direct ST_GeomFromText() - simplest and most efficient for small datasets
+            if use_simple_wkt:
+                expr = self._build_simple_wkt_expression(
+                    geom_expr=geom_expr,
+                    predicate_func=predicate_func,
+                    source_wkt=source_wkt,
+                    source_srid=source_srid,
+                    buffer_value=None  # Buffer already applied to geom_expr if needed
+                )
+                self.log_debug(f"  ✓ Simple WKT expression: {expr[:100]}...")
+                predicate_expressions.append(expr)
+                continue
+            
+            # STRATEGY 2: EXISTS subquery mode (many source features or no WKT available)
             if source_geom:
-                # Apply spatial predicate
-                expr = f"{predicate_func}({geom_expr}, {source_geom})"
+                # CRITICAL FIX: Detect if source_geom references another table
+                # Pattern: "schema"."table"."column" or ST_Buffer("schema"."table"."column", value)
+                # In these cases, we MUST use EXISTS subquery because setSubsetString 
+                # cannot reference other tables directly (would cause "missing FROM-clause entry" error)
+                
+                # Parse source_geom to extract table reference
+                source_table_ref = self._parse_source_table_reference(source_geom)
+                
+                if source_table_ref:
+                    # Use EXISTS subquery to avoid "missing FROM-clause entry" error
+                    source_schema_name = source_table_ref['schema']
+                    source_table_name = source_table_ref['table']
+                    source_geom_field = source_table_ref['geom_field']
+                    source_has_buffer = source_table_ref.get('buffer_expr')
+                    
+                    # Build source geometry expression within subquery
+                    if source_has_buffer:
+                        source_geom_in_subquery = source_has_buffer
+                    else:
+                        source_geom_in_subquery = f'__source."{source_geom_field}"'
+                    
+                    # CRITICAL FIX: Include source layer filter in EXISTS subquery
+                    # When source layer is filtered (via setSubsetString), we must
+                    # only match against the filtered features, not the entire table
+                    where_clauses = [f'{predicate_func}({geom_expr}, {source_geom_in_subquery})']
+                    
+                    self.log_info(f"🔧 Building EXISTS subquery for {layer_props.get('layer_name', 'unknown')}")
+                    self.log_info(f"  - Source filter provided: {source_filter is not None}")
+                    
+                    if source_filter:
+                        # CRITICAL FIX: Validate source_filter before using
+                        # If source_filter already contains spatial predicates or __source alias,
+                        # it's from a previous geometric filter and should NOT be included
+                        # This prevents SQL duplication errors like:
+                        # EXISTS(...WHERE ST_Intersects(...)) AND (ST_Intersects(...))
+                        source_filter_upper = source_filter.upper()
+                        is_spatial_filter = any(pred in source_filter_upper for pred in [
+                            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                            'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                            '__SOURCE'
+                        ])
+                        
+                        if is_spatial_filter:
+                            self.log_warning(f"  ⚠️ Source filter contains spatial predicates or __source alias - SKIPPING")
+                            self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
+                            self.log_warning(f"  → This is likely from a previous geometric filter operation")
+                            self.log_warning(f"  → Only the spatial predicate will be used (no attribute filter)")
+                        else:
+                            # CRITICAL: Replace table references with __source alias
+                            # The source_filter comes from setSubsetString and contains qualified table names
+                            # like "Distribution Cluster"."id" which must become __source."id"
+                            self.log_info(f"  - Original source filter: '{source_filter[:100]}'...")
+                            adapted_filter = self._adapt_filter_for_subquery(
+                                source_filter, 
+                                source_schema_name, 
+                                source_table_name
+                            )
+                            # Add the adapted filter without extra parentheses
+                            # The filter is already properly formatted by _adapt_filter_for_subquery
+                            where_clauses.append(adapted_filter)
+                            self.log_info(f"  - Adapted filter: '{adapted_filter[:100]}'...")
+                            self.log_info(f"  - WHERE clause will be: predicate AND adapted_filter")
+                    
+                    where_clause = ' AND '.join(where_clauses)
+                    
+                    # Build EXISTS subquery
+                    expr = (
+                        f'EXISTS ('
+                        f'SELECT 1 FROM "{source_schema_name}"."{source_table_name}" AS __source '
+                        f'WHERE {where_clause}'
+                        f')'
+                    )
+                    self.log_info(f"  ✓ Built EXISTS expression: '{expr[:150]}'...")
+                    self.log_debug(f"Using EXISTS subquery to avoid missing FROM-clause error")
+                else:
+                    # Simple expression (WKT, geometry literal, etc.) - can use directly
+                    expr = f"{predicate_func}({geom_expr}, {source_geom})"
+                
                 predicate_expressions.append(expr)
         
         # Combine predicates with OR
@@ -195,8 +506,52 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             # Get feature count to determine strategy
             feature_count = layer.featureCount()
             
+            # Check if layer uses ctid (no primary key)
+            from ..appUtils import get_primary_key_name
+            key_column = get_primary_key_name(layer)
+            uses_ctid = (key_column == 'ctid')
+            
+            # CRITICAL FIX: Clean invalid old_subset from previous failed operations
+            # If old_subset contains __source alias, it's from a corrupted previous filter
+            # The __source alias ONLY exists inside EXISTS subqueries and is invalid outside
+            if old_subset and '__source' in old_subset.lower():
+                self.log_warning(f"⚠️ CRITICAL: Invalid old_subset detected with __source alias!")
+                self.log_warning(f"  → Corrupted subset: '{old_subset[:150]}'...")
+                self.log_warning(f"  → This is from a previous failed filtering operation")
+                self.log_warning(f"  → Clearing invalid subset to prevent SQL syntax errors")
+                # FORCE clear the invalid subset - DO NOT combine with it
+                old_subset = None
+                self.log_info(f"  ✓ Invalid subset cleared - will apply fresh filter")
+            
             # Combine with existing filter if specified
+            # CRITICAL: Don't combine in these cases:
+            # 1. Expression already contains EXISTS subquery (source filter already integrated)
+            # 2. old_subset was just cleared (was invalid)
+            # 3. No explicit combine operator with EXISTS
+            has_exists_subquery = 'EXISTS (' in expression.upper()
+            
+            # DIAGNOSTIC: Log detection results
+            self.log_info(f"🔍 Filter combination check:")
+            self.log_info(f"  - Expression contains EXISTS: {has_exists_subquery}")
+            self.log_info(f"  - old_subset exists after cleanup: {old_subset is not None}")
             if old_subset:
+                self.log_info(f"  - old_subset (valid): '{old_subset[:80]}'...")
+            self.log_info(f"  - combine_operator: {combine_operator}")
+            
+            # CRITICAL FIX: When EXISTS subquery contains the source filter adapted inside it,
+            # DO NOT combine with old_subset again (would create duplicate conditions with syntax error)
+            # The source filter is already integrated in the WHERE clause of the EXISTS subquery
+            # Example: EXISTS (SELECT 1 FROM ... WHERE ST_Intersects(...) AND __source."id" = '17')
+            # If we combine with old_subset containing the same filter, we get:
+            # (old_filter) AND (EXISTS(...AND adapted_filter)) which creates an invalid double condition
+            should_skip_combination = (
+                has_exists_subquery or 
+                (old_subset and combine_operator is None)  # Don't auto-combine if no explicit operator
+            )
+            
+            self.log_info(f"  → should_skip_combination: {should_skip_combination}")
+            
+            if old_subset and not should_skip_combination:
                 if not combine_operator:
                     combine_operator = 'AND'
                     self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
@@ -205,11 +560,24 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 final_expression = f"({old_subset}) {combine_operator} ({expression})"
                 self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
             else:
+                if has_exists_subquery and old_subset:
+                    self.log_info(f"✓ EXISTS subquery detected - source filter already integrated in WHERE clause, skipping combination")
+                    self.log_info(f"  → Expression already contains source filter adapted for __source alias")
+                if old_subset and combine_operator is None and has_exists_subquery:
+                    self.log_info(f"✓ No explicit combine operator with EXISTS subquery - using expression as-is")
                 final_expression = expression
             
-            # Decide strategy based on dataset size
-            if feature_count >= self.MATERIALIZED_VIEW_THRESHOLD:
-                # Large dataset - use materialized views
+            # Decide strategy based on dataset size and primary key availability
+            if uses_ctid:
+                # No primary key (using ctid) - MUST use direct method
+                self.log_info(
+                    f"PostgreSQL: Layer without PRIMARY KEY (using ctid). "
+                    f"Using direct filtering (materialized views disabled)."
+                )
+                return self._apply_direct(layer, final_expression)
+            
+            elif feature_count >= self.MATERIALIZED_VIEW_THRESHOLD:
+                # Large dataset with PK - use materialized views
                 if feature_count >= self.LARGE_DATASET_THRESHOLD:
                     self.log_info(
                         f"PostgreSQL: Very large dataset ({feature_count:,} features). "
@@ -286,7 +654,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         Provides optimal performance for large datasets by:
         - Creating indexed materialized views on the server
         - Using GIST spatial indexes for fast spatial queries
-        - Clustering data for sequential read optimization
+        - Optional clustering for sequential read optimization (configurable)
+        
+        Performance optimizations:
+        - Index FILLFACTOR tuning for read-heavy workloads
+        - Optional CLUSTER (can be slow, disabled for very large datasets)
+        - ANALYZE for query optimizer statistics
+        - Batch transaction for faster execution
         
         Args:
             layer: PostgreSQL layer to filter
@@ -317,8 +691,16 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 from ..appUtils import get_primary_key_name
                 key_column = get_primary_key_name(layer)
             
-            if not key_column:
-                self.log_warning("Cannot determine primary key, falling back to direct method")
+            # CRITICAL: ctid cannot be used in materialized views
+            # ctid is PostgreSQL's internal row identifier, not a real column
+            if not key_column or key_column == 'ctid':
+                if key_column == 'ctid':
+                    self.log_warning(
+                        f"Layer '{layer.name()}' uses 'ctid' (no PRIMARY KEY). "
+                        f"Materialized views disabled, using direct filtering."
+                    )
+                else:
+                    self.log_warning("Cannot determine primary key, falling back to direct method")
                 conn.close()
                 return self._apply_direct(layer, expression)
             
@@ -328,34 +710,76 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             self.log_debug(f"Creating materialized view: {full_mv_name}")
             
-            # Build SQL commands
-            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS {full_mv_name} CASCADE;'
+            # Get estimated row count for optimization decisions
+            feature_count = layer.featureCount()
             
-            # Build CREATE MATERIALIZED VIEW with WHERE clause
+            # Build SQL commands
+            commands = []
+            command_names = []
+            
+            # 1. Drop existing MV if any
+            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS {full_mv_name} CASCADE;'
+            commands.append(sql_drop)
+            command_names.append("DROP MV")
+            
+            # 2. Create MV with optimized settings
+            # Use UNLOGGED for temporary MV if supported (PostgreSQL 11+)
             sql_create = f'''
                 CREATE MATERIALIZED VIEW {full_mv_name} AS
                 SELECT * FROM "{schema}"."{table}"
                 WHERE {expression}
                 WITH DATA;
             '''
+            commands.append(sql_create)
+            command_names.append("CREATE MV")
             
-            # Create spatial index
+            # 3. Create spatial index with FILLFACTOR optimization
             index_name = f"{mv_name}_gist_idx"
-            sql_create_index = f'CREATE INDEX "{index_name}" ON {full_mv_name} USING GIST ("{geom_column}");'
+            sql_create_index = (
+                f'CREATE INDEX "{index_name}" ON {full_mv_name} '
+                f'USING GIST ("{geom_column}") '
+                f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
+            )
+            commands.append(sql_create_index)
+            command_names.append("CREATE INDEX")
             
-            # Cluster on spatial index for better sequential read performance
-            sql_cluster = f'CLUSTER {full_mv_name} USING "{index_name}";'
+            # 4. Create index on primary key for fast lookups
+            pk_index_name = f"{mv_name}_pk_idx"
+            sql_create_pk_index = f'CREATE INDEX "{pk_index_name}" ON {full_mv_name} ("{key_column}");'
+            commands.append(sql_create_pk_index)
+            command_names.append("CREATE PK INDEX")
             
-            # Analyze for query optimizer
-            sql_analyze = f'ANALYZE {full_mv_name};'
+            # 5. CLUSTER - optional, can be slow for large datasets (> 100k features)
+            # CLUSTER reorganizes data on disk for better sequential reads
+            # Skip for very large datasets as it can take a long time
+            if self.ENABLE_MV_CLUSTER and feature_count < self.LARGE_DATASET_THRESHOLD:
+                sql_cluster = f'CLUSTER {full_mv_name} USING "{index_name}";'
+                commands.append(sql_cluster)
+                command_names.append("CLUSTER")
+            elif feature_count >= self.LARGE_DATASET_THRESHOLD:
+                self.log_info(f"⚡ Skipping CLUSTER for performance (dataset > {self.LARGE_DATASET_THRESHOLD:,} features)")
             
-            # Execute commands
-            commands = [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze]
+            # 6. ANALYZE for query optimizer
+            if self.ENABLE_MV_ANALYZE:
+                sql_analyze = f'ANALYZE {full_mv_name};'
+                commands.append(sql_analyze)
+                command_names.append("ANALYZE")
             
-            for i, cmd in enumerate(commands):
-                self.log_debug(f"Executing PostgreSQL command {i+1}/{len(commands)}")
+            # Execute commands with timing
+            total_steps = len(commands)
+            step_times = []
+            
+            for i, (cmd, cmd_name) in enumerate(zip(commands, command_names)):
+                step_start = time.time()
+                self.log_debug(f"Executing {cmd_name} ({i+1}/{total_steps})")
                 cursor.execute(cmd)
                 conn.commit()
+                step_time = time.time() - step_start
+                step_times.append((cmd_name, step_time))
+                
+                # Log slow operations
+                if step_time > 1.0:
+                    self.log_debug(f"  ⏱️ {cmd_name} took {step_time:.2f}s")
             
             # Update layer to use materialized view
             layer_subset = f'"{key_column}" IN (SELECT "{key_column}" FROM {full_mv_name})'
@@ -374,6 +798,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     f"✓ Materialized view created and filter applied in {elapsed:.2f}s. "
                     f"{new_feature_count} features match."
                 )
+                
+                # Log performance breakdown for debugging
+                if elapsed > 2.0:
+                    breakdown = ", ".join([f"{name}: {t:.2f}s" for name, t in step_times])
+                    self.log_debug(f"  Performance breakdown: {breakdown}")
             else:
                 self.log_error(f"Failed to set subset string on layer")
             

@@ -82,21 +82,23 @@ filter_mate/
 ```
 
 ## Current Status
-- **Version**: 2.3.0 (December 15, 2025)
+- **Version**: 2.3.0 (December 16, 2025)
 - **Status**: Production - Global Undo/Redo with intelligent context detection
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
 - **Refactoring Progress**: All phases complete, code extracted to modules/tasks/
-- **Repository Cleanup**: December 15, 2025 - tools/ directory created, scripts organized
+- **Repository Cleanup**: December 16, 2025 - Second cleanup: backup files removed, scripts reorganized to tools/
+- **PostgreSQL Improvements**: December 16, 2025 - Primary key detection, ctid fallback, freeze fixes
 
-## File Sizes (as of December 15, 2025)
-- `filter_mate_app.py`: ~2048 lines (with undo/redo features)
-- `filter_mate_dockwidget.py`: ~5077 lines
+## File Sizes (as of December 16, 2025)
+- `filter_mate_app.py`: ~2200 lines (with undo/redo, PostgreSQL improvements)
+- `filter_mate_dockwidget.py`: ~5200 lines
 - `modules/appTasks.py`: 58 lines (re-exports only - code moved to modules/tasks/)
-- `modules/tasks/layer_management_task.py`: ~1125 lines
-- `modules/tasks/filter_task.py`: ~950 lines
+- `modules/tasks/layer_management_task.py`: ~1200 lines (primary key detection improvements)
+- `modules/tasks/filter_task.py`: ~1000 lines
 - `modules/tasks/task_utils.py`: ~328 lines
-- `modules/type_utils.py`: ~126 lines (NEW)
+- `modules/type_utils.py`: ~126 lines
+- `modules/appUtils.py`: ~850 lines (sanitization functions added)
 
 ## Recent Development (December 12, 2025)
 

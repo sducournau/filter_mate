@@ -1,6 +1,6 @@
 # Repository Structure - FilterMate v2.3.0
 
-**Last Updated:** December 15, 2025
+**Last Updated:** December 16, 2025
 
 ## Overview
 
@@ -32,6 +32,11 @@ setup_tests.bat             # Windows: Test environment setup
 setup_tests.sh              # Linux: Test environment setup
 requirements-test.txt       # Test dependencies
 ```
+
+**Note (December 16, 2025):** Build and development scripts have been moved to `tools/` directory:
+- `create_release_zip.py` → `tools/build/`
+- `fix_pyuic5_imports.py`, `remove_ui_suffixes.py` → `tools/ui/`
+- `test_import.py`, `test_plugin_load.py`, `reload_plugin.py` → `tools/diagnostic/`
 
 ### Documentation (Root)
 ```
@@ -109,16 +114,23 @@ modules/
 Development utilities (NOT part of plugin runtime):
 ```
 tools/
-├── README.md               # Tool documentation
-├── build/                  # Build & release
+├── README.md                   # Tool documentation
+├── cleanup_postgresql_virtual_id.py  # PostgreSQL cleanup utility
+├── build/                      # Build & release
 │   └── create_release_zip.py
-├── diagnostic/             # Debugging tools
-│   ├── diagnose_before_load.py
-│   ├── diagnose_freeze.py
-│   ├── test_color_picker.py
-│   ├── test_load_simple.py
+├── diagnostic/                 # Debugging tools
+│   ├── README_PRIMARY_KEY_DETECTION.md
+│   ├── check_column_names.py
+│   ├── check_primary_keys.py
+│   ├── check_remote_layers_filter.py
+│   ├── fix_ctid_layers.py
+│   ├── fix_postgresql_stats.py
+│   ├── reload_plugin.py
+│   ├── test_import.py
+│   ├── test_pk_detection_live.py
+│   ├── test_plugin_load.py
 │   └── validate_config_helpers.py
-├── i18n/                   # Translation tools
+├── i18n/                       # Translation tools
 │   ├── add_ui_tooltips_translations.py
 │   ├── compile_translations.bat
 │   ├── compile_ts_to_qm.py
@@ -126,7 +138,8 @@ tools/
 │   ├── simple_qm_compiler.py
 │   ├── update_translations.py
 │   └── verify_translations.py
-└── ui/                     # UI modification tools
+└── ui/                         # UI modification tools
+    ├── fix_pyuic5_imports.py
     ├── fix_ui_suffixes.py
     ├── remove_ui_suffixes.py
     ├── update_ui_tooltips.py
@@ -147,13 +160,23 @@ tests/
 Documentation:
 ```
 docs/
-├── CONFIG_HARMONIZATION_*.md  # Configuration docs
-├── POSTGRESQL_MV_OPTIMIZATION.md
-└── archive/                # Historical documentation
-    ├── CODEBASE_QUALITY_AUDIT_*.md
-    ├── IMPLEMENTATION_STATUS_*.md
-    ├── UNDO_REDO_*.md
-    └── ... (archived docs)
+├── AUDIT_POSTGRESQL_POSTGIS_2025-12-16.md    # PostgreSQL audit
+├── CONFIG_HARMONIZATION_PROPOSAL.md          # Configuration docs
+├── CONFIG_HARMONIZATION_SUMMARY.md
+├── FIX_IMPORT_ERROR_2025-12-14.md            # Import error fix
+├── IMPLEMENTATION_RECOMMENDATIONS_2025-12-16.md
+├── POSTGRESQL_MV_OPTIMIZATION.md             # MV optimization
+├── archive/                                   # Historical documentation
+│   ├── CODEBASE_QUALITY_AUDIT_*.md
+│   ├── IMPLEMENTATION_STATUS_*.md
+│   ├── UNDO_REDO_*.md
+│   └── ... (archived docs)
+└── fixes/                                     # Bug fix documentation
+    ├── FREEZE_QGIS_POSTGRESQL_FIX_2025-12-16.md
+    ├── POSTGRESQL_LAYER_ACTIVATION_FIX.md
+    ├── POSTGRESQL_NO_PRIMARY_KEY_SUPPORT_2025-12-16.md
+    ├── POSTGRESQL_VIRTUAL_ID_FIX_2025-12-16.md
+    └── TEST_POSTGRESQL_FIX.md
 ```
 
 ### i18n/

@@ -661,6 +661,20 @@ class LayersManagementEngineTask(QgsTask):
         layer_variables = self._load_existing_layer_properties(layer)
         
         if layer_variables:
+            # CRITICAL: Validate PostgreSQL layers don't have virtual_id (legacy bug)
+            if layer.providerType() == 'postgres':
+                primary_key = layer_variables.get("infos", {}).get("primary_key_name")
+                if primary_key == "virtual_id":
+                    error_msg = (
+                        f"Couche PostgreSQL '{layer.name()}' : Données corrompues détectées.\n\n"
+                        f"Cette couche utilise 'virtual_id' qui n'existe pas dans PostgreSQL.\n"
+                        f"Cette erreur provient d'une version précédente de FilterMate.\n\n"
+                        f"Solution : Supprimez cette couche du projet FilterMate, puis rajoutez-la.\n"
+                        f"Assurez-vous que la table PostgreSQL a une PRIMARY KEY définie."
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+            
             # Layer exists - apply migration if needed
             self._migrate_legacy_geometry_field(layer_variables, layer)
         else:
@@ -671,6 +685,21 @@ class LayersManagementEngineTask(QgsTask):
             
             if not isinstance(result, tuple) or len(list(result)) != 4:
                 return False
+            
+            # Check if PostgreSQL layer using ctid (no PRIMARY KEY)
+            primary_key = result[0]
+            if layer.providerType() == 'postgres' and primary_key == 'ctid':
+                # Show warning to user about limitations
+                from qgis.core import Qgis
+                from qgis.utils import iface
+                iface.messageBar().pushMessage(
+                    "FilterMate - PostgreSQL sans clé primaire",
+                    f"La couche '{layer.name()}' n'a pas de PRIMARY KEY. "
+                    f"Fonctionnalités limitées : vues matérialisées désactivées. "
+                    f"Recommandation : ajoutez une PRIMARY KEY pour performances optimales.",
+                    Qgis.Warning,
+                    duration=10
+                )
             
             layer_variables = self._build_new_layer_properties(layer, result)
             self._set_layer_variables(layer, layer_variables)
@@ -720,6 +749,68 @@ class LayersManagementEngineTask(QgsTask):
             return True
         return False
 
+    def cleanup_postgresql_virtual_id_layers(self):
+        """
+        Clean up PostgreSQL layers that incorrectly use virtual_id.
+        
+        This is a migration function to fix layers affected by the virtual_id bug
+        where PostgreSQL layers were allowed to use virtual fields that don't exist
+        in the actual database.
+        
+        Returns:
+            list: List of layer IDs that were cleaned up
+        """
+        cleaned_layer_ids = []
+        
+        try:
+            conn = self._safe_spatialite_connect()
+            cur = conn.cursor()
+            
+            # Find all layers with virtual_id as primary key
+            cur.execute("""
+                SELECT DISTINCT layer_id, meta_value 
+                FROM fm_project_layers_properties 
+                WHERE fk_project = ? 
+                  AND meta_key = 'primary_key_name' 
+                  AND meta_value = 'virtual_id'
+            """, (str(self.project_uuid),))
+            
+            problematic_layers = cur.fetchall()
+            
+            for layer_id, _ in problematic_layers:
+                # Check if this is a PostgreSQL layer
+                cur.execute("""
+                    SELECT meta_value 
+                    FROM fm_project_layers_properties 
+                    WHERE fk_project = ? 
+                      AND layer_id = ? 
+                      AND meta_key = 'layer_provider'
+                """, (str(self.project_uuid), layer_id))
+                
+                provider_result = cur.fetchone()
+                if provider_result and provider_result[0] == 'postgresql':
+                    logger.warning(f"Removing corrupted PostgreSQL layer {layer_id} with virtual_id")
+                    
+                    # Delete all properties for this layer
+                    cur.execute("""
+                        DELETE FROM fm_project_layers_properties 
+                        WHERE fk_project = ? AND layer_id = ?
+                    """, (str(self.project_uuid), layer_id))
+                    
+                    cleaned_layer_ids.append(layer_id)
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            if cleaned_layer_ids:
+                logger.info(f"Cleaned up {len(cleaned_layer_ids)} PostgreSQL layers with virtual_id: {cleaned_layer_ids}")
+            
+        except Exception as e:
+            logger.error(f"Error during PostgreSQL virtual_id cleanup: {e}")
+        
+        return cleaned_layer_ids
+
     def search_primary_key_from_layer(self, layer):
         """
         Search for a primary key field in the layer.
@@ -737,10 +828,14 @@ class LayersManagementEngineTask(QgsTask):
             tuple: (field_name, field_index, field_type, is_numeric) or False if canceled
         """
         feature_count = layer.featureCount()
+        layer_provider = layer.providerType()
         
-        # CRITICAL FIX: For PostgreSQL layers, featureCount() can return -1 if not yet loaded
-        # or if estimated count is used. In this case, we trust the primary key attributes
-        # without checking uniqueness (PostgreSQL enforces this at DB level).
+        # CRITICAL FIX: For PostgreSQL layers, ALWAYS trust declared primary key
+        # without checking uniqueness to avoid freeze on large tables.
+        # uniqueValues() loads ALL values in memory = freeze on 100k+ rows
+        is_postgresql = (layer_provider == 'postgres')
+        
+        # For PostgreSQL or unknown feature count, trust primary key attributes
         if feature_count == -1:
             logger.debug(f"Layer {layer.name()} has unknown feature count (-1), using primary key attributes directly")
         
@@ -750,41 +845,85 @@ class LayersManagementEngineTask(QgsTask):
                 if self.isCanceled():
                     return False
                 field = layer.fields()[field_id]
+                
+                # CRITICAL: For PostgreSQL, ALWAYS trust declared PK (no uniqueValues check)
+                # PostgreSQL enforces PRIMARY KEY constraint at database level
+                if is_postgresql:
+                    logger.debug(f"PostgreSQL layer: trusting declared primary key '{field.name()}' (no uniqueness check)")
+                    return (field.name(), field_id, field.typeName(), field.isNumeric())
+                
                 # For unknown feature count, trust the declared primary key
                 if feature_count == -1:
                     logger.debug(f"Using declared primary key: {field.name()}")
                     return (field.name(), field_id, field.typeName(), field.isNumeric())
-                # Otherwise verify uniqueness
+                
+                # For other providers with known count, verify uniqueness (safe for small datasets)
                 if len(layer.uniqueValues(field_id)) == feature_count:
                     return (field.name(), field_id, field.typeName(), field.isNumeric())
         
         # If no declared primary key, try to find one
-        # For unknown feature count, just use the first 'id' field
+        # For PostgreSQL or unknown feature count, use first 'id' field without verification
+        logger.debug(f"PostgreSQL layer '{layer.name()}': No declared PRIMARY KEY, searching for ID field manually")
+        logger.debug(f"Available fields: {[f.name() for f in layer.fields()]}")
+        
         for field in layer.fields():
             if self.isCanceled():
                 return False
-            if 'id' in str(field.name()).lower():
+            field_name_lower = str(field.name()).lower()
+            logger.debug(f"Checking field '{field.name()}' (lowercase: '{field_name_lower}')")
+            
+            # Check if field name contains 'id' or matches common ID patterns
+            if 'id' in field_name_lower:
+                # For PostgreSQL, assume 'id' field is unique (avoid freeze)
+                if is_postgresql:
+                    logger.info(f"PostgreSQL layer '{layer.name()}': Found field with 'id': '{field.name()}', using as primary key")
+                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                
                 if feature_count == -1:
                     logger.debug(f"Using field with 'id' in name: {field.name()}")
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                
+                # Only verify uniqueness for non-PostgreSQL layers
                 if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 
+        # For PostgreSQL without declared PK or 'id' field, use ctid immediately
+        # Don't iterate all fields (would freeze on large tables)
+        if is_postgresql:
+            logger.warning(
+                f"⚠️ Couche PostgreSQL '{layer.name()}' : Aucune clé primaire ou champ 'id' trouvé.\n"
+                f"   FilterMate utilisera 'ctid' (identifiant interne PostgreSQL) avec limitations :\n"
+                f"   - ✅ Filtrage attributaire possible\n"
+                f"   - ✅ Filtrage géométrique basique possible\n"
+                f"   - ❌ Vues matérialisées désactivées (performance réduite)\n"
+                f"   - ❌ Historique de filtres limité\n"
+                f"   Recommandation : Ajoutez une PRIMARY KEY pour performances optimales."
+            )
+            return ('ctid', -1, 'tid', False)
+        
         # For unknown feature count, use first field
         if feature_count == -1 and layer.fields().count() > 0:
             field = layer.fields()[0]
             logger.debug(f"Using first field as fallback: {field.name()}")
             return (field.name(), 0, field.typeName(), field.isNumeric())
         
+        # For non-PostgreSQL layers, check uniqueness (safe for small datasets)
         for field in layer.fields():
             if self.isCanceled():
                 return False
             if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
                 return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+        
+        # Should not reach here for PostgreSQL (already handled above)
+        # But keep as safety fallback
+        if is_postgresql:
+            logger.error(f"Unexpected: PostgreSQL layer '{layer.name()}' reached end of search_primary_key_from_layer")
+            return ('ctid', -1, 'tid', False)
                 
-        # No unique field found - create virtual ID
+        # For non-PostgreSQL layers (memory, shapefile, etc.), create virtual ID
         new_field = QgsField('virtual_id', QMetaType.Type.LongLong)
         layer.addExpressionField('@row_number', new_field)
+        logger.warning(f"Layer {layer.name()}: No unique field found, created virtual_id (only works for non-database layers)")
         return ('virtual_id', layer.fields().indexFromName('virtual_id'), new_field.typeName(), True)
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):

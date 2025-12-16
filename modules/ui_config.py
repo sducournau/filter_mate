@@ -221,9 +221,9 @@ class UIConfig:
                 "loose": {"top": 20, "right": 20, "bottom": 20, "left": 20}
             },
             
-            # Scrollbar dimensions
+            # Scrollbar dimensions - aligned with splitter handle_width
             "scrollbar": {
-                "width": 8,
+                "width": 4,
                 "handle_min_height": 20
             },
             
@@ -429,10 +429,10 @@ class UIConfig:
                 "loose": {"top": 20, "right": 20, "bottom": 20, "left": 20}
             },
             
-            # Scrollbar dimensions
+            # Scrollbar dimensions - aligned with splitter handle_width
             "scrollbar": {
-                "width": 12,
-                "handle_min_height": 30
+                "width": 6,
+                "handle_min_height": 20
             },
             
             # Dockwidget dimensions
