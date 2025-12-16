@@ -14,6 +14,65 @@
 
 ## Recently Fixed (v2.3.0-alpha - December 16, 2025)
 
+### PostgreSQL "missing FROM-clause entry" Error on 2-Part Table References
+**Status:** ✅ FIXED
+
+**Issue:**
+- Filtering remote layers (e.g., "Drop Cluster") by spatial intersection with source layer caused SQL error
+- Error: `missing FROM-clause entry for table "Sheaths"`
+- Query incorrectly referenced source table columns directly in WHERE clause instead of using EXISTS subquery
+
+**Impact:**
+- CRITICAL: Spatial filtering failed on remote layers when source layer used 2-part table reference
+- Affected all PostgreSQL layers with `"table"."geom"` format (no schema prefix)
+
+**Root Cause:**
+- `_parse_source_table_reference()` in `modules/backends/postgresql_backend.py` only handled:
+  - 3-part references: `"schema"."table"."geom"` ✓
+  - Materialized views: `"mv_xxx_dump"."geom"` ✓
+- 2-part references like `"Sheaths"."geom"` returned `None`, causing bypass of EXISTS subquery
+- This resulted in direct table references in WHERE clause, which is invalid SQL
+
+**Solution:**
+1. Added Pattern 4: Handle 2-part table references (`"table"."geom"`) for regular tables
+2. Added Pattern 2: Handle 2-part buffer references (`ST_Buffer("table"."geom", value)`)
+3. Use default schema "public" when schema is not specified
+4. Now correctly generates EXISTS subquery for all table reference formats
+
+**Code Change:**
+```python
+# Pattern 4: "table"."geom" (2-part, table reference without schema)
+two_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"'
+match = re.match(two_part_pattern, source_geom)
+if match:
+    table, geom_field = match.groups()
+    if table.startswith('mv_') and table.endswith('_dump'):
+        return None  # Materialized view - safe to reference directly
+    # CRITICAL FIX: For regular tables without schema, use default "public"
+    return {
+        'schema': 'public',
+        'table': table,
+        'geom_field': geom_field
+    }
+```
+
+**Files Changed:**
+- `modules/backends/postgresql_backend.py`: Fixed `_parse_source_table_reference()` method
+
+**Benefits:**
+- ✅ Spatial filtering now works with 2-part table references
+- ✅ EXISTS subquery correctly generated for all table formats
+- ✅ No more "missing FROM-clause entry" SQL errors
+- ✅ Backward compatible with existing 3-part references
+
+**References:**
+- Fix date: December 16, 2025
+- Related: PostgreSQL spatial filtering, EXISTS subquery generation
+
+---
+
+## Recently Fixed (v2.3.0-alpha - December 16, 2025)
+
 ### PostgreSQL Layer Freeze on Loading
 **Status:** ✅ FIXED
 

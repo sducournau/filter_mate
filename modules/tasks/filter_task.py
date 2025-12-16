@@ -1883,7 +1883,10 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Empty memory layer configured for buffered geometries
         """
-        geom_type = "Polygon" if layer.geometryType() in [0, 1] else "MultiPolygon"
+        # ALWAYS use MultiPolygon for buffer results - buffers always produce polygons
+        # regardless of source geometry type (Point, Line, Polygon)
+        # Using MultiPolygon handles both single and multi-part results
+        geom_type = "MultiPolygon"
         buffered_layer = QgsVectorLayer(
             f"{geom_type}?crs={layer.crs().authid()}",
             "buffered_temp",
@@ -1960,6 +1963,61 @@ class FilterEngineTask(QgsTask):
         """
         # Dissolve all geometries into one
         dissolved_geom = QgsGeometry.unaryUnion(geometries)
+        
+        # CRITICAL FIX: Handle GeometryCollection result from unaryUnion
+        # unaryUnion can produce a GeometryCollection when geometries don't overlap
+        # We need to extract polygons and convert to MultiPolygon
+        if dissolved_geom and not dissolved_geom.isEmpty():
+            wkb_type = dissolved_geom.wkbType()
+            type_name = QgsWkbTypes.displayString(wkb_type)
+            
+            if 'GeometryCollection' in type_name:
+                logger.info(f"Buffer result is GeometryCollection - extracting polygons")
+                # Extract all polygon parts from the GeometryCollection
+                polygon_parts = []
+                for part in dissolved_geom.asGeometryCollection():
+                    part_type = QgsWkbTypes.displayString(part.wkbType())
+                    if 'Polygon' in part_type:
+                        # Handle both Polygon and MultiPolygon
+                        if 'Multi' in part_type:
+                            for sub_part in part.asGeometryCollection():
+                                polygon_parts.append(sub_part)
+                        else:
+                            polygon_parts.append(part)
+                    elif 'Line' in part_type or 'Point' in part_type:
+                        # Skip non-polygon geometries (can happen with degenerate buffers)
+                        logger.debug(f"Skipping non-polygon part: {part_type}")
+                
+                if polygon_parts:
+                    # Combine all polygon parts into a MultiPolygon
+                    dissolved_geom = QgsGeometry.collectGeometry(polygon_parts)
+                    
+                    # CRITICAL: Force conversion to MultiPolygon if still GeometryCollection
+                    # collectGeometry can still produce GeometryCollection in some cases
+                    new_type_name = QgsWkbTypes.displayString(dissolved_geom.wkbType())
+                    if 'GeometryCollection' in new_type_name:
+                        logger.warning(f"collectGeometry still produced {new_type_name} - forcing MultiPolygon conversion")
+                        # convertToType with destMultipart=True forces MultiPolygon output
+                        converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
+                        if converted and not converted.isEmpty():
+                            dissolved_geom = converted
+                            logger.info(f"Forced conversion to {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
+                        else:
+                            logger.error("convertToType failed - geometry may be incompatible")
+                    else:
+                        logger.info(f"Converted GeometryCollection to {new_type_name}")
+                else:
+                    logger.warning("GeometryCollection contained no polygon parts - buffer may be empty")
+        
+        # FINAL CHECK: Ensure geometry is compatible with MultiPolygon layer
+        if dissolved_geom and not dissolved_geom.isEmpty():
+            final_type = QgsWkbTypes.displayString(dissolved_geom.wkbType())
+            if 'GeometryCollection' in final_type:
+                logger.warning(f"Final geometry is still {final_type} - attempting last-resort conversion")
+                converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
+                if converted and not converted.isEmpty():
+                    dissolved_geom = converted
+                    logger.info(f"Last-resort conversion succeeded: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
         
         # Create feature with dissolved geometry
         feat = QgsFeature()
@@ -4362,6 +4420,49 @@ class FilterEngineTask(QgsTask):
         return True
 
 
+    def _ensure_source_table_stats(self, connexion, schema, table, geom_field):
+        """
+        Ensure PostgreSQL statistics exist for source table geometry column.
+        
+        Checks pg_stats for geometry column statistics and runs ANALYZE if missing.
+        This prevents "stats for X.geom do not exist" warnings from PostgreSQL
+        query planner.
+        
+        Args:
+            connexion: psycopg2 connection
+            schema: Table schema name
+            table: Table name
+            geom_field: Geometry column name
+            
+        Returns:
+            bool: True if stats exist or were created, False on error
+        """
+        try:
+            with connexion.cursor() as cursor:
+                # Check if stats exist for geometry column
+                cursor.execute("""
+                    SELECT COUNT(*) FROM pg_stats 
+                    WHERE schemaname = %s 
+                    AND tablename = %s 
+                    AND attname = %s;
+                """, (schema, table, geom_field))
+                
+                result = cursor.fetchone()
+                has_stats = result[0] > 0 if result else False
+                
+                if not has_stats:
+                    logger.info(f"Running ANALYZE on source table \"{schema}\".\"{table}\" (missing stats for {geom_field})")
+                    cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                    connexion.commit()
+                    logger.debug(f"ANALYZE completed for \"{schema}\".\"{table}\"")
+                
+                return True
+                
+        except Exception as e:
+            logger.warning(f"Could not check/create stats for \"{schema}\".\"{table}\": {e}")
+            return False
+
+
     def _insert_subset_history(self, cur, conn, layer, sql_subset_string, seq_order):
         """
         Insert subset history record into database.
@@ -4497,6 +4598,15 @@ class FilterEngineTask(QgsTask):
         import time
         start_time = time.time()
         
+        # Ensure source table has statistics for query optimization
+        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        self._ensure_source_table_stats(
+            connexion, 
+            self.param_source_schema, 
+            self.param_source_table, 
+            self.param_source_geom
+        )
+        
         try:
             # Extract WHERE clause from SELECT statement
             # sql_subset_string format: SELECT * FROM "schema"."table" WHERE condition
@@ -4600,6 +4710,15 @@ class FilterEngineTask(QgsTask):
         start_time = time.time()
         
         schema = self.current_materialized_view_schema
+        
+        # Ensure source table has statistics for query optimization
+        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        self._ensure_source_table_stats(
+            connexion, 
+            self.param_source_schema, 
+            self.param_source_table, 
+            geom_key_name
+        )
         
         # Build SQL commands
         sql_drop = f'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'

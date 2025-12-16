@@ -810,3 +810,97 @@ def escape_json_string(s: str) -> str:
     escaped = escaped.replace('\t', '\\t')
     
     return escaped
+
+
+def get_best_display_field(layer):
+    """
+    Determine the best field to use as display expression for a layer.
+    
+    This function analyzes layer fields and selects the most suitable one
+    for display purposes. It prioritizes descriptive text fields over 
+    primary keys or IDs.
+    
+    Priority order:
+    1. Fields matching common name patterns (name, nom, label, titre, etc.)
+    2. First text/string field that's not an ID/key field
+    3. Primary key if no better option
+    
+    Args:
+        layer (QgsVectorLayer): The layer to analyze
+        
+    Returns:
+        str: The field name to use as display expression, or empty string if no fields
+        
+    Examples:
+        >>> layer = QgsVectorLayer("Point?field=id:integer&field=name:string", "test", "memory")
+        >>> get_best_display_field(layer)
+        'name'
+    """
+    if layer is None or not layer.isValid():
+        return ""
+    
+    fields = layer.fields()
+    if fields.count() == 0:
+        return ""
+    
+    # Common name patterns for descriptive fields (case-insensitive)
+    name_patterns = [
+        'name', 'nom', 'label', 'titre', 'title', 'description', 'desc',
+        'libelle', 'libellé', 'bezeichnung', 'nombre', 'nome', 'naam',
+        'display_name', 'displayname', 'full_name', 'fullname'
+    ]
+    
+    # Patterns to exclude (ID/key fields)
+    exclude_patterns = [
+        'id', 'pk', 'fid', 'ogc_fid', 'gid', 'uid', 'uuid', 'oid',
+        'objectid', 'object_id', '_id', 'rowid', 'row_id'
+    ]
+    
+    # Get field type from QVariant
+    from qgis.PyQt.QtCore import QVariant
+    
+    string_types = [QVariant.String, QVariant.Char]
+    
+    best_field = None
+    first_text_field = None
+    primary_key = None
+    
+    # Try to get primary key from layer
+    primary_key = get_primary_key_name(layer)
+    
+    for field in fields:
+        field_name = field.name()
+        field_name_lower = field_name.lower()
+        field_type = field.type()
+        
+        # Skip geometry fields
+        if field_name_lower in ('geometry', 'geom', 'the_geom', 'shape'):
+            continue
+        
+        # Check if it's a text field
+        is_text_field = field_type in string_types
+        
+        # Check for exact match with name patterns
+        for pattern in name_patterns:
+            if field_name_lower == pattern or field_name_lower.endswith('_' + pattern):
+                return field_name
+        
+        # Track first text field that's not an ID
+        if is_text_field and first_text_field is None:
+            is_excluded = any(
+                field_name_lower == ex or 
+                field_name_lower.startswith(ex + '_') or
+                field_name_lower.endswith('_' + ex)
+                for ex in exclude_patterns
+            )
+            if not is_excluded:
+                first_text_field = field_name
+    
+    # Return first text field if found, otherwise primary key
+    if first_text_field:
+        return first_text_field
+    elif primary_key:
+        return primary_key
+    else:
+        # Fall back to first field
+        return fields[0].name()

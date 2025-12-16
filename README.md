@@ -1,12 +1,14 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.3.3** | December 2025
+**Version 2.3.4** | December 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.3.3 - Project Loading Auto-Activation Fix
-- 🐛 **CRITICAL: Fixed plugin auto-activation on project load** - Plugin now correctly activates when loading a QGIS project containing vector layers
-- 📝 **Documentation** - Version synchronization across all files
+### 🎉 What's New in v2.3.4 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
+- 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format (without schema prefix)
+- ✨ **Smart display field selection** - New layers auto-select the best descriptive field (name, label, etc.) instead of primary key
+- 🐛 **Fixed GeometryCollection buffer results** - Buffer operations now properly handle non-overlapping geometries
+- 🛠️ **Automatic PostgreSQL ANALYZE** - Query planner now has proper statistics for optimal performance
 
 ### Previous Updates (v2.3.0) - Global Undo/Redo System
 - ⭐ **Intelligent Undo/Redo** - Smart context-aware undo/redo for filters

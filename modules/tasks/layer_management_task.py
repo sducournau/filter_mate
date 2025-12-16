@@ -60,7 +60,8 @@ from ..appUtils import (
     get_datasource_connexion_from_layer,
     detect_layer_provider_type,
     geometry_type_to_string,
-    escape_json_string
+    escape_json_string,
+    get_best_display_field
 )
 
 # Import task utilities
@@ -574,11 +575,16 @@ class LayersManagementEngineTask(QgsTask):
         # Add PostgreSQL connection availability flag
         new_layer_variables["infos"]["postgresql_connection_available"] = postgresql_connection_available
         
+        # Determine the best display field for exploring expressions
+        # Use descriptive text fields when available instead of just primary key
+        best_display_field = get_best_display_field(layer)
+        display_expression = best_display_field if best_display_field else (primary_key_name if primary_key_name else "")
+        
         new_layer_variables["exploring"] = json.loads(
             self.json_template_layer_exploring % (
-                escape_json_string(str(primary_key_name)) if primary_key_name else "",
-                escape_json_string(str(primary_key_name)) if primary_key_name else "",
-                escape_json_string(str(primary_key_name)) if primary_key_name else ""
+                escape_json_string(display_expression),
+                escape_json_string(display_expression),
+                escape_json_string(display_expression)
             )
         )
         new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)

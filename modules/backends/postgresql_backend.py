@@ -117,8 +117,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         1. "schema"."table"."geom" - direct table reference
         2. "mv_xxx_dump"."geom" - materialized view reference
         3. ST_Buffer("schema"."table"."geom", value) - with buffer
+        4. "table"."geom" - table reference without schema (uses default "public")
+        5. ST_Buffer("table"."geom", value) - buffer without schema
         
-        For formats 1 and 3, we need to use EXISTS subquery in setSubsetString.
+        For formats 1, 3, 4, 5 we need to use EXISTS subquery in setSubsetString.
         For format 2 (materialized view), it's OK to use direct reference.
         
         Args:
@@ -129,9 +131,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         import re
         
-        # Pattern 1: ST_Buffer("schema"."table"."geom", value)
-        buffer_pattern = r'ST_Buffer\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*([^)]+)\)'
-        match = re.match(buffer_pattern, source_geom, re.IGNORECASE)
+        # Pattern 1: ST_Buffer("schema"."table"."geom", value) - 3-part with buffer
+        buffer_pattern_3part = r'ST_Buffer\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*([^)]+)\)'
+        match = re.match(buffer_pattern_3part, source_geom, re.IGNORECASE)
         if match:
             schema, table, geom_field, buffer_value = match.groups()
             return {
@@ -141,7 +143,24 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 'buffer_expr': f'ST_Buffer(__source."{geom_field}", {buffer_value})'
             }
         
-        # Pattern 2: "schema"."table"."geom" (3-part identifier)
+        # Pattern 2: ST_Buffer("table"."geom", value) - 2-part with buffer (no schema)
+        buffer_pattern_2part = r'ST_Buffer\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*([^)]+)\)'
+        match = re.match(buffer_pattern_2part, source_geom, re.IGNORECASE)
+        if match:
+            table, geom_field, buffer_value = match.groups()
+            # Skip materialized views - they're safe to reference directly
+            if table.startswith('mv_') and table.endswith('_dump'):
+                self.log_debug(f"Source is materialized view '{table}' with buffer - using direct reference")
+                return None
+            self.log_debug(f"Detected 2-part buffer reference: table='{table}', geom='{geom_field}', using schema='public'")
+            return {
+                'schema': 'public',
+                'table': table,
+                'geom_field': geom_field,
+                'buffer_expr': f'ST_Buffer(__source."{geom_field}", {buffer_value})'
+            }
+        
+        # Pattern 3: "schema"."table"."geom" (3-part identifier)
         three_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"'
         match = re.match(three_part_pattern, source_geom)
         if match:
@@ -156,15 +175,24 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 'geom_field': geom_field
             }
         
-        # Pattern 3: "mv_xxx_dump"."geom" (2-part, materialized view)
+        # Pattern 4: "table"."geom" (2-part, table reference without schema)
+        # CRITICAL FIX: Handle 2-part table references for regular tables, not just MVs
         two_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"'
         match = re.match(two_part_pattern, source_geom)
         if match:
             table, geom_field = match.groups()
+            # Skip materialized views - they're safe to reference directly
             if table.startswith('mv_') and table.endswith('_dump'):
-                # Materialized view - safe to reference directly
                 self.log_debug(f"Source is materialized view '{table}' - using direct reference")
                 return None
+            # CRITICAL FIX: For regular tables without schema, use default schema "public"
+            # This ensures EXISTS subquery is used to avoid "missing FROM-clause entry" error
+            self.log_debug(f"Detected 2-part table reference: table='{table}', geom='{geom_field}', using schema='public'")
+            return {
+                'schema': 'public',
+                'table': table,
+                'geom_field': geom_field
+            }
         
         # Not a table reference (could be WKT, ST_GeomFromText, etc.)
         self.log_debug(f"Source geometry is not a table reference - using direct expression")

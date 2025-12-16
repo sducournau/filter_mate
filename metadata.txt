@@ -6,21 +6,23 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.3
+version=2.3.4
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.3 - Project loading auto-activation fix
+about=FilterMate v2.3.4 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
 
- NEW in v2.3.0:
- - ⭐ FEATURE: Intelligent Undo/Redo with automatic context detection
- - 🔄 Smart Mode: Source-only or Global multi-layer restoration
- - 🎯 UX: Auto-enable/disable buttons, clear feedback messages
- - 🏗️ Architecture: Task modules extracted (appTasks.py -99%%)
- - ✅ Quality: PEP 8 95%%, 26 automated tests, CI/CD active
- - 🚀 Performance: Geometry caching (5× speedup for multi-layer ops)
-
- Previous (v2.2.5): Automatic EPSG:3857 conversion for geographic CRS
+ NEW in v2.3.4:
+ - 🐛 CRITICAL: Fixed PostgreSQL 2-part table reference spatial filtering
+ - ✨ Smart display field selection for exploring expressions  
+ - 🐛 Fixed GeometryCollection buffer handling
+ - 🛠️ Automatic ANALYZE on PostgreSQL source tables
+ 
+ Previous (v2.3.0):
+ - ⭐ Intelligent Undo/Redo with automatic context detection
+ - 🏗️ Task modules extracted (appTasks.py -99%%)
+ - ✅ PEP 8 95%%, 26 automated tests, CI/CD active
+ - 🚀 Geometry caching (5× speedup for multi-layer ops)
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
@@ -46,6 +48,12 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
+    Version 2.3.4 (December 2025) - PostgreSQL & UX Improvements
+    🐛 CRITICAL FIX: PostgreSQL 2-part table references now work correctly
+    ✨ FEATURE: Smart display field selection for exploring expressions
+    🐛 FIX: GeometryCollection buffer results now properly handled
+    🛠️ IMPROVED: Automatic ANALYZE on source tables for query optimization
+    
     Version 2.3.0 (December 2025) - Global Undo/Redo System
     ⭐ FEATURE: Intelligent undo/redo with context detection (source-only/global)
     🏗️ REFACTOR: Task modules extracted (-99%% appTasks.py, +400%% maintainability)

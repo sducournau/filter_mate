@@ -121,6 +121,7 @@ from .modules.qt_json_view.view import JsonView
 from .modules.appUtils import (
     get_datasource_connexion_from_layer,
     get_primary_key_name,
+    get_best_display_field,
     POSTGRESQL_AVAILABLE,
     is_layer_source_available
 )
@@ -4388,15 +4389,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             checked_list_data = []
-            for i in range(self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].count()):
-                if self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemCheckState(i) == Qt.Checked:
-                    data = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].itemData(i, Qt.UserRole)
+            widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+            total_items = widget.count()
+            
+            logger.info(f"=== get_layers_to_filter DIAGNOSTIC ===")
+            logger.info(f"  Total items in combobox: {total_items}")
+            
+            for i in range(total_items):
+                item_text = widget.itemText(i)
+                check_state = widget.itemCheckState(i)
+                data = widget.itemData(i, Qt.UserRole)
+                
+                logger.debug(f"  Item {i}: '{item_text}' | checked={check_state == Qt.Checked} | data={data}")
+                
+                if check_state == Qt.Checked:
                     if isinstance(data, dict) and "layer_id" in data:
                         checked_list_data.append(data["layer_id"])
+                        logger.info(f"  ✓ CHECKED: {item_text} -> layer_id={data['layer_id'][:8]}...")
                     elif isinstance(data, str):
                         # Backward compatibility with old format
                         checked_list_data.append(data)
+                        logger.info(f"  ✓ CHECKED (legacy): {item_text} -> {data[:8]}...")
+            
+            logger.info(f"  Total checked layers: {len(checked_list_data)}")
+            logger.info(f"=== END get_layers_to_filter ===")
             return checked_list_data
+
+        return []
 
 
     def get_layers_to_export(self):
@@ -4728,6 +4747,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Force reload of ALL exploration widgets with new layer data.
         
         This ensures all widgets are properly populated even if already initialized.
+        Auto-initializes empty expressions with the best available field.
         
         Args:
             layer: The validated layer to use for widget updates
@@ -4744,10 +4764,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
+            # Auto-initialize empty expressions with best available field
+            expressions_updated = False
+            single_expr = layer_props["exploring"]["single_selection_expression"]
+            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
+            custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            
+            if not single_expr or not multiple_expr or not custom_expr:
+                best_field = get_best_display_field(layer)
+                if best_field:
+                    if not single_expr:
+                        layer_props["exploring"]["single_selection_expression"] = best_field
+                        self.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = best_field
+                        expressions_updated = True
+                    if not multiple_expr:
+                        layer_props["exploring"]["multiple_selection_expression"] = best_field
+                        self.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = best_field
+                        expressions_updated = True
+                    if not custom_expr:
+                        layer_props["exploring"]["custom_selection_expression"] = best_field
+                        self.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = best_field
+                        expressions_updated = True
+                    
+                    # Save updated expressions to SQLite if any were auto-initialized
+                    if expressions_updated:
+                        logger.debug(f"Auto-initialized exploring expressions with field '{best_field}' for layer {layer.name()}")
+                        # Emit signal to save the updated expressions
+                        properties_to_save = []
+                        if not single_expr:
+                            properties_to_save.append(("exploring", "single_selection_expression"))
+                        if not multiple_expr:
+                            properties_to_save.append(("exploring", "multiple_selection_expression"))
+                        if not custom_expr:
+                            properties_to_save.append(("exploring", "custom_selection_expression"))
+                        self.settingLayerVariable.emit(layer, properties_to_save)
+            
+            # Update expressions after potential auto-initialization
+            single_expr = layer_props["exploring"]["single_selection_expression"]
+            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
+            custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            
             # Single selection widget - use validated layer parameter
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer)
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_expr)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
             
@@ -4758,15 +4818,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Field expression widgets - setLayer BEFORE setExpression - use validated layer parameter
             if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
-                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["single_selection_expression"])
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_expr)
             
             if "MULTIPLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["multiple_selection_expression"])
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_expr)
             
             if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
-                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(layer_props["exploring"]["custom_selection_expression"])
+                self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(custom_expr)
             
             # Reconnect signals AFTER all widgets are updated
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'connect', 'featureChanged')
@@ -5236,8 +5296,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         flag_value_changed = False
         group_enabled_property = properties_tuples[0]
         group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
+        
+        # DIAGNOSTIC: Log the property update
+        logger.info(f"=== _update_other_property DIAGNOSTIC ===")
+        logger.info(f"  property_path: {property_path}")
+        logger.info(f"  group_enabled_property: {group_enabled_property}")
+        logger.info(f"  group_state (button checked): {group_state}")
 
         if group_state is False:
+            logger.warning(f"  ⚠️ Group button NOT checked - resetting to defaults!")
             self.properties_group_state_reset_to_default(properties_tuples, properties_group_key, group_state)
             flag_value_changed = True
         else:
@@ -5267,10 +5334,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Get the value from custom function or use input_data directly
                 new_value = custom_functions["CUSTOM_DATA"](0) if "CUSTOM_DATA" in custom_functions else input_data
                 
+                logger.info(f"  Widget type: non-PushButton, getting new_value from CUSTOM_DATA")
+                logger.info(f"  new_value: {new_value}")
+                logger.info(f"  old_value: {layer_props[property_path[0]][property_path[1]]}")
+                
                 # Only mark as changed if value actually changed
                 if layer_props[property_path[0]][property_path[1]] != new_value:
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = new_value
                     flag_value_changed = True
+                    logger.info(f"  ✓ Value CHANGED and saved to PROJECT_LAYERS")
                     
                     if new_value and "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)
@@ -5279,7 +5351,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     # Log when layers_to_filter is updated
                     if property_path[1] == 'layers_to_filter':
-                        logger.debug(f"layers_to_filter updated: {new_value}")
+                        logger.info(f"  ✓ layers_to_filter updated in PROJECT_LAYERS: {new_value}")
+                else:
+                    logger.info(f"  ℹ️ Value unchanged, not updating PROJECT_LAYERS")
                     
         return flag_value_changed
 

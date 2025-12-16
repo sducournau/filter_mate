@@ -2,28 +2,39 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [Unreleased] - 2025-12-16 - PostgreSQL Virtual ID Fix
+## [2.3.4] - 2025-12-16 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
 
 ### 🐛 Bug Fixes
-- **CRITICAL: Fixed PostgreSQL virtual_id error** - PostgreSQL layers without a unique field/primary key now raise an informative error instead of attempting to use a `virtual_id` field in SQL queries. Virtual fields created by QGIS (`addExpressionField`) only exist in QGIS memory and cannot be used in database-side SQL queries, causing "column does not exist" errors.
-  - Error message now explicitly instructs users to add a PRIMARY KEY constraint or use a unique column
-  - Non-database layers (shapefile, GeoPackage, memory) can still use virtual_id as fallback
-  - Added validation in `add_project_layer()` to detect and reject existing layers with virtual_id corruption
-  - Added test case `test_postgresql_layer_without_primary_key_rejected` to prevent regression
+- **CRITICAL: Fixed PostgreSQL 2-part table reference error** - Filtering remote layers by spatial intersection with source layer using 2-part table references (`"table"."geom"` format without schema) now works correctly. Previously caused "missing FROM-clause entry" SQL error.
+  - Added Pattern 4: Handle 2-part table references for regular tables (uses default "public" schema)
+  - Added Pattern 2: Handle 2-part buffer references (`ST_Buffer("table"."geom", value)`)
+  - EXISTS subquery now correctly generated for all table reference formats
+- **Fixed GeometryCollection buffer results** - `unaryUnion` can produce GeometryCollection when geometries don't overlap. Now properly extracts polygons and converts to MultiPolygon.
+  - Added automatic conversion from GeometryCollection to MultiPolygon
+  - Buffer layer now always uses MultiPolygon type for compatibility
+- **Fixed PostgreSQL virtual_id error** - PostgreSQL layers without a unique field/primary key now raise an informative error instead of attempting to use a `virtual_id` field in SQL queries.
+
+### ✨ New Features
+- **Smart display field selection** - New layers now auto-select the best display field for exploring expressions
+  - Prioritizes descriptive text fields (name, label, titre, description, etc.)
+  - Falls back to primary key only when no descriptive field found
+  - Auto-initializes empty expressions when switching layers
+  - New `get_best_display_field()` utility function in `appUtils.py`
+
+### 🛠️ Improvements
+- **Automatic ANALYZE on source tables** - PostgreSQL query planner now has proper statistics
+  - Checks `pg_stats` for geometry column statistics before spatial queries
+  - Runs ANALYZE automatically if stats are missing
+  - Prevents "stats for X.geom do not exist" planner warnings
+- **Reduced log noise** - Task cancellation now logs at Info level instead of Warning
 
 ### 🛠️ New Tools
 - **cleanup_postgresql_virtual_id.py** - Utility script to clean up corrupted layers from previous versions
-  - Automatically detects PostgreSQL layers with virtual_id in FilterMate database
-  - Creates backup before cleanup
-  - Removes corrupted layer properties
-  - Shows which PostgreSQL tables need PRIMARY KEY constraints
-  - Usage: `python tools/cleanup_postgresql_virtual_id.py`
 
 ### 📝 Technical Details
-- Modified `LayersManagementEngineTask.search_primary_key_from_layer()` to detect PostgreSQL provider and raise `ValueError` before attempting virtual field creation
-- Added validation in `add_project_layer()` to detect existing layers with virtual_id corruption
-- Added `cleanup_postgresql_virtual_id_layers()` method for programmatic cleanup
-- Virtual fields work for client-side operations but fail when used in server-side SQL (e.g., `WHERE "table"."virtual_id" IN (...)`)
+- Modified `_parse_source_table_reference()` in `postgresql_backend.py` to handle 2-part references
+- Added `_ensure_source_table_stats()` method in `filter_task.py`
+- Buffer layer creation now forces `MultiPolygon` geometry type
 - Full documentation in `docs/fixes/POSTGRESQL_VIRTUAL_ID_FIX_2025-12-16.md`
 
 ## [2.3.3] - 2025-12-15 - Project Loading Auto-Activation Fix

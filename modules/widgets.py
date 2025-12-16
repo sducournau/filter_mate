@@ -547,8 +547,11 @@ class PopulateListEngineTask(QgsTask):
         
     
     def cancel(self):
+        # Task cancellation is normal user behavior (switching layers, changing selection, etc.)
+        # Log at Info level to reduce noise in the log panel
         QgsMessageLog.logMessage(
-            '"{name}" was canceled'.format(name=self.description()))
+            '"{name}" was canceled'.format(name=self.description()),
+            'FilterMate', Qgis.Info)
         super().cancel()
 
 

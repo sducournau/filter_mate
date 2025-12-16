@@ -824,7 +824,15 @@ class FilterMateApp:
             list: List of validated layer info dictionaries
         """
         layers_to_filter = []
-        for key in self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]:
+        
+        # DIAGNOSTIC: Log the raw layers_to_filter list from PROJECT_LAYERS
+        raw_layers_list = self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]
+        logger.info(f"=== _build_layers_to_filter DIAGNOSTIC ===")
+        logger.info(f"  Source layer: {current_layer.name()} (id={current_layer.id()[:8]}...)")
+        logger.info(f"  Raw layers_to_filter list: {raw_layers_list}")
+        logger.info(f"  Number of layers in list: {len(raw_layers_list)}")
+        
+        for key in raw_layers_list:
             if key in self.PROJECT_LAYERS:
                 layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
 
@@ -951,9 +959,9 @@ class FilterMateApp:
                         continue
                 
                 layers_to_filter.append(layer_info)
-                logger.debug(f"Added layer to filter list: {layer_info.get('layer_name', key)}")
+                logger.info(f"  ✓ Added layer to filter list: {layer_info.get('layer_name', key)}")
         
-        logger.info(f"Built layers_to_filter list with {len(layers_to_filter)} layers")
+        logger.info(f"=== Built layers_to_filter list with {len(layers_to_filter)} layers ===")
         return layers_to_filter
     
     def _initialize_filter_history(self, current_layer, layers_to_filter, task_parameters):

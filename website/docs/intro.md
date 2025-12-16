@@ -7,11 +7,15 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.3 - Project Loading Auto-Activation Fix
+## 🎉 What's New in v2.3.4 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
 
 ### Bug Fixes
-- 🐛 **CRITICAL: Fixed plugin auto-activation on project load** - Plugin now correctly activates when loading a QGIS project containing vector layers, even if it was activated in a previous empty project
-- 📝 **Documentation** - Version synchronization across all files
+- 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format (without schema prefix). Previously caused "missing FROM-clause entry" SQL error.
+- 🐛 **Fixed GeometryCollection buffer results** - Buffer operations with non-overlapping geometries now properly convert to MultiPolygon
+
+### New Features
+- ✨ **Smart display field selection** - New layers auto-select the best descriptive field (name, label, titre, etc.) for exploring expressions instead of just primary key
+- 🛠️ **Automatic PostgreSQL ANALYZE** - Query planner now gets proper statistics before spatial queries
 
 ## Previous Updates
 
