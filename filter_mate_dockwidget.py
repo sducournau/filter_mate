@@ -99,7 +99,21 @@ except ImportError:
         # Fallback for versions where QgsMapLayerProxyModel is not available
         class QgsMapLayerProxyModel:
             """Fallback class for QGIS versions without QgsMapLayerProxyModel"""
-            VectorLayer = 1  # Filter to show only vector layers
+            NoFilter = 0
+            RasterLayer = 1
+            VectorLayer = 2
+            PointLayer = 4
+            LineLayer = 8
+            PolygonLayer = 16
+            HasGeometry = 32
+            NoGeometry = 64
+            PluginLayer = 128
+            WritableLayer = 256
+            MeshLayer = 512
+            VectorTileLayer = 1024
+            PointCloudLayer = 2048
+            TiledSceneLayer = 4096
+            All = 0xFFFFFFFF
 
 # QgsFieldProxyModel: Used for filtering field types in QgsFieldExpressionWidget
 try:
@@ -111,7 +125,17 @@ except ImportError:
         # Fallback for versions where QgsFieldProxyModel is not available
         class QgsFieldProxyModel:
             """Fallback class for QGIS versions without QgsFieldProxyModel"""
-            AllTypes = 0  # No filtering (all field types accepted)
+            AllTypes = 0xFFFFFFFF
+            String = 1
+            Int = 2
+            LongLong = 4
+            Double = 8
+            Numeric = 2 | 4 | 8  # Int | LongLong | Double
+            Date = 16
+            Time = 32
+            DateTime = 64
+            Binary = 128
+            Boolean = 256
 from qgis.utils import iface
 
 import webbrowser
@@ -612,6 +636,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_exploring_tab_widgets()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
+        self._setup_raster_tab_widgets()
+        self._setup_network_tab_widgets()
 
         # Continue setupUiCustom after widget creation
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
@@ -2060,6 +2086,174 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Configure map canvas selection color
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
 
+    def _setup_raster_tab_widgets(self):
+        """
+        Configure widgets for the RASTER tab.
+        
+        Sets up:
+        - mMapLayerComboBox_raster_layer (RasterLayer filter)
+        - mMapLayerComboBox_raster_target (VectorLayer filter)
+        - comboBox_raster_band
+        - comboBox_raster_sampling_method
+        - doubleSpinBox_raster_min/max
+        - lineEdit_raster_output_field
+        - checkBox_raster_add_slope/aspect/zonal_stats
+        - Icons for checkable buttons
+        """
+        # Filter raster layer combobox to show only raster layers
+        self.mMapLayerComboBox_raster_layer.setFilters(QgsMapLayerProxyModel.RasterLayer)
+        
+        # Filter target layer combobox to show only vector layers
+        self.mMapLayerComboBox_raster_target.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        
+        # Connect raster layer change to update band combobox
+        self.mMapLayerComboBox_raster_layer.layerChanged.connect(self._on_raster_layer_changed)
+        
+        # Set default values for spinboxes
+        self.doubleSpinBox_raster_min.setValue(0.0)
+        self.doubleSpinBox_raster_max.setValue(1000.0)
+        
+        # Set placeholder for output field
+        self.lineEdit_raster_output_field.setPlaceholderText(self.tr("Output field name (e.g. altitude)"))
+        
+        # Setup icons for checkable buttons using temporary mapping
+        self._setup_raster_icons()
+        
+        logger.debug("RASTER tab widgets configured")
+
+    def _on_raster_layer_changed(self, layer):
+        """
+        Handle raster layer selection change.
+        Updates the band combobox with available bands.
+        
+        Args:
+            layer: The newly selected raster layer (QgsRasterLayer or None)
+        """
+        self.comboBox_raster_band.clear()
+        
+        if layer is None or not layer.isValid():
+            return
+        
+        # Add bands to combobox
+        band_count = layer.bandCount()
+        for i in range(1, band_count + 1):
+            band_name = layer.bandName(i)
+            if band_name:
+                self.comboBox_raster_band.addItem(f"Band {i}: {band_name}", i)
+            else:
+                self.comboBox_raster_band.addItem(f"Band {i}", i)
+        
+        logger.debug(f"Raster layer changed: {layer.name()} with {band_count} bands")
+
+    def _setup_raster_icons(self):
+        """
+        Setup icons for RASTER tab checkable buttons.
+        Uses temporary mapping until custom icons are created.
+        """
+        import os
+        icon_base_path = os.path.join(self.plugin_dir, 'icons')
+        
+        # Icon mapping using existing icons
+        icon_mapping = {
+            'pushButton_checkable_raster_layer': 'raster_layer.png',
+            'pushButton_checkable_raster_band': 'raster_band.png',
+            'pushButton_checkable_raster_target_layer': 'layers.png',
+            'pushButton_checkable_raster_sampling_method': 'raster_sampling.png',
+            'pushButton_checkable_raster_filter_range': 'raster.png',
+            'pushButton_checkable_raster_output_field': 'folder.png',
+        }
+        
+        for widget_name, icon_filename in icon_mapping.items():
+            widget = getattr(self, widget_name, None)
+            if widget:
+                icon_path = os.path.join(icon_base_path, icon_filename)
+                if os.path.exists(icon_path):
+                    widget.setIcon(QtGui.QIcon(icon_path))
+                else:
+                    logger.debug(f"Icon not found: {icon_path}")
+
+    def _setup_network_tab_widgets(self):
+        """
+        Configure widgets for the NETWORK tab.
+        
+        Sets up:
+        - mMapLayerComboBox_network_layer (LineGeometry filter)
+        - mFieldComboBox_network_cost (connected to network layer)
+        - mMapLayerComboBox_network_bro (PointGeometry filter)
+        - mMapLayerComboBox_network_clients (PointGeometry filter)
+        - comboBox_network_analysis_type
+        - spinBox_network_max_distance
+        - spinBox_network_capacity
+        - checkBox_network_use_mnt
+        - checkBox_network_bidirectional
+        - Icons for checkable buttons
+        """
+        # Filter network layer combobox to show only line layers
+        self.mMapLayerComboBox_network_layer.setFilters(QgsMapLayerProxyModel.LineLayer)
+        
+        # Filter BRO and clients comboboxes to show only point layers
+        self.mMapLayerComboBox_network_bro.setFilters(QgsMapLayerProxyModel.PointLayer)
+        self.mMapLayerComboBox_network_clients.setFilters(QgsMapLayerProxyModel.PointLayer)
+        
+        # Connect network layer change to update field combobox
+        self.mMapLayerComboBox_network_layer.layerChanged.connect(self._on_network_layer_changed)
+        
+        # Configure field combobox to show numeric fields
+        self.mFieldComboBox_network_cost.setFilters(QgsFieldProxyModel.Numeric)
+        
+        # Set default values for spinboxes
+        self.spinBox_network_max_distance.setValue(2000)
+        self.spinBox_network_capacity.setValue(128)
+        
+        # Set bidirectional checked by default
+        self.checkBox_network_bidirectional.setChecked(True)
+        
+        # Setup icons for checkable buttons using temporary mapping
+        self._setup_network_icons()
+        
+        logger.debug("NETWORK tab widgets configured")
+
+    def _on_network_layer_changed(self, layer):
+        """
+        Handle network layer selection change.
+        Updates the cost field combobox with available numeric fields.
+        
+        Args:
+            layer: The newly selected network layer (QgsVectorLayer or None)
+        """
+        # Update the field combobox to use the new layer
+        self.mFieldComboBox_network_cost.setLayer(layer)
+        
+        if layer and layer.isValid():
+            logger.debug(f"Network layer changed: {layer.name()}")
+
+    def _setup_network_icons(self):
+        """
+        Setup icons for NETWORK tab checkable buttons.
+        Uses temporary mapping until custom icons are created.
+        """
+        import os
+        icon_base_path = os.path.join(self.plugin_dir, 'icons')
+        
+        # Temporary icon mapping (until custom icons are created)
+        icon_mapping = {
+            'pushButton_checkable_network_layer': 'network.png',
+            'pushButton_checkable_network_cost_field': 'link.png',
+            'pushButton_checkable_network_bro_layer': 'geo.png',
+            'pushButton_checkable_network_client_layer': 'layer.png',
+            'pushButton_checkable_network_analysis_type': 'parameters.png',
+            'pushButton_checkable_network_constraints': 'buffer_value.png',
+        }
+        
+        for widget_name, icon_filename in icon_mapping.items():
+            widget = getattr(self, widget_name, None)
+            if widget:
+                icon_path = os.path.join(icon_base_path, icon_filename)
+                if os.path.exists(icon_path):
+                    widget.setIcon(QtGui.QIcon(icon_path))
+                else:
+                    logger.debug(f"Icon not found: {icon_path}")
+
     def dockwidget_widgets_configuration(self):
 
         self.layer_properties_tuples_dict =   {
@@ -2083,7 +2277,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                                 "batch_zip":(("exporting", "has_zip_to_export"), ("exporting", "batch_zip"), ("exporting", "zip_to_export"))
                                                 }
 
-        self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "FILTERING":{}, "EXPORTING":{}, "QGIS":{}}
+        self.widgets = {"DOCK":{}, "ACTION":{}, "EXPLORING":{}, "FILTERING":{}, "RASTER":{}, "NETWORK":{}, "EXPORTING":{}, "QGIS":{}}
             
         # CRITICAL: GroupBoxes use "toggled" signal to detect checkbox state changes
         # and "collapsedStateChanged" (arrow) signal for collapse/expand via arrow
@@ -2160,9 +2354,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "OUTPUT_FOLDER_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_output_folder, "SIGNALS":[("textEdited", lambda state, x='output_folder_to_export', custom_functions={"ON_CHANGE": lambda x: self.reset_export_output_path()}: self.project_property_changed(x, state, custom_functions))]},
                                     "ZIP_TO_EXPORT":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_exporting_zip, "SIGNALS":[("textEdited", lambda state, x='zip_to_export', custom_functions={"ON_CHANGE": lambda x: self.reset_export_output_pathzip()}: self.project_property_changed(x, state, custom_functions))]}
                                     }
-            
 
-    
+        # RASTER tab widgets - Phase 1 Raster Analysis
+        self.widgets["RASTER"] = {
+                                    "RASTER_LAYER":{"TYPE":"QgsMapLayerComboBox", "WIDGET":self.mMapLayerComboBox_raster_layer, "SIGNALS":[("layerChanged", self._on_raster_layer_changed)]},
+                                    "RASTER_BAND":{"TYPE":"ComboBox", "WIDGET":self.comboBox_raster_band, "SIGNALS":[]},
+                                    "RASTER_TARGET_LAYER":{"TYPE":"QgsMapLayerComboBox", "WIDGET":self.mMapLayerComboBox_raster_target, "SIGNALS":[]},
+                                    "RASTER_SAMPLING_METHOD":{"TYPE":"ComboBox", "WIDGET":self.comboBox_raster_sampling_method, "SIGNALS":[]},
+                                    "RASTER_MIN":{"TYPE":"QDoubleSpinBox", "WIDGET":self.doubleSpinBox_raster_min, "SIGNALS":[]},
+                                    "RASTER_MAX":{"TYPE":"QDoubleSpinBox", "WIDGET":self.doubleSpinBox_raster_max, "SIGNALS":[]},
+                                    "RASTER_OUTPUT_FIELD":{"TYPE":"LineEdit", "WIDGET":self.lineEdit_raster_output_field, "SIGNALS":[]},
+                                    "RASTER_ADD_SLOPE":{"TYPE":"CheckBox", "WIDGET":self.checkBox_raster_add_slope, "SIGNALS":[]},
+                                    "RASTER_ADD_ASPECT":{"TYPE":"CheckBox", "WIDGET":self.checkBox_raster_add_aspect, "SIGNALS":[]},
+                                    "RASTER_ZONAL_STATS":{"TYPE":"CheckBox", "WIDGET":self.checkBox_raster_zonal_stats, "SIGNALS":[]},
+                                    # Checkable buttons for row visibility
+                                    "HAS_RASTER_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_raster_layer, "SIGNALS":[], "ICON":None},
+                                    "HAS_RASTER_BAND":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_raster_band, "SIGNALS":[], "ICON":None},
+                                    "HAS_RASTER_TARGET_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_raster_target_layer, "SIGNALS":[], "ICON":None},
+                                    "HAS_RASTER_SAMPLING_METHOD":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_raster_sampling_method, "SIGNALS":[], "ICON":None},
+                                    "HAS_RASTER_FILTER_RANGE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_raster_filter_range, "SIGNALS":[], "ICON":None},
+                                    "HAS_RASTER_OUTPUT_FIELD":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_raster_output_field, "SIGNALS":[], "ICON":None},
+                                    }
+
+        # NETWORK tab widgets - Phase 3 Network Analysis (FTTH/Telecom)
+        self.widgets["NETWORK"] = {
+                                    "NETWORK_LAYER":{"TYPE":"QgsMapLayerComboBox", "WIDGET":self.mMapLayerComboBox_network_layer, "SIGNALS":[("layerChanged", self._on_network_layer_changed)]},
+                                    "NETWORK_COST_FIELD":{"TYPE":"QgsFieldComboBox", "WIDGET":self.mFieldComboBox_network_cost, "SIGNALS":[]},
+                                    "NETWORK_BRO_LAYER":{"TYPE":"QgsMapLayerComboBox", "WIDGET":self.mMapLayerComboBox_network_bro, "SIGNALS":[]},
+                                    "NETWORK_CLIENTS_LAYER":{"TYPE":"QgsMapLayerComboBox", "WIDGET":self.mMapLayerComboBox_network_clients, "SIGNALS":[]},
+                                    "NETWORK_ANALYSIS_TYPE":{"TYPE":"ComboBox", "WIDGET":self.comboBox_network_analysis_type, "SIGNALS":[]},
+                                    "NETWORK_MAX_DISTANCE":{"TYPE":"QSpinBox", "WIDGET":self.spinBox_network_max_distance, "SIGNALS":[]},
+                                    "NETWORK_CAPACITY":{"TYPE":"QSpinBox", "WIDGET":self.spinBox_network_capacity, "SIGNALS":[]},
+                                    "NETWORK_USE_MNT":{"TYPE":"CheckBox", "WIDGET":self.checkBox_network_use_mnt, "SIGNALS":[]},
+                                    "NETWORK_BIDIRECTIONAL":{"TYPE":"CheckBox", "WIDGET":self.checkBox_network_bidirectional, "SIGNALS":[]},
+                                    # Checkable buttons for row visibility
+                                    "HAS_NETWORK_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_network_layer, "SIGNALS":[], "ICON":None},
+                                    "HAS_NETWORK_COST_FIELD":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_network_cost_field, "SIGNALS":[], "ICON":None},
+                                    "HAS_NETWORK_BRO_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_network_bro_layer, "SIGNALS":[], "ICON":None},
+                                    "HAS_NETWORK_CLIENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_network_client_layer, "SIGNALS":[], "ICON":None},
+                                    "HAS_NETWORK_ANALYSIS_TYPE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_network_analysis_type, "SIGNALS":[], "ICON":None},
+                                    "HAS_NETWORK_CONSTRAINTS":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_network_constraints, "SIGNALS":[], "ICON":None},
+                                    }
+
         self.widgets["QGIS"] = {
                                 "LAYER_TREE_VIEW":{"TYPE":"LayerTreeView", "WIDGET":self.iface.layerTreeView(), "SIGNALS":[("currentLayerChanged", self.current_layer_changed)]}
                                 }
@@ -2940,7 +3173,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
             item_index = 0  # Track actual item position in widget
-            for key in self.PROJECT_LAYERS:
+            # Create a snapshot of keys to avoid RuntimeError if dict changes during iteration
+            project_layers_keys = list(self.PROJECT_LAYERS.keys())
+            for key in project_layers_keys:
+                # Verify layer still exists in dict (may have been removed)
+                if key not in self.PROJECT_LAYERS:
+                    continue
                 # Verify required keys exist in layer info
                 if "infos" not in self.PROJECT_LAYERS[key]:
                     continue

@@ -3529,16 +3529,30 @@ class FilterEngineTask(QgsTask):
         }
 
 
-    def _get_layer_by_name(self, layer_name):
+    def _get_layer_by_name(self, layer_name_or_info):
         """
-        Get layer object from project by name.
+        Get layer object from project by name or layer info dict.
         
         Args:
-            layer_name: Layer name to search for
+            layer_name_or_info: Either a layer name (str) or a layer info dict
+                               containing 'layer_id' and/or 'layer_name' keys
             
         Returns:
             QgsVectorLayer or None if not found
         """
+        # If it's a dict, try to get layer by ID first (more reliable)
+        if isinstance(layer_name_or_info, dict):
+            layer_id = layer_name_or_info.get('layer_id')
+            if layer_id:
+                layer = self.PROJECT.mapLayer(layer_id)
+                if layer:
+                    return layer
+            # Fallback to name
+            layer_name = layer_name_or_info.get('layer_name', '')
+        else:
+            layer_name = layer_name_or_info
+        
+        # Search by name
         layers_found = self.PROJECT.mapLayersByName(layer_name)
         if layers_found:
             return layers_found[0]
@@ -3612,7 +3626,12 @@ class FilterEngineTask(QgsTask):
 
     def _export_to_gpkg(self, layer_names, output_path, save_styles):
         """
-        Export layers to GeoPackage format using QGIS processing.
+        Export layers to GeoPackage format using QgsVectorFileWriter.
+        
+        This method uses QgsVectorFileWriter.writeAsVectorFormatV3 instead of
+        qgis:package to avoid the "Cannot create field ID" error that occurs
+        when layers have an existing "ID" field (OGR tries to create a fid field
+        with the same name).
         
         Args:
             layer_names: List of layer names (str) or layer info dicts to export
@@ -3627,36 +3646,124 @@ class FilterEngineTask(QgsTask):
         # Collect layer objects
         layer_objects = []
         for layer_item in layer_names:
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
-            layer = self._get_layer_by_name(layer_name)
+            # Pass the layer_item directly - _get_layer_by_name handles both
+            # dict (layer info with layer_id) and string (layer name) formats
+            layer = self._get_layer_by_name(layer_item)
             if layer:
                 layer_objects.append(layer)
+            else:
+                # Log the layer identifier for debugging
+                layer_id = layer_item.get('layer_name', layer_item) if isinstance(layer_item, dict) else layer_item
+                logger.warning(f"Layer not found for export: {layer_id}")
         
         if not layer_objects:
             logger.error("No valid layers found for GPKG export")
             return False
         
-        alg_parameters = {
-            'LAYERS': layer_objects,
-            'OVERWRITE': True,
-            'SAVE_STYLES': save_styles,
-            'OUTPUT': output_path
-        }
+        # Remove existing file if it exists (OVERWRITE)
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+                logger.debug(f"Removed existing GPKG file: {output_path}")
+            except OSError as e:
+                logger.error(f"Cannot remove existing GPKG file: {e}")
+                return False
+        
+        total_layers = len(layer_objects)
+        success_count = 0
         
         try:
-            # processing.run() is thread-safe for file operations
-            output = processing.run("qgis:package", alg_parameters)
+            for idx, layer in enumerate(layer_objects, 1):
+                self.setDescription(f"Empaquetage de la couche {idx}/{total_layers} : {layer.name()}")
+                logger.info(f"Exporting layer {idx}/{total_layers}: {layer.name()}")
+                
+                # Configure export options
+                options = QgsVectorFileWriter.SaveVectorOptions()
+                options.driverName = "GPKG"
+                options.fileEncoding = "UTF-8"
+                
+                # CRITICAL: Use FID field to avoid ID conflict
+                # When layer has an existing "ID" field, OGR will fail because
+                # GPKG creates a fid column. Using a unique fid name avoids collision.
+                options.layerOptions = ["FID=fid"]
+                
+                # For first layer, create new file; for subsequent layers, append
+                if idx == 1:
+                    options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
+                else:
+                    options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteLayer
+                
+                # Sanitize layer name for GPKG table name
+                safe_layer_name = sanitize_sql_identifier(layer.name())
+                options.layerName = safe_layer_name
+                
+                # Write layer to GPKG
+                error, error_message, new_filename, new_layer_name = QgsVectorFileWriter.writeAsVectorFormatV3(
+                    layer,
+                    output_path,
+                    QgsProject.instance().transformContext(),
+                    options
+                )
+                
+                if error != QgsVectorFileWriter.NoError:
+                    logger.error(f"Export failed for layer '{layer.name()}': {error_message}")
+                    self.message = f"L'empaquetage de la couche a échoué : {error_message}"
+                    # Continue with other layers instead of failing completely
+                    continue
+                
+                logger.info(f"Layer '{layer.name()}' exported successfully as '{safe_layer_name}'")
+                success_count += 1
+                
+                # Save style if requested
+                if save_styles:
+                    self._save_gpkg_layer_style(layer, output_path, safe_layer_name)
             
-            if not output or 'OUTPUT' not in output:
-                logger.error("GPKG export failed: no output returned")
+            if success_count == 0:
+                logger.error("GPKG export failed: no layers were exported successfully")
                 return False
             
-            logger.info(f"GPKG export successful: {output['OUTPUT']}")
+            if success_count < total_layers:
+                logger.warning(f"GPKG export partial: {success_count}/{total_layers} layers exported")
+                self.message = f"Export partiel : {success_count}/{total_layers} couches exportées vers {output_path}"
+            else:
+                logger.info(f"GPKG export successful: {success_count} layers to {output_path}")
+            
             return True
             
         except Exception as e:
             logger.error(f"GPKG export failed with exception: {e}")
+            return False
+    
+    def _save_gpkg_layer_style(self, layer, gpkg_path, layer_name):
+        """
+        Save layer style to GeoPackage.
+        
+        Args:
+            layer: QgsVectorLayer to save style from
+            gpkg_path: Path to GeoPackage file
+            layer_name: Name of the layer in GPKG
+            
+        Returns:
+            bool: True if style saved successfully
+        """
+        try:
+            # Save style directly to GPKG using layer method
+            error_message = layer.saveStyleToDatabase(
+                name=layer_name,
+                description=f"Style for {layer.name()}",
+                useAsDefault=True,
+                uiFileContent=""
+            )
+            
+            if error_message:
+                logger.warning(f"Could not save style for {layer.name()}: {error_message}")
+                return False
+            
+            logger.debug(f"Style saved for layer '{layer.name()}'")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Exception saving style for {layer.name()}: {e}")
             return False
 
 
@@ -3681,16 +3788,16 @@ class FilterEngineTask(QgsTask):
         
         total_layers = len(layer_names)
         for idx, layer_item in enumerate(layer_names, 1):
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
+            # Get layer using _get_layer_by_name which handles both dict and string
+            layer = self._get_layer_by_name(layer_item)
+            if not layer:
+                continue
+            
+            layer_name = layer.name()
             
             # Update task description with current progress
             self.setDescription(f"Exporting layer {idx}/{total_layers}: {layer_name}")
             self.setProgress(int((idx / total_layers) * 90))  # Reserve 90% for export, 10% for zip
-            
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                continue
             
             # Sanitize filename to handle special characters like em-dash (—)
             safe_filename = sanitize_filename(layer_name)
@@ -3740,17 +3847,18 @@ class FilterEngineTask(QgsTask):
         exported_files = []
         
         for idx, layer_item in enumerate(layer_names, 1):
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
+            # Get layer using _get_layer_by_name which handles both dict and string
+            layer = self._get_layer_by_name(layer_item)
+            if not layer:
+                layer_id = layer_item.get('layer_name', layer_item) if isinstance(layer_item, dict) else layer_item
+                logger.warning(f"Skipping layer '{layer_id}' (not found)")
+                continue
+            
+            layer_name = layer.name()
             
             # Update task description with current progress
             self.setDescription(f"Batch export: layer {idx}/{total_layers}: {layer_name}")
             self.setProgress(int((idx / total_layers) * 100))
-            
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                logger.warning(f"Skipping layer '{layer_name}' (not found)")
-                continue
             
             # Build output path for this layer
             # Sanitize filename to handle special characters like em-dash (—)
@@ -3815,17 +3923,18 @@ class FilterEngineTask(QgsTask):
         exported_zips = []
         
         for idx, layer_item in enumerate(layer_names, 1):
-            # Handle both dict (layer info) and string (layer name) formats
-            layer_name = layer_item['layer_name'] if isinstance(layer_item, dict) else layer_item
+            # Get layer using _get_layer_by_name which handles both dict and string
+            layer = self._get_layer_by_name(layer_item)
+            if not layer:
+                layer_id = layer_item.get('layer_name', layer_item) if isinstance(layer_item, dict) else layer_item
+                logger.warning(f"Skipping layer '{layer_id}' (not found)")
+                continue
+            
+            layer_name = layer.name()
             
             # Update task description with current progress
             self.setDescription(f"Batch ZIP export: layer {idx}/{total_layers}: {layer_name}")
             self.setProgress(int((idx / total_layers) * 100))
-            
-            layer = self._get_layer_by_name(layer_name)
-            if not layer:
-                logger.warning(f"Skipping layer '{layer_name}' (not found)")
-                continue
             
             # Sanitize filename to handle special characters like em-dash (—)
             safe_filename = sanitize_filename(layer_name)

@@ -775,6 +775,133 @@ pytest tests/test_qt_json_view_themes.py -v
 - Success messages indicate which mode was used
 - Clear indication of state restoration
 
+## Analysis Panels (NEW in v3.0.0-alpha)
+
+### Collapsible Panel System
+
+**New Module:** `modules/ui/`
+
+**Components:**
+- `CollapsiblePanel`: Reusable expandable/collapsible widget
+- `RasterAnalysisPanel`: MNT/NDVI sampling and filtering
+- `NetworkAnalysisPanel`: Graph analysis for FTTH/telecom
+
+### CollapsiblePanel Widget
+
+**Purpose:** Generic panel with clickable header for expand/collapse
+**File:** `modules/ui/collapsible_panel.py`
+
+**Features:**
+- Toggle icon (▼ expanded / ▶ collapsed)
+- Clickable header with title
+- Content container with show/hide
+- Status text display
+- Dark/light theme support
+- Compact mode for small screens
+
+**Signals:**
+- `toggled(bool)`: Emitted when expanded/collapsed
+
+**Methods:**
+```python
+panel = CollapsiblePanel(title="Title", initially_expanded=False)
+panel.set_content(widget)
+panel.expand()
+panel.collapse()
+panel.toggle()
+panel.set_status("Ready")
+panel.apply_dark_theme()
+panel.apply_light_theme()
+```
+
+### RasterAnalysisPanel
+
+**Purpose:** UI for raster analysis operations
+**File:** `modules/ui/raster_panel.py`
+
+**Sections:**
+1. **Source Raster:** Layer selection (MNT, NDVI, etc.), band selection
+2. **Target Layer:** Vector layer for sampling
+3. **Sampling Options:** Nearest, Bilinear, Cubic interpolation
+4. **Filter by Values:** Altitude/slope/aspect range filtering
+5. **Results:** Statistics display
+
+**Signals:**
+- `rasterLayerChanged(layer)`
+- `samplingRequested(dict)`
+- `filterRequested(dict)`
+- `resultsReady(dict)`
+
+**QGIS Widgets Used:**
+- `QgsMapLayerComboBox` with RasterLayer filter
+- `QComboBox` for band selection
+- `QRadioButton` for sampling method
+- `QDoubleSpinBox` for value ranges
+
+### NetworkAnalysisPanel
+
+**Purpose:** UI for network/graph analysis
+**File:** `modules/ui/network_panel.py`
+
+**Sections:**
+1. **Network Config:** Network layer, cost field, direction
+2. **Telecom Points:** BRO layer, Client layer
+3. **Analysis Type:** 5 options (shortest path, service area, etc.)
+4. **Constraints:** Distance, capacity, slope, NDVI, obstacles
+5. **Results:** Table with path details
+
+**Analysis Types:**
+- Shortest Path
+- Service Area (Isochrone)
+- Nearest Facility
+- Optimal Assignment
+- Feasibility Check
+
+**Signals:**
+- `networkLayerChanged(layer)`
+- `graphBuildRequested(dict)`
+- `analysisRequested(dict)`
+- `resultsReady(dict)`
+
+**QGIS Widgets Used:**
+- `QgsMapLayerComboBox` with LineGeometry filter
+- `QgsFieldComboBox` for cost/direction fields
+- `QRadioButton` for analysis type
+- `QTableWidget` for results display
+
+### Integration in Dockwidget
+
+**Location:** `filter_mate_dockwidget.py`
+
+**Method:** `_setup_analysis_panels()`
+
+**Placement:** After main splitter, before end of vertical layout
+
+**Theme Integration:** `_apply_analysis_panels_theme()` called on theme change
+
+**Signal Handlers:**
+- `_on_raster_sampling_requested(params)`
+- `_on_raster_filter_requested(params)`
+- `_on_network_graph_build_requested(params)`
+- `_on_network_analysis_requested(params)`
+
+### Graceful Degradation
+
+**Pattern:**
+```python
+try:
+    from .modules.ui import CollapsiblePanel, RasterAnalysisPanel, NetworkAnalysisPanel
+    ANALYSIS_PANELS_AVAILABLE = True
+except ImportError:
+    ANALYSIS_PANELS_AVAILABLE = False
+
+# Later in code
+if ANALYSIS_PANELS_AVAILABLE:
+    self._setup_analysis_panels()
+```
+
+**Benefit:** Plugin works even if new UI modules fail to load
+
 ## Future UI Enhancements
 
 ### Planned Features

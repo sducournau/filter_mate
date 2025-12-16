@@ -57,3 +57,8 @@ modules/
 - Compatibilité totale avec backends existants
 - Intégration non intrusive via onglets UI
 - Support undo/redo étendu
+
+## Documents Associés
+
+- **Roadmap complète:** `docs/RASTER_NETWORK_ROADMAP.md`
+- **Proposition UI:** `docs/UI_RASTER_NETWORK_PROPOSAL.md` - Spécifications détaillées pour les onglets RASTER et NETWORK
