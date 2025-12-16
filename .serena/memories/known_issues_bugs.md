@@ -14,6 +14,43 @@
 
 ## Recently Fixed (v2.3.0-alpha - December 16, 2025)
 
+### Stability Improvements - KeyError Prevention in PROJECT_LAYERS Access
+**Status:** ✅ FIXED
+
+**Issue:**
+- Multiple methods accessed `PROJECT_LAYERS[layer_id]` without verifying the key exists first
+- This could cause `KeyError` crashes when layers were removed or not yet initialized
+- Affected: `handle_undo()`, `handle_redo()`, `_build_layers_to_filter()`, `exploring_source_params_changed()`, `get_exploring_features()`
+
+**Impact:**
+- MEDIUM: Potential crashes during undo/redo operations
+- MEDIUM: Crashes when filtering with layers not yet in PROJECT_LAYERS
+
+**Solution:**
+- Added safety guards `if layer_id not in PROJECT_LAYERS: return` before accessing
+- Added logging for debugging when guard is triggered
+
+**Files Changed:**
+- `filter_mate_app.py`: `handle_undo()`, `handle_redo()`, `_build_layers_to_filter()`
+- `filter_mate_dockwidget.py`: `exploring_source_params_changed()`, `get_exploring_features()`
+
+### Exception Handling Improvements - Replaced bare except clauses
+**Status:** ✅ FIXED
+
+**Issue:**
+- Several `except Exception:` and `except:` clauses without proper exception types or logging
+- This masked errors and made debugging difficult
+
+**Impact:**
+- LOW: Debugging difficulty, potential silent failures
+
+**Solution:**
+- Replaced with specific exception types (`OSError`, `AttributeError`, `RuntimeError`, etc.)
+- Added logging for caught exceptions
+- Files: `filter_mate_app.py`, `postgresql_backend.py`, `layer_management_task.py`, `widgets.py`, `appUtils.py`, `filter_mate_dockwidget.py`
+
+---
+
 ### PostgreSQL "missing FROM-clause entry" Error on 2-Part Table References
 **Status:** ✅ FIXED
 

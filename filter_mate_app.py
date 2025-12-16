@@ -825,8 +825,13 @@ class FilterMateApp:
         """
         layers_to_filter = []
         
+        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+        if current_layer.id() not in self.PROJECT_LAYERS:
+            logger.warning(f"_build_layers_to_filter: layer {current_layer.name()} not in PROJECT_LAYERS")
+            return layers_to_filter
+        
         # DIAGNOSTIC: Log the raw layers_to_filter list from PROJECT_LAYERS
-        raw_layers_list = self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"]
+        raw_layers_list = self.PROJECT_LAYERS[current_layer.id()]["filtering"].get("layers_to_filter", [])
         logger.info(f"=== _build_layers_to_filter DIAGNOSTIC ===")
         logger.info(f"  Source layer: {current_layer.name()} (id={current_layer.id()[:8]}...)")
         logger.info(f"  Raw layers_to_filter list: {raw_layers_list}")
@@ -1331,6 +1336,12 @@ class FilterMateApp:
                 "Impossible d'annuler: couche invalide ou source introuvable."
             )
             return
+        
+        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+        if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
+            logger.warning(f"handle_undo: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
+            return
+        
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
         # Check if the "Layers to filter" button is checked and has remote layers selected
@@ -1430,6 +1441,12 @@ class FilterMateApp:
                 "Impossible de rétablir: couche invalide ou source introuvable."
             )
             return
+        
+        # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+        if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
+            logger.warning(f"handle_redo: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
+            return
+        
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
         # Check if the "Layers to filter" button is checked and has remote layers selected
@@ -2184,8 +2201,8 @@ class FilterMateApp:
         finally:
             try:
                 connexion.close()
-            except Exception:
-                pass
+            except (OSError, AttributeError) as e:
+                logger.debug(f"Could not close connection: {e}")
 
 
 

@@ -4034,6 +4034,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             logger.debug(f"exploring_source_params_changed called with expression={expression}, groupbox_override={groupbox_override}")
 
+            # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"exploring_source_params_changed: layer {self.current_layer.name()} not in PROJECT_LAYERS")
+                return
+
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
 
             # Use groupbox_override if provided, otherwise fall back to current_exploring_groupbox
@@ -4226,6 +4231,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Guard: Handle invalid input types (e.g., False from currentSelectedFeatures())
             if input is False or input is None:
                 logger.debug("get_exploring_features: Input is False or None, returning empty")
+                return [], None
+            
+            # STABILITY FIX: Verify layer exists in PROJECT_LAYERS before access
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"get_exploring_features: Layer {self.current_layer.name()} not in PROJECT_LAYERS")
                 return [], None
             
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
@@ -4481,8 +4491,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         "FilterMate",
                         "La couche sélectionnée est invalide ou sa source est introuvable. Sélection annulée."
                     )
-                except Exception:
-                    pass
+                except (RuntimeError, AttributeError) as e:
+                    logger.debug(f"Could not show warning message: {e}")
                 # Revert combo selection to previous valid layer if possible
                 try:
                     prev = self.current_layer if isinstance(self.current_layer, QgsVectorLayer) and is_layer_source_available(self.current_layer) else None

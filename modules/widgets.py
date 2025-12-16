@@ -96,8 +96,8 @@ def get_feature_attribute(feature, field_name):
             idx = fields.lookupField(field_name)
             if idx >= 0:
                 return feature.attributes()[idx]
-        except Exception:
-            pass
+        except (KeyError, IndexError, AttributeError) as e:
+            logger.debug(f"Could not get feature attribute '{field_name}': {e}")
         return None
 
 

@@ -847,8 +847,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     cursor.close()
                 if 'conn' in locals():
                     conn.close()
-            except:
-                pass
+            except (OSError, AttributeError, Exception) as cleanup_err:
+                self.log_debug(f"Cleanup error (non-fatal): {cleanup_err}")
             
             self.log_info("Falling back to direct filter method")
             return self._apply_direct(layer, expression)

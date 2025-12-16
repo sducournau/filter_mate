@@ -2,6 +2,30 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.3.5] - 2025-12-16 - Stability Improvements: Exception Handling & Guard Clauses
+
+### 🐛 Bug Fixes
+- **CRITICAL: Fixed potential KeyError crashes in PROJECT_LAYERS access** - Added guard clauses to verify layer existence before dictionary access in multiple critical methods:
+  - `_build_layers_to_filter()`: Prevents crash when layer removed during filtering
+  - `handle_undo()`: Validates layer exists before undo operation
+  - `handle_redo()`: Validates layer exists before redo operation
+  - `exploring_source_params_changed()`: Guards against invalid layer state
+  - `get_exploring_features()`: Returns empty safely if layer not tracked
+
+### 🛠️ Improvements
+- **Improved exception handling throughout codebase** - Replaced generic exception handlers with specific types for better debugging:
+  - `postgresql_backend.py`: Cleanup errors now logged with specific exception types
+  - `layer_management_task.py`: Connection close errors properly typed and logged
+  - `widgets.py`: Feature attribute access errors logged for debugging
+  - `filter_mate_dockwidget.py`: Warning message errors typed as `RuntimeError, AttributeError`
+  - `filter_mate_app.py`: Connection close errors typed as `OSError, AttributeError`
+
+### 📝 Technical Details
+- All bare `except:` and `except Exception:` clauses without logging replaced
+- Added logging for exception handlers to aid debugging
+- Guard clauses return early with warning log instead of crashing
+- Full audit documented in `.serena/memories/known_issues_bugs.md`
+
 ## [2.3.4] - 2025-12-16 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
 
 ### 🐛 Bug Fixes

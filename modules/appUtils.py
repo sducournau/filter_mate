@@ -139,9 +139,10 @@ def safe_set_subset_string(layer, expression):
     except Exception as e:
         try:
             lname = layer.name() if layer else 'None'
-        except Exception:
+        except (AttributeError, RuntimeError):
             lname = 'Unknown'
         logger.error(f"Failed to apply subset string to {lname}: {e}")
+        return False
         return False
 
 def is_layer_source_available(layer) -> bool:

@@ -989,8 +989,8 @@ class LayersManagementEngineTask(QgsTask):
         finally:
             try:
                 connexion.close()
-            except Exception:
-                pass
+            except (OSError, AttributeError) as e:
+                logger.debug(f"Could not close connection: {e}")
 
         if self.isCanceled():
             return False
