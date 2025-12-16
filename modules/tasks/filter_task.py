@@ -692,13 +692,16 @@ class FilterEngineTask(QgsTask):
         param_old_subset_where = self.param_source_old_subset[index_where:]
         param_source_old_subset = self.param_source_old_subset[:index_where]
         
-        # Remove trailing )) if present
+        # Remove trailing )) if present (legacy handling for malformed expressions)
         if param_old_subset_where.endswith('))'):
             param_old_subset_where = param_old_subset_where[:-1]
         
+        # CRITICAL FIX: Removed extra closing parenthesis that was causing SQL syntax errors
+        # The bug was: f'... ( {expression} ) )' - two closing parens with only one opening
+        # This caused "syntax error at or near ')'" in EXISTS subqueries
         combined = (
             f'{param_source_old_subset} {param_old_subset_where} '
-            f'{combine_operator} ( {expression} ) )'
+            f'{combine_operator} ( {expression} )'
         )
         
         return combined
@@ -2859,8 +2862,14 @@ class FilterEngineTask(QgsTask):
                 param_old_subset_where_clause = param_old_subset_where_clause[:-1]
             param_source_old_subset = old_subset[:index_where_clause]
         
-        # Combine expressions
-        combined = f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {new_expression} )'
+        # CRITICAL FIX: Removed extra closing parenthesis that was causing SQL syntax errors
+        # When there's no WHERE clause, we should wrap in parentheses; when there is, just combine
+        if index_where_clause > -1:
+            # Has WHERE clause - combine with existing structure
+            combined = f'{param_source_old_subset} {param_old_subset_where_clause} {combine_operator} {new_expression}'
+        else:
+            # No WHERE clause - wrap both in parentheses for safety
+            combined = f'( {old_subset} ) {combine_operator} ( {new_expression} )'
         return combined 
 
     def _validate_layer_properties(self, layer_props, layer_name):

@@ -348,14 +348,58 @@ class FilterMateApp:
                 # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
                 QTimer.singleShot(500, lambda layers=init_layers: self.manage_task('add_layers', layers))
                 
-                # SAFETY: Force UI update after 2 seconds if task hasn't completed
-                # This ensures UI is never left in disabled state on startup
+                # SAFETY: Force UI update after 3 seconds if task hasn't completed
+                # This ensures UI is never left in disabled/grey state on startup
                 def ensure_ui_enabled():
-                    if self.dockwidget and len(self.PROJECT_LAYERS) > 0:
-                        logger.info("Safety timer: Forcing UI update after initial layer load")
+                    if not self.dockwidget:
+                        return
+                    
+                    # Check if layers were successfully loaded
+                    if len(self.PROJECT_LAYERS) > 0:
+                        logger.info("Safety timer: Task completed, forcing UI refresh")
                         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+                    else:
+                        # Task may have failed or not completed - try to reload layers
+                        logger.warning("Safety timer: PROJECT_LAYERS still empty after 3s, attempting recovery")
+                        current_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
+                        if len(current_layers) > 0:
+                            logger.info(f"Recovery: Found {len(current_layers)} layers, retrying add_layers")
+                            # Use QTimer to defer to avoid recursion issues
+                            QTimer.singleShot(100, lambda layers=current_layers: self.manage_task('add_layers', layers))
+                            # Set another safety timer
+                            QTimer.singleShot(3000, ensure_ui_enabled_final)
+                        else:
+                            # No layers found - update indicator to show waiting state
+                            logger.info("Recovery: No usable layers found, plugin waiting for layers")
+                            if self.dockwidget and hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                                self.dockwidget.backend_indicator_label.setText("...")
+                                self.dockwidget.backend_indicator_label.setStyleSheet("""
+                                    QLabel#label_backend_indicator {
+                                        color: #7f8c8d;
+                                        font-size: 9pt;
+                                        font-weight: 600;
+                                        padding: 3px 10px;
+                                        border-radius: 12px;
+                                        border: none;
+                                        background-color: #ecf0f1;
+                                    }
+                                """)
                 
-                QTimer.singleShot(2000, ensure_ui_enabled)
+                def ensure_ui_enabled_final():
+                    """Final safety check after recovery attempt."""
+                    if not self.dockwidget:
+                        return
+                    if len(self.PROJECT_LAYERS) > 0:
+                        logger.info("Final safety timer: Layers loaded, refreshing UI")
+                        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+                    else:
+                        logger.error("Final safety timer: Failed to load layers after recovery attempt")
+                        iface.messageBar().pushWarning(
+                            "FilterMate",
+                            "Échec du chargement des couches. Essayez de recharger le plugin."
+                        )
+                
+                QTimer.singleShot(3000, ensure_ui_enabled)
             else:
                 # No layers in project - inform user that plugin is waiting for layers
                 logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
@@ -611,6 +655,15 @@ class FilterMateApp:
                         self._refresh_ui_after_project_load()
                 
                 QTimer.singleShot(1000, refresh_after_load)
+                
+                # SAFETY FIX: Reset _loading_new_project flag after timeout if task didn't complete
+                # This prevents the flag from being stuck if task fails
+                def reset_loading_flag():
+                    if self._loading_new_project:
+                        logger.warning(f"Safety timer: Resetting _loading_new_project flag (task may have failed)")
+                        self._loading_new_project = False
+                
+                QTimer.singleShot(5000, reset_loading_flag)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -774,6 +827,13 @@ class FilterMateApp:
                 lambda layer, variable_key: self.removing_layer_variable(layer, variable_key),
                 Qt.QueuedConnection
             )
+            
+            # CRITICAL FIX: Handle task termination (failure/cancellation)
+            # This ensures the UI is not left in a disabled state if the task fails
+            self.appTasks[task_name].taskTerminated.connect(
+                lambda tn=task_name: self._handle_layer_task_terminated(tn),
+                Qt.QueuedConnection
+            )
 
         try:
             active_tasks = QgsApplication.taskManager().activeTasks()
@@ -809,6 +869,58 @@ class FilterMateApp:
                     
         except Exception as e:
             logger.warning(f"Could not cancel tasks: {e}")
+
+    def _handle_layer_task_terminated(self, task_name):
+        """Handle layer management task termination (failure or cancellation).
+        
+        This method is called when a LayersManagementEngineTask is terminated
+        (cancelled or failed) without emitting resultingLayers signal. It ensures
+        the UI is not left in a disabled/grey state.
+        
+        Args:
+            task_name (str): Name of the task that was terminated ('add_layers', 'remove_layers')
+        """
+        logger.warning(f"Layer management task '{task_name}' was terminated")
+        
+        # Reset loading flags to allow retry
+        if task_name == 'add_layers':
+            self._loading_new_project = False
+        
+        # Check if we still need to initialize the UI
+        if self.dockwidget is None:
+            return
+        
+        # If PROJECT_LAYERS is still empty, try to recover
+        if len(self.PROJECT_LAYERS) == 0:
+            logger.info("Task terminated with empty PROJECT_LAYERS, attempting recovery")
+            
+            # Get current vector layers from project
+            current_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
+            
+            if len(current_layers) > 0:
+                # Retry add_layers with a delay
+                logger.info(f"Recovery: Retrying add_layers with {len(current_layers)} layers")
+                QTimer.singleShot(500, lambda layers=current_layers: self.manage_task('add_layers', layers))
+            else:
+                # No layers - update UI to show waiting state
+                logger.info("No layers available after task termination")
+                if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                    self.dockwidget.backend_indicator_label.setText("...")
+                    self.dockwidget.backend_indicator_label.setStyleSheet("""
+                        QLabel#label_backend_indicator {
+                            color: #7f8c8d;
+                            font-size: 9pt;
+                            font-weight: 600;
+                            padding: 3px 10px;
+                            border-radius: 12px;
+                            border: none;
+                            background-color: #ecf0f1;
+                        }
+                    """)
+        else:
+            # PROJECT_LAYERS has data - just refresh UI
+            logger.info("Task terminated but PROJECT_LAYERS has data, refreshing UI")
+            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
     def on_remove_layer_task_begun(self):
         self.dockwidget.disconnect_widgets_signals()
