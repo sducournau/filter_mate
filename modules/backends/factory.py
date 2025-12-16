@@ -3,15 +3,16 @@
 Backend Factory for FilterMate
 
 Factory pattern implementation for selecting the appropriate backend
-based on layer provider type.
+based on layer provider type. Includes support for raster backends.
 """
 
-from typing import Dict
-from qgis.core import QgsVectorLayer
+from typing import Dict, Optional, Union
+from qgis.core import QgsVectorLayer, QgsRasterLayer
 from .base_backend import GeometricFilterBackend
 from .postgresql_backend import PostgreSQLGeometricFilter, POSTGRESQL_AVAILABLE
 from .spatialite_backend import SpatialiteGeometricFilter
 from .ogr_backend import OGRGeometricFilter
+from .raster_backend import RasterBackend, GDAL_AVAILABLE
 from ..logging_config import get_tasks_logger
 from ..constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 
@@ -91,3 +92,41 @@ class BackendFactory:
             return SpatialiteGeometricFilter(task_params)
         else:
             return OGRGeometricFilter(task_params)
+    
+    @staticmethod
+    def get_raster_backend(
+        raster_source: Union[str, QgsRasterLayer]
+    ) -> Optional[RasterBackend]:
+        """
+        Get a raster backend instance for raster operations.
+        
+        Args:
+            raster_source: Path to raster file or QgsRasterLayer instance
+        
+        Returns:
+            RasterBackend instance, or None if GDAL is not available
+        
+        Raises:
+            ValueError: If raster cannot be opened
+        """
+        if not GDAL_AVAILABLE:
+            logger.warning("GDAL is not available, cannot create raster backend")
+            return None
+        
+        if isinstance(raster_source, QgsRasterLayer):
+            raster_path = raster_source.source()
+        else:
+            raster_path = str(raster_source)
+        
+        logger.info(f"Creating raster backend for: {raster_path}")
+        return RasterBackend(raster_path)
+    
+    @staticmethod
+    def is_raster_available() -> bool:
+        """
+        Check if raster operations are available.
+        
+        Returns:
+            True if GDAL is available, False otherwise
+        """
+        return GDAL_AVAILABLE
