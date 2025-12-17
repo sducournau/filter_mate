@@ -148,6 +148,11 @@ PERFORMANCE_THRESHOLD_MEDIUM = 50000     # 10k-50k: Warn if not PostgreSQL
 PERFORMANCE_THRESHOLD_LARGE = 100000     # 50k-100k: Strong warning
 PERFORMANCE_THRESHOLD_XLARGE = 500000    # > 500k: Critical warning
 
+# Small dataset optimization threshold
+# PostgreSQL layers below this threshold will use OGR memory backend for faster filtering
+SMALL_DATASET_THRESHOLD = 5000           # < 5k: Use OGR memory instead of PostgreSQL
+DEFAULT_SMALL_DATASET_OPTIMIZATION = True  # Enable small dataset optimization by default
+
 # ============================================================================
 # Database Defaults
 # ============================================================================

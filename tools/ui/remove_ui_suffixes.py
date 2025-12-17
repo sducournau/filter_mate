@@ -163,8 +163,8 @@ def remove_suffixes_from_ui_file(ui_file_path):
                 backup_content = f.read()
             with open(ui_file, 'w', encoding='utf-8') as f:
                 f.write(backup_content)
-        except:
-            pass
+        except (OSError, IOError):
+            pass  # Backup restore failed silently
         return False, 0, f"Error writing file: {e}"
     
     return True, changes_count, "Success"

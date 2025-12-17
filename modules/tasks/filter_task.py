@@ -87,6 +87,7 @@ from ..constants import (
 
 # Import backend architecture
 from ..backends import BackendFactory
+from ..backends.spatialite_backend import SpatialiteGeometricFilter
 
 # Import utilities
 from ..appUtils import (
@@ -251,30 +252,47 @@ class FilterEngineTask(QgsTask):
             self.exception = KeyError("task_parameters missing 'infos' dictionary")
             return False
         
-        required_keys = ["layer_name", "layer_id", "layer_crs_authid"]
         infos = self.task_parameters["infos"]
-        missing_keys = [k for k in required_keys if k not in infos or infos[k] is None]
         
-        if missing_keys:
-            error_msg = f"task_parameters['infos'] missing required keys: {missing_keys}"
+        # First, we need layer_id to find the layer (cannot be auto-filled)
+        if "layer_id" not in infos or infos["layer_id"] is None:
+            error_msg = "task_parameters['infos'] missing required key: ['layer_id']"
             logger.error(error_msg)
             self.exception = KeyError(error_msg)
             return False
         
-        self.layers_count = 1
-        layers = [
-            layer for layer in self.PROJECT.mapLayersByName(
-                infos["layer_name"]
-            ) 
-            if layer.id() == infos["layer_id"]
-        ]
+        # Try to find the layer by ID first (more reliable than name)
+        layer_id = infos["layer_id"]
+        layer_obj = self.PROJECT.mapLayer(layer_id)
         
-        if not layers:
+        # Fallback: try by name if available
+        if layer_obj is None and infos.get("layer_name"):
+            layers = [
+                layer for layer in self.PROJECT.mapLayersByName(infos["layer_name"]) 
+                if layer.id() == layer_id
+            ]
+            if layers:
+                layer_obj = layers[0]
+        
+        if layer_obj is None:
+            error_msg = f"Layer with id '{layer_id}' not found in project"
+            logger.error(error_msg)
+            self.exception = KeyError(error_msg)
             return False
         
-        self.source_layer = layers[0]
+        # Auto-fill missing required keys from the QGIS layer object
+        if "layer_name" not in infos or infos["layer_name"] is None:
+            infos["layer_name"] = layer_obj.name()
+            logger.info(f"Auto-filled layer_name='{infos['layer_name']}' for source layer")
+        
+        if "layer_crs_authid" not in infos or infos["layer_crs_authid"] is None:
+            infos["layer_crs_authid"] = layer_obj.sourceCrs().authid()
+            logger.info(f"Auto-filled layer_crs_authid='{infos['layer_crs_authid']}' for source layer")
+        
+        self.layers_count = 1
+        self.source_layer = layer_obj
         self.source_crs = self.source_layer.sourceCrs()
-        self.source_layer_crs_authid = self.task_parameters["infos"]["layer_crs_authid"]
+        self.source_layer_crs_authid = infos["layer_crs_authid"]
         
         # Extract feature count limit if provided
         task_options = self.task_parameters.get("task", {}).get("options", {})
@@ -355,6 +373,23 @@ class FilterEngineTask(QgsTask):
                     # Mark in layer_props for later reference
                     layer_props["_effective_provider_type"] = PROVIDER_OGR
                     layer_props["_postgresql_fallback"] = True
+            
+            # CRITICAL FIX: Verify provider_type is correct by detecting it from actual layer
+            # This ensures GeoPackage layers are correctly identified as 'spatialite'
+            # even if layer_props had incorrect provider_type from previous operations
+            from ..appUtils import detect_layer_provider_type
+            layer_by_id = self.PROJECT.mapLayer(layer_id)
+            if layer_by_id:
+                detected_provider = detect_layer_provider_type(layer_by_id)
+                if detected_provider != provider_type and detected_provider != 'unknown':
+                    logger.warning(
+                        f"  ⚠️ Provider type mismatch for '{layer_name}': "
+                        f"stored='{provider_type}', detected='{detected_provider}'. "
+                        f"Using detected type."
+                    )
+                    provider_type = detected_provider
+                    # Update layer_props with correct provider type
+                    layer_props["layer_provider_type"] = provider_type
             
             logger.info(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
             
@@ -510,12 +545,80 @@ class FilterEngineTask(QgsTask):
         """Extract and initialize all parameters needed for source layer filtering"""
         self.param_source_old_subset = ''
         
-        # Validate required keys exist
+        infos = self.task_parameters.get("infos", {})
+        
+        # Auto-fill missing keys from source_layer if available
+        if self.source_layer:
+            # Auto-fill layer_name
+            if "layer_name" not in infos or infos["layer_name"] is None:
+                infos["layer_name"] = self.source_layer.name()
+                logger.info(f"Auto-filled layer_name='{infos['layer_name']}' from source layer")
+            
+            # Auto-fill layer_id  
+            if "layer_id" not in infos or infos["layer_id"] is None:
+                infos["layer_id"] = self.source_layer.id()
+                logger.info(f"Auto-filled layer_id='{infos['layer_id']}' from source layer")
+            
+            # Auto-fill layer_provider_type
+            if "layer_provider_type" not in infos or infos["layer_provider_type"] is None:
+                provider = self.source_layer.providerType()
+                if provider == 'postgres':
+                    infos["layer_provider_type"] = 'postgresql'
+                elif provider == 'spatialite':
+                    infos["layer_provider_type"] = 'spatialite'
+                else:
+                    infos["layer_provider_type"] = 'ogr'
+                logger.info(f"Auto-filled layer_provider_type='{infos['layer_provider_type']}' from source layer")
+            
+            # Auto-fill layer_geometry_field
+            if "layer_geometry_field" not in infos or infos["layer_geometry_field"] is None:
+                try:
+                    geom_col = self.source_layer.dataProvider().geometryColumn()
+                    if geom_col:
+                        infos["layer_geometry_field"] = geom_col
+                    else:
+                        # Default based on provider
+                        if infos.get("layer_provider_type") == 'postgresql':
+                            infos["layer_geometry_field"] = 'geom'
+                        else:
+                            infos["layer_geometry_field"] = 'geometry'
+                    logger.info(f"Auto-filled layer_geometry_field='{infos['layer_geometry_field']}' from source layer")
+                except Exception as e:
+                    infos["layer_geometry_field"] = 'geom'
+                    logger.warning(f"Could not detect geometry column, using 'geom': {e}")
+            
+            # Auto-fill primary_key_name
+            if "primary_key_name" not in infos or infos["primary_key_name"] is None:
+                pk_indices = self.source_layer.primaryKeyAttributes()
+                if pk_indices:
+                    infos["primary_key_name"] = self.source_layer.fields()[pk_indices[0]].name()
+                else:
+                    # Fallback to first field
+                    if self.source_layer.fields():
+                        infos["primary_key_name"] = self.source_layer.fields()[0].name()
+                    else:
+                        infos["primary_key_name"] = 'id'
+                logger.info(f"Auto-filled primary_key_name='{infos['primary_key_name']}' from source layer")
+            
+            # Auto-fill layer_schema (empty for non-PostgreSQL)
+            if "layer_schema" not in infos or infos["layer_schema"] is None:
+                if infos.get("layer_provider_type") == 'postgresql':
+                    import re
+                    source = self.source_layer.source()
+                    match = re.search(r'table="([^"]+)"\.', source)
+                    if match:
+                        infos["layer_schema"] = match.group(1)
+                    else:
+                        infos["layer_schema"] = 'public'
+                else:
+                    infos["layer_schema"] = ''
+                logger.info(f"Auto-filled layer_schema='{infos['layer_schema']}' from source layer")
+        
+        # Validate required keys exist after auto-fill
         required_keys = [
-            "layer_provider_type", "layer_schema", "layer_name", 
+            "layer_provider_type", "layer_name", 
             "layer_id", "layer_geometry_field", "primary_key_name"
         ]
-        infos = self.task_parameters.get("infos", {})
         missing_keys = [k for k in required_keys if k not in infos or infos[k] is None]
         
         if missing_keys:
@@ -540,12 +643,17 @@ class FilterEngineTask(QgsTask):
             self._source_postgresql_fallback = False
         
         self.param_source_schema = infos["layer_schema"]
-        self.param_source_table = infos["layer_name"]
+        # CRITICAL FIX: Use layer_table_name (actual DB table name) for PostgreSQL, not layer_name (display name)
+        # layer_name is the QGIS layer name which can differ from the actual database table name
+        # e.g., layer_name="Distribution Cluster" but layer_table_name="distribution_clusters"
+        # This is essential for building correct SQL queries in EXISTS subqueries
+        self.param_source_table = infos.get("layer_table_name") or infos["layer_name"]
+        self.param_source_layer_name = infos["layer_name"]  # Keep display name for logging
         self.param_source_layer_id = infos["layer_id"]
         self.param_source_geom = infos["layer_geometry_field"]
         self.primary_key_name = infos["primary_key_name"]
         
-        logger.debug(f"Filtering layer: {self.param_source_table} (Provider: {self.param_source_provider_type})")
+        logger.debug(f"Filtering layer: {self.param_source_layer_name} (table: {self.param_source_table}, Provider: {self.param_source_provider_type})")
         
         # Extract filtering configuration
         self.has_combine_operator = self.task_parameters["filtering"]["has_combine_operator"]
@@ -727,10 +835,16 @@ class FilterEngineTask(QgsTask):
         is_numeric = self.task_parameters["infos"]["primary_key_is_numeric"]
         
         if self.param_source_provider_type == PROVIDER_OGR:
-            # OGR: Simple syntax without table qualification
-            # Use "fid" for numeric keys, quoted field name for string keys
+            # OGR: Simple syntax with quoted field name
+            # CRITICAL FIX: Use actual primary_key_name, not hardcoded "fid"
             if is_numeric:
-                expression = f'"fid" IN ({", ".join(features_ids)})'
+                expression = f'"{self.primary_key_name}" IN ({", ".join(features_ids)})'
+            else:
+                expression = f'"{self.primary_key_name}" IN ({", ".join(repr(fid) for fid in features_ids)})'
+        elif self.param_source_provider_type == PROVIDER_SPATIALITE:
+            # Spatialite: Simple syntax with quoted field name (no table qualification needed)
+            if is_numeric:
+                expression = f'"{self.primary_key_name}" IN ({", ".join(features_ids)})'
             else:
                 expression = f'"{self.primary_key_name}" IN ({", ".join(repr(fid) for fid in features_ids)})'
         else:
@@ -804,6 +918,21 @@ class FilterEngineTask(QgsTask):
         
         result = False
         task_expression = self.task_parameters["task"]["expression"]
+        task_features = self.task_parameters["task"]["features"]
+        
+        # DIAGNOSTIC: Log incoming parameters
+        logger.info("=" * 60)
+        logger.info("🔧 execute_source_layer_filtering DIAGNOSTIC")
+        logger.info("=" * 60)
+        logger.info(f"   task_expression = '{task_expression}'")
+        logger.info(f"   task_features count = {len(task_features) if task_features else 0}")
+        if task_features and len(task_features) > 0:
+            for i, f in enumerate(task_features[:3]):  # Show first 3
+                logger.info(f"      feature[{i}]: id={f.id()}, isValid={f.isValid()}")
+        logger.info(f"   source_layer = '{self.source_layer.name() if self.source_layer else 'None'}'")
+        logger.info(f"   primary_key_name = '{self.primary_key_name}'")
+        logger.info("=" * 60)
+        
         logger.debug(f"Task expression: {task_expression}")
         
         # Check if expression is just a field name (no comparison operators)
@@ -864,26 +993,39 @@ class FilterEngineTask(QgsTask):
         
         # Process QGIS expression if provided
         if task_expression:
+            logger.info(f"   → Processing task_expression: '{task_expression}'")
             processed_expr, is_field_expr = self._process_qgis_expression(task_expression)
+            logger.info(f"   → processed_expr: '{processed_expr}', is_field_expr: {is_field_expr}")
             
             if processed_expr:
                 # Combine with existing subset if needed
                 self.expression = self._combine_with_old_subset(processed_expr)
+                logger.info(f"   → combined expression: '{self.expression}'")
                 
                 # Apply filter and update subset
                 result = self._apply_filter_and_update_subset(self.expression)
+                logger.info(f"   → filter applied result: {result}")
+        else:
+            logger.info(f"   → No task_expression provided, will try fallback to feature IDs")
         
         # Fallback to feature ID list if expression processing failed
         if not result:
+            logger.info(f"   → Fallback: trying feature ID list...")
             self.is_field_expression = None
             features_list = self.task_parameters["task"]["features"]
+            logger.info(f"   → features_list count: {len(features_list) if features_list else 0}")
             
             if features_list:
                 self.expression = self._build_feature_id_expression(features_list)
+                logger.info(f"   → built expression from features: '{self.expression}'")
                 
                 if self.expression:
                     result = self._apply_filter_and_update_subset(self.expression)
+                    logger.info(f"   → fallback filter applied result: {result}")
+            else:
+                logger.warning(f"   ⚠️ No features in list - cannot apply filter!")
         
+        logger.info(f"🔧 execute_source_layer_filtering RESULT: {result}")
         return result
     
     def _initialize_source_subset_and_buffer(self):
@@ -1046,19 +1188,46 @@ class FilterEngineTask(QgsTask):
             logger.info(f"PostgreSQL simplified mode: {source_feature_count} features ≤ 50")
             logger.info("  → Will prepare WKT geometry for direct ST_GeomFromText()")
         
+        # Check if any OGR layer needs Spatialite geometry
+        ogr_needs_spatialite_geom = False
+        if 'ogr' in provider_list and hasattr(self, 'layers') and 'ogr' in self.layers:
+            spatialite_backend = SpatialiteGeometricFilter(self.task_parameters)
+            for layer, layer_props in self.layers['ogr']:
+                if spatialite_backend.supports_layer(layer):
+                    ogr_needs_spatialite_geom = True
+                    logger.info(f"  OGR layer '{layer.name()}' will use Spatialite backend - need WKT geometry")
+                    break
+        
         # Prepare PostgreSQL source geometry
-        # Only if we have actual PostgreSQL layers with working connections
+        # CRITICAL FIX: Check BOTH source layer AND distant layers for PostgreSQL
+        # If source layer is PostgreSQL with connection, we MUST prepare postgresql_source_geom
+        # for EXISTS subqueries to work correctly
+        has_postgresql_fallback_layers = False  # Track if any PostgreSQL layer uses OGR fallback
+        
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
-            # Check if any PostgreSQL layer actually has connection available
-            has_postgresql_with_connection = False
+            # Check if SOURCE layer is PostgreSQL with connection
+            source_is_postgresql_with_connection = (
+                self.param_source_provider_type == PROVIDER_POSTGRES and
+                self.task_parameters.get("infos", {}).get("postgresql_connection_available", False)
+            )
+            
+            # Check if any DISTANT PostgreSQL layer has connection available
+            has_distant_postgresql_with_connection = False
             if hasattr(self, 'layers') and 'postgresql' in self.layers:
                 for layer, layer_props in self.layers['postgresql']:
                     if layer_props.get('postgresql_connection_available', False):
-                        has_postgresql_with_connection = True
-                        break
+                        has_distant_postgresql_with_connection = True
+                    # CRITICAL FIX: Check if this layer uses OGR fallback
+                    if layer_props.get('_postgresql_fallback', False):
+                        has_postgresql_fallback_layers = True
+                        logger.info(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")
             
-            if has_postgresql_with_connection:
+            if source_is_postgresql_with_connection or has_distant_postgresql_with_connection:
                 logger.info("Preparing PostgreSQL source geometry...")
+                if source_is_postgresql_with_connection:
+                    logger.info("  → Source layer is PostgreSQL with connection")
+                if has_distant_postgresql_with_connection:
+                    logger.info("  → Distant PostgreSQL layers with connection found")
                 self.prepare_postgresql_source_geom()
             else:
                 logger.warning("PostgreSQL in provider list but no layers have connection - will use OGR fallback")
@@ -1067,16 +1236,28 @@ class FilterEngineTask(QgsTask):
                     logger.info("Adding OGR to provider list for PostgreSQL fallback...")
                     provider_list.append('ogr')
         
+        # CRITICAL FIX: If any PostgreSQL layer uses OGR fallback, we MUST prepare ogr_source_geom
+        # This happens when source layer has PostgreSQL connection but distant layers don't
+        if has_postgresql_fallback_layers and 'ogr' not in provider_list:
+            logger.info("PostgreSQL fallback layers detected - adding OGR to provider list")
+            provider_list.append('ogr')
+        
         # Prepare Spatialite source geometry (WKT string) with fallback to OGR
         # Also needed for PostgreSQL simplified mode (few source features)
-        if 'spatialite' in provider_list or postgresql_needs_wkt:
+        # CRITICAL FIX: Also prepare for OGR layers that will use Spatialite backend (GeoPackage/SQLite)
+        if 'spatialite' in provider_list or postgresql_needs_wkt or ogr_needs_spatialite_geom:
             logger.info("Preparing Spatialite source geometry...")
+            logger.info(f"  → Reason: spatialite={'spatialite' in provider_list}, "
+                       f"postgresql_wkt={postgresql_needs_wkt}, ogr_spatialite={ogr_needs_spatialite_geom}")
+            logger.info(f"  → Features in task: {len(self.task_parameters['task'].get('features', []))}")
             spatialite_success = False
             try:
                 self.prepare_spatialite_source_geom()
                 if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom is not None:
                     spatialite_success = True
-                    logger.info("✓ Spatialite source geometry prepared successfully")
+                    wkt_preview = self.spatialite_source_geom[:150] if len(self.spatialite_source_geom) > 150 else self.spatialite_source_geom
+                    logger.info(f"✓ Spatialite source geometry prepared: {len(self.spatialite_source_geom)} chars")
+                    logger.info(f"  → WKT preview: {wkt_preview}...")
                 else:
                     logger.warning("Spatialite geometry preparation returned None")
             except Exception as e:
@@ -1090,9 +1271,30 @@ class FilterEngineTask(QgsTask):
                 try:
                     self.prepare_ogr_source_geom()
                     if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom is not None:
-                        # Use OGR geometry as Spatialite geometry
-                        self.spatialite_source_geom = self.ogr_source_geom
-                        logger.info("✓ Successfully used OGR geometry as fallback")
+                        # CRITICAL FIX: Convert OGR layer geometry to WKT for Spatialite
+                        # ogr_source_geom is a QgsVectorLayer, spatialite_source_geom expects WKT string
+                        if isinstance(self.ogr_source_geom, QgsVectorLayer):
+                            # Extract geometries from the layer and convert to WKT
+                            all_geoms = []
+                            for feature in self.ogr_source_geom.getFeatures():
+                                geom = feature.geometry()
+                                if geom and not geom.isEmpty():
+                                    all_geoms.append(geom)
+                            
+                            if all_geoms:
+                                # Combine all geometries and convert to WKT
+                                combined = QgsGeometry.collectGeometry(all_geoms)
+                                wkt = combined.asWkt()
+                                # Escape single quotes for SQL
+                                self.spatialite_source_geom = wkt.replace("'", "''")
+                                logger.info(f"✓ Converted OGR layer to WKT ({len(self.spatialite_source_geom)} chars)")
+                            else:
+                                logger.warning("OGR layer has no valid geometries for Spatialite fallback")
+                                self.spatialite_source_geom = None
+                        else:
+                            # If it's already a string (WKT), use it directly
+                            self.spatialite_source_geom = self.ogr_source_geom
+                            logger.info("✓ Successfully used OGR geometry as fallback")
                     else:
                         logger.error("OGR fallback also failed - no geometry available")
                         return False
@@ -1100,8 +1302,15 @@ class FilterEngineTask(QgsTask):
                     logger.error(f"OGR fallback failed: {e2}")
                     return False
 
-        # Prepare OGR geometry if needed for OGR layers or buffer expressions
-        if 'ogr' in provider_list or self.param_buffer_expression != '':
+        # Prepare OGR geometry if needed for OGR layers, buffer expressions, OR PostgreSQL layers
+        # CRITICAL: Always prepare OGR geometry for PostgreSQL because BackendFactory may
+        # fall back to OGR at runtime if PostgreSQL connection fails or for small datasets
+        needs_ogr_geom = (
+            'ogr' in provider_list or 
+            self.param_buffer_expression != '' or
+            'postgresql' in provider_list  # PostgreSQL may use OGR fallback at runtime
+        )
+        if needs_ogr_geom:
             logger.info("Preparing OGR/Spatialite source geometry...")
             self.prepare_ogr_source_geom()
 
@@ -1687,6 +1896,57 @@ class FilterEngineTask(QgsTask):
         logger.debug(f"  ✓ Copied {len(features_to_copy)} features to memory layer")
         return memory_layer
 
+    def _copy_selected_features_to_memory(self, layer, layer_name="selected_copy"):
+        """
+        Copy only selected features from layer to memory layer.
+        
+        This method extracts only the currently selected features from the source
+        layer and copies them to a new memory layer. Essential for multi-selection
+        mode where only selected features should be used for spatial operations.
+        
+        Args:
+            layer: Source layer with selected features
+            layer_name: Name for the memory layer
+            
+        Returns:
+            QgsVectorLayer: Memory layer containing only selected features
+        """
+        selected_count = layer.selectedFeatureCount()
+        logger.debug(f"_copy_selected_features_to_memory: {layer.name()}, "
+                    f"selected={selected_count}")
+        
+        if selected_count == 0:
+            logger.warning(f"  ⚠️ No features selected in {layer.name()}")
+            # Return empty memory layer with same structure
+            geom_type = QgsWkbTypes.displayString(layer.wkbType())
+            crs = layer.crs().authid()
+            empty_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", layer_name, "memory")
+            empty_layer.dataProvider().addAttributes(layer.fields())
+            empty_layer.updateFields()
+            return empty_layer
+        
+        # Create memory layer with same structure
+        geom_type = QgsWkbTypes.displayString(layer.wkbType())
+        crs = layer.crs().authid()
+        memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs}", layer_name, "memory")
+        
+        # Copy fields
+        memory_layer.dataProvider().addAttributes(layer.fields())
+        memory_layer.updateFields()
+        
+        # Copy ONLY selected features
+        features_to_copy = []
+        for feature in layer.selectedFeatures():
+            new_feature = QgsFeature(feature)
+            features_to_copy.append(new_feature)
+        
+        if features_to_copy:
+            memory_layer.dataProvider().addFeatures(features_to_copy)
+            memory_layer.updateExtents()
+        
+        logger.debug(f"  ✓ Copied {len(features_to_copy)} selected features to memory layer")
+        return memory_layer
+
     def _fix_invalid_geometries(self, layer, output_key):
         """
         Fix invalid geometries in layer using QGIS processing.
@@ -2017,17 +2277,77 @@ class FilterEngineTask(QgsTask):
             final_type = QgsWkbTypes.displayString(dissolved_geom.wkbType())
             if 'GeometryCollection' in final_type:
                 logger.warning(f"Final geometry is still {final_type} - attempting last-resort conversion")
+                
+                # Method 1: convertToType
                 converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
                 if converted and not converted.isEmpty():
                     dissolved_geom = converted
                     logger.info(f"Last-resort conversion succeeded: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
+                else:
+                    # Method 2: Manual extraction of all polygon parts
+                    logger.warning("convertToType failed - extracting polygons manually")
+                    all_polygons = []
+                    
+                    def extract_polygons(geom):
+                        """Recursively extract all polygons from any geometry type."""
+                        if geom is None or geom.isEmpty():
+                            return
+                        geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                        if 'Polygon' in geom_type and 'Multi' not in geom_type:
+                            all_polygons.append(QgsGeometry(geom))
+                        elif 'MultiPolygon' in geom_type or 'GeometryCollection' in geom_type:
+                            for part in geom.asGeometryCollection():
+                                extract_polygons(part)
+                    
+                    extract_polygons(dissolved_geom)
+                    
+                    if all_polygons:
+                        logger.info(f"Extracted {len(all_polygons)} polygon(s) from GeometryCollection")
+                        # Create MultiPolygon from parts
+                        if len(all_polygons) == 1:
+                            dissolved_geom = all_polygons[0]
+                            # Convert single polygon to multipolygon
+                            dissolved_geom = QgsGeometry.fromMultiPolygonXY([dissolved_geom.asPolygon()])
+                        else:
+                            multi_poly_parts = [p.asPolygon() for p in all_polygons if p.asPolygon()]
+                            if multi_poly_parts:
+                                dissolved_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
+                        logger.info(f"Manual extraction result: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
+                    else:
+                        logger.error("Could not extract any polygons from GeometryCollection")
+        
+        # FINAL SAFETY CHECK: Ensure geometry is MultiPolygon before adding to layer
+        if dissolved_geom and not dissolved_geom.isEmpty():
+            final_type = QgsWkbTypes.displayString(dissolved_geom.wkbType())
+            logger.info(f"Final geometry type before adding: {final_type}")
+            
+            # If still not a Polygon type, force conversion
+            if 'Polygon' not in final_type:
+                logger.warning(f"Geometry is {final_type}, not Polygon - attempting final conversion")
+                converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
+                if converted and not converted.isEmpty():
+                    dissolved_geom = converted
+                    logger.info(f"Final conversion succeeded: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
+                else:
+                    logger.error(f"Cannot convert {final_type} to Polygon - returning empty layer")
+                    return buffered_layer
+            
+            # Ensure it's MultiPolygon (not single Polygon)
+            if dissolved_geom.wkbType() == QgsWkbTypes.Polygon:
+                # Convert single Polygon to MultiPolygon
+                poly_data = dissolved_geom.asPolygon()
+                if poly_data:
+                    dissolved_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                    logger.info("Converted single Polygon to MultiPolygon")
         
         # Create feature with dissolved geometry
         feat = QgsFeature()
         feat.setGeometry(dissolved_geom)
         
         provider = buffered_layer.dataProvider()
-        provider.addFeatures([feat])
+        success, _ = provider.addFeatures([feat])
+        if not success:
+            logger.error(f"Failed to add feature to buffer layer. Geometry type: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
         buffered_layer.updateExtents()
         
         # Create spatial index
@@ -2638,6 +2958,27 @@ class FilterEngineTask(QgsTask):
         Returns:
             None (modifies current_layer selection)
         """
+        # CRITICAL FIX: Validate ogr_source_geom before using it
+        if not self.ogr_source_geom:
+            logger.error("ogr_source_geom is None - cannot execute spatial selection")
+            raise Exception("Source geometry layer is not available for spatial selection")
+        
+        if not isinstance(self.ogr_source_geom, QgsVectorLayer):
+            logger.error(f"ogr_source_geom is not a QgsVectorLayer: {type(self.ogr_source_geom)}")
+            raise Exception(f"Source geometry must be a QgsVectorLayer, got {type(self.ogr_source_geom)}")
+        
+        if not self.ogr_source_geom.isValid():
+            logger.error(f"ogr_source_geom is not valid: {self.ogr_source_geom.name()}")
+            raise Exception("Source geometry layer is not valid")
+        
+        if self.ogr_source_geom.featureCount() == 0:
+            logger.warning("ogr_source_geom has no features - spatial selection will return no results")
+            return
+        
+        logger.info(f"Using ogr_source_geom: {self.ogr_source_geom.name()}, "
+                   f"features={self.ogr_source_geom.featureCount()}, "
+                   f"geomType={QgsWkbTypes.displayString(self.ogr_source_geom.wkbType())}")
+        
         if self.has_combine_operator is True:
             current_layer.selectAll()
             
@@ -2770,8 +3111,8 @@ class FilterEngineTask(QgsTask):
         """
         result_expression = expression
         
-        # For OGR, just ensure field names are quoted, no table qualification
-        if self.param_source_provider_type == PROVIDER_OGR:
+        # For OGR and Spatialite, just ensure field names are quoted, no table qualification
+        if self.param_source_provider_type in (PROVIDER_OGR, PROVIDER_SPATIALITE):
             # Handle primary key
             if primary_key_name in result_expression and f'"{primary_key_name}"' not in result_expression:
                 result_expression = result_expression.replace(
@@ -3050,11 +3391,32 @@ class FilterEngineTask(QgsTask):
             # Get appropriate backend for this layer - use effective provider type
             backend = BackendFactory.get_backend(effective_provider_type, layer, self.task_parameters)
             
-            # Prepare source geometry based on backend type - use effective provider type
-            source_geom = self._prepare_source_geometry(effective_provider_type)
+            # CRITICAL FIX: Use backend type to determine geometry format, not provider type
+            # The factory may return OGRGeometricFilter for PostgreSQL layers when:
+            # 1. Small dataset optimization is active (memory layer copy)
+            # 2. PostgreSQL connection failed (fallback mode)
+            # In these cases, we need QgsVectorLayer geometry (ogr), not SQL string (postgresql)
+            backend_name = backend.get_backend_name().lower()
+            geometry_provider = effective_provider_type
+            
+            # Handle OGR backend with PostgreSQL provider (fallback or small dataset opt)
+            if backend_name == 'ogr' and effective_provider_type == PROVIDER_POSTGRES:
+                geometry_provider = PROVIDER_OGR
+                logger.info(f"  → Backend is OGR but provider is PostgreSQL - using OGR geometry format (fallback/optimization)")
+            
+            # Prepare source geometry based on backend type - use geometry_provider
+            logger.info(f"  → Preparing source geometry for provider: {geometry_provider}")
+            logger.info(f"  → spatialite_source_geom exists: {hasattr(self, 'spatialite_source_geom')}")
+            if hasattr(self, 'spatialite_source_geom'):
+                logger.info(f"  → spatialite_source_geom length: {len(self.spatialite_source_geom) if self.spatialite_source_geom else 'None'}")
+            source_geom = self._prepare_source_geometry(geometry_provider)
             if not source_geom:
                 logger.error(f"Failed to prepare source geometry for {layer.name()}")
+                logger.error(f"  → effective_provider_type: {effective_provider_type}")
+                logger.error(f"  → spatialite_source_geom: {getattr(self, 'spatialite_source_geom', 'NOT SET')}")
+                logger.error(f"  → ogr_source_geom: {getattr(self, 'ogr_source_geom', 'NOT SET')}")
                 return False
+            logger.info(f"  ✓ Source geometry ready: {type(source_geom).__name__}")
             
             # Ensure layer object is in layer_props for backend use
             if 'layer' not in layer_props:
@@ -3073,10 +3435,16 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"  ✓ Layer {layer.name()} subset cleared - ready for fresh filter")
             
             # Build filter expression using backend
+            logger.info(f"  → Building backend expression with predicates: {self.current_predicates}")
             expression = self._build_backend_expression(backend, layer_props, source_geom)
             if not expression:
                 logger.warning(f"No expression generated for {layer.name()}")
+                logger.warning(f"  → backend type: {type(backend).__name__}")
+                logger.warning(f"  → current_predicates: {self.current_predicates}")
+                logger.warning(f"  → source_geom type: {type(source_geom).__name__}")
                 return False
+            logger.info(f"  ✓ Expression built: {len(expression)} chars")
+            logger.info(f"  → Expression preview: {expression[:200]}...")
             
             # Get old subset and combine operator for backend to handle
             old_subset = layer.subsetString() if layer.subsetString() != '' else None

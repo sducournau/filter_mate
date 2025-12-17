@@ -1,5 +1,12 @@
 {
     "APP": {
+        "AUTO_ACTIVATE": {
+            "value": false
+        },
+        "_AUTO_ACTIVATE_META": {
+            "description": "Auto-activate plugin when a project with vector layers is loaded: true (automatically open plugin), false (manual activation only)",
+            "applies_to": "Plugin initialization behavior"
+        },
         "DOCKWIDGET": {
             "FEEDBACK_LEVEL": {
                 "choices": [
@@ -18,6 +25,31 @@
                     "config_changes",
                     "progress_info",
                     "history_status"
+                ]
+            },
+            "LANGUAGE": {
+                "choices": [
+                    "auto",
+                    "en",
+                    "fr",
+                    "de",
+                    "es",
+                    "it",
+                    "nl",
+                    "pt"
+                ],
+                "value": "auto"
+            },
+            "_LANGUAGE_META": {
+                "description": "Interface language: 'auto' (use QGIS locale), or force specific language",
+                "available_translations": [
+                    "en (English)",
+                    "fr (Français)",
+                    "de (Deutsch)",
+                    "es (Español)",
+                    "it (Italiano)",
+                    "nl (Nederlands)",
+                    "pt (Português)"
                 ]
             },
             "UI_PROFILE": {
@@ -124,7 +156,7 @@
                         "dark",
                         "light"
                     ],
-                    "value": "auto"
+                    "value": "default"
                 },
                 "THEME_SOURCE": {
                     "choices": [
@@ -140,7 +172,7 @@
                             "#F5F5F5",
                             "#FFFFFF",
                             "#E0E0E0",
-                            "#616161"
+                            "#2196F3"
                         ],
                         "FONT": [
                             "#212121",
@@ -148,11 +180,11 @@
                             "#BDBDBD"
                         ],
                         "ACCENT": {
-                            "PRIMARY": "#424242",
-                            "HOVER": "#616161",
-                            "PRESSED": "#212121",
-                            "LIGHT_BG": "#F5F5F5",
-                            "DARK": "#000000"
+                            "PRIMARY": "#1976D2",
+                            "HOVER": "#2196F3",
+                            "PRESSED": "#0D47A1",
+                            "LIGHT_BG": "#E3F2FD",
+                            "DARK": "#01579B"
                         }
                     },
                     "dark": {
@@ -180,7 +212,7 @@
                             "#FFFFFF",
                             "#F5F5F5",
                             "#E0E0E0",
-                            "#616161"
+                            "#2196F3"
                         ],
                         "FONT": [
                             "#000000",
@@ -188,11 +220,11 @@
                             "#9E9E9E"
                         ],
                         "ACCENT": {
-                            "PRIMARY": "#424242",
-                            "HOVER": "#616161",
-                            "PRESSED": "#212121",
-                            "LIGHT_BG": "#F5F5F5",
-                            "DARK": "#000000"
+                            "PRIMARY": "#2196F3",
+                            "HOVER": "#64B5F6",
+                            "PRESSED": "#1976D2",
+                            "LIGHT_BG": "#E3F2FD",
+                            "DARK": "#0D47A1"
                         }
                     }
                 },
@@ -200,7 +232,7 @@
                     "#FAFAFA",
                     "#E0E0E0",
                     "#BDBDBD",
-                    "#616161"
+                    "#2196F3"
                 ],
                 "FONT": [
                     "#212121",
@@ -208,11 +240,11 @@
                     "#9E9E9E"
                 ],
                 "ACCENT": {
-                    "PRIMARY": "#424242",
-                    "HOVER": "#616161",
-                    "PRESSED": "#212121",
-                    "LIGHT_BG": "#F5F5F5",
-                    "DARK": "#000000"
+                    "PRIMARY": "#2196F3",
+                    "HOVER": "#64B5F6",
+                    "PRESSED": "#1976D2",
+                    "LIGHT_BG": "#E3F2FD",
+                    "DARK": "#0D47A1"
                 }
             }
         },
@@ -220,8 +252,14 @@
             "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
             "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
             "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
-            "APP_SQLITE_PATH": "C:\\Users\\Simon\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\imagodata\\FilterMate",
-            "FRESH_RELOAD_FLAG": false
+            "APP_SQLITE_PATH": "",
+            "FRESH_RELOAD_FLAG": false,
+            "SMALL_DATASET_OPTIMIZATION": {
+                "enabled": true,
+                "threshold": 5000,
+                "method": "ogr_memory",
+                "_description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)"
+            }
         }
     },
     "CURRENT_PROJECT": {
@@ -229,7 +267,7 @@
             "HAS_LAYERS_TO_EXPORT": false,
             "LAYERS_TO_EXPORT": [],
             "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:31370",
+            "PROJECTION_TO_EXPORT": "EPSG:3857",
             "HAS_STYLES_TO_EXPORT": false,
             "STYLES_TO_EXPORT": "QML",
             "HAS_DATATYPE_TO_EXPORT": false,
@@ -243,7 +281,7 @@
         },
         "OPTIONS": {
             "LAYERS": {
-                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": false,
+                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
                 "LAYER_PROPERTIES_COUNT": 35,
                 "FEATURE_COUNT_LIMIT": 10000
             },

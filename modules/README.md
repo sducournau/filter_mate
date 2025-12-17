@@ -109,7 +109,7 @@ Factory pattern for backend selection
 
 ### 1. Constants Pattern
 ```python
-from modules.constants import PROVIDER_POSTGRES, PREDICATE_INTERSECTS
+from modules.constants import PROVIDER_POSTGRES, PREDICATE_INTERSECTS, SMALL_DATASET_THRESHOLD
 
 if provider == PROVIDER_POSTGRES:
     # Type-safe, no magic strings
@@ -119,11 +119,40 @@ if provider == PROVIDER_POSTGRES:
 ```python
 from modules.backends import BackendFactory
 
+# Standard usage - returns backend instance
 backend = BackendFactory.get_backend(provider_type, layer, task_params)
 result = backend.apply_filter(layer, expression)
+
+# With memory optimization info (for small PostgreSQL datasets)
+backend, memory_layer, use_opt = BackendFactory.get_backend(
+    provider_type, layer, task_params, return_memory_info=True
+)
 ```
 
-### 3. Safe Signal Management
+### 3. Small Dataset Optimization
+For PostgreSQL layers with < 5000 features (configurable), FilterMate automatically:
+1. Loads the data into a memory layer
+2. Uses OGR backend for fast spatial calculations  
+3. Applies the resulting filter to the original PostgreSQL layer
+
+This avoids network overhead and is typically 2-10× faster for small datasets.
+
+Configuration in `config.json`:
+```json
+{
+  "APP": {
+    "OPTIONS": {
+      "SMALL_DATASET_OPTIMIZATION": {
+        "enabled": true,
+        "threshold": 5000,
+        "method": "ogr_memory"
+      }
+    }
+  }
+}
+```
+
+### 4. Safe Signal Management
 ```python
 from modules.signal_utils import SignalBlocker
 
@@ -133,7 +162,7 @@ with SignalBlocker(widget):
 # Signals automatically restored, even if exception occurs
 ```
 
-### 4. Logging
+### 5. Logging
 ```python
 from modules.logging_config import get_app_logger
 

@@ -30,6 +30,7 @@ from qgis.core import (
     QgsApplication,
     QgsAuthMethodConfig,
     QgsDataSourceUri,
+    QgsFeatureRequest,
     QgsTask,
     QgsVectorLayer,
     QgsWkbTypes
@@ -383,6 +384,104 @@ def detect_layer_provider_type(layer):
             return 'spatialite'
         else:
             return 'ogr'
+
+
+def get_geopackage_path(layer):
+    """
+    Extract GeoPackage file path from a layer.
+    
+    Args:
+        layer (QgsVectorLayer): QGIS vector layer
+    
+    Returns:
+        str or None: Absolute path to GeoPackage file, or None if not a GeoPackage layer
+    
+    Examples:
+        >>> gpkg_path = get_geopackage_path(layer)
+        >>> if gpkg_path:
+        ...     print(f"Layer is from: {gpkg_path}")
+    """
+    import os
+    
+    if not isinstance(layer, QgsVectorLayer):
+        return None
+    
+    # Get provider type first
+    provider_type = detect_layer_provider_type(layer)
+    
+    # Only process spatialite/ogr layers
+    if provider_type not in ('spatialite', 'ogr'):
+        return None
+    
+    # Extract source path
+    source = layer.source()
+    source_path = source.split('|')[0] if '|' in source else source
+    
+    # Check if it's a GeoPackage file
+    if source_path.lower().endswith('.gpkg'):
+        # Normalize and return absolute path
+        if os.path.isfile(source_path):
+            return os.path.abspath(source_path)
+    
+    return None
+
+
+def get_geopackage_related_layers(source_layer, project_layers_dict):
+    """
+    Get all layers from the same GeoPackage as the source layer.
+    
+    This function identifies all layers in the project that share the same GeoPackage
+    file as the source layer. Useful for automatically including related layers in
+    geometric filtering operations.
+    
+    Args:
+        source_layer (QgsVectorLayer): Source layer to find related layers for
+        project_layers_dict (dict): PROJECT_LAYERS dictionary containing layer info
+    
+    Returns:
+        list: List of layer IDs from the same GeoPackage (excluding source layer itself)
+    
+    Examples:
+        >>> related_ids = get_geopackage_related_layers(source_layer, PROJECT_LAYERS)
+        >>> logger.info(f"Found {len(related_ids)} related layers in same GeoPackage")
+    """
+    # Get GeoPackage path of source layer
+    source_gpkg_path = get_geopackage_path(source_layer)
+    
+    if not source_gpkg_path:
+        logger.debug(f"Source layer '{source_layer.name()}' is not from a GeoPackage")
+        return []
+    
+    logger.info(f"🔍 Looking for layers from same GeoPackage: {source_gpkg_path}")
+    
+    related_layer_ids = []
+    from qgis.core import QgsProject
+    project = QgsProject.instance()
+    
+    # Iterate through all layers in project
+    for layer_id, layer_obj in project.mapLayers().items():
+        # Skip the source layer itself
+        if layer_id == source_layer.id():
+            continue
+        
+        # Skip non-vector layers
+        if not isinstance(layer_obj, QgsVectorLayer):
+            continue
+        
+        # Check if this layer is from the same GeoPackage
+        layer_gpkg_path = get_geopackage_path(layer_obj)
+        if layer_gpkg_path and layer_gpkg_path == source_gpkg_path:
+            # Verify layer is in PROJECT_LAYERS (properly initialized)
+            if layer_id in project_layers_dict:
+                related_layer_ids.append(layer_id)
+                logger.info(f"  ✓ Found related layer: {layer_obj.name()} (id={layer_id[:8]}...)")
+            else:
+                logger.warning(
+                    f"  ⚠️ Layer '{layer_obj.name()}' from same GeoPackage but not in PROJECT_LAYERS - skipping"
+                )
+    
+    logger.info(f"  📊 Total related layers found: {len(related_layer_ids)}")
+    return related_layer_ids
 
 
 def geometry_type_to_string(layer):
@@ -813,21 +912,23 @@ def escape_json_string(s: str) -> str:
     return escaped
 
 
-def get_best_display_field(layer):
+def get_best_display_field(layer, sample_size=10):
     """
     Determine the best field to use as display expression for a layer.
     
     This function analyzes layer fields and selects the most suitable one
     for display purposes. It prioritizes descriptive text fields over 
-    primary keys or IDs.
+    primary keys or IDs, and verifies that the field has non-null values.
     
     Priority order:
-    1. Fields matching common name patterns (name, nom, label, titre, etc.)
-    2. First text/string field that's not an ID/key field
-    3. Primary key if no better option
+    1. Fields matching common name patterns (name, nom, label, titre, etc.) with values
+    2. First text/string field that's not an ID/key field and has values
+    3. Any field with values (fallback)
+    4. Primary key if no better option
     
     Args:
         layer (QgsVectorLayer): The layer to analyze
+        sample_size (int): Number of features to sample for value checking (default: 10)
         
     Returns:
         str: The field name to use as display expression, or empty string if no fields
@@ -864,10 +965,30 @@ def get_best_display_field(layer):
     
     best_field = None
     first_text_field = None
+    first_field_with_values = None
     primary_key = None
     
     # Try to get primary key from layer
     primary_key = get_primary_key_name(layer)
+    
+    # Helper function to check if a field has non-null/non-empty values
+    def field_has_values(field_name):
+        """Check if a field has at least one non-null, non-empty value."""
+        try:
+            # Get a sample of features to check values
+            request = QgsFeatureRequest().setLimit(sample_size)
+            request.setFlags(QgsFeatureRequest.NoGeometry)  # Faster without geometry
+            request.setSubsetOfAttributes([field_name], layer.fields())
+            
+            for feature in layer.getFeatures(request):
+                value = feature.attribute(field_name)
+                # Check if value is not NULL and not empty string
+                if value is not None and value != QVariant() and str(value).strip() != '':
+                    return True
+            return False
+        except Exception:
+            # If we can't check, assume it has values to avoid false negatives
+            return True
     
     for field in fields:
         field_name = field.name()
@@ -884,9 +1005,13 @@ def get_best_display_field(layer):
         # Check for exact match with name patterns
         for pattern in name_patterns:
             if field_name_lower == pattern or field_name_lower.endswith('_' + pattern):
-                return field_name
+                # Found a name pattern match - verify it has values
+                if field_has_values(field_name):
+                    return field_name
+                # If no values, continue searching for another match
+                break
         
-        # Track first text field that's not an ID
+        # Track first text field that's not an ID and has values
         if is_text_field and first_text_field is None:
             is_excluded = any(
                 field_name_lower == ex or 
@@ -895,13 +1020,33 @@ def get_best_display_field(layer):
                 for ex in exclude_patterns
             )
             if not is_excluded:
-                first_text_field = field_name
+                if field_has_values(field_name):
+                    first_text_field = field_name
+        
+        # Track first field with values (any type)
+        if first_field_with_values is None and field_has_values(field_name):
+            is_excluded = any(
+                field_name_lower == ex or 
+                field_name_lower.startswith(ex + '_') or
+                field_name_lower.endswith('_' + ex)
+                for ex in exclude_patterns
+            )
+            if not is_excluded:
+                first_field_with_values = field_name
     
-    # Return first text field if found, otherwise primary key
+    # Return first text field with values if found
     if first_text_field:
         return first_text_field
+    
+    # Return first field with values if found
+    if first_field_with_values:
+        return first_field_with_values
+    
+    # Return primary key if exists and has values
+    if primary_key and field_has_values(primary_key):
+        return primary_key
     elif primary_key:
         return primary_key
-    else:
-        # Fall back to first field
-        return fields[0].name()
+    
+    # Fall back to first field
+    return fields[0].name()

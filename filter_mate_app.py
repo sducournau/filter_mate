@@ -241,6 +241,10 @@ class FilterMateApp:
         self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
         self._loading_new_project = False  # Flag to track when loading a new project
         self._initializing_project = False  # Flag to prevent recursive project initialization
+        self._pending_add_layers_tasks = 0  # Counter for concurrent add_layers tasks prevention
+        self._add_layers_queue = []  # Queue for deferred add_layers operations
+        self._processing_queue = False  # Flag to prevent concurrent queue processing
+        self._widgets_ready = False  # Flag to track when widgets are fully initialized and ready
         
         # Initialize PROJECT_LAYERS as instance attribute (shadows class attribute for isolation)
         self.PROJECT_LAYERS = {}
@@ -323,6 +327,9 @@ class FilterMateApp:
             logger.info("FilterMate App.run(): Creating FilterMateDockWidget")
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
             logger.info("FilterMate App.run(): FilterMateDockWidget created")
+            
+            # Connect to widgetsInitialized signal for synchronization
+            self.dockwidget.widgetsInitialized.connect(self._on_widgets_initialized)
 
             # Force retranslation to ensure tooltips/text use current translator
             try:
@@ -344,9 +351,30 @@ class FilterMateApp:
             # Process existing layers AFTER dockwidget is shown and fully initialized
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()
             if init_layers is not None and len(init_layers) > 0:
-                # Increased delay to 500ms to ensure complete initialization
-                # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-                QTimer.singleShot(500, lambda layers=init_layers: self.manage_task('add_layers', layers))
+                # STABILITY FIX: Increased delay to 600ms to ensure complete initialization
+                # Wait for widgets_initialized callback before processing layers
+                # Use explicit lambda capture to prevent variable mutation issues
+                def wait_for_widget_initialization(layers_to_add):
+                    """Wait for widgets to be fully initialized before adding layers."""
+                    max_retries = 10  # Max 3 seconds (10 * 300ms)
+                    retry_count = 0
+                    
+                    def check_and_add():
+                        nonlocal retry_count
+                        if self.dockwidget and self.dockwidget.widgets_initialized:
+                            logger.info(f"Widgets initialized, adding {len(layers_to_add)} layers")
+                            self.manage_task('add_layers', layers_to_add)
+                        elif retry_count < max_retries:
+                            retry_count += 1
+                            logger.debug(f"Waiting for widget initialization (attempt {retry_count}/{max_retries})")
+                            QTimer.singleShot(300, check_and_add)
+                        else:
+                            logger.warning("Widget initialization timeout, forcing add_layers anyway")
+                            self.manage_task('add_layers', layers_to_add)
+                    
+                    check_and_add()
+                
+                QTimer.singleShot(600, lambda: wait_for_widget_initialization(init_layers))
                 
                 # SAFETY: Force UI update after 3 seconds if task hasn't completed
                 # This ensures UI is never left in disabled/grey state on startup
@@ -594,18 +622,18 @@ class FilterMateApp:
             init_env_vars()
             global ENV_VARS
             self.PROJECT = ENV_VARS["PROJECT"]
-            
+
             # Verify project is still valid after init
             if not self.PROJECT:
                 logger.warning(f"Project became invalid during {task_name}, skipping")
                 self._loading_new_project = False
                 return
-            
+
             # CRITICAL: Disconnect old layer store signals before updating reference
             # The old MapLayerStore may be invalid after project change
             old_layer_store = self.MapLayerStore
             new_layer_store = self.PROJECT.layerStore()
-            
+
             # ALWAYS reconnect signals on project change - even if layer_store is same object,
             # the project context has changed and signals may be stale
             if self._signals_connected:
@@ -656,29 +684,40 @@ class FilterMateApp:
                 
                 QTimer.singleShot(1000, refresh_after_load)
                 
-                # SAFETY FIX: Reset _loading_new_project flag after timeout if task didn't complete
-                # This prevents the flag from being stuck if task fails
-                def reset_loading_flag():
+                # STABILITY FIX: Reset flags after shorter timeout (1.5s instead of 3s)
+                # Faster recovery if task fails
+                def reset_loading_flags():
                     if self._loading_new_project:
-                        logger.warning(f"Safety timer: Resetting _loading_new_project flag (task may have failed)")
+                        logger.warning(f"Safety timer (1.5s): Resetting _loading_new_project flag")
                         self._loading_new_project = False
-                
-                QTimer.singleShot(5000, reset_loading_flag)
+                    if self._pending_add_layers_tasks > 0:
+                        logger.warning(f"Safety timer (1.5s): Resetting _pending_add_layers_tasks counter")
+                        self._pending_add_layers_tasks = 0
+                    # Process any queued add_layers operations
+                    if self._add_layers_queue:
+                        logger.info(f"Safety timer: Processing {len(self._add_layers_queue)} queued add_layers operations")
+                        self._process_add_layers_queue()
+
+                QTimer.singleShot(1500, reset_loading_flags)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
                 if self.dockwidget is not None:
                     self.dockwidget.disconnect_widgets_signals()
                     self.dockwidget.reset_multiple_checkable_combobox()
-                self.layer_management_engine_task_completed({}, 'remove_all_layers')
-                self._loading_new_project = False
-                # Inform user that plugin is waiting for layers
-                iface.messageBar().pushInfo(
-                    "FilterMate",
-                    "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
-                )
+                    self.layer_management_engine_task_completed({}, 'remove_all_layers')
+                    self._loading_new_project = False
+                    # Inform user that plugin is waiting for layers
+                    iface.messageBar().pushInfo(
+                        "FilterMate",
+                        "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
+                    )
         finally:
             self._initializing_project = False
+            # STABILITY FIX: Always reset _loading_new_project flag, even on error
+            if self._loading_new_project:
+                logger.debug(f"Resetting _loading_new_project flag in finally block")
+                self._loading_new_project = False
             # STABILITY FIX: Release dockwidget busy flag
             if self.dockwidget is not None:
                 self.dockwidget._plugin_busy = False
@@ -723,14 +762,32 @@ class FilterMateApp:
             logger.debug(f"Skipping add_layers - project initialization in progress (will be handled by _handle_project_initialization)")
             return
         
+        # STABILITY FIX: Queue concurrent add_layers tasks instead of rejecting them
+        # Multiple signals (projectRead, layersAdded, timers) can trigger add_layers simultaneously
+        if task_name == 'add_layers':
+            if self._pending_add_layers_tasks > 0:
+                logger.info(f"Queueing add_layers - already {self._pending_add_layers_tasks} task(s) in progress (queue size: {len(self._add_layers_queue)})")
+                self._add_layers_queue.append(data)
+                return
+            self._pending_add_layers_tasks += 1
+            logger.debug(f"Starting add_layers task (pending count: {self._pending_add_layers_tasks}, queue size: {len(self._add_layers_queue)})")
+        
         # Guard: Ensure dockwidget is fully initialized before processing tasks
         # Exception: remove_all_layers, project_read, new_project, add_layers can run without full initialization
         # add_layers is allowed to run early to handle existing layers at startup
         if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
-                logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 300ms...")
+                logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 500ms...")
                 # STABILITY FIX: Use explicit lambda captures to prevent variable mutation issues
-                QTimer.singleShot(300, lambda tn=task_name, d=data: self.manage_task(tn, d))
+                # Increased delay to ensure complete initialization
+                QTimer.singleShot(500, lambda tn=task_name, d=data: self.manage_task(tn, d))
+                return
+        
+        # CRITICAL: For filtering tasks, ensure widgets are fully initialized AND connected
+        if task_name in ('filter', 'unfilter', 'reset'):
+            if not self._is_dockwidget_ready_for_filtering():
+                logger.warning(f"Task '{task_name}' called before dockwidget is ready for filtering, deferring by 500ms...")
+                QTimer.singleShot(500, lambda tn=task_name, d=data: self.manage_task(tn, d))
                 return
 
         if self.dockwidget is not None:
@@ -882,6 +939,15 @@ class FilterMateApp:
         """
         logger.warning(f"Layer management task '{task_name}' was terminated")
         
+        # STABILITY FIX: Reset counters and flags on task failure
+        if task_name == 'add_layers':
+            if self._pending_add_layers_tasks > 0:
+                self._pending_add_layers_tasks -= 1
+                logger.debug(f"Reset add_layers counter after termination (remaining: {self._pending_add_layers_tasks})")
+            if self._loading_new_project:
+                logger.warning("Resetting _loading_new_project flag after task termination")
+                self._loading_new_project = False
+        
         # Reset loading flags to allow retry
         if task_name == 'add_layers':
             self._loading_new_project = False
@@ -922,12 +988,112 @@ class FilterMateApp:
             logger.info("Task terminated but PROJECT_LAYERS has data, refreshing UI")
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
 
+    def _process_add_layers_queue(self):
+        """Process queued add_layers operations.
+        
+        Processes the first queued add_layers operation from self._add_layers_queue.
+        Called after a previous add_layers task completes or from safety timer.
+        
+        Thread-safe: Uses _processing_queue flag to prevent concurrent processing.
+        """
+        # Prevent concurrent queue processing
+        if self._processing_queue:
+            logger.debug("Queue already being processed, skipping")
+            return
+        
+        if not self._add_layers_queue:
+            logger.debug("Queue is empty, nothing to process")
+            return
+        
+        self._processing_queue = True
+        
+        try:
+            # Get first queued operation
+            queued_layers = self._add_layers_queue.pop(0)
+            logger.info(f"Processing queued add_layers operation with {len(queued_layers) if queued_layers else 0} layers (queue size: {len(self._add_layers_queue)})")
+            
+            # Process the queued operation
+            # Note: manage_task will increment _pending_add_layers_tasks
+            self.manage_task('add_layers', queued_layers)
+            
+        except Exception as e:
+            logger.error(f"Error processing add_layers queue: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
+        finally:
+            self._processing_queue = False
+    
+    def _is_dockwidget_ready_for_filtering(self):
+        """Check if dockwidget is fully ready for filtering operations.
+        
+        Verifies that:
+        - Dockwidget exists
+        - Widgets are initialized (via widgetsInitialized signal)
+        - Layer combobox has items
+        - Current layer is set
+        - Widgets are ready flag is set
+        
+        Returns:
+            bool: True if ready for filtering, False otherwise
+        """
+        if self.dockwidget is None:
+            logger.debug("Dockwidget not ready: dockwidget is None")
+            return False
+        
+        # Primary check: use the signal-based flag
+        if not self._widgets_ready:
+            logger.debug("Dockwidget not ready: widgetsInitialized signal not yet received")
+            return False
+        
+        # Secondary check: verify widgets_initialized attribute
+        if not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
+            logger.debug("Dockwidget not ready: widgets_initialized attribute is False")
+            return False
+        
+        # Check if layer combobox has items
+        if hasattr(self.dockwidget, 'cbb_layers') and self.dockwidget.cbb_layers:
+            if self.dockwidget.cbb_layers.count() == 0:
+                logger.debug("Dockwidget not ready: layer combobox is empty")
+                return False
+        
+        # Check if current layer is set
+        if self.dockwidget.current_layer is None:
+            logger.debug("Dockwidget not ready: no current layer")
+            return False
+        
+        logger.debug("✓ Dockwidget is fully ready for filtering")
+        return True
+
+    def _on_widgets_initialized(self):
+        """Callback when dockwidget widgets are fully initialized.
+        
+        This is called via widgetsInitialized signal when the dockwidget
+        has finished creating and connecting all its widgets. It's a safe
+        point to perform operations that require fully functional UI.
+        """
+        logger.info("✓ Received widgetsInitialized signal - dockwidget ready for operations")
+        self._widgets_ready = True
+        
+        # If we have PROJECT_LAYERS but UI wasn't refreshed yet, do it now
+        if len(self.PROJECT_LAYERS) > 0:
+            logger.debug(f"Refreshing UI with {len(self.PROJECT_LAYERS)} existing layers")
+            self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+        
+        # Process any queued add_layers operations now that widgets are ready
+        if self._add_layers_queue and self._pending_add_layers_tasks == 0:
+            logger.info(f"Widgets ready - processing {len(self._add_layers_queue)} queued add_layers operations")
+            QTimer.singleShot(100, self._process_add_layers_queue)
+
     def on_remove_layer_task_begun(self):
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
     
     def _build_layers_to_filter(self, current_layer):
         """Build list of layers to filter with validation.
+        
+        AUTO-DETECTION: If source layer is from a GeoPackage, automatically includes
+        all other layers from the same GeoPackage file for geometric filtering.
+        This ensures consistent filtering across all layers in the same data source.
         
         Args:
             current_layer: Source layer for filtering
@@ -946,8 +1112,23 @@ class FilterMateApp:
         raw_layers_list = self.PROJECT_LAYERS[current_layer.id()]["filtering"].get("layers_to_filter", [])
         logger.info(f"=== _build_layers_to_filter DIAGNOSTIC ===")
         logger.info(f"  Source layer: {current_layer.name()} (id={current_layer.id()[:8]}...)")
-        logger.info(f"  Raw layers_to_filter list: {raw_layers_list}")
-        logger.info(f"  Number of layers in list: {len(raw_layers_list)}")
+        logger.info(f"  Raw layers_to_filter list (user-selected): {raw_layers_list}")
+        logger.info(f"  Number of user-selected layers: {len(raw_layers_list)}")
+        
+        # AUTO-INCLUDE: Add layers from same GeoPackage if source is GeoPackage
+        from .modules.appUtils import get_geopackage_related_layers
+        related_gpkg_layers = get_geopackage_related_layers(current_layer, self.PROJECT_LAYERS)
+        
+        if related_gpkg_layers:
+            logger.info(f"🔗 Auto-including {len(related_gpkg_layers)} layer(s) from same GeoPackage")
+            # Merge with user-selected layers, avoiding duplicates
+            combined_list = list(set(raw_layers_list + related_gpkg_layers))
+            logger.info(f"  Combined list size: {len(combined_list)} layers (user + auto)")
+            raw_layers_list = combined_list
+        else:
+            logger.debug(f"  No related GeoPackage layers found (source is not GeoPackage or is single-layer)")
+        
+        logger.info(f"  Final layers to process: {len(raw_layers_list)}")
         
         for key in raw_layers_list:
             if key in self.PROJECT_LAYERS:
@@ -1405,6 +1586,14 @@ class FilterMateApp:
             return
         
         source_layer = self.dockwidget.current_layer
+        
+        # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
+        if source_layer.id() not in self.dockwidget.PROJECT_LAYERS:
+            logger.debug(f"update_undo_redo_buttons: layer {source_layer.name()} not in PROJECT_LAYERS")
+            self.dockwidget.pushButton_action_undo_filter.setEnabled(False)
+            self.dockwidget.pushButton_action_redo_filter.setEnabled(False)
+            return
+        
         layers_to_filter = self.dockwidget.PROJECT_LAYERS[source_layer.id()]["filtering"].get("layers_to_filter", [])
         
         # Check if remote layers are selected
@@ -2412,56 +2601,76 @@ class FilterMateApp:
                 return
             cur = conn.cursor()
 
-            if task_name in ("add_layers","remove_layers","remove_all_layers"):
-                if task_name == 'add_layers':
-                    for layer_key in self.PROJECT_LAYERS.keys():
-                        if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
-                            try:
-                                self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                            except (KeyError, AttributeError, RuntimeError):
-                                pass
+            try:
+                if task_name in ("add_layers","remove_layers","remove_all_layers"):
+                    if task_name == 'add_layers':
+                        for layer_key in self.PROJECT_LAYERS.keys():
+                            if layer_key not in self.dockwidget.PROJECT_LAYERS.keys():
+                                try:
+                                    self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+                                except (KeyError, AttributeError, RuntimeError):
+                                    pass
 
-                        # Validate and update datasource
-                        layer_info = self._validate_layer_info(layer_key)
-                        if layer_info:
-                            self._update_datasource_for_layer(layer_info)
-                            
-
-                else:
-                    # Handle layer removal
-                    for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
-                        if layer_key not in self.PROJECT_LAYERS.keys():
-                            # Layer removed - clean up database
-                            cur.execute("""DELETE FROM fm_project_layers_properties 
-                                            WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
-                                                project_id=self.project_uuid,
-                                                layer_id=layer_key
-                                            ))
-                            conn.commit()
-                            
-                            # Clean up history for removed layer
-                            self.history_manager.remove_history(layer_key)
-                            logger.info(f"FilterMate: Removed history for deleted layer {layer_key}")
-                            
-                            try:
-                                self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
-                            except (KeyError, AttributeError, RuntimeError):
-                                pass
-                        else:
-                            # Update datasource for remaining layers
+                            # Validate and update datasource
                             layer_info = self._validate_layer_info(layer_key)
                             if layer_info:
-                                self._remove_datasource_for_layer(layer_info)
-                
-                
-                self.save_project_variables()                    
-                self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+                                self._update_datasource_for_layer(layer_info)
+                                
 
-            self.MapLayerStore = self.PROJECT.layerStore()
-            self.update_datasource()
-            logger.debug(f"Project datasources: {self.project_datasources}")
-            cur.close()
-            conn.close()
+                    else:
+                        # Handle layer removal
+                        for layer_key in self.dockwidget.PROJECT_LAYERS.keys():
+                            if layer_key not in self.PROJECT_LAYERS.keys():
+                                # Layer removed - clean up database
+                                cur.execute("""DELETE FROM fm_project_layers_properties 
+                                                WHERE fk_project = '{project_id}' and layer_id = '{layer_id}';""".format(
+                                                    project_id=self.project_uuid,
+                                                    layer_id=layer_key
+                                                ))
+                                conn.commit()
+                                
+                                # Clean up history for removed layer
+                                self.history_manager.remove_history(layer_key)
+                                logger.info(f"FilterMate: Removed history for deleted layer {layer_key}")
+                                
+                                try:
+                                    self.dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].remove_list_widget(layer_key)
+                                except (KeyError, AttributeError, RuntimeError):
+                                    pass
+                            else:
+                                # Update datasource for remaining layers
+                                layer_info = self._validate_layer_info(layer_key)
+                                if layer_info:
+                                    self._remove_datasource_for_layer(layer_info)
+                    
+                    
+                    self.save_project_variables()                    
+                    self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+
+                self.MapLayerStore = self.PROJECT.layerStore()
+                self.update_datasource()
+                logger.debug(f"Project datasources: {self.project_datasources}")
+            finally:
+                # STABILITY FIX: Ensure DB connection is always closed
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            
+            # STABILITY FIX: Decrement add_layers task counter and process queue
+            if task_name == 'add_layers':
+                if self._pending_add_layers_tasks > 0:
+                    self._pending_add_layers_tasks -= 1
+                    logger.debug(f"Completed add_layers task (remaining: {self._pending_add_layers_tasks})")
+                
+                # Process next queued operation if any
+                if self._add_layers_queue and self._pending_add_layers_tasks == 0:
+                    logger.info(f"Processing {len(self._add_layers_queue)} queued add_layers operations")
+                    QTimer.singleShot(100, self._process_add_layers_queue)
             
             # If we're loading a new project, force UI refresh after add_layers completes
             if task_name == 'add_layers' and hasattr(self, '_loading_new_project') and self._loading_new_project:
@@ -2479,6 +2688,11 @@ class FilterMateApp:
         Returns:
             dict: Layer info or None if invalid
         """
+        # STABILITY FIX: Guard against KeyError if layer_key not in PROJECT_LAYERS
+        if layer_key not in self.PROJECT_LAYERS:
+            logger.warning(f"Layer {layer_key} not found in PROJECT_LAYERS")
+            return None
+        
         if "infos" not in self.PROJECT_LAYERS[layer_key]:
             logger.warning(f"Layer {layer_key} missing required 'infos' in PROJECT_LAYERS")
             return None

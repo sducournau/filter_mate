@@ -143,6 +143,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     closingPlugin = pyqtSignal()
     launchingTask = pyqtSignal(str)
     currentLayerChanged = pyqtSignal()
+    widgetsInitialized = pyqtSignal()  # NEW: Signal emitted when widgets are fully initialized
 
     gettingProjectLayers = pyqtSignal()
 
@@ -2168,7 +2169,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 }
         
         self.widgets_initialized = True
-        logger.debug(f"Widgets initialized with {len(self.PROJECT_LAYERS)} layers")
+        logger.info(f"✓ Widgets fully initialized with {len(self.PROJECT_LAYERS)} layers")
+        
+        # NEW: Emit signal to notify that widgets are ready
+        # This allows FilterMateApp to safely proceed with layer operations
+        self.widgetsInitialized.emit()
         
         # CRITICAL: If layers were updated before widgets_initialized, refresh UI now
         if self._pending_layers_update:
@@ -3261,11 +3266,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Safely disconnect all widget signals.
         
         Critical for preventing Qt access violations during task execution.
-        Processes Qt event queue between disconnections to avoid overflow.
         
         Notes:
             - CRITICAL FIX: Prevents crashes during task execution
-            - Processes events between disconnects to avoid Qt queue overflow
             - Handles already-deleted widgets gracefully
             - Called before long-running tasks or layer removal
             - Essential for plugin stability
@@ -3275,14 +3278,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             No exceptions propagated - all errors caught and logged
         """
         # CRITICAL FIX: Protect against Qt access violations during task execution
-        from qgis.PyQt.QtCore import QCoreApplication
+        # DO NOT call processEvents() inside the loop - it can trigger widget destruction
+        # during iteration, causing access violations
         
         for widget_group in self.widgets:
             if widget_group != 'QGIS':
                 for widget in self.widgets[widget_group]:
                     try:
-                        # Process events to avoid Qt queue overflow during signal disconnect
-                        QCoreApplication.processEvents()
                         self.manageSignal([widget_group, widget], 'disconnect')
                     except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
                         # Widget may not exist, already deleted, or signal not connected
@@ -3751,6 +3753,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except (AttributeError, KeyError, RuntimeError) as e:
                 logger.error(f"Error setting multiple selection expression widget: {type(e).__name__}: {e}")
 
+            # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"exploring_multiple_selection: layer {self.current_layer.name()} not in PROJECT_LAYERS")
+                return
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             try:
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
@@ -3822,6 +3828,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # PRESERVE FILTER FIX: Only call exploring_custom_selection if there's a custom expression
             # OR if the layer has no existing filter. This prevents clearing the filter when
             # switching groupboxes on an already-filtered layer.
+            # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"exploring_groupbox_changed: layer {self.current_layer.name()} not in PROJECT_LAYERS")
+                return
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_expression = layer_props["exploring"].get("custom_selection_expression", "")
             current_filter = self.current_layer.subsetString()
@@ -3907,17 +3917,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             # Log current groupbox state for filtering diagnostics
             logger.debug(f"get_current_features: current_exploring_groupbox = '{self.current_exploring_groupbox}'")
+            logger.info(f"🔍 get_current_features DIAGNOSTIC:")
+            logger.info(f"   current_exploring_groupbox = '{self.current_exploring_groupbox}'")
+            logger.info(f"   current_layer = '{self.current_layer.name()}' (id: {self.current_layer.id()[:8]}...)")
             
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
+                logger.info(f"   SINGLE_SELECTION input feature: {input}")
+                if input:
+                    logger.info(f"      feature.isValid() = {input.isValid() if hasattr(input, 'isValid') else 'N/A'}")
+                    logger.info(f"      feature.id() = {input.id() if hasattr(input, 'id') else 'N/A'}")
                 features, expression = self.get_exploring_features(input, True)
+                logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
             elif self.current_exploring_groupbox == "multiple_selection":
                 input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
+                logger.info(f"   MULTIPLE_SELECTION checked items: {len(input) if input else 0}")
                 features, expression = self.get_exploring_features(input, True)
+                logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
             elif self.current_exploring_groupbox == "custom_selection":
                 expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                logger.info(f"   CUSTOM_SELECTION expression: '{expression}'")
                 
                 # Save expression to layer_props before calling exploring_custom_selection
                 if self.current_layer.id() in self.PROJECT_LAYERS:
@@ -3925,11 +3946,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Process expression (whether field or complex expression)
                 features, expression = self.exploring_custom_selection()
+                logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
-
+            else:
+                logger.warning(f"   ⚠️ current_exploring_groupbox '{self.current_exploring_groupbox}' does not match any known groupbox!")
                 
             return features, expression
         
+        logger.warning(f"🔍 get_current_features: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer}")
         return [], ''
         
 
@@ -3948,6 +3972,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if self.widgets_initialized is True and self.current_layer is not None:
 
+            # DIAGNOSTIC: Log incoming features
+            logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
+            logger.info(f"   features count: {len(features) if features else 0}")
+            if features and len(features) > 0:
+                for i, f in enumerate(features[:3]):
+                    has_geom = f.hasGeometry() if hasattr(f, 'hasGeometry') else 'N/A'
+                    fid = f.id() if hasattr(f, 'id') else 'N/A'
+                    logger.info(f"   feature[{i}]: id={fid}, hasGeometry={has_geom}")
+                    if has_geom and f.hasGeometry():
+                        geom = f.geometry()
+                        logger.info(f"      geometry: type={geom.type()}, isEmpty={geom.isEmpty()}")
+            
             # Safety check: ensure features is a list
             if not features or not isinstance(features, list) or len(features) == 0:
                 logger.debug("zooming_to_features: No features provided, zooming to layer extent")
@@ -3955,7 +3991,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.iface.mapCanvas().zoomToFeatureExtent(extent) 
 
             else: 
-                features_with_geometry = [feature for feature in features if feature.hasGeometry()]
+                # CRITICAL FIX: For features without geometry, try to reload from layer
+                features_with_geometry = []
+                for feature in features:
+                    if feature.hasGeometry() and not feature.geometry().isEmpty():
+                        features_with_geometry.append(feature)
+                    else:
+                        # Try to reload feature with geometry from layer
+                        try:
+                            reloaded = self.current_layer.getFeature(feature.id())
+                            if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                                features_with_geometry.append(reloaded)
+                                logger.debug(f"Reloaded feature {feature.id()} with geometry for zoom")
+                            else:
+                                logger.warning(f"Could not reload feature {feature.id()} with valid geometry")
+                        except Exception as e:
+                            logger.warning(f"Error reloading feature {feature.id()}: {e}")
+
+                logger.info(f"   features_with_geometry count: {len(features_with_geometry)}")
 
                 if len(features_with_geometry) == 0:
                     logger.debug("zooming_to_features: No features have geometry, zooming to layer extent")
@@ -4250,9 +4303,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if not input.isValid():
                     logger.debug("get_exploring_features: Input feature is invalid, returning empty")
                     return [], None
+                
+                # DIAGNOSTIC: Log input feature state
+                logger.debug(f"get_exploring_features: input feature id={input.id()}, hasGeometry={input.hasGeometry()}")
                     
                 if identify_by_primary_key_name is True:
-                    pk_name = layer_props["infos"]["primary_key_name"]
+                    # CRITICAL FIX: Check if primary_key_name exists in layer properties
+                    pk_name = layer_props["infos"].get("primary_key_name")
+                    
+                    if pk_name is None:
+                        # Primary key not detected - try to use fid for OGR layers
+                        logger.debug(f"No primary_key_name in layer properties")
+                        provider_type = layer_props["infos"].get("layer_provider_type", "")
+                        
+                        # For OGR layers, use fid as the identifier
+                        if provider_type == 'ogr':
+                            feature_id = input.id()
+                            expression = f'"fid" = {feature_id}'
+                            logger.debug(f"OGR layer: using fid expression: {expression}")
+                        
+                        # Always reload feature to ensure geometry is available
+                        try:
+                            reloaded_feature = self.current_layer.getFeature(input.id())
+                            if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                                features = [reloaded_feature]
+                                logger.debug(f"Reloaded feature {input.id()} with geometry")
+                            else:
+                                features = [input]
+                                logger.warning(f"Could not reload feature {input.id()} with geometry")
+                        except Exception as e:
+                            logger.debug(f"Could not reload feature: {e}")
+                            features = [input]
+                        return features, expression
+                    
                     # Try to get the primary key value using multiple methods
                     pk_value = None
                     try:
@@ -4270,16 +4353,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             logger.debug(f"pk_name: {pk_name}, feature fields: {[f.name() for f in input.fields()]}")
                     
                     if pk_value is not None:
-                        if layer_props["infos"]["primary_key_is_numeric"] is True: 
-                            expression = pk_name + " = {}".format(pk_value)
+                        pk_is_numeric = layer_props["infos"].get("primary_key_is_numeric", False)
+                        provider_type = layer_props["infos"].get("layer_provider_type", "")
+                        
+                        # CRITICAL FIX: For OGR and Spatialite, field names must be quoted
+                        # PostgreSQL uses qualified names ("table"."field") in filter_task.py
+                        if provider_type in ('ogr', 'spatialite'):
+                            if pk_is_numeric is True: 
+                                expression = f'"{pk_name}" = {pk_value}'
+                            else:
+                                expression = f'"{pk_name}" = \'{pk_value}\''
+                            logger.debug(f"Generated expression for {provider_type}: {expression}")
                         else:
-                            expression = pk_name + " = '{}'".format(pk_value)
-                    else:
-                        # If we can't get the primary key, reload feature from layer by ID
-                        # This ensures geometry is loaded correctly for tracking
+                            # PostgreSQL: use simple format (qualification happens in filter_task.py)
+                            if pk_is_numeric is True: 
+                                expression = pk_name + " = {}".format(pk_value)
+                            else:
+                                expression = pk_name + " = '{}'".format(pk_value)
+                        
+                        # CRITICAL: Also reload feature to ensure geometry is available for zoom
                         try:
                             reloaded_feature = self.current_layer.getFeature(input.id())
-                            if reloaded_feature.isValid():
+                            if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
+                                features = [reloaded_feature]
+                                logger.debug(f"Reloaded feature {input.id()} with geometry")
+                            else:
+                                features = [input]
+                        except Exception as e:
+                            logger.debug(f"Could not reload feature: {e}")
+                            features = [input]
+                    else:
+                        # If we can't get the primary key value, use fid for OGR layers
+                        provider_type = layer_props["infos"].get("layer_provider_type", "")
+                        if provider_type == 'ogr':
+                            feature_id = input.id()
+                            expression = f'"fid" = {feature_id}'
+                            logger.debug(f"OGR layer fallback: using fid expression: {expression}")
+                        
+                        # Reload feature from layer by ID for geometry
+                        try:
+                            reloaded_feature = self.current_layer.getFeature(input.id())
+                            if reloaded_feature.isValid() and reloaded_feature.hasGeometry():
                                 features = [reloaded_feature]
                             else:
                                 features = [input]
@@ -4307,12 +4421,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     return features, expression
                 
                 if identify_by_primary_key_name is True:
-                    if layer_props["infos"]["primary_key_is_numeric"] is True:
-                        input_ids = [str(feat[1]) for feat in input]  
-                        expression = layer_props["infos"]["primary_key_name"] + " IN (" + ", ".join(input_ids) + ")"
+                    pk_name = layer_props["infos"]["primary_key_name"]
+                    pk_is_numeric = layer_props["infos"]["primary_key_is_numeric"]
+                    provider_type = layer_props["infos"].get("layer_provider_type", "")
+                    
+                    # CRITICAL FIX: For OGR and Spatialite, field names must be quoted
+                    if provider_type in ('ogr', 'spatialite'):
+                        if pk_is_numeric is True:
+                            input_ids = [str(feat[1]) for feat in input]  
+                            expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
+                        else:
+                            input_ids = [str(feat[1]) for feat in input]
+                            quoted_ids = "', '".join(input_ids)
+                            expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
+                        logger.debug(f"Generated list expression for {provider_type}: {expression}")
                     else:
-                        input_ids = [str(feat[1]) for feat in input]
-                        expression = layer_props["infos"]["primary_key_name"] + " IN (\'" + "\', \'".join(input_ids) + "\')"
+                        # PostgreSQL: use simple format (qualification happens in filter_task.py)
+                        if pk_is_numeric is True:
+                            input_ids = [str(feat[1]) for feat in input]  
+                            expression = pk_name + " IN (" + ", ".join(input_ids) + ")"
+                        else:
+                            input_ids = [str(feat[1]) for feat in input]
+                            expression = pk_name + " IN (\'" + "\', \'".join(input_ids) + "\')"
                 
             if custom_expression is not None:
                     expression = custom_expression
@@ -5324,8 +5454,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.properties_group_state_enabler(properties_tuples)
             widget_type = self.widgets[property_path[0].upper()][property_path[1].upper()]["TYPE"]
             
+            # CRITICAL FIX: Use .get() to avoid KeyError on missing properties
+            current_value = layer_props.get(property_path[0], {}).get(property_path[1])
+            
             if widget_type == 'PushButton':
-                if layer_props[property_path[0]][property_path[1]] is not input_data and input_data is True:
+                if current_value is not input_data and input_data is True:
+                    # Ensure the property path exists
+                    if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
                     if "ON_TRUE" in custom_functions:
@@ -5337,7 +5473,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.filtering_populate_layers_chekableCombobox()
                         self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
                         
-                elif layer_props[property_path[0]][property_path[1]] is not input_data and input_data is False:
+                elif current_value is not input_data and input_data is False:
+                    # Ensure the property path exists
+                    if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = input_data
                     flag_value_changed = True
                     if "ON_FALSE" in custom_functions:
@@ -5349,10 +5488,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 logger.info(f"  Widget type: non-PushButton, getting new_value from CUSTOM_DATA")
                 logger.info(f"  new_value: {new_value}")
-                logger.info(f"  old_value: {layer_props[property_path[0]][property_path[1]]}")
+                logger.info(f"  old_value: {current_value}")
                 
                 # Only mark as changed if value actually changed
-                if layer_props[property_path[0]][property_path[1]] != new_value:
+                if current_value != new_value:
+                    # Ensure the property path exists
+                    if property_path[0] not in self.PROJECT_LAYERS[self.current_layer.id()]:
+                        self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]] = {}
                     self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]] = new_value
                     flag_value_changed = True
                     logger.info(f"  ✓ Value CHANGED and saved to PROJECT_LAYERS")
@@ -5376,7 +5518,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Orchestrates property updates by type (is/selection_expression/other).
         """
         if self.widgets_initialized is True and self.current_layer is not None:
-            if self.current_layer is None:
+            # STABILITY FIX: Guard against KeyError if layer not in PROJECT_LAYERS
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"layer_property_changed: layer {self.current_layer.name()} not in PROJECT_LAYERS")
                 return
             
             # Disconnect exploring widgets
@@ -5851,15 +5995,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         try:
             if self.current_layer is not None:
-                layers = [layer for layer in self.PROJECT.mapLayersByName(
-                    self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]
-                ) if layer.id() == self.current_layer.id()]
-                
-                if len(layers) == 0:
+                # STABILITY FIX: Guard against KeyError before accessing PROJECT_LAYERS
+                if self.current_layer.id() not in self.PROJECT_LAYERS:
+                    logger.debug(f"_determine_active_layer: layer {self.current_layer.name()} not in PROJECT_LAYERS")
                     if self.iface.activeLayer():
                         layer = self.iface.activeLayer()
-                elif len(layers) > 0:
-                    layer = layers[0]
+                else:
+                    layers = [layer for layer in self.PROJECT.mapLayersByName(
+                        self.PROJECT_LAYERS[self.current_layer.id()]["infos"]["layer_name"]
+                    ) if layer.id() == self.current_layer.id()]
+                    
+                    if len(layers) == 0:
+                        if self.iface.activeLayer():
+                            layer = self.iface.activeLayer()
+                    elif len(layers) > 0:
+                        layer = layers[0]
             else:
                 if self.iface.activeLayer():
                     layer = self.iface.activeLayer()

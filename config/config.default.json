@@ -1,5 +1,12 @@
 {
     "APP": {
+        "AUTO_ACTIVATE": {
+            "value": false
+        },
+        "_AUTO_ACTIVATE_META": {
+            "description": "Auto-activate plugin when a project with vector layers is loaded: true (automatically open plugin), false (manual activation only)",
+            "applies_to": "Plugin initialization behavior"
+        },
         "DOCKWIDGET": {
             "FEEDBACK_LEVEL": {
                 "choices": [
@@ -246,7 +253,13 @@
             "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
             "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
             "APP_SQLITE_PATH": "",
-            "FRESH_RELOAD_FLAG": false
+            "FRESH_RELOAD_FLAG": false,
+            "SMALL_DATASET_OPTIMIZATION": {
+                "enabled": true,
+                "threshold": 5000,
+                "method": "ogr_memory",
+                "_description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)"
+            }
         }
     },
     "CURRENT_PROJECT": {

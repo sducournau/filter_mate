@@ -269,7 +269,17 @@ class FilterMate:
         Connects projectRead, newProjectCreated, and layersAdded signals to automatically
         activate the plugin when layers are available. The layersAdded signal is now
         connected with proper guards to avoid freeze issues when the plugin is already active.
+        
+        This behavior can be disabled by setting APP.AUTO_ACTIVATE.value to false in the configuration.
         """
+        # Check if auto-activation is enabled in configuration
+        from .config.config import ENV_VARS
+        auto_activate_enabled = ENV_VARS.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        
+        if not auto_activate_enabled:
+            logger.info("FilterMate: Auto-activation disabled in configuration")
+            return
+        
         if not self._auto_activation_signals_connected:
             from qgis.core import QgsProject
             from qgis.PyQt.QtCore import QTimer
@@ -326,9 +336,10 @@ class FilterMate:
         # Use QTimer to ensure QGIS is in a stable state before activation
         logger.info(f"FilterMate: Auto-activating plugin via layersAdded ({len(vector_layers)} vector layer(s))")
         
-        # Use a longer delay (200ms) for stability, especially with PostgreSQL layers
-        # which may need more time to fully initialize their connections
-        QTimer.singleShot(200, self.run)
+        # STABILITY: Increased delay to 400ms for better stability
+        # Especially important for PostgreSQL layers which need time to initialize connections
+        # and for projects with multiple layers being added simultaneously
+        QTimer.singleShot(400, self.run)
     
     def _auto_activate_plugin(self, layers=None):
         """Auto-activate plugin if not already active.

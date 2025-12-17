@@ -69,22 +69,35 @@ def find_similar_columns(columns, search_term):
     """
     Find columns with similar names (case-insensitive).
     
+    PostgreSQL column name behavior:
+    - Unquoted identifiers are converted to lowercase during table creation
+    - Quoted identifiers (e.g., "SUB_TYPE") preserve the original case
+    - Most PostgreSQL tables use lowercase column names by convention
+    
+    Common issue: QGIS may show "SUB_TYPE" but PostgreSQL has "sub_type"
+    
     Args:
         columns: dict of column_name -> data_type
         search_term: term to search for
         
     Returns:
-        list: matching column names
+        list: matching column names (exact case-insensitive matches first)
     """
     search_lower = search_term.lower()
-    matches = []
+    exact_matches = []
+    partial_matches = []
     
     for col_name in columns.keys():
         col_lower = col_name.lower()
-        if search_lower in col_lower or col_lower in search_lower:
-            matches.append(col_name)
+        # Exact case-insensitive match (most likely the correct column)
+        if search_lower == col_lower:
+            exact_matches.append(col_name)
+        # Partial match
+        elif search_lower in col_lower or col_lower in search_lower:
+            partial_matches.append(col_name)
     
-    return matches
+    # Return exact matches first, then partial matches
+    return exact_matches + partial_matches
 
 
 def diagnose_layer_filter(layer):
@@ -130,12 +143,22 @@ def diagnose_layer_filter(layer):
             if col_name not in columns:
                 result['issues'].append(f"Column '{col_name}' does not exist in table")
                 
-                # Find similar columns
+                # Find similar columns (case-insensitive match)
                 similar = find_similar_columns(columns, col_name)
                 if similar:
-                    result['suggestions'].append(
-                        f"Did you mean: {', '.join(similar)}?"
-                    )
+                    # Check if this is a case mismatch issue
+                    exact_case_match = [c for c in similar if c.lower() == col_name.lower()]
+                    if exact_case_match:
+                        result['issues'].append(
+                            f"⚠️ PostgreSQL Case Issue: The column exists as '{exact_case_match[0]}' (not '{col_name}')"
+                        )
+                        result['suggestions'].append(
+                            f"Replace \"{col_name}\" with \"{exact_case_match[0]}\" in your filter expression"
+                        )
+                    else:
+                        result['suggestions'].append(
+                            f"Did you mean: {', '.join(similar)}?"
+                        )
     
     return result
 
@@ -243,6 +266,106 @@ def list_layer_columns(layer_name):
         print(f"\nTotal fields: {len(fields)}")
 
 
+def fix_column_case(layer_name, dry_run=True):
+    """
+    Fix column name case issues in a layer's filter expression.
+    
+    PostgreSQL is case-sensitive for quoted identifiers. This function
+    corrects column names in filter expressions to match the actual
+    column names in the database.
+    
+    Args:
+        layer_name: Name of the layer to fix
+        dry_run: If True, only show what would be changed (default: True)
+        
+    Returns:
+        str: The corrected filter expression, or None if no fixes needed
+        
+    Usage in QGIS Python Console:
+        # Preview changes
+        check_column_names.fix_column_case("structures")
+        
+        # Apply changes
+        check_column_names.fix_column_case("structures", dry_run=False)
+    """
+    import re
+    
+    project = QgsProject.instance()
+    layers = project.mapLayersByName(layer_name)
+    
+    if not layers:
+        print(f"❌ Layer '{layer_name}' not found")
+        return None
+    
+    layer = layers[0]
+    
+    if layer.providerType() != 'postgres':
+        print(f"ℹ️ Layer '{layer_name}' is not a PostgreSQL layer (provider: {layer.providerType()})")
+        print("   Column case issues are specific to PostgreSQL.")
+        return None
+    
+    if not PSYCOPG2_AVAILABLE:
+        print("❌ psycopg2 not available - cannot verify PostgreSQL column names")
+        return None
+    
+    filter_str = layer.subsetString()
+    if not filter_str:
+        print(f"ℹ️ Layer '{layer_name}' has no filter")
+        return None
+    
+    print(f"\n{'=' * 80}")
+    print(f"FIXING COLUMN CASE: {layer_name}")
+    print(f"{'=' * 80}")
+    print(f"\nOriginal filter: {filter_str}")
+    
+    # Get actual PostgreSQL column names
+    columns = get_postgresql_columns(layer)
+    if not columns:
+        print("❌ Could not retrieve table columns")
+        return None
+    
+    # Create case-insensitive lookup map
+    col_lower_map = {col.lower(): col for col in columns.keys()}
+    
+    # Find quoted column names in filter
+    quoted_cols = re.findall(r'"([^"]+)"', filter_str)
+    
+    # Build replacement map
+    replacements = {}
+    for col_name in quoted_cols:
+        if col_name not in columns:
+            # Check for case-insensitive match
+            col_lower = col_name.lower()
+            if col_lower in col_lower_map:
+                correct_name = col_lower_map[col_lower]
+                replacements[col_name] = correct_name
+    
+    if not replacements:
+        print("\n✓ No case issues found in filter expression")
+        return filter_str
+    
+    print(f"\n⚠️ Found {len(replacements)} column name case issue(s):")
+    for wrong, correct in replacements.items():
+        print(f"   \"{wrong}\" → \"{correct}\"")
+    
+    # Apply replacements
+    fixed_filter = filter_str
+    for wrong, correct in replacements.items():
+        fixed_filter = fixed_filter.replace(f'"{wrong}"', f'"{correct}"')
+    
+    print(f"\nCorrected filter: {fixed_filter}")
+    
+    if dry_run:
+        print(f"\n📋 DRY RUN - No changes applied")
+        print(f"   To apply changes, run: fix_column_case('{layer_name}', dry_run=False)")
+    else:
+        layer.setSubsetString(fixed_filter)
+        print(f"\n✓ Filter updated successfully!")
+        print(f"   Features now visible: {layer.featureCount()}")
+    
+    return fixed_filter
+
+
 def clear_layer_filter(layer_name):
     """
     Clear the filter on a specific layer.
@@ -343,6 +466,18 @@ def check_filtermate_history():
 if __name__ == "__main__":
     print("Run this script in QGIS Python Console:")
     print("  from filter_mate.tools.diagnostic import check_column_names")
+    print("")
+    print("  # Diagnose all layer filters for issues")
     print("  check_column_names.diagnose_all_filters()")
-    print("  check_column_names.list_layer_columns('Distribution Cluster')")
-    print("  check_column_names.clear_layer_filter('Distribution Cluster')")
+    print("")
+    print("  # List columns for a specific layer")
+    print("  check_column_names.list_layer_columns('structures')")
+    print("")
+    print("  # Fix column case issues (preview)")
+    print("  check_column_names.fix_column_case('structures')")
+    print("")
+    print("  # Fix column case issues (apply)")
+    print("  check_column_names.fix_column_case('structures', dry_run=False)")
+    print("")
+    print("  # Clear layer filter")
+    print("  check_column_names.clear_layer_filter('structures')")
