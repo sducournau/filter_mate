@@ -7,24 +7,30 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v3.5.6 - Code Quality & Harmonization
+## 🎉 What's New in v3.5.7 - Project & Layer Loading Stability
 
-### Centralized Feedback System
-- 🛠️ **Unified Message Bar Notifications** - Consistent user feedback across all modules
-- 🔧 **Graceful Fallback** - Works even when iface is unavailable
-- 📦 **New Functions**: `show_info()`, `show_warning()`, `show_error()`, `show_success()`
+### Centralized Timing Constants
+- 🛡️ **STABILITY_CONSTANTS Dict** - All timing values centralized in one place
+- ⏱️ **FLAG_TIMEOUT_MS**: 30000 (30-second timeout for stale flags)
+- 📊 **MAX_ADD_LAYERS_QUEUE**: 50 (prevents memory overflow)
 
-### PostgreSQL Optimization
-- ⚡ **5-50× Faster Layer Loading** - Smarter initialization for PostgreSQL layers
-- 🔌 **Connection Caching** - Avoid repeated connection tests per datasource
-- 📊 **Conditional ANALYZE** - Only runs if table has no statistics
+### Timestamp-Tracked Flags
+- ⏱️ **Automatic Stale Detection** - Flags auto-reset after 30 seconds
+- 🔧 **New Methods**: `_set_loading_flag()`, `_set_initializing_flag()`, `_check_and_reset_stale_flags()`
+- 🛡️ **Prevents Stuck State** - Plugin never stays in "loading" indefinitely
 
-### Code Quality
-- 🐛 **Bug Fixes** - Fixed syntax errors and bare except clauses
-- 🧹 **Code Cleanup** - Removed obsolete code, added docstrings
-- 📈 **Quality Score**: 8.9/10
+### Layer Validation & Signal Debouncing
+- ✅ **C++ Object Validation** - `_is_layer_valid()` checks layer validity
+- 🔄 **Signal Debouncing** - Rapid `layersAdded` signals gracefully handled
+- 📈 **Queue Management** - FIFO trimming when queue exceeds 50 items
 
 ## Previous Updates
+
+### v3.5.6 - Code Quality & Harmonization (December 17, 2025)
+- 🛠️ **Centralized Feedback System** - Unified message bar notifications (`show_info/warning/error/success`)
+- ⚡ **PostgreSQL Init Optimization** - 5-50× faster layer loading with connection caching
+- 🐛 **Bug Fixes** - Fixed syntax errors and bare except clauses
+- 🧹 **Code Quality** - Score improved to 8.9/10
 
 ### v2.3.5 - Configuration System v2.0 (December 17, 2025)
 - ⚙️ **Configuration v2.0** - Integrated metadata structure with auto-migration

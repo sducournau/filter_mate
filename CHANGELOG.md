@@ -2,7 +2,7 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [3.5.7] - 2025-12-17 - Project & Layer Loading Stability
+## [3.5.7] - 2025-12-18 - Project & Layer Loading Stability
 
 ### 🛡️ Stability Improvements
 - **Centralized Timing Constants** - All timing values now in `STABILITY_CONSTANTS` dict

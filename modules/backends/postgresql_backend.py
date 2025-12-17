@@ -214,6 +214,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             Input:  ("public"."Distribution Cluster"."id" = 1)
             Output: __source."id" = 1
+            
+            Input:  (("Structures"."SUB_TYPE" = 'Facade Point'))
+            Output: __source."SUB_TYPE" = 'Facade Point'
         
         Args:
             filter_expr: Original filter expression with qualified table names
@@ -225,27 +228,38 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         import re
         
-        # Strip outer parentheses if present (they will be added by the caller if needed)
-        filter_expr = filter_expr.strip()
-        while filter_expr.startswith('(') and filter_expr.endswith(')'):
-            # Check if these are matching outer parentheses
-            # by ensuring the closing paren matches the opening one
-            depth = 0
-            is_outer = True
-            for i, char in enumerate(filter_expr):
-                if char == '(':
-                    depth += 1
-                elif char == ')':
-                    depth -= 1
-                    if depth == 0 and i < len(filter_expr) - 1:
-                        # Found a closing paren before the end - not outer parens
-                        is_outer = False
-                        break
-            if is_outer and depth == 0:
-                filter_expr = filter_expr[1:-1].strip()
-            else:
-                break
+        def strip_balanced_outer_parens(expr: str) -> str:
+            """
+            Strip balanced outer parentheses from expression.
+            
+            Only strips if the opening '(' at position 0 matches the closing ')' at the end.
+            Uses a proper parenthesis counting algorithm to verify balance.
+            """
+            expr = expr.strip()
+            while expr.startswith('(') and expr.endswith(')'):
+                # Check if these are matching outer parentheses
+                # by ensuring the closing paren matches the opening one
+                depth = 0
+                is_outer = True
+                for i, char in enumerate(expr):
+                    if char == '(':
+                        depth += 1
+                    elif char == ')':
+                        depth -= 1
+                        if depth == 0 and i < len(expr) - 1:
+                            # Found a closing paren before the end - not outer parens
+                            is_outer = False
+                            break
+                if is_outer and depth == 0:
+                    expr = expr[1:-1].strip()
+                else:
+                    break
+            return expr
         
+        # Step 1: Strip outer parentheses BEFORE regex substitution
+        filter_expr = strip_balanced_outer_parens(filter_expr)
+        
+        # Step 2: Apply regex substitutions for table references
         # Pattern 1: "schema"."table"."column" -> __source."column"
         three_part_pattern = rf'"{re.escape(schema)}"\s*\.\s*"{re.escape(table)}"\s*\.\s*"([^"]+)"'
         adapted = re.sub(three_part_pattern, r'__source."\1"', filter_expr)
@@ -253,6 +267,23 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Pattern 2: "table"."column" -> __source."column"
         two_part_pattern = rf'"{re.escape(table)}"\s*\.\s*"([^"]+)"'
         adapted = re.sub(two_part_pattern, r'__source."\1"', adapted)
+        
+        # Step 3: CRITICAL FIX - Strip outer parentheses AFTER regex substitution
+        # The regex may have changed the structure, leaving orphan parentheses
+        # Example: (("Structures"."col" = 'val')) -> ((__source."col" = 'val')) -> __source."col" = 'val'
+        adapted = strip_balanced_outer_parens(adapted)
+        
+        # Step 4: Validate parentheses balance to catch any edge cases
+        open_count = adapted.count('(')
+        close_count = adapted.count(')')
+        if open_count != close_count:
+            self.log_warning(f"⚠️ Unbalanced parentheses in adapted filter: {open_count} open vs {close_count} close")
+            self.log_warning(f"  → Original: '{filter_expr[:100]}'...")
+            self.log_warning(f"  → Adapted: '{adapted[:100]}'...")
+            # Try to fix by removing trailing unmatched parentheses
+            while adapted.endswith(')') and adapted.count(')') > adapted.count('('):
+                adapted = adapted[:-1].strip()
+                self.log_info(f"  → Removed trailing ')': '{adapted[:100]}'...")
         
         return adapted
 
@@ -617,16 +648,52 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             uses_ctid = (key_column == 'ctid')
             
             # CRITICAL FIX: Clean invalid old_subset from previous failed operations
-            # If old_subset contains __source alias, it's from a corrupted previous filter
-            # The __source alias ONLY exists inside EXISTS subqueries and is invalid outside
-            if old_subset and '__source' in old_subset.lower():
-                self.log_warning(f"⚠️ CRITICAL: Invalid old_subset detected with __source alias!")
-                self.log_warning(f"  → Corrupted subset: '{old_subset[:150]}'...")
-                self.log_warning(f"  → This is from a previous failed filtering operation")
-                self.log_warning(f"  → Clearing invalid subset to prevent SQL syntax errors")
-                # FORCE clear the invalid subset - DO NOT combine with it
-                old_subset = None
-                self.log_info(f"  ✓ Invalid subset cleared - will apply fresh filter")
+            # Invalid old_subset patterns that MUST be cleared:
+            # 1. Contains __source alias (only valid inside EXISTS subqueries)
+            # 2. Contains EXISTS subquery (would create nested EXISTS = complex/slow)
+            # 3. Contains spatial predicates referencing other tables (cross-table filter)
+            #
+            # When these patterns are detected in old_subset, it means:
+            # - A previous geometric filter operation left a corrupted/incompatible subset
+            # - Combining with such subset would create invalid SQL syntax
+            # - The new filter should completely replace the old one
+            if old_subset:
+                old_subset_upper = old_subset.upper()
+                
+                # Pattern 1: __source alias (invalid outside EXISTS)
+                has_source_alias = '__source' in old_subset.lower()
+                
+                # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                
+                # Pattern 3: Spatial predicates that reference external tables
+                # These indicate a cross-table spatial filter that should not be combined
+                spatial_predicates = [
+                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                    'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
+                ]
+                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                
+                # Determine if old_subset is invalid
+                should_clear_old_subset = has_source_alias or has_exists or has_spatial_predicate
+                
+                if should_clear_old_subset:
+                    reason = []
+                    if has_source_alias:
+                        reason.append("contains __source alias")
+                    if has_exists:
+                        reason.append("contains EXISTS subquery")
+                    if has_spatial_predicate:
+                        reason.append("contains spatial predicate (likely cross-table filter)")
+                    
+                    self.log_warning(f"⚠️ CRITICAL: Invalid old_subset detected - {', '.join(reason)}")
+                    self.log_warning(f"  → Corrupted subset: '{old_subset[:150]}'...")
+                    self.log_warning(f"  → This is from a previous geometric filtering operation")
+                    self.log_warning(f"  → Clearing invalid subset to prevent SQL syntax errors")
+                    # FORCE clear the invalid subset - DO NOT combine with it
+                    old_subset = None
+                    self.log_info(f"  ✓ Invalid subset cleared - will apply fresh filter")
             
             # Combine with existing filter if specified
             # CRITICAL: Don't combine in these cases:

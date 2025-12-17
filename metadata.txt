@@ -6,19 +6,19 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=3.5.6
+version=3.5.7
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v3.5.6 - Code Quality & Harmonization
+about=FilterMate v3.5.7 - Project & Layer Loading Stability
 
- NEW in v3.5.6:
- - 🛠️ Centralized feedback system (show_info/warning/error/success)
- - 🐛 Fixed syntax errors in dockwidget module
- - ⚡ PostgreSQL init optimization (5-50× faster layer loading)
- - 🔧 Connection caching for PostgreSQL layers
- - 📊 Code quality score improved to 8.9/10
- - 🧹 Removed obsolete code and fixed bare except clauses
+ NEW in v3.5.7:
+ - 🛡️ Centralized timing constants (STABILITY_CONSTANTS dict)
+ - ⏱️ Timestamp-tracked flags with auto-reset (30s timeout)
+ - ✅ Layer validation (C++ object validity checks)
+ - 🔄 Signal debouncing for rapid layer changes
+ - 🐛 Fixed stuck flags, queue overflow, error recovery
+ - 📊 Queue size limit (50 items) with automatic trimming
  
  Previous (v2.3.5):
  - ⚙️ Configuration v2.0 with integrated metadata structure

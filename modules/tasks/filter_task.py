@@ -3697,6 +3697,7 @@ class FilterEngineTask(QgsTask):
         - Si un filtre existant est présent, il est TOUJOURS préservé
         - Si aucun opérateur n'est spécifié, utilise AND par défaut
         - Garantit que les filtres multi-couches ne sont jamais perdus
+        - EXCEPTION: Les filtres géométriques (EXISTS, ST_*) sont REMPLACÉS, pas combinés
         
         Args:
             expression: New filter expression
@@ -3709,6 +3710,37 @@ class FilterEngineTask(QgsTask):
         
         # Si aucun filtre existant, retourner la nouvelle expression
         if not old_subset:
+            return expression
+        
+        # CRITICAL FIX: Check for invalid old_subset patterns that should NOT be combined
+        # These patterns indicate a previous geometric filter that should be replaced
+        old_subset_upper = old_subset.upper()
+        
+        # Pattern 1: __source alias (only valid inside EXISTS subqueries)
+        has_source_alias = '__source' in old_subset.lower()
+        
+        # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+        has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+        
+        # Pattern 3: Spatial predicates (likely from previous geometric filter)
+        spatial_predicates = [
+            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+            'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+            'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
+        ]
+        has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+        
+        # If old_subset contains geometric filter patterns, replace instead of combine
+        if has_source_alias or has_exists or has_spatial_predicate:
+            reason = []
+            if has_source_alias:
+                reason.append("__source alias")
+            if has_exists:
+                reason.append("EXISTS subquery")
+            if has_spatial_predicate:
+                reason.append("spatial predicate")
+            
+            logger.info(f"FilterMate: Old subset contains {', '.join(reason)} - replacing instead of combining")
             return expression
         
         # Récupérer l'opérateur (ou AND par défaut)
@@ -3855,16 +3887,47 @@ class FilterEngineTask(QgsTask):
             old_subset = layer.subsetString() if layer.subsetString() != '' else None
             combine_operator = self._get_combine_operator()
             
-            # CRITICAL FIX: Clean invalid old_subset containing __source alias
-            # This can happen if a previous filtering operation failed mid-way and left an invalid
-            # EXISTS subquery in the layer's subset string. The __source alias only exists inside
-            # EXISTS subqueries and is invalid in the outer WHERE clause.
-            if old_subset and '__source' in old_subset.lower():
-                logger.warning(f"⚠️ Invalid old subset detected containing '__source' alias - clearing it")
-                logger.warning(f"  → Invalid subset: '{old_subset[:100]}...'")
-                logger.warning(f"  → This is likely from a previous failed filtering operation")
-                old_subset = None  # Clear invalid subset instead of trying to combine with it
-                logger.info(f"  → Subset cleared, will apply new filter without combination")
+            # CRITICAL FIX: Clean invalid old_subset from previous geometric filtering operations
+            # Invalid old_subset patterns that MUST be cleared:
+            # 1. Contains __source alias (only valid inside EXISTS subqueries)
+            # 2. Contains EXISTS subquery (would create nested EXISTS = complex/slow)
+            # 3. Contains spatial predicates (ST_Intersects, etc.) - likely cross-table filter
+            #
+            # When these patterns are detected, the new filter should completely replace the old one
+            if old_subset:
+                old_subset_upper = old_subset.upper()
+                
+                # Pattern 1: __source alias (invalid outside EXISTS)
+                has_source_alias = '__source' in old_subset.lower()
+                
+                # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                
+                # Pattern 3: Spatial predicates (likely from previous geometric filter)
+                spatial_predicates = [
+                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                    'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
+                ]
+                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                
+                # Determine if old_subset should be cleared
+                should_clear = has_source_alias or has_exists or has_spatial_predicate
+                
+                if should_clear:
+                    reason = []
+                    if has_source_alias:
+                        reason.append("__source alias")
+                    if has_exists:
+                        reason.append("EXISTS subquery")
+                    if has_spatial_predicate:
+                        reason.append("spatial predicate")
+                    
+                    logger.warning(f"⚠️ Invalid old subset detected - contains: {', '.join(reason)}")
+                    logger.warning(f"  → Invalid subset: '{old_subset[:100]}...'")
+                    logger.warning(f"  → This is from a previous geometric filtering operation")
+                    old_subset = None  # Clear invalid subset
+                    logger.info(f"  → Subset cleared, will apply new filter without combination")
             
             logger.info(f"📋 Préparation du filtre pour {layer.name()}")
             logger.info(f"  → Nouvelle expression: '{expression[:100]}...' ({len(expression)} chars)")
@@ -5378,19 +5441,42 @@ class FilterEngineTask(QgsTask):
                 old_subset = layer.subsetString()
                 
                 if old_subset:
-                    # Check if the new filter is identical to the old one to avoid duplication
-                    # Normalize both expressions for comparison (remove extra spaces/parentheses)
-                    normalized_old = old_subset.strip().strip('()')
-                    normalized_new = where_clause.strip().strip('()')
+                    # CRITICAL FIX: Check for invalid old_subset patterns that should NOT be combined
+                    # These patterns indicate a previous geometric filter that should be replaced
+                    old_subset_upper = old_subset.upper()
                     
-                    if normalized_old == normalized_new:
-                        # Identical filter - no need to combine, just use the new one
+                    # Pattern 1: __source alias (only valid inside EXISTS subqueries)
+                    has_source_alias = '__source' in old_subset.lower()
+                    
+                    # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+                    has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                    
+                    # Pattern 3: Spatial predicates (likely from previous geometric filter)
+                    spatial_predicates = [
+                        'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                        'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                        'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
+                    ]
+                    has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                    
+                    # If old_subset contains geometric filter patterns, replace instead of combine
+                    if has_source_alias or has_exists or has_spatial_predicate:
                         final_expression = where_clause
-                        logger.debug(f"New filter identical to existing - replacing instead of combining")
+                        logger.info(f"Old subset contains geometric filter patterns - replacing instead of combining")
                     else:
-                        # Different filters - combine with existing filter using AND
-                        final_expression = f"({old_subset}) AND ({where_clause})"
-                        logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
+                        # Check if the new filter is identical to the old one to avoid duplication
+                        # Normalize both expressions for comparison (remove extra spaces/parentheses)
+                        normalized_old = old_subset.strip().strip('()')
+                        normalized_new = where_clause.strip().strip('()')
+                        
+                        if normalized_old == normalized_new:
+                            # Identical filter - no need to combine, just use the new one
+                            final_expression = where_clause
+                            logger.debug(f"New filter identical to existing - replacing instead of combining")
+                        else:
+                            # Different filters - combine with existing filter using AND
+                            final_expression = f"({old_subset}) AND ({where_clause})"
+                            logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
                 else:
                     final_expression = where_clause
                 

@@ -1,29 +1,35 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-**Version 3.5.6** | December 17, 2025
+**Version 3.5.7** | December 18, 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v3.5.6 - Code Quality & Harmonization
+### 🎉 What's New in v3.5.7 - Project & Layer Loading Stability
+
+- 🛡️ **Centralized Timing Constants** - All timing values in `STABILITY_CONSTANTS` dict
+  - `MAX_ADD_LAYERS_QUEUE`: 50 (prevents memory overflow)
+  - `FLAG_TIMEOUT_MS`: 30000 (30-second timeout for stale flags)
+  - `LAYER_RETRY_DELAY_MS`: 500 / `UI_REFRESH_DELAY_MS`: 200
+  
+- ⏱️ **Timestamp-Tracked Flags** - Automatic stale flag detection and reset
+  - `_set_loading_flag()` / `_set_initializing_flag()` with timestamps
+  - `_check_and_reset_stale_flags()` auto-resets after 30 seconds
+  - Prevents plugin from getting stuck in "loading" state
+  
+- ✅ **Layer Validation** - Better C++ object validation
+  - `_is_layer_valid()` checks if layer object is still valid
+  - Prevents crashes from accessing deleted layer objects
+  
+- 🔄 **Signal Debouncing** - Graceful handling of rapid signals
+  - `layersAdded` signal debounced to prevent flood
+  - Queue size limit (50) with automatic FIFO trimming
+
+### Previous Updates (v3.5.6) - Code Quality & Harmonization
 
 - 🛠️ **Centralized Feedback System** - Unified message bar notifications
-  - New `show_info/warning/error/success` functions
-  - Graceful fallback when iface unavailable
-  - Consistent error handling across all modules
-  
+  - New `show_info/warning/error/success` functions with graceful fallback
 - ⚡ **PostgreSQL Init Optimization** - 5-50× faster layer loading
-  - Check index existence before creating (skip redundant operations)
-  - Connection caching per datasource (avoid repeated tests)
-  - Skip CLUSTER at init (deferred to filter time if beneficial)
-  - Conditional ANALYZE only if table has no statistics
-  
-- 🐛 **Bug Fixes**
-  - Fixed syntax errors in dockwidget module
-  - Fixed bare except clauses for better error handling
-  
-- 🧹 **Code Quality Improvements** - Score 8.9/10
-  - Removed obsolete commented code
-  - Added comprehensive docstrings
-  - Migrated 20+ messageBar calls to centralized functions
+- 🐛 **Bug Fixes** - Fixed syntax errors in dockwidget module
+- 🧹 **Code Quality** - Score improved to 8.9/10
 
 ### Previous Updates (v2.3.5) - Configuration System v2.0 & Performance
 

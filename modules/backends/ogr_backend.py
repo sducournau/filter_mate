@@ -124,6 +124,63 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_warning(f"Error checking spatial index: {str(e)}. Continuing anyway.")
             return False
     
+    def _should_clear_old_subset(self, old_subset: Optional[str]) -> bool:
+        """
+        Check if old_subset contains patterns that indicate it should be cleared.
+        
+        This prevents combining with corrupted or incompatible previous filters.
+        
+        Invalid patterns:
+        1. __source alias (PostgreSQL EXISTS subquery internal alias)
+        2. EXISTS subquery (would create nested subqueries)
+        3. Spatial predicates (likely from previous geometric filter)
+        
+        Args:
+            old_subset: The existing subset string to check
+            
+        Returns:
+            True if old_subset should be cleared (not combined with)
+        """
+        if not old_subset:
+            return False
+        
+        old_subset_upper = old_subset.upper()
+        
+        # Pattern 1: __source alias (only valid inside PostgreSQL EXISTS subqueries)
+        has_source_alias = '__source' in old_subset.lower()
+        
+        # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+        has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+        
+        # Pattern 3: Spatial predicates from various backends
+        # These indicate a previous geometric filter that should be replaced
+        spatial_predicates = [
+            # PostGIS/Spatialite predicates
+            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+            'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+            'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY',
+            # Spatialite-specific
+            'INTERSECTS', 'CONTAINS', 'WITHIN'
+        ]
+        has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+        
+        should_clear = has_source_alias or has_exists or has_spatial_predicate
+        
+        if should_clear:
+            reason = []
+            if has_source_alias:
+                reason.append("contains __source alias")
+            if has_exists:
+                reason.append("contains EXISTS subquery")
+            if has_spatial_predicate:
+                reason.append("contains spatial predicate")
+            
+            self.log_warning(f"⚠️ Invalid old_subset detected - {', '.join(reason)}")
+            self.log_warning(f"  → Subset: '{old_subset[:100]}...'")
+            self.log_info(f"  → Will replace instead of combine")
+        
+        return should_clear
+
     def build_expression(
         self,
         layer_props: Dict,
@@ -613,8 +670,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 self.log_debug(f"Generated subset expression using key '{pk_field}'")
                 
-                # Combine with old subset if needed
-                if old_subset:
+                # Combine with old subset if needed (but not if it contains invalid patterns)
+                if old_subset and not self._should_clear_old_subset(old_subset):
                     if not combine_operator:
                         combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
@@ -719,8 +776,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 escaped_temp = escape_ogr_identifier(temp_field)
                 new_subset_expression = f'{escaped_temp} = 1'
                 
-                # Combine with old subset if needed
-                if old_subset:
+                # Combine with old subset if needed (but not if it contains invalid patterns)
+                if old_subset and not self._should_clear_old_subset(old_subset):
                     if not combine_operator:
                         combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
@@ -849,8 +906,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # Clear memory layer selection
                 memory_layer.removeSelection()
                 
-                # Combine with old subset if needed
-                if old_subset:
+                # Combine with old subset if needed (but not if it contains invalid patterns)
+                if old_subset and not self._should_clear_old_subset(old_subset):
                     if not combine_operator:
                         combine_operator = 'AND'
                         self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")

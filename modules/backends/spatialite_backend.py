@@ -692,15 +692,39 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Current feature count: {layer.featureCount()}")
             
             # Combine with existing filter if specified
-            # COMPORTEMENT PAR DÉFAUT: Si un filtre existe, il est TOUJOURS préservé
+            # CRITICAL FIX: Check for invalid old_subset patterns that should NOT be combined
+            # These patterns indicate a previous geometric filter that should be replaced
             if old_subset:
-                if not combine_operator:
-                    combine_operator = 'AND'
-                    self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
-                self.log_info(f"  → Nouveau filtre: '{expression[:80]}...' (longueur: {len(expression)})")
-                final_expression = f"({old_subset}) {combine_operator} ({expression})"
-                self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
+                old_subset_upper = old_subset.upper()
+                
+                # Pattern 1: __source alias (only valid inside EXISTS subqueries)
+                has_source_alias = '__source' in old_subset.lower()
+                
+                # Pattern 2: EXISTS subquery (avoid nested EXISTS)
+                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                
+                # Pattern 3: Spatial predicates (likely from previous geometric filter)
+                # Spatialite uses same names as PostGIS for most functions
+                spatial_predicates = [
+                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                    'INTERSECTS', 'CONTAINS', 'WITHIN'  # Spatialite-specific
+                ]
+                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                
+                # If old_subset contains geometric filter patterns, replace instead of combine
+                if has_source_alias or has_exists or has_spatial_predicate:
+                    self.log_info(f"🔄 Old subset contains geometric filter - replacing instead of combining")
+                    self.log_info(f"  → Old subset: '{old_subset[:80]}...'")
+                    final_expression = expression
+                else:
+                    if not combine_operator:
+                        combine_operator = 'AND'
+                        self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
+                    self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
+                    self.log_info(f"  → Nouveau filtre: '{expression[:80]}...' (longueur: {len(expression)})")
+                    final_expression = f"({old_subset}) {combine_operator} ({expression})"
+                    self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
             else:
                 final_expression = expression
             
