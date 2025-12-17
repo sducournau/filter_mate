@@ -358,39 +358,51 @@ class FilterEngineTask(QgsTask):
             logger.info("  ℹ️ No layers in task params - skipping distant layers organization")
             return
         
+        # Get forced backends from task parameters (set by user in UI)
+        forced_backends = self.task_parameters.get('forced_backends', {})
+        
         # Process all layers in the list
         for layer_props in self.task_parameters["task"]["layers"]:
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
             layer_id = layer_props.get("layer_id", "unknown")
             
-            # CRITICAL FIX: Check if PostgreSQL connection is available
-            # If not, use OGR fallback which works with all layer types via QGIS processing
-            if provider_type == PROVIDER_POSTGRES:
-                postgresql_connection_available = layer_props.get("postgresql_connection_available", False)
-                if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
-                    logger.warning(f"  PostgreSQL layer '{layer_name}' has no connection available - using OGR fallback")
-                    provider_type = PROVIDER_OGR
-                    # Mark in layer_props for later reference
-                    layer_props["_effective_provider_type"] = PROVIDER_OGR
-                    layer_props["_postgresql_fallback"] = True
-            
-            # CRITICAL FIX: Verify provider_type is correct by detecting it from actual layer
-            # This ensures GeoPackage layers are correctly identified as 'spatialite'
-            # even if layer_props had incorrect provider_type from previous operations
-            from ..appUtils import detect_layer_provider_type
-            layer_by_id = self.PROJECT.mapLayer(layer_id)
-            if layer_by_id:
-                detected_provider = detect_layer_provider_type(layer_by_id)
-                if detected_provider != provider_type and detected_provider != 'unknown':
-                    logger.warning(
-                        f"  ⚠️ Provider type mismatch for '{layer_name}': "
-                        f"stored='{provider_type}', detected='{detected_provider}'. "
-                        f"Using detected type."
-                    )
-                    provider_type = detected_provider
-                    # Update layer_props with correct provider type
-                    layer_props["layer_provider_type"] = provider_type
+            # PRIORITY 1: Check if backend is forced by user for this layer
+            forced_backend = forced_backends.get(layer_id)
+            if forced_backend:
+                logger.info(f"  🔒 Using FORCED backend '{forced_backend}' for layer '{layer_name}'")
+                provider_type = forced_backend
+                # Mark in layer_props for later reference
+                layer_props["_effective_provider_type"] = forced_backend
+                layer_props["_forced_backend"] = True
+            else:
+                # PRIORITY 2: Check if PostgreSQL connection is available
+                # If not, use OGR fallback which works with all layer types via QGIS processing
+                if provider_type == PROVIDER_POSTGRES:
+                    postgresql_connection_available = layer_props.get("postgresql_connection_available", False)
+                    if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
+                        logger.warning(f"  PostgreSQL layer '{layer_name}' has no connection available - using OGR fallback")
+                        provider_type = PROVIDER_OGR
+                        # Mark in layer_props for later reference
+                        layer_props["_effective_provider_type"] = PROVIDER_OGR
+                        layer_props["_postgresql_fallback"] = True
+                
+                # PRIORITY 3: Verify provider_type is correct by detecting it from actual layer
+                # This ensures GeoPackage layers are correctly identified as 'spatialite'
+                # even if layer_props had incorrect provider_type from previous operations
+                from ..appUtils import detect_layer_provider_type
+                layer_by_id = self.PROJECT.mapLayer(layer_id)
+                if layer_by_id:
+                    detected_provider = detect_layer_provider_type(layer_by_id)
+                    if detected_provider != provider_type and detected_provider != 'unknown':
+                        logger.warning(
+                            f"  ⚠️ Provider type mismatch for '{layer_name}': "
+                            f"stored='{provider_type}', detected='{detected_provider}'. "
+                            f"Using detected type."
+                        )
+                        provider_type = detected_provider
+                        # Update layer_props with correct provider type
+                        layer_props["layer_provider_type"] = provider_type
             
             logger.info(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
             
@@ -626,18 +638,30 @@ class FilterEngineTask(QgsTask):
         # Extract basic layer information
         self.param_source_provider_type = infos["layer_provider_type"]
         
-        # CRITICAL FIX: Check PostgreSQL connection availability for source layer
-        # If PostgreSQL layer but no connection, use OGR fallback which works with all layer types
-        if self.param_source_provider_type == PROVIDER_POSTGRES:
-            postgresql_connection_available = infos.get("postgresql_connection_available", False)
-            if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
-                logger.warning(f"Source layer is PostgreSQL but connection unavailable - using OGR fallback")
-                self.param_source_provider_type = PROVIDER_OGR
-                self._source_postgresql_fallback = True
+        # PRIORITY 1: Check if backend is forced by user for source layer
+        forced_backends = self.task_parameters.get('forced_backends', {})
+        source_layer_id = infos.get("layer_id")
+        forced_backend = forced_backends.get(source_layer_id) if source_layer_id else None
+        
+        if forced_backend:
+            logger.info(f"🔒 Source layer: Using FORCED backend '{forced_backend}'")
+            self.param_source_provider_type = forced_backend
+            self._source_forced_backend = True
+            self._source_postgresql_fallback = False
+        else:
+            self._source_forced_backend = False
+            # PRIORITY 2: Check PostgreSQL connection availability for source layer
+            # If PostgreSQL layer but no connection, use OGR fallback which works with all layer types
+            if self.param_source_provider_type == PROVIDER_POSTGRES:
+                postgresql_connection_available = infos.get("postgresql_connection_available", False)
+                if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
+                    logger.warning(f"Source layer is PostgreSQL but connection unavailable - using OGR fallback")
+                    self.param_source_provider_type = PROVIDER_OGR
+                    self._source_postgresql_fallback = True
+                else:
+                    self._source_postgresql_fallback = False
             else:
                 self._source_postgresql_fallback = False
-        else:
-            self._source_postgresql_fallback = False
         
         self.param_source_schema = infos["layer_schema"]
         # CRITICAL FIX: Use layer_table_name (actual DB table name) for PostgreSQL, not layer_name (display name)
@@ -4115,27 +4139,6 @@ class FilterEngineTask(QgsTask):
             if self.layers_count == 0:
                 logger.info("  → No layers organized for filtering (layers_count=0)")
             logger.info("  → Only source layer filtered")
-
-        # elif self.is_field_expression != None:
-        #     field_idx = -1
-
-        #     for layer_provider_type in self.layers:
-        #         for layer, layer_prop in self.layers[layer_provider_type]:
-        #             field_idx = layer.fields().indexOf(self.is_field_expression[1])
-        #             if field_idx >= 0:
-        #                 param_old_subset = ''
-        #                 if self.source_layer.subsetString() != '':
-        #                     if self.param_other_layers_combine_operator != '':
-        #                         if layer.subsetString() != '':
-        #                             param_old_subset = layer.subsetString()
-
-        #                 if param_old_subset != '' and self.param_other_layers_combine_operator != '':
-
-        #                     result = self.source_layer.setSubsetString('( {old_subset} ) {combine_operator} {expression}'.format(old_subset=param_old_subset,
-        #                                                                                                                         combine_operator=self.param_other_layers_combine_operator,
-        #                                                                                                                         expression=self.expression))
-        #                 else:
-        #                     result = self.source_layer.setSubsetString(self.expression)
 
         return result 
      

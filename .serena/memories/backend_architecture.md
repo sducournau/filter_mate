@@ -74,17 +74,69 @@ modules/backends/
 - `use_qgis_processing()`: Processing algorithm calls
 - `memory_layer_filtering()`: In-memory operations
 
+## Forced Backend System (v2.4+)
+
+### User-Controlled Backend Selection
+
+Users can force a specific backend for any layer via the UI backend indicator.
+This overrides automatic backend selection.
+
+**UI Location:** Backend indicator (icon next to layer name in dockwidget)
+
+**Data Flow:**
+```
+dockwidget.forced_backends = {layer_id: 'postgresql' | 'spatialite' | 'ogr'}
+    ↓
+filter_mate_app.get_task_parameters()
+    → task_parameters["forced_backends"] = dockwidget.forced_backends
+    ↓
+filter_task._organize_layers_to_filter()
+    → PRIORITY 1: Check forced_backends.get(layer_id)
+    → PRIORITY 2: PostgreSQL fallback check
+    → PRIORITY 3: Auto-detection
+    ↓
+filter_task._initialize_source_filtering_parameters()
+    → Same priority system for source layer
+    ↓
+BackendFactory.get_backend()
+    → Uses forced_backend if provided
+```
+
+**Key Files:**
+- `filter_mate_dockwidget.py`: `forced_backends` dict, `_set_forced_backend()`, `get_forced_backend_for_layer()`
+- `filter_mate_app.py`: `get_task_parameters()` - adds forced_backends to task params
+- `modules/tasks/filter_task.py`: `_organize_layers_to_filter()`, `_initialize_source_filtering_parameters()`
+- `modules/backends/factory.py`: `get_backend()` respects forced_backends
+
+**Priority System:**
+1. **FORCED**: User explicitly selected backend via UI
+2. **FALLBACK**: PostgreSQL unavailable → OGR fallback
+3. **AUTO**: Automatic detection based on provider type
+
 ## Factory Pattern Implementation
 
 ### BackendFactory Class
 
 **Location:** `modules/backends/factory.py`
 
-**Key Method:** `get_backend(layer)`
+**Key Method:** `get_backend(layer, task_parameters=None)`
 
 **Selection Logic:**
 ```python
-def get_backend(layer):
+def get_backend(layer, task_parameters=None):
+    # PRIORITY 1: Check for forced backend
+    forced_backends = task_parameters.get('forced_backends', {}) if task_parameters else {}
+    forced_backend = forced_backends.get(layer.id())
+    
+    if forced_backend:
+        if forced_backend == 'postgresql' and POSTGRESQL_AVAILABLE:
+            return PostgreSQLBackend(layer)
+        elif forced_backend == 'spatialite':
+            return SpatialiteBackend(layer)
+        elif forced_backend == 'ogr':
+            return OGRBackend(layer)
+    
+    # PRIORITY 2-3: Auto-detection
     provider_type = layer.providerType()
     
     if provider_type == 'postgres' and POSTGRESQL_AVAILABLE:

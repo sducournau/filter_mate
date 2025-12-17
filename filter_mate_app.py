@@ -1550,6 +1550,11 @@ class FilterMateApp:
                 if task_name == 'filter':
                     self._initialize_filter_history(current_layer, layers_to_filter, task_parameters)
                 
+                # CRITICAL: Add forced_backends at root level for factory.py and filter_task.py access
+                # They expect task_parameters.get('forced_backends', {}) at root level
+                if self.dockwidget and hasattr(self.dockwidget, 'forced_backends'):
+                    task_parameters["forced_backends"] = self.dockwidget.forced_backends
+                
                 return task_parameters
 
             elif task_name == 'export':

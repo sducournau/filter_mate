@@ -17,6 +17,10 @@ All notable changes to FilterMate will be documented in this file.
   - No automatic fallback to OGR when a backend is forced
   - Clear warnings if forced backend is not optimal
   - Graceful handling of unavailable backends (e.g., PostgreSQL without psycopg2)
+  - **FIX**: `forced_backends` now correctly propagated at root level of `task_parameters`
+  - **FIX**: Source layer and distant layers now check forced backend with PRIORITY 1
+  - **FIX**: `_organize_layers_to_filter()` respects forced backend before auto-detection
+  - **FIX**: `_initialize_source_filtering_parameters()` applies forced backend to source layer
 
 ### ⚙️ Configuration System Enhancements
 - **Configuration Metadata System** - Complete metadata-driven configuration
