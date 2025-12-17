@@ -3732,6 +3732,15 @@ class FilterEngineTask(QgsTask):
             # Verify spatial index exists before filtering - critical for performance
             self._verify_and_create_spatial_index(layer, layer_name)
             
+            # Check if backend is forced for this layer
+            forced_backends = self.task_parameters.get('forced_backends', {})
+            forced_backend = forced_backends.get(layer.id())
+            
+            if forced_backend:
+                logger.info(f"  ⚡ Using FORCED backend '{forced_backend}' for layer '{layer_name}'")
+                # Force the provider type to match the forced backend
+                effective_provider_type = forced_backend
+            
             # Get appropriate backend for this layer - use effective provider type
             backend = BackendFactory.get_backend(effective_provider_type, layer, self.task_parameters)
             
@@ -3741,6 +3750,17 @@ class FilterEngineTask(QgsTask):
             # 2. OGRGeometricFilter for PostgreSQL layers (small dataset / fallback) - needs QgsVectorLayer
             # 3. PostgreSQLGeometricFilter for PostgreSQL layers - needs SQL expression
             backend_name = backend.get_backend_name().lower()
+            
+            # Log actual backend being used
+            if forced_backend and backend_name != forced_backend:
+                logger.warning(f"  ⚠️ Forced backend '{forced_backend}' but got '{backend_name}' (backend may not support layer)")
+            else:
+                logger.info(f"  ✓ Using backend: {backend_name}")
+            
+            # Store actual backend used for this layer (for UI indicator)
+            if 'actual_backends' not in self.task_parameters:
+                self.task_parameters['actual_backends'] = {}
+            self.task_parameters['actual_backends'][layer.id()] = backend_name
             
             # Determine geometry provider based on backend type, not layer provider
             if backend_name == 'spatialite':

@@ -1336,7 +1336,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Keep title label reference for compatibility but don't add to layout
         self.plugin_title_label = None
         
-        # Backend indicator label (right) - badge style
+        # Backend indicator label (right) - badge style - NOW CLICKABLE
         self.backend_indicator_label = QtWidgets.QLabel(self.frame_header)
         self.backend_indicator_label.setObjectName("label_backend_indicator")
         
@@ -1357,16 +1357,528 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 border: none;
                 background-color: #3498db;
             }
+            QLabel#label_backend_indicator:hover {
+                background-color: #2980b9;
+                cursor: pointer;
+            }
         """)
         self.backend_indicator_label.setAlignment(Qt.AlignCenter)
         self.backend_indicator_label.setMinimumWidth(40)
         self.backend_indicator_label.setMaximumHeight(20)
+        
+        # Make clickable for backend selection
+        self.backend_indicator_label.setCursor(Qt.PointingHandCursor)
+        self.backend_indicator_label.setToolTip("Click to change backend")
+        self.backend_indicator_label.mousePressEvent = self._on_backend_indicator_clicked
+        
+        # Initialize backend preference storage
+        self.forced_backends = {}  # layer_id -> forced_backend_type
+        
         header_layout.addWidget(self.backend_indicator_label)
         
         # Insert header frame at the top of verticalLayout_8 (main container)
         if hasattr(self, 'verticalLayout_8'):
             self.verticalLayout_8.insertWidget(0, self.frame_header)
             logger.debug("Header bar inserted at top with plugin title and backend indicator")
+    
+    def _on_backend_indicator_clicked(self, event):
+        """
+        Handle click on backend indicator to show backend selection menu.
+        Allows user to force a specific backend for the current layer.
+        """
+        from qgis.PyQt.QtWidgets import QMenu
+        from qgis.PyQt.QtGui import QCursor
+        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+        
+        current_layer = self.current_layer
+        if not current_layer:
+            return
+        
+        # Get available backends for this layer
+        available_backends = self._get_available_backends_for_layer(current_layer)
+        
+        if not available_backends:
+            from qgis.utils import iface
+            iface.messageBar().pushWarning("FilterMate", "No alternative backends available for this layer")
+            return
+        
+        # Create context menu
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 1px solid #cccccc;
+                padding: 5px;
+            }
+            QMenu::item {
+                padding: 5px 20px;
+            }
+            QMenu::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+        """)
+        
+        # Add header
+        header = menu.addAction("Select Backend:")
+        header.setEnabled(False)
+        menu.addSeparator()
+        
+        # Add available backends
+        current_forced = self.forced_backends.get(current_layer.id())
+        
+        for backend_type, backend_name, backend_icon in available_backends:
+            action_text = f"{backend_icon} {backend_name}"
+            if current_forced == backend_type:
+                action_text += " ✓"
+            action = menu.addAction(action_text)
+            action.setData(backend_type)
+        
+        menu.addSeparator()
+        
+        # Add "Auto" option (remove forced backend)
+        auto_action = menu.addAction("⚙️ Auto (Default)")
+        auto_action.setData(None)
+        if not current_forced:
+            auto_action.setText(auto_action.text() + " ✓")
+        
+        menu.addSeparator()
+        
+        # Add "Auto-select All" option
+        auto_all_action = menu.addAction("🎯 Auto-select Optimal for All Layers")
+        auto_all_action.setData('__AUTO_ALL__')
+        
+        # Add "Force All Layers" option - force current backend for all layers
+        menu.addSeparator()
+        # Detect current backend (forced or auto-detected)
+        current_backend = self._detect_current_backend(current_layer)
+        backend_name = current_backend.upper() if current_backend else "CURRENT"
+        force_all_text = f"🔒 Force {backend_name} for All Layers"
+        force_all_tooltip = f"Force all layers to use {backend_name} backend"
+        
+        force_all_action = menu.addAction(force_all_text)
+        force_all_action.setData('__FORCE_ALL__')
+        force_all_action.setToolTip(force_all_tooltip)
+        
+        # Show menu and handle selection
+        selected_action = menu.exec_(QCursor.pos())
+        
+        if selected_action:
+            selected_backend = selected_action.data()
+            
+            # Handle "Auto-select All" special action
+            if selected_backend == '__AUTO_ALL__':
+                self.auto_select_optimal_backends()
+                return
+            
+            # Handle "Force All Layers" special action
+            if selected_backend == '__FORCE_ALL__':
+                # Use detected backend (which may be forced or auto-detected)
+                backend_to_force = self._detect_current_backend(current_layer)
+                self._force_backend_for_all_layers(backend_to_force)
+                return
+            
+            self._set_forced_backend(current_layer.id(), selected_backend)
+            
+            # Update indicator to reflect change
+            if selected_backend:
+                self._update_backend_indicator(self._current_provider_type, 
+                                              self._current_postgresql_available,
+                                              actual_backend=selected_backend)
+                from qgis.utils import iface
+                iface.messageBar().pushSuccess("FilterMate", f"Backend forced to {selected_backend.upper()} for layer '{current_layer.name()}'")
+            else:
+                # Reset to auto - no forced backend
+                self._update_backend_indicator(self._current_provider_type, 
+                                              self._current_postgresql_available,
+                                              actual_backend=None)
+                from qgis.utils import iface
+                iface.messageBar().pushInfo("FilterMate", f"Backend set to Auto for layer '{current_layer.name()}'")
+    
+    def _get_available_backends_for_layer(self, layer):
+        """
+        Get list of available backends for the given layer.
+        
+        Returns:
+            List of tuples: (backend_type, backend_name, backend_icon)
+        """
+        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+        
+        available = []
+        provider_type = layer.providerType()
+        
+        # PostgreSQL backend (only for postgres layers with psycopg2 available)
+        if provider_type == 'postgres' and POSTGRESQL_AVAILABLE:
+            available.append(('postgresql', 'PostgreSQL', '🐘'))
+        
+        # Spatialite backend (for spatialite layers and some OGR layers)
+        if provider_type in ['spatialite', 'ogr']:
+            # Check if it's a SQLite-based layer
+            source = layer.source()
+            if 'gpkg' in source.lower() or 'sqlite' in source.lower() or provider_type == 'spatialite':
+                available.append(('spatialite', 'Spatialite', '💾'))
+        
+        # OGR backend (always available as fallback)
+        available.append(('ogr', 'OGR', '📁'))
+        
+        # Remove current backend to show only alternatives
+        # (but keep at least one option)
+        if len(available) > 1:
+            current_backend = self._detect_current_backend(layer)
+            available = [b for b in available if b[0] != current_backend]
+        
+        return available
+    
+    def _detect_current_backend(self, layer):
+        """
+        Detect which backend is currently being used for a layer.
+        
+        Returns:
+            str: Backend type ('postgresql', 'spatialite', 'ogr')
+        """
+        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        
+        provider_type = layer.providerType()
+        
+        # Check for forced backend first
+        if hasattr(self, 'forced_backends') and layer.id() in self.forced_backends:
+            return self.forced_backends[layer.id()]
+        
+        # Auto-detection based on provider
+        if provider_type == 'postgres' and POSTGRESQL_AVAILABLE:
+            return 'postgresql'
+        elif provider_type == 'spatialite':
+            return 'spatialite'
+        else:
+            return 'ogr'
+
+    def _verify_backend_supports_layer(self, layer, backend_type):
+        """
+        Verify that a backend can actually support a layer.
+        
+        Uses the backend's supports_layer() method to test actual compatibility
+        (not just theoretical availability).
+        
+        Args:
+            layer: QgsVectorLayer instance
+            backend_type: Backend type string ('postgresql', 'spatialite', 'ogr')
+        
+        Returns:
+            bool: True if backend can support this layer
+        """
+        from .modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+        from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
+        from .modules.backends.ogr_backend import OGRGeometricFilter
+        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        
+        if not layer or not layer.isValid():
+            return False
+        
+        # Create backend instance with minimal params
+        task_params = {}
+        
+        try:
+            if backend_type == 'postgresql':
+                if not POSTGRESQL_AVAILABLE:
+                    return False
+                backend = PostgreSQLGeometricFilter(task_params)
+            elif backend_type == 'spatialite':
+                backend = SpatialiteGeometricFilter(task_params)
+            elif backend_type == 'ogr':
+                backend = OGRGeometricFilter(task_params)
+            else:
+                return False
+            
+            # Test actual compatibility
+            return backend.supports_layer(layer)
+            
+        except Exception as e:
+            logger.warning(f"Error testing backend {backend_type} for layer {layer.name()}: {e}")
+            return False
+    
+    def _set_forced_backend(self, layer_id, backend_type):
+        """
+        Force a specific backend for a layer.
+        
+        Args:
+            layer_id: Layer ID
+            backend_type: Backend type to force, or None for auto
+        """
+        if not hasattr(self, 'forced_backends'):
+            self.forced_backends = {}
+        
+        if backend_type is None:
+            # Remove forced backend (use auto)
+            if layer_id in self.forced_backends:
+                del self.forced_backends[layer_id]
+        else:
+            self.forced_backends[layer_id] = backend_type
+
+    def _force_backend_for_all_layers(self, backend_type):
+        """
+        Force a specific backend for all layers in the project.
+        
+        Only forces backend if it can truly support the layer (tests with backend.supports_layer()).
+        Skips layers where the backend is not compatible.
+        
+        Args:
+            backend_type: Backend type to force ('postgresql', 'spatialite', 'ogr', or None)
+        """
+        from qgis.utils import iface
+        from qgis.core import QgsProject
+        from .modules.backends.postgresql_backend import PostgreSQLGeometricFilter
+        from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
+        from .modules.backends.ogr_backend import OGRGeometricFilter
+        from .modules.appUtils import POSTGRESQL_AVAILABLE
+        
+        if not backend_type:
+            iface.messageBar().pushWarning("FilterMate", "No backend selected to force")
+            return
+        
+        logger.info("=" * 60)
+        logger.info(f"FORCING {backend_type.upper()} BACKEND FOR ALL LAYERS")
+        logger.info("=" * 60)
+        
+        forced_count = 0
+        skipped_count = 0
+        incompatible_layers = []
+        
+        project = QgsProject.instance()
+        layers = project.mapLayers().values()
+        
+        # Create backend instance to test compatibility
+        task_params = {}  # Minimal params just for testing
+        if backend_type == 'postgresql':
+            if not POSTGRESQL_AVAILABLE:
+                iface.messageBar().pushWarning(
+                    "FilterMate", 
+                    "PostgreSQL backend not available (psycopg2 not installed)"
+                )
+                return
+            backend = PostgreSQLGeometricFilter(task_params)
+        elif backend_type == 'spatialite':
+            backend = SpatialiteGeometricFilter(task_params)
+        elif backend_type == 'ogr':
+            backend = OGRGeometricFilter(task_params)
+        else:
+            iface.messageBar().pushWarning("FilterMate", f"Unknown backend type: {backend_type}")
+            return
+        
+        for layer in layers:
+            if not layer.isValid():
+                skipped_count += 1
+                continue
+            
+            layer_name = layer.name()
+            logger.info(f"\nProcessing layer: {layer_name}")
+            logger.info(f"  Provider: {layer.providerType()}, Features: {layer.featureCount():,}")
+            
+            # CRITICAL: Test if backend truly supports this layer
+            # This checks provider type AND connection/functionality availability
+            if backend.supports_layer(layer):
+                self._set_forced_backend(layer.id(), backend_type)
+                forced_count += 1
+                logger.info(f"  ✓ Forced backend to: {backend_type.upper()}")
+            else:
+                incompatible_layers.append(layer_name)
+                skipped_count += 1
+                logger.info(f"  ⚠ Backend {backend_type.upper()} not compatible with this layer - skipping")
+        
+        logger.info("\n" + "=" * 60)
+        logger.info("FORCE BACKEND COMPLETE")
+        logger.info(f"Forced: {forced_count} layers to {backend_type.upper()}")
+        logger.info(f"Skipped: {skipped_count} layers (incompatible or invalid)")
+        if incompatible_layers:
+            logger.info(f"Incompatible layers: {', '.join(incompatible_layers)}")
+        logger.info("=" * 60)
+        
+        # Show summary message with details
+        if forced_count > 0:
+            msg = f"Forced {forced_count} layer(s) to use {backend_type.upper()} backend"
+            if skipped_count > 0:
+                msg += f" ({skipped_count} incompatible layer(s) skipped)"
+            iface.messageBar().pushSuccess("FilterMate", msg)
+        else:
+            msg = f"No layers compatible with {backend_type.upper()} backend"
+            if incompatible_layers:
+                msg += f" - Incompatible: {', '.join(incompatible_layers[:3])}"
+                if len(incompatible_layers) > 3:
+                    msg += f" and {len(incompatible_layers) - 3} more"
+            iface.messageBar().pushWarning("FilterMate", msg)
+        
+        # Update indicator for current layer
+        if self.current_layer:
+            # Get layer properties to pass to synchronization
+            _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
+            self._synchronize_layer_widgets(self.current_layer, layer_props)
+    
+    def get_forced_backend_for_layer(self, layer_id):
+        """
+        Get forced backend for a layer, if any.
+        
+        Args:
+            layer_id: Layer ID
+        
+        Returns:
+            str or None: Forced backend type, or None if auto
+        """
+        if not hasattr(self, 'forced_backends'):
+            self.forced_backends = {}
+        return self.forced_backends.get(layer_id)
+    
+    def _get_optimal_backend_for_layer(self, layer):
+        """
+        Determine optimal backend for a layer based on its characteristics.
+        
+        Logic matches BackendFactory.get_backend() to ensure consistency.
+        
+        Analysis criteria:
+        - Layer provider type
+        - Feature count (small/medium/large datasets)
+        - PostgreSQL availability (psycopg2 installed)
+        - Data source type (file-based vs server-based)
+        
+        Args:
+            layer: QgsVectorLayer instance
+        
+        Returns:
+            str or None: Optimal backend type ('postgresql', 'spatialite', 'ogr'), or None for auto
+        """
+        from .modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
+        from .modules.backends.factory import should_use_memory_optimization
+        
+        if not layer or not layer.isValid():
+            return None
+        
+        provider_type = detect_layer_provider_type(layer)
+        feature_count = layer.featureCount()
+        source = layer.source().lower()
+        
+        logger.info(f"Analyzing layer: {layer.name()}")
+        logger.info(f"  Provider: {provider_type}, Features: {feature_count:,}")
+        logger.info(f"  PostgreSQL available: {POSTGRESQL_AVAILABLE}")
+        
+        # PostgreSQL layers
+        if provider_type == 'postgresql':
+            if not POSTGRESQL_AVAILABLE:
+                logger.info(f"  → PostgreSQL unavailable - OGR fallback")
+                return 'ogr'
+            
+            # Check if memory optimization would be used (matches BackendFactory logic)
+            if should_use_memory_optimization(layer, provider_type):
+                logger.info(f"  → Small PostgreSQL dataset ({feature_count} features) - OGR memory optimization")
+                return 'ogr'
+            
+            # Large PostgreSQL datasets - use PostgreSQL backend for server-side ops
+            logger.info(f"  → Large PostgreSQL dataset ({feature_count} features) - PostgreSQL optimal")
+            return 'postgresql'
+        
+        # SQLite/Spatialite layers
+        elif provider_type == 'spatialite':
+            if feature_count > 5000:
+                logger.info(f"  → SQLite dataset ({feature_count} features) - Spatialite R-tree indexes optimal")
+                return 'spatialite'
+            else:
+                logger.info(f"  → Small SQLite dataset ({feature_count} features) - OGR sufficient")
+                return 'ogr'
+        
+        # OGR layers (Shapefile, GeoJSON, GeoPackage via OGR)
+        elif provider_type == 'ogr':
+            # Check if it's a GeoPackage/SQLite accessed via OGR
+            if 'gpkg' in source or 'sqlite' in source:
+                if feature_count > 5000:
+                    logger.info(f"  → GeoPackage via OGR ({feature_count} features) - Spatialite backend optimal")
+                    return 'spatialite'
+                else:
+                    logger.info(f"  → Small GeoPackage ({feature_count} features) - OGR sufficient")
+                    return 'ogr'
+            
+            # Regular OGR formats (Shapefile, GeoJSON, etc.)
+            logger.info(f"  → OGR format ({feature_count} features) - OGR backend sufficient")
+            return 'ogr'
+        
+        # Unknown provider - let auto-selection handle it
+        logger.info(f"  → Unknown provider '{provider_type}' - using auto-selection")
+        return None
+    
+    def auto_select_optimal_backends(self):
+        """
+        Automatically select optimal backend for all layers in the project.
+        
+        Analyzes each layer's characteristics and sets the most appropriate backend.
+        Shows summary message with results.
+        """
+        from qgis.utils import iface
+        from qgis.core import QgsProject
+        
+        if not hasattr(self, 'PROJECT_LAYERS') or not self.PROJECT_LAYERS:
+            iface.messageBar().pushWarning("FilterMate", "No layers loaded in project")
+            return
+        
+        logger.info("=" * 60)
+        logger.info("AUTO-SELECTING OPTIMAL BACKENDS FOR ALL LAYERS")
+        logger.info("=" * 60)
+        
+        optimized_count = 0
+        skipped_count = 0
+        backend_stats = {'postgresql': 0, 'spatialite': 0, 'ogr': 0, 'auto': 0}
+        
+        project = QgsProject.instance()
+        layers = project.mapLayers().values()
+        
+        for layer in layers:
+            if not layer.isValid():
+                skipped_count += 1
+                continue
+            
+            layer_name = layer.name()
+            logger.info(f"\nAnalyzing layer: {layer_name}")
+            
+            # Get optimal backend for THIS SPECIFIC LAYER
+            optimal_backend = self._get_optimal_backend_for_layer(layer)
+            
+            if optimal_backend:
+                # Verify that the optimal backend actually supports this layer
+                if self._verify_backend_supports_layer(layer, optimal_backend):
+                    # Set forced backend
+                    self._set_forced_backend(layer.id(), optimal_backend)
+                    backend_stats[optimal_backend] += 1
+                    optimized_count += 1
+                    logger.info(f"  ✓ Set backend to: {optimal_backend.upper()}")
+                else:
+                    # Backend not compatible - keep auto
+                    backend_stats['auto'] += 1
+                    logger.info(f"  ⚠ Optimal backend {optimal_backend.upper()} not compatible - keeping auto-selection")
+            else:
+                # Keep auto-selection
+                backend_stats['auto'] += 1
+                logger.info(f"  → Keeping auto-selection")
+        
+        logger.info("\n" + "=" * 60)
+        logger.info("AUTO-SELECTION COMPLETE")
+        logger.info(f"Optimized: {optimized_count} layers")
+        logger.info(f"Skipped: {skipped_count} invalid layers")
+        logger.info(f"Backend distribution:")
+        for backend, count in backend_stats.items():
+            if count > 0:
+                logger.info(f"  - {backend.upper()}: {count} layer(s)")
+        logger.info("=" * 60)
+        
+        # Show summary message
+        if optimized_count > 0:
+            summary = f"Optimized {optimized_count} layer(s): "
+            summary += ", ".join([f"{count} {backend.upper()}" for backend, count in backend_stats.items() if count > 0 and backend != 'auto'])
+            iface.messageBar().pushSuccess("FilterMate", summary)
+        else:
+            iface.messageBar().pushInfo("FilterMate", "All layers using auto-selection")
+        
+        # Update indicator for current layer
+        if self.current_layer:
+            # Get layer properties to pass to synchronization
+            _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
+            self._synchronize_layer_widgets(self.current_layer, layer_props)
         
         # The label will be added to frame_actions layout in _create_horizontal_action_bar_layout
 
@@ -2734,7 +3246,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         if reply == QMessageBox.Yes:
             self.reload_plugin()
-
 
         
     def manage_output_name(self):
@@ -4829,22 +5340,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["FILTERING","CURRENT_LAYER"], 'connect', 'layerChanged')
         
         # Update backend indicator with PostgreSQL connection availability flag
+        # CRITICAL: Pass forced backend if set to show the actual backend being used
+        forced_backend = None
+        if hasattr(self, 'forced_backends') and layer.id() in self.forced_backends:
+            forced_backend = self.forced_backends[layer.id()]
+        
         if layer.id() in self.PROJECT_LAYERS:
             infos = layer_props.get('infos', {})
             if 'layer_provider_type' in infos:
                 provider_type = infos['layer_provider_type']
                 postgresql_conn = infos.get('postgresql_connection_available', None)
-                self._update_backend_indicator(provider_type, postgresql_conn)
+                self._update_backend_indicator(provider_type, postgresql_conn, actual_backend=forced_backend)
         else:
             provider_type = layer.providerType()
             if provider_type == 'postgres':
-                self._update_backend_indicator(PROVIDER_POSTGRES)
+                self._update_backend_indicator(PROVIDER_POSTGRES, actual_backend=forced_backend)
             elif provider_type == 'spatialite':
-                self._update_backend_indicator(PROVIDER_SPATIALITE)
+                self._update_backend_indicator(PROVIDER_SPATIALITE, actual_backend=forced_backend)
             elif provider_type == 'ogr':
-                self._update_backend_indicator(PROVIDER_OGR)
+                self._update_backend_indicator(PROVIDER_OGR, actual_backend=forced_backend)
             else:
-                self._update_backend_indicator(provider_type)
+                self._update_backend_indicator(provider_type, actual_backend=forced_backend)
         
         # Initialize buffer property widget with current layer
         self.filtering_init_buffer_property()
@@ -6099,7 +6615,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if 'layer_provider_type' in infos:
                     provider_type = infos['layer_provider_type']
                     postgresql_conn = infos.get('postgresql_connection_available', None)
-                    self._update_backend_indicator(provider_type, postgresql_conn)
+                    # Check for forced backend
+                    forced_backend = None
+                    if hasattr(self, 'forced_backends') and first_layer_id in self.forced_backends:
+                        forced_backend = self.forced_backends[first_layer_id]
+                    self._update_backend_indicator(provider_type, postgresql_conn, actual_backend=forced_backend)
         
         # Notify user when transitioning from empty to loaded state
         if was_empty and len(self.PROJECT_LAYERS) > 0:
@@ -6127,7 +6647,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if layer.id() in self.PROJECT_LAYERS:
             layer_props = self.PROJECT_LAYERS[layer.id()]
             if 'layer_provider_type' in layer_props.get('infos', {}):
-                self._update_backend_indicator(layer_props['infos']['layer_provider_type'])
+                # Check for forced backend
+                forced_backend = None
+                if hasattr(self, 'forced_backends') and layer.id() in self.forced_backends:
+                    forced_backend = self.forced_backends[layer.id()]
+                self._update_backend_indicator(layer_props['infos']['layer_provider_type'], actual_backend=forced_backend)
         
         self.manage_output_name()
         self.select_tabTools_index()
@@ -6381,20 +6905,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.settingProjectVariables.emit()
 
-    def _update_backend_indicator(self, provider_type, postgresql_connection_available=None):
+    def _update_backend_indicator(self, provider_type, postgresql_connection_available=None, actual_backend=None):
         """
-        Update the backend indicator badge based on the layer provider type.
+        Update the backend indicator badge based on the layer provider type and actual backend used.
         
         Uses modern badge styling with colored backgrounds for visual distinction.
+        Shows the REAL backend being used (not just provider type).
         
         Args:
             provider_type: The provider type string ('postgresql', 'spatialite', 'ogr', etc.)
             postgresql_connection_available: For PostgreSQL layers, whether connection is available
+            actual_backend: The actual backend name being used (from BackendFactory)
         """
         if not hasattr(self, 'backend_indicator_label') or not self.backend_indicator_label:
             return
         
         from .modules.appUtils import POSTGRESQL_AVAILABLE
+        
+        # Store current provider for backend selection menu
+        self._current_provider_type = provider_type
+        self._current_postgresql_available = postgresql_connection_available
         
         # Determine backend text and badge style (modern colored badges)
         base_style = """
@@ -6406,30 +6936,102 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 border: none;
                 {custom_style}
             }}
+            QLabel#label_backend_indicator:hover {{
+                opacity: 0.85;
+            }}
         """
         
         # CRITICAL FIX: Check both POSTGRESQL_AVAILABLE and postgresql_connection_available
         postgresql_usable = POSTGRESQL_AVAILABLE and (postgresql_connection_available is not False)
         
-        if provider_type == 'postgresql' and postgresql_usable:
+        # PRIORITY 1: Check if backend is forced by user (always takes precedence)
+        current_layer = self.current_layer
+        forced_backend_from_dict = None
+        if current_layer and hasattr(self, 'forced_backends'):
+            if current_layer.id() in self.forced_backends:
+                forced_backend_from_dict = self.forced_backends[current_layer.id()]
+        
+        # Determine actual backend being used
+        if actual_backend:
+            # Use actual backend name if provided as parameter (forced backend)
+            backend_type = actual_backend.lower()
+        elif forced_backend_from_dict:
+            # Use forced backend from dictionary (user selection via menu)
+            backend_type = forced_backend_from_dict.lower()
+        else:
+            # Auto mode: Apply same logic as BackendFactory to show real backend
+            # Get current layer to check feature count for optimization
+            feature_count = current_layer.featureCount() if current_layer else -1
+            
+            # Import optimization logic
+            from .modules.backends.factory import should_use_memory_optimization
+            
+            # PostgreSQL layers
+            if provider_type == 'postgresql' and postgresql_usable:
+                # Check if small dataset optimization would be used
+                if current_layer and should_use_memory_optimization(current_layer, 'postgresql'):
+                    backend_type = 'ogr'  # Small PostgreSQL → OGR memory optimization
+                else:
+                    backend_type = 'postgresql'
+            elif provider_type == 'postgresql' and not postgresql_usable:
+                backend_type = 'ogr_fallback'
+            # Spatialite layers
+            elif provider_type == 'spatialite':
+                # Same threshold as in _get_optimal_backend_for_layer
+                if feature_count > 0 and feature_count <= 5000:
+                    backend_type = 'ogr'  # Small Spatialite → OGR sufficient
+                else:
+                    backend_type = 'spatialite'
+            # OGR layers
+            elif provider_type == 'ogr':
+                backend_type = 'ogr'
+            else:
+                backend_type = 'unknown'
+        
+        # Set text and styling based on backend type
+        # Check if backend is forced (either by parameter or from dictionary)
+        is_forced = (actual_backend is not None) or (forced_backend_from_dict is not None)
+        is_auto_mode = not is_forced
+        feature_count = current_layer.featureCount() if current_layer else -1
+        
+        if backend_type == 'postgresql':
             backend_text = "PostgreSQL"
             custom = "color: white; background-color: #27ae60;"
-        elif provider_type == 'spatialite':
+            tooltip = "Backend: PostgreSQL (High Performance)"
+        elif backend_type == 'spatialite':
             backend_text = "Spatialite"
             custom = "color: white; background-color: #9b59b6;"
-        elif provider_type == 'ogr':
+            tooltip = "Backend: Spatialite (Good Performance)"
+        elif backend_type == 'ogr':
             backend_text = "OGR"
             custom = "color: white; background-color: #3498db;"
-        elif provider_type == 'postgresql' and not postgresql_usable:
-            # PostgreSQL layer but no connection - will use OGR fallback
+            # Provide context for OGR usage in auto mode
+            if is_auto_mode and provider_type == 'postgresql':
+                tooltip = f"Backend: OGR (Memory Optimization - {feature_count:,} features)"
+            elif is_auto_mode and provider_type == 'spatialite':
+                tooltip = f"Backend: OGR (Small Dataset - {feature_count:,} features)"
+            else:
+                tooltip = "Backend: OGR (Universal)"
+        elif backend_type == 'ogr_fallback':
             backend_text = "OGR*"
             custom = "color: white; background-color: #e67e22;"  # Orange for fallback
+            tooltip = "Backend: OGR (Fallback - PostgreSQL connection unavailable)"
         else:
             backend_text = provider_type[:6].upper() if provider_type else "..."
             custom = "color: #7f8c8d; background-color: #ecf0f1;"
+            tooltip = f"Backend: {provider_type or 'Unknown'}"
+        
+        # Add forced indicator if backend was forced by user
+        if is_forced:
+            backend_text = f"{backend_text}⚡"
+            forced_backend_name = actual_backend or forced_backend_from_dict
+            tooltip += f"\n(Forced by user: {forced_backend_name.upper()})"
+        
+        tooltip += "\n\nClick to change backend"
         
         self.backend_indicator_label.setText(backend_text)
         self.backend_indicator_label.setStyleSheet(base_style.format(custom_style=custom))
+        self.backend_indicator_label.setToolTip(tooltip)
         self.backend_indicator_label.adjustSize()
 
     def getProjectLayersEvent(self, event):

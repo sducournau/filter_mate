@@ -157,7 +157,15 @@ class JsonView(QtWidgets.QTreeView):
             return
         actions = data.actions(index)
         if actions is not None and len(actions) > 0:
-            menu.addActions(actions)
+            # Convert string actions to QAction objects if needed
+            qactions = []
+            for action in actions:
+                if isinstance(action, str):
+                    qaction = QtWidgets.QAction(action, None)
+                    qactions.append(qaction)
+                else:
+                    qactions.append(action)
+            menu.addActions(qactions)
         action = menu.exec_(self.viewport().mapToGlobal(position))
         if action:
             action_data = action.data()

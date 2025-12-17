@@ -10,23 +10,25 @@ version=2.3.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.5 - Stability & Backend Improvements
+about=FilterMate v2.3.5 - Configuration System & Performance
 
  NEW in v2.3.5:
- - 🐛 CRITICAL: Fixed GeometryCollection errors in OGR backend buffer operations
- - 🐛 CRITICAL: Fixed potential crashes in layer operations (guard clauses)
- - 🚀 GeoPackage now 10× faster with Spatialite backend
- - 🛠️ Improved exception handling throughout codebase
+ - ⚙️ Advanced configuration system with metadata & auto-generated UI
+ - 🔄 Automatic config migration (v1.0→v2.0) with backup/rollback
+ - 🚀 PostgreSQL 30%% faster loading (fast counting + UNLOGGED MVs)
+ - 📊 Complete performance & stability audit (score: 9.0/10)
+ - 🐛 Fixed config editor save & validation feedback
+ - 📚 30+ documentation files (config, migration, optimization)
  
  Previous (v2.3.4):
- - 🐛 Fixed PostgreSQL 2-part table reference spatial filtering
- - ✨ Smart display field selection for exploring expressions  
- - 🛠️ Automatic ANALYZE on PostgreSQL source tables
+ - 🐛 Fixed GeometryCollection errors & PostgreSQL filtering
+ - ✨ Smart display field selection
+ - 🛠️ Automatic ANALYZE on PostgreSQL tables
  
  Previous (v2.3.0):
  - ⭐ Intelligent Undo/Redo with automatic context detection
  - 🏗️ Task modules extracted (appTasks.py -99%%)
- - ✅ PEP 8 95%%, 26 automated tests, CI/CD active
+ - ✅ PEP 8 95%%, 30+ automated tests, CI/CD active
  - 🚀 Geometry caching (5× speedup for multi-layer ops)
  
  Core features:

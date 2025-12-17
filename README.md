@@ -1,8 +1,42 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-
 **Version 2.3.5** | December 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
+
+### 🎉 What's New in v2.3.5 - Configuration System & Performance
+
+- ⚙️ **Advanced Configuration System** - Metadata-driven configuration with auto-generated UI
+  - Auto-generated widgets (checkbox, combobox, spinbox, colorpicker)
+  - Real-time validation with clear error messages
+  - Complete metadata schema with descriptions and validation rules
+  
+- 🔄 **Automatic Configuration Migration** - Seamless v1.0 → v2.0 migration
+  - Automatic version detection and migration
+  - Backup creation before migration with rollback capability
+  - Command-line interface for manual migration
+  
+- ⚡ **~30% Faster PostgreSQL Loading** - Major optimizations for large datasets
+  - Fast feature count using database statistics (500× faster)
+  - UNLOGGED materialized views (30-50% faster creation)
+  - Smart caching eliminates double counting
+  - 1M features: 32s vs 46s previously
+  
+- 📊 **Complete Code Audit** - Quality score 9.0/10
+  - Fixed config editor save functionality (P0 - CRITICAL)
+  - Improved validation error messages (P1 - HIGH)
+  - 40+ try/finally blocks for resource management
+  - Test coverage: ~70% (target: 80%)
+  
+- 📚 **30+ New Documentation Files** - Comprehensive guides
+  - Configuration system & migration guides
+  - PostgreSQL optimization documentation
+  - Performance & stability audit reports
+  - Integration examples and quick start guides
+
+### Previous Updates (v2.3.4) - PostgreSQL 2-Part Table Reference Fix
+- 🐛 **CRITICAL: Fixed PostgreSQL spatial filtering** - Tables using `"table"."geom"` format now work correctly
+- ✨ **Smart display field selection** - Auto-selects best descriptive field (name, label, etc.)
+- 🛠️ **Automatic PostgreSQL ANALYZE** - Optimal query performance with proper statistics
 
 ### 🎉 What's New in v2.3.5 - Stability & Backend Improvements
 - 🐛 **CRITICAL: Fixed GeometryCollection errors in OGR backend** - Buffer operations now properly convert to MultiPolygon

@@ -244,6 +244,50 @@ class BackendFactory:
         memory_layer = None
         use_optimization = False
         
+        # PRIORITY 1: Check if backend is forced by user
+        forced_backends = task_params.get('forced_backends', {})
+        forced_backend = forced_backends.get(layer.id()) if forced_backends else None
+        
+        if forced_backend:
+            logger.info(f"🔒 Using forced backend '{forced_backend.upper()}' for layer '{layer.name()}'")
+            
+            # Create the forced backend
+            if forced_backend == 'postgresql' and POSTGRESQL_AVAILABLE:
+                backend = PostgreSQLGeometricFilter(task_params)
+                if backend.supports_layer(layer):
+                    if return_memory_info:
+                        return (backend, None, False)
+                    return backend
+                else:
+                    logger.warning(f"Forced PostgreSQL backend not available for {layer.name()}, falling back to OGR")
+                    backend = OGRGeometricFilter(task_params)
+                    if return_memory_info:
+                        return (backend, None, False)
+                    return backend
+            
+            elif forced_backend == 'spatialite':
+                backend = SpatialiteGeometricFilter(task_params)
+                if backend.supports_layer(layer):
+                    if return_memory_info:
+                        return (backend, None, False)
+                    return backend
+                else:
+                    logger.warning(f"Forced Spatialite backend not available for {layer.name()}, falling back to OGR")
+                    backend = OGRGeometricFilter(task_params)
+                    if return_memory_info:
+                        return (backend, None, False)
+                    return backend
+            
+            elif forced_backend == 'ogr':
+                backend = OGRGeometricFilter(task_params)
+                if return_memory_info:
+                    return (backend, None, False)
+                return backend
+            
+            else:
+                logger.warning(f"Unknown forced backend '{forced_backend}', using auto-selection")
+        
+        # PRIORITY 2: Auto-selection logic
         # Check for small PostgreSQL dataset optimization
         if should_use_memory_optimization(layer, layer_provider_type):
             memory_layer = BackendFactory.get_memory_layer(layer)

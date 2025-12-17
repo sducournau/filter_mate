@@ -17,207 +17,84 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
   - OGR (Shapefiles, GeoPackage, etc.)
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
-## Project Structure
-```
-filter_mate/
-├── filter_mate.py              # Plugin entry point (QGIS integration)
-├── filter_mate_app.py          # Main application orchestrator (~2048 lines)
-├── filter_mate_dockwidget.py   # UI dockwidget management (~5077 lines)
-├── filter_mate_dockwidget_base.py  # Base UI class (auto-generated)
-├── filter_mate_dockwidget_base.ui  # Qt Designer UI file
-├── config/
-│   ├── config.json             # Plugin configuration (dynamic, reactive)
-│   └── config.py               # Configuration loader
-├── modules/
-│   ├── appTasks.py             # Re-exports for backwards compatibility (~58 lines)
-│   ├── appUtils.py             # Database connections and utilities (~800 lines)
-│   ├── backends/               # Multi-backend architecture
-│   │   ├── base_backend.py     # Abstract base class
-│   │   ├── factory.py          # Backend factory (auto-selection)
-│   │   ├── postgresql_backend.py  # PostgreSQL/PostGIS backend
-│   │   ├── spatialite_backend.py  # Spatialite backend
-│   │   └── ogr_backend.py      # OGR universal fallback
-│   ├── tasks/                  # Task modules (refactored in v2.3.0)
-│   │   ├── __init__.py         # Re-exports & backwards compatibility
-│   │   ├── task_utils.py       # Common utilities (~328 lines)
-│   │   ├── geometry_cache.py   # SourceGeometryCache (~146 lines)
-│   │   ├── layer_management_task.py  # LayersManagementEngineTask (~1125 lines)
-│   │   ├── filter_task.py      # FilterEngineTask (~950 lines)
-│   │   └── README.md           # Task module documentation
-│   ├── config_helpers.py       # Configuration utilities (v2.2.2)
-│   ├── constants.py            # Application constants
-│   ├── customExceptions.py     # Custom exception classes
-│   ├── feedback_utils.py       # User feedback utilities
-│   ├── filter_history.py       # Filter history with undo/redo
-│   ├── logging_config.py       # Logging configuration
-│   ├── prepared_statements.py  # SQL prepared statements
-│   ├── signal_utils.py         # Qt signal management utilities
-│   ├── state_manager.py        # Application state management
-│   ├── type_utils.py           # Type conversion utilities (NEW in v2.3.0)
-│   ├── ui_config.py            # Dynamic UI dimensions
-│   ├── ui_elements.py          # UI element creation
-│   ├── ui_elements_helpers.py  # UI helper functions
-│   ├── ui_styles.py            # Theme management
-│   ├── ui_widget_utils.py      # Widget utilities
-│   ├── widgets.py              # Custom widgets
-│   └── qt_json_view/           # JSON tree view widgets
-├── resources/
-│   └── styles/                 # QSS theme files
-├── icons/                      # Plugin icons
-├── i18n/                       # Translations (7 languages)
-├── tests/                      # Unit tests (30+ tests)
-├── docs/                       # Documentation
-│   └── archive/                # Archived documentation
-├── tools/                      # Development utilities (NEW - December 2025)
-│   ├── build/                  # Build and release scripts
-│   ├── diagnostic/             # Diagnostic tools
-│   ├── i18n/                   # Translation utilities
-│   └── ui/                     # UI modification utilities
-├── website/                    # Docusaurus documentation site
-├── .github/
-│   ├── copilot-instructions.md # GitHub Copilot guidelines
-│   └── workflows/              # CI/CD pipeline
-├── .editorconfig               # Editor configuration
-└── .serena/                    # Serena MCP configuration
-```
-
-## Current Status\n- **Version**: 2.3.5 (December 17, 2025)
-- **Status**: Production - Global Undo/Redo with intelligent context detection
+## Current Status
+- **Version**: 2.3.5 (December 17, 2025)
+- **Status**: Production - Stable with configuration system, performance optimizations, and comprehensive auditing
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
-- **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
-- **Refactoring Progress**: All phases complete, code extracted to modules/tasks/
-- **Repository Cleanup**: December 16, 2025 - Second cleanup: backup files removed, scripts reorganized to tools/
-- **PostgreSQL Improvements**: December 16, 2025 - Primary key detection, ctid fallback, freeze fixes
+- **Recent Additions**: 
+  - Configuration migration system (v1.0 → v2.0)
+  - Auto-generated configuration UI with metadata
+  - Complete audit and critical TODOs implementation
+  - PostgreSQL loading optimizations (~30% faster)
 
-## File Sizes (as of December 16, 2025)
-- `filter_mate_app.py`: ~2200 lines (with undo/redo, PostgreSQL improvements)
-- `filter_mate_dockwidget.py`: ~5200 lines
-- `modules/appTasks.py`: 58 lines (re-exports only - code moved to modules/tasks/)
-- `modules/tasks/layer_management_task.py`: ~1200 lines (primary key detection improvements)
-- `modules/tasks/filter_task.py`: ~1000 lines
-- `modules/tasks/task_utils.py`: ~328 lines
-- `modules/type_utils.py`: ~126 lines
-- `modules/appUtils.py`: ~850 lines (sanitization functions added)
+## Recent Development (December 17, 2025)
 
-## Recent Development (December 12, 2025)
+### Configuration System Enhancements (✅ Complete)
+**Date**: December 17, 2025
 
-### Global Undo/Redo Functionality (✅ Complete)
-**Date**: December 11-12, 2025
+**New Components:**
+- **Configuration Metadata**: `config/config_schema.json` - Complete schema with validation, widget types, descriptions
+- **Migration System**: `modules/config_migration.py` - Automatic v1.0 → v2.0 migration with backup/rollback
+- **Config Editor Widget**: `modules/config_editor_widget.py` - Auto-generated UI from metadata
+- **Validation**: Complete value validation with user-friendly error messages
+- **Documentation**: Comprehensive guides (CONFIG_SYSTEM.md, CONFIG_MIGRATION.md, etc.)
 
-**New Features:**
-- **GlobalFilterState class**: Captures source + remote layers state atomically
-- **Intelligent context detection**: Source-only mode vs global mode
-- **Button state management**: Auto-enable/disable based on history availability
-- **Multi-layer state restoration**: Restore all layers simultaneously
+**Features:**
+- Auto-detect configuration version
+- Automatic backup before migration
+- User-friendly widgets (checkbox, combobox, spinbox, colorpicker)
+- Real-time validation
+- Markdown documentation export
 
-**Implementation Details:**
-- `GlobalFilterState` class in `modules/filter_history.py`
-- `handle_undo()`, `handle_redo()` methods in `filter_mate_app.py`
-- `update_undo_redo_buttons()` for automatic button state updates
-- `currentLayerChanged` signal for real-time updates
+**Testing:**
+- 20+ unit tests for migration
+- Demo scripts for all features
+- WCAG-compliant error messages
 
 **Commits:**
-- `06e8ca2` - feat: Implement undo/redo functionality with visual indicators
-- `39a07c1` - feat: Add intelligent undo/redo for filter operations
+- Multiple commits for config system development
+- All new files added and documented
 
-## Recent Development (December 10, 2025)
+### Performance & Stability Audit (✅ Complete)
+**Date**: December 17, 2025
 
-### Code Quality Improvements
-**Status**: Phase 1 & 2 & 3 & 4 & 5a Complete ✅
-- **Tests**: 26 unit tests created, CI/CD active
-- **Wildcard Imports**: 94% eliminated (31/33 cleaned, 2 legitimate re-exports kept)
-- **PEP 8 Compliance**: 95% (was 85%)
-- **Code Quality**: 4.5/5 stars (was 2/5)
-- **Bare Except**: 100% eliminated (13/13 fixed)
-- **Null Comparisons**: 100% fixed (27/27 `!= None` → `is not None`)
-- **Code Complexity**: -40% in filter_mate_app.py (779→468 lines, 12 helpers extracted)
+**Actions Performed:**
+- Complete codebase audit for performance, stability, TODOs, duplicates
+- Generated comprehensive report: `docs/AUDIT_PERFORMANCE_STABILITY_2025-12-17.md`
+- Implemented 2 critical TODOs:
+  1. Configuration saving in config editor (P0)
+  2. Validation error user feedback (P1)
 
-### Phase 3a: Task Module Extraction (✅ Complete)
-**Date**: December 10, 2025 - 23:00
-- **Extracted**: 474 lines of utilities from appTasks.py
-- **New Structure**: `modules/tasks/` directory
-  - `task_utils.py`: Common utilities (spatialite_connect, retry logic, CRS helpers)
-  - `geometry_cache.py`: SourceGeometryCache (5× speedup for multi-layer filtering)
-  - `__init__.py`: Backwards-compatible re-exports
-  - `README.md`: Complete documentation
-- **Benefits**: Better separation, testability, reusability
-- **Breaking Changes**: None (backwards compatibility maintained)
-- **Commit**: `699f637` - Phase 3a extraction
+**Findings:**
+- **Overall Score**: 8.5/10 → 9.0/10 (after fixes)
+- **Performance**: 9/10 (optimizations 3-45× already in place)
+- **Stability**: 9/10 (40+ try/finally blocks, improved error handling)
+- **Test Coverage**: ~70% (target: 80%)
+- **Critical TODOs**: 0/2 remaining (all implemented)
+- **Non-Critical TODOs**: 2/4 (tracked for backlog)
 
-### Phase 3b: Layer Management Extraction (✅ Complete)
-**Date**: December 10, 2025 - 23:30
-- **Extracted**: LayersManagementEngineTask (1125 lines) from appTasks.py
-- **New File**: `modules/tasks/layer_management_task.py`
-- **Contains**: Complete layer lifecycle management, index creation, metadata detection
-- **Benefits**: Isolation, testability, clearer responsibilities
-- **Breaking Changes**: None (backwards compatibility via __init__.py)
-- **Commit**: Pushed
+**Documentation:**
+- `docs/AUDIT_PERFORMANCE_STABILITY_2025-12-17.md` - Complete audit
+- `docs/AUDIT_IMPLEMENTATION_2025-12-17.md` - TODOs implementation details
+- Updated `.serena/memories/code_quality_improvements_2025.md`
 
-### Phase 5a: filter_mate_app.py Refactoring (✅ Complete)
-**Date**: December 10, 2025 - Evening
-- **Refactored**: 4 large methods (779 → 468 lines, -40% complexity)
-- **Helper Methods**: 12 new helpers extracted following Single Responsibility Principle
-- **Methods Refactored**:
-  - `init_filterMate_db()`: 227→103 lines (-55%)
-  - `get_task_parameters()`: 198→134 lines (-33%)
-  - `manage_task()`: 164→127 lines (-23%)
-  - `layer_management_engine_task_completed()`: 190→104 lines (-46%)
-- **Benefits**: Better maintainability, testability, reduced complexity
-- **Breaking Changes**: None (100% backward compatibility)
-- **Commits**: 77a628c, 9ab7daa, 947f79a, ce9e18c
+### PostgreSQL Loading Optimizations (December 16-17, 2025)
+**Date**: December 16-17, 2025
 
-### Latest Commits (Phase 5a - December 10, 2025)
-- `ce9e18c` (HEAD) - docs: Update status to Phase 5a complete in all doc files
-- `947f79a` - docs: Update IMPLEMENTATION_STATUS with Phase 5a completion
-- `9ab7daa` - refactor: Phase 5a - Complete filter_mate_app.py refactoring (4 methods)
-- `77a628c` - refactor: Phase 5a - Extract helpers from filter_mate_app.py
-- `3d23744` - fixing missing imports
-- `2c8b627` - docs: Update implementation status with Phase 3a completion
-- `699f637` - refactor: Phase 3a - Extract utilities and cache from appTasks.py
-- `4f672ae` - docs: update implementation status and quality audit
+**Optimizations Implemented:**
+1. **Fast Feature Count**: Uses `pg_stat_user_tables` (500× faster than COUNT(*))
+2. **UNLOGGED MVs**: 30-50% faster materialized view creation
+3. **Smart Caching**: Eliminates double feature counting
 
-## Recent Releases
+**Performance Impact:**
+- **Overall**: ~30% reduction in loading time
+- **Feature counting**: 2.5s → 5ms (500× faster)
+- **MV creation**: 30s → 18s (40% faster)
+- **1M features**: 46s → 32s total loading time
 
-### v2.2.5 - Automatic Geographic CRS Handling (December 8, 2025)
-- **Automatic EPSG:3857 Conversion**: Auto-detects geographic CRS (EPSG:4326) and switches to EPSG:3857 for metric operations
-- **Accuracy Improvement**: 50m buffer is always 50 meters regardless of latitude (eliminates 30-50% errors at high latitudes)
-- **Zero Configuration**: Works automatically for all geographic layers
-- **Performance**: Minimal overhead (~1ms per feature transformation)
-- **Bug Fix**: Fixed geographic coordinates zoom & flash flickering issues
-- **Implementation**:
-  - Zoom operations: Auto-convert to EPSG:3857 for metric buffer
-  - Filtering: Spatialite and OGR backends auto-convert for buffer calculations
-  - Updated backends: `filter_mate_dockwidget.py`, `modules/appTasks.py`
-
-### v2.2.4 - Bug Fix Release (December 8, 2025)
-- **CRITICAL FIX**: Spatialite expression field name quote handling
-  - Issue: `"HOMECOUNT" > 100` was incorrectly converted by removing quotes
-  - Impact: Filters failed on case-sensitive field names
-  - Solution: Preserved field name quotes in `qgis_expression_to_spatialite()`
-  - Added comprehensive test suite (`test_spatialite_expression_quotes.py`)
-- Enhanced Spatialite backend robustness
-- Comprehensive expression conversion testing
-
-### v2.2.3 - Color Harmonization & Accessibility (December 8, 2025)
-- **Enhanced Visual Distinction**: +300% frame contrast improvement
-- **WCAG 2.1 Compliance**: AA/AAA accessibility standards met
-  - Primary text contrast: 17.4:1 (AAA compliance)
-  - Secondary text contrast: 8.86:1 (AAA compliance)
-  - Disabled text: 4.6:1 (AA compliance)
-- **Theme Refinements**:
-  - `default` theme: Darker frames (#EFEFEF), clearer borders (#D0D0D0)
-  - `light` theme: Better widget contrast (#F8F8F8), visible borders (#CCCCCC)
-- **Accent Colors**: Deeper blue (#1565C0) for better contrast
-- **Testing**: New color contrast test suite, WCAG validation
-- **Documentation**: Complete color harmonization guide
-
-### v2.2.2 - Configuration Reactivity (December 8, 2025)
-- **Real-time Configuration**: Updates without restart
-- **Dynamic UI Profile Switching**: Compact/normal/auto modes
-- **ChoicesType Integration**: Dropdown selectors for config fields
-- **Live Updates**: Icons, themes, dimensions apply immediately
-- **Auto-save**: Configuration changes saved automatically
-- **Type Safety**: Validation for configuration values
+**Documentation:**
+- `docs/POSTGRESQL_LOADING_OPTIMIZATION.md` - Complete technical guide
+- `docs/POSTGRESQL_LOADING_OPTIMIZATION_SUMMARY.md` - Executive summary
 
 ## Key Features
 
@@ -225,17 +102,19 @@ filter_mate/
 - Multi-backend support with automatic selection (PostgreSQL/Spatialite/OGR)
 - Asynchronous task execution (QgsTask) for non-blocking operations
 - Layer property persistence with JSON configuration
-- Filter history with full undo/redo support (in-memory management)
+- Filter history with full undo/redo support (global state management)
 - Automatic CRS reprojection on the fly
 - Performance warnings and recommendations for large datasets
+- Configuration migration with automatic backup/rollback
 
 ### User Experience
 - Dynamic UI dimensions (adaptive to screen resolution)
 - Theme synchronization with QGIS interface
 - Real-time configuration updates (no restart required)
-- ChoicesType dropdowns for key settings
+- Auto-generated configuration UI from metadata
+- ChoicesType dropdowns for validated settings
 - WCAG 2.1 AA/AAA accessibility compliance
-- Comprehensive error messages and user feedback
+- Comprehensive error messages with user feedback
 
 ### Technical Features
 - Robust geometry repair for buffer operations
@@ -245,23 +124,31 @@ filter_mate/
 - Source geometry caching for multi-layer operations (5× speedup)
 - Field name quote preservation for case-sensitive databases
 - Automatic geographic CRS to metric conversion
+- PostgreSQL statistics-based fast counting
+- UNLOGGED materialized views for temporary data
 
-## Performance Characteristics
+## Configuration System (v2.3.5+)
 
-### PostgreSQL Backend
-- **Best for:** > 50,000 features
-- **Performance:** Sub-second queries on millions of features
-- **Implementation:** Materialized views with GIST indexes
+### Features
+- **Metadata-driven**: All config parameters documented in `config_schema.json`
+- **Auto-generated UI**: Widgets created automatically based on metadata
+- **Validation**: Complete value validation with clear error messages
+- **Migration**: Automatic v1.0 → v2.0 migration with backup
+- **User-friendly**: Labels, descriptions, tooltips for all parameters
 
-### Spatialite Backend
-- **Best for:** 10,000 - 50,000 features
-- **Performance:** 1-10s for 100k features
-- **Implementation:** Temporary tables with R-tree indexes
+### Components
+- `config/config_schema.json`: Metadata and validation rules
+- `modules/config_metadata.py`: Metadata management
+- `modules/config_helpers.py`: Helper functions with validation
+- `modules/config_editor_widget.py`: Auto-generated UI
+- `modules/config_migration.py`: Version migration system
 
-### OGR Backend
-- **Best for:** < 10,000 features
-- **Performance:** Universal compatibility
-- **Implementation:** QGIS processing framework
+### Widget Types Supported
+- Checkbox (boolean values)
+- Combobox (predefined choices)
+- Spinbox (integer ranges)
+- Textbox (free text)
+- Colorpicker (hex colors)
 
 ## Architecture Patterns
 
@@ -280,101 +167,54 @@ filter_mate/
 - Signal utilities for safe blocking/unblocking
 - Automatic resource cleanup
 
-## Development Workflow
+### Metadata Pattern
+- Configuration metadata drives UI generation
+- Single source of truth for all config parameters
+- Automatic validation and documentation
 
-### Testing
-- Unit tests: `pytest tests/ -v`
-- Coverage: `pytest tests/ --cov=modules`
-- Performance benchmarks: `python tests/benchmark_simple.py`
-- 26+ comprehensive tests including:
-  - Backend tests
-  - Expression conversion tests
-  - Color contrast/WCAG compliance tests
-  - Configuration reactivity tests
-  - Performance optimization tests
+## Performance Characteristics
 
-### CI/CD
-- **GitHub Actions**: `.github/workflows/test.yml`
-- **Automated checks**: Tests, flake8, black, wildcard detection
-- **Coverage**: Codecov integration
-- **Triggers**: Push, pull requests
+### PostgreSQL Backend
+- **Best for:** > 50,000 features
+- **Performance:** Sub-second queries on millions of features (30% faster with v2.3.5)
+- **Implementation:** UNLOGGED materialized views with GIST indexes, fast statistics-based counting
 
-### Build & Release
-- Compile UI: `./compile_ui.sh` (Linux/macOS) or `compile_ui.bat` (Windows)
-- Create release: `python create_release_zip.py`
-- Deploy: See `website/DEPLOYMENT.md`
+### Spatialite Backend
+- **Best for:** 10,000 - 50,000 features
+- **Performance:** 1-10s for 100k features
+- **Implementation:** Temporary tables with R-tree indexes
 
-### Documentation
-- Developer guide: `docs/DEVELOPER_ONBOARDING.md`
-- Architecture: `docs/architecture.md`
-- API docs: `docs/BACKEND_API.md`
-- Quality audit: `docs/CODEBASE_QUALITY_AUDIT_2025-12-10.md`
-- Implementation status: `docs/IMPLEMENTATION_STATUS_2025-12-10.md`
-- Color harmonization: `docs/COLOR_HARMONIZATION.md`
-- Website: https://sducournau.github.io/filter_mate
-
-## Configuration System (v2.2.2+)
-
-### Dynamic Configuration
-- Real-time updates via JSON tree view
-- ChoicesType for validated dropdowns
-- Auto-save on changes
-- Backward compatible
-- No restart required for most changes
-
-### Key Configuration Fields
-- `UI_PROFILE`: Display mode (auto/compact/normal)
-- `ACTIVE_THEME`: Theme selection (auto/default/dark/light)
-- `THEME_SOURCE`: Theme source (config/qgis/system)
-- `STYLES_TO_EXPORT`: Export format (QML/SLD/None)
-- `DATATYPE_TO_EXPORT`: Data format (GPKG/SHP/GEOJSON/KML/DXF/CSV)
-
-### Configuration Helpers
-**File:** `modules/config_helpers.py`
-**Functions:**
-- `get_config_value(key, default)`: Read with ChoicesType extraction
-- `set_config_value(key, value)`: Write with validation
-- `get_config_choices(key)`: Get available options
-- `validate_config_value(key, value)`: Validate before setting
-- Convenience functions: `get_ui_profile()`, `get_active_theme()`, etc.
-
-## Known Limitations
-
-### Current Constraints
-- PostgreSQL requires psycopg2 (optional dependency)
-- Very large exports (>1M features) may require disk space
-- Some QGIS expressions may not translate to all backends
-- Field names with special characters may need quoting
-
-### Fixed Issues (v2.2.4-2.2.5)
-- ✅ Spatialite field name quote preservation
-- ✅ Case-sensitive field name handling
-- ✅ Expression conversion robustness
-- ✅ Geographic coordinates zoom & flash flickering
-- ✅ Automatic metric CRS conversion
+### OGR Backend
+- **Best for:** < 10,000 features
+- **Performance:** Universal compatibility
+- **Implementation:** QGIS processing framework
 
 ## Documentation Structure
 
 ### Core Documentation
 - `README.md`: User-facing introduction
-- `CHANGELOG.md`: Complete version history (1796+ lines)
+- `CHANGELOG.md`: Complete version history
 - `docs/INDEX.md`: Documentation index
+
+### Configuration Documentation (NEW)
+- `docs/CONFIG_SYSTEM.md`: Complete configuration system guide
+- `docs/CONFIG_MIGRATION.md`: Migration guide with examples
+- `docs/CONFIG_OVERVIEW.md`: System overview
+- `docs/CONFIG_INTEGRATION_EXAMPLES.py`: Integration code examples
+- `docs/QUICK_INTEGRATION.md`: 5-minute integration guide
+- `config/README_CONFIG.md`: Quick start guide
+
+### Performance Documentation (NEW)
+- `docs/POSTGRESQL_LOADING_OPTIMIZATION.md`: Detailed optimization guide
+- `docs/POSTGRESQL_LOADING_OPTIMIZATION_SUMMARY.md`: Executive summary
+- `docs/AUDIT_PERFORMANCE_STABILITY_2025-12-17.md`: Complete audit report
+- `docs/AUDIT_IMPLEMENTATION_2025-12-17.md`: TODOs implementation
 
 ### Technical Documentation
 - `docs/architecture.md`: System architecture
 - `docs/BACKEND_API.md`: Backend API reference
-- `docs/IMPLEMENTATION_STATUS_2025-12-10.md`: Feature completion status (696 lines)
-- `docs/CODEBASE_QUALITY_AUDIT_2025-12-10.md`: Quality audit (1689 lines)
-
-### Configuration Documentation
-- `docs/CONFIG_JSON_REACTIVITY.md`: Reactivity system
-- `docs/CONFIG_JSON_IMPROVEMENTS.md`: Configuration improvements
-
-### UI Documentation
-- `docs/UI_SYSTEM_OVERVIEW.md`: UI architecture
-- `docs/UI_DYNAMIC_CONFIG.md`: Dynamic dimensions
-- `docs/COLOR_HARMONIZATION.md`: Color system & WCAG compliance
-- `docs/THEMES.md`: Theme details
+- `docs/IMPLEMENTATION_STATUS_2025-12-10.md`: Feature completion status
+- `docs/CODEBASE_QUALITY_AUDIT_2025-12-10.md`: Quality audit
 
 ### Developer Documentation
 - `docs/DEVELOPER_ONBOARDING.md`: Getting started guide
@@ -382,24 +222,48 @@ filter_mate/
 - `tests/README.md`: Testing guide
 - `modules/tasks/README.md`: Task module documentation
 
-## Accessibility (v2.2.3+)
+## Testing
 
-### WCAG 2.1 Compliance
-- **Primary Text**: 17.4:1 contrast ratio (AAA)
-- **Secondary Text**: 8.86:1 contrast ratio (AAA)
-- **Disabled Text**: 4.6:1 contrast ratio (AA)
-- **Frame Separation**: +300% contrast improvement
-- **Border Visibility**: +40% darker borders
-- **Reduced eye strain** for long work sessions
+### Test Categories
+- Configuration system tests (migration, metadata, helpers)
+- Backend tests (PostgreSQL, Spatialite, OGR)
+- Expression conversion tests
+- Color contrast/WCAG compliance tests
+- Performance optimization tests
+- Layer handling tests
+- **Total**: 30+ comprehensive tests
 
-### Testing
-- Automated WCAG validation: `tests/test_color_contrast.py`
-- Visual preview generation: `tests/generate_color_preview.py`
-- Interactive HTML comparison: `docs/color_harmonization_preview.html`
+### Running Tests
+```bash
+# All tests
+pytest tests/ -v
+
+# Configuration tests
+pytest tests/test_config*.py -v
+
+# Coverage
+pytest --cov=modules --cov-report=html
+```
+
+## Code Quality Metrics (December 17, 2025)
+
+| Metric | Score | Status |
+|--------|-------|--------|
+| Overall Quality | 9.0/10 | ✅ Excellent |
+| PEP 8 Compliance | 95% | ✅ |
+| Wildcard Imports | 6% (2/33) | ✅ |
+| Bare except clauses | 0% | ✅ |
+| Test Coverage | ~70% | 🎯 Target 80% |
+| Critical TODOs | 0/2 | ✅ |
+| Performance | 9/10 | ✅ |
+| Stability | 9/10 | ✅ |
+| Error Handling | 9/10 | ✅ |
+| Documentation | 90% | ✅ |
 
 ## Repository Information
 - **Repository**: https://github.com/sducournau/filter_mate
 - **Issues**: https://github.com/sducournau/filter_mate/issues
+- **Website**: https://sducournau.github.io/filter_mate
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
@@ -419,20 +283,4 @@ FilterMate is configured for automatic Serena MCP server activation:
 - Leverage symbolic tools for token-efficient code exploration
 - Read `.github/copilot-instructions.md` for coding guidelines
 - Check `POSTGRESQL_AVAILABLE` before PostgreSQL operations
-- Serena MCP server auto-starts when Chat opens (Windows: configured via MCP with SERENA_PROJECT)
-
-## Next Steps (Post-Refactoring)
-
-### Completed
-- ✅ Phase 1: Test infrastructure (26+ tests, CI/CD)
-- ✅ Phase 2: Code quality (wildcard imports, PEP 8, bare except)
-- ✅ Phase 3: File decomposition (appTasks.py → modules/tasks/)
-- ✅ Phase 4: filter_mate_dockwidget.py refactoring (35 methods extracted)
-- ✅ Phase 5a-d: filter_mate_app.py refactoring (helpers, task params, completion handlers)
-- ✅ Undo/Redo: Global undo/redo with intelligent context detection
-
-### Planned
-- Documentation improvements and user guides
-- Additional unit tests for undo/redo functionality
-- Performance monitoring dashboard
-- End-to-end integration tests
+- Use Serena's symbolic search for efficient code navigation

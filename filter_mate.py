@@ -200,6 +200,9 @@ class FilterMate:
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
+        
+        # Auto-migrate configuration if needed
+        self._auto_migrate_config()
 
         icon_path = ':/plugins/filter_mate/icon.png'
         
@@ -262,6 +265,29 @@ class FilterMate:
 
 
             return path
+    
+    def _auto_migrate_config(self):
+        """Auto-migrate configuration to latest version if needed."""
+        try:
+            from modules.config_migration import ConfigMigration
+            
+            migrator = ConfigMigration()
+            performed, warnings = migrator.auto_migrate_if_needed()
+            
+            if performed:
+                logger.info("Configuration migrated to latest version")
+                self.iface.messageBar().pushInfo(
+                    "FilterMate",
+                    self.tr("Configuration mise à jour vers la dernière version")
+                )
+            
+            if warnings:
+                for warning in warnings:
+                    logger.warning(f"Config migration warning: {warning}")
+        
+        except Exception as e:
+            logger.error(f"Error during config migration: {e}")
+            # Don't block plugin initialization if migration fails
     
     def _connect_auto_activation_signals(self):
         """Connect signals to handle project changes and reload layers.
@@ -342,6 +368,15 @@ class FilterMate:
         Args:
             layers: List of QgsMapLayer that were just added
         """
+        # CRITICAL: Check if auto-activation is enabled
+        from .config.config import ENV_VARS
+        config_data = ENV_VARS.get('CONFIG_DATA', {})
+        auto_activate_enabled = config_data.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        
+        if not auto_activate_enabled:
+            logger.debug("FilterMate: Auto-activation disabled, skipping layersAdded auto-activation")
+            return
+        
         from qgis.core import QgsVectorLayer
         from qgis.PyQt.QtCore import QTimer
         
@@ -385,6 +420,15 @@ class FilterMate:
         Args:
             layers: Optional list of layers that were just added (from layersAdded signal)
         """
+        # CRITICAL: Check if auto-activation is enabled
+        from .config.config import ENV_VARS
+        config_data = ENV_VARS.get('CONFIG_DATA', {})
+        auto_activate_enabled = config_data.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        
+        if not auto_activate_enabled:
+            logger.debug("FilterMate: Auto-activation disabled, skipping auto-activation")
+            return
+        
         from qgis.core import QgsProject, QgsVectorLayer
         from qgis.PyQt.QtCore import QTimer
         from qgis.utils import iface as qgis_iface

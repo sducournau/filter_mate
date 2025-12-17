@@ -707,12 +707,23 @@ class FilterMateApp:
                 
                 # CRITICAL: Force UI refresh after layers are loaded
                 # This ensures all widgets and signals are properly updated
+                # Use longer delay (2000ms) and verify PROJECT_LAYERS is populated
                 def refresh_after_load():
-                    if self.dockwidget and self.dockwidget.widgets_initialized:
-                        logger.info(f"Forcing UI refresh after {task_name} layer load")
-                        self._refresh_ui_after_project_load()
+                    if not self.dockwidget or not self.dockwidget.widgets_initialized:
+                        return
+                    
+                    # CRITICAL: Verify PROJECT_LAYERS has been populated before refreshing
+                    if len(self.PROJECT_LAYERS) == 0:
+                        logger.debug(f"PROJECT_LAYERS still empty, deferring UI refresh by 1000ms")
+                        # Layers not yet processed - try again in 1 second
+                        QTimer.singleShot(1000, refresh_after_load)
+                        return
+                    
+                    logger.info(f"Forcing UI refresh after {task_name} layer load with {len(self.PROJECT_LAYERS)} layers")
+                    self._refresh_ui_after_project_load()
                 
-                QTimer.singleShot(1000, refresh_after_load)
+                # Start with 2000ms delay to give layer tasks time to complete
+                QTimer.singleShot(2000, refresh_after_load)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -1408,6 +1419,11 @@ class FilterMateApp:
         }
         if include_history:
             params["history_manager"] = self.history_manager
+        
+        # Add forced backends information from dockwidget
+        if self.dockwidget and hasattr(self.dockwidget, 'forced_backends'):
+            params["forced_backends"] = self.dockwidget.forced_backends
+        
         return params
     
     def _build_layer_management_params(self, layers, reset_flag):
@@ -1988,6 +2004,15 @@ class FilterMateApp:
         
         # Show success message
         self._show_task_completion_message(task_name, source_layer, provider_type, layer_count)
+        
+        # Update backend indicator with actual backend used
+        if hasattr(self.dockwidget, '_update_backend_indicator'):
+            actual_backends = task_parameters.get('actual_backends', {})
+            actual_backend = actual_backends.get(source_layer.id())
+            if actual_backend:
+                # Get PostgreSQL connection status
+                postgresql_conn = task_parameters.get('infos', {}).get('postgresql_connection_available')
+                self.dockwidget._update_backend_indicator(provider_type, postgresql_conn, actual_backend)
         
         # Zoom to filtered extent and update dockwidget
         extent = source_layer.extent()
@@ -2845,8 +2870,13 @@ class FilterMateApp:
         if self.dockwidget is None or not self.dockwidget.widgets_initialized:
             logger.debug("Cannot refresh UI: dockwidget not initialized")
             return
+        
+        # CRITICAL: Verify PROJECT_LAYERS has layers before attempting refresh
+        if len(self.PROJECT_LAYERS) == 0:
+            logger.warning("Cannot refresh UI: PROJECT_LAYERS is still empty - layer tasks not yet completed")
+            return
             
-        logger.info("Forcing complete UI refresh after project load")
+        logger.info(f"Forcing complete UI refresh after project load with {len(self.PROJECT_LAYERS)} layers")
         
         # CRITICAL: Reconnect dockwidget signals that depend on PROJECT
         # The PROJECT reference has changed and signals need to be refreshed

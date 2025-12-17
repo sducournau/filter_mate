@@ -10,9 +10,21 @@ ChoicesType format:
     "value": "current_value",
     "choices": ["option1", "option2", "option3"]
 }
+
+Enhanced with metadata support - use config_metadata module for:
+- Widget type detection (checkbox, combobox, etc.)
+- User-friendly labels and descriptions
+- Validation rules
 """
 
-from typing import Any, Optional, List, Union
+from typing import Any, Optional, List, Union, Dict, Tuple
+
+# Import metadata utilities
+try:
+    from .config_metadata import get_config_metadata
+    METADATA_AVAILABLE = True
+except ImportError:
+    METADATA_AVAILABLE = False
 
 
 def get_config_value(config_data: dict, *path_keys, default=None) -> Any:
@@ -679,6 +691,184 @@ def get_link_legend_layers_flag(config_data: dict) -> bool:
         ("CURRENT_PROJECT", "OPTIONS", "LAYERS", "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"),
         default=True
     )
+
+
+# ============================================================================
+# Metadata-Enhanced Functions
+# ============================================================================
+
+def get_config_metadata_for_path(config_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Get metadata for a configuration path.
+    
+    Args:
+        config_path: Dot-separated path (e.g., 'app.ui.profile')
+    
+    Returns:
+        Metadata dictionary or None
+    
+    Example:
+        >>> meta = get_config_metadata_for_path('app.ui.profile')
+        >>> print(meta['description'])
+        'UI layout profile - auto detects screen size...'
+    """
+    if not METADATA_AVAILABLE:
+        return None
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_metadata(config_path)
+    except Exception:
+        return None
+
+
+def get_widget_type_for_config(config_path: str) -> str:
+    """
+    Get recommended widget type for a configuration parameter.
+    
+    Args:
+        config_path: Dot-separated path (e.g., 'app.auto_activate')
+    
+    Returns:
+        Widget type: 'checkbox', 'combobox', 'textbox', 'spinbox', 'colorpicker'
+    
+    Example:
+        >>> widget = get_widget_type_for_config('app.auto_activate')
+        >>> print(widget)  # 'checkbox'
+    """
+    if not METADATA_AVAILABLE:
+        return 'textbox'
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_widget_type(config_path)
+    except Exception:
+        return 'textbox'
+
+
+def get_config_description(config_path: str) -> str:
+    """
+    Get user-friendly description for a configuration parameter.
+    
+    Args:
+        config_path: Dot-separated path
+    
+    Returns:
+        Description string
+    """
+    if not METADATA_AVAILABLE:
+        return ""
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_description(config_path)
+    except Exception:
+        return ""
+
+
+def get_config_label(config_path: str) -> str:
+    """
+    Get user-friendly label for UI display.
+    
+    Args:
+        config_path: Dot-separated path
+    
+    Returns:
+        User-friendly label
+    """
+    if not METADATA_AVAILABLE:
+        return config_path.split('.')[-1].replace('_', ' ').title()
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_user_friendly_label(config_path)
+    except Exception:
+        return config_path.split('.')[-1].replace('_', ' ').title()
+
+
+def get_config_allowed_values(config_path: str) -> Optional[List[Any]]:
+    """
+    Get list of allowed values for a configuration parameter.
+    
+    Args:
+        config_path: Dot-separated path
+    
+    Returns:
+        List of allowed values or None
+    """
+    if not METADATA_AVAILABLE:
+        return None
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_allowed_values(config_path)
+    except Exception:
+        return None
+
+
+def validate_config_value_with_metadata(config_path: str, value: Any) -> Tuple[bool, str]:
+    """
+    Validate a configuration value using metadata rules.
+    
+    Args:
+        config_path: Dot-separated path
+        value: Value to validate
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    
+    Example:
+        >>> valid, error = validate_config_value_with_metadata('app.ui.profile', 'invalid')
+        >>> print(valid, error)
+        False, 'Value must be one of: auto, compact, normal'
+    """
+    if not METADATA_AVAILABLE:
+        return True, ""
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.validate_value(config_path, value)
+    except Exception as e:
+        return False, str(e)
+
+
+def get_all_configurable_paths() -> List[str]:
+    """
+    Get list of all configuration paths that have metadata.
+    
+    Returns:
+        List of dot-separated configuration paths
+    """
+    if not METADATA_AVAILABLE:
+        return []
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_all_config_paths()
+    except Exception:
+        return []
+
+
+def get_config_groups() -> Dict[str, List[str]]:
+    """
+    Get configuration parameters grouped by category.
+    
+    Returns:
+        Dictionary mapping category names to lists of config paths
+    
+    Example:
+        >>> groups = get_config_groups()
+        >>> print(groups['UI'])
+        ['app.ui.profile', 'app.ui.theme.active', ...]
+    """
+    if not METADATA_AVAILABLE:
+        return {}
+    
+    try:
+        metadata = get_config_metadata()
+        return metadata.get_config_groups()
+    except Exception:
+        return {}
 
 
 def get_feature_count_limit(config_data: dict) -> int:
