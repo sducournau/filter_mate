@@ -1,9 +1,9 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-**Version 3.5.7** | December 18, 2025
+**Version 2.3.6** | December 18, 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v3.5.7 - Project & Layer Loading Stability
+### 🎉 What's New in v2.3.6 - Project & Layer Loading Stability
 
 - 🛡️ **Centralized Timing Constants** - All timing values in `STABILITY_CONSTANTS` dict
   - `MAX_ADD_LAYERS_QUEUE`: 50 (prevents memory overflow)
@@ -23,33 +23,15 @@
   - `layersAdded` signal debounced to prevent flood
   - Queue size limit (50) with automatic FIFO trimming
 
-### Previous Updates (v3.5.6) - Code Quality & Harmonization
+### Previous Updates (v2.3.5) - Code Quality & Configuration v2.0
 
 - 🛠️ **Centralized Feedback System** - Unified message bar notifications
   - New `show_info/warning/error/success` functions with graceful fallback
 - ⚡ **PostgreSQL Init Optimization** - 5-50× faster layer loading
+- ⚙️ **Configuration System v2.0** - Integrated metadata structure with auto-migration
+- 🔒 **Forced Backend Respect** - User choice strictly enforced
 - 🐛 **Bug Fixes** - Fixed syntax errors in dockwidget module
 - 🧹 **Code Quality** - Score improved to 8.9/10
-
-### Previous Updates (v2.3.5) - Configuration System v2.0 & Performance
-
-- ⚙️ **Configuration System v2.0** - Integrated metadata structure
-  - Metadata embedded directly in parameters (no fragmented `_*_META` sections)
-  - Auto-detection and reset of obsolete/corrupted configurations
-  - Automatic backup before any migration
-  - `ConfigMetadataHandler` for intelligent extraction and tooltips
-  
-- 🔒 **Forced Backend Respect** - User choice strictly enforced
-  - System always uses the backend chosen by user
-  - No automatic fallback to OGR when a backend is forced
-  
-- 🔄 **Automatic Configuration Migration** - Seamless v1.0 → v2.0 migration
-  - Automatic version detection and migration
-  - Backup creation before migration with rollback capability
-  
-- ⚡ **~30% Faster PostgreSQL Loading** - Major optimizations for large datasets
-  - Fast feature count using database statistics (500× faster)
-  - UNLOGGED materialized views (30-50% faster creation)
 
 ### Previous Updates (v2.3.4) - PostgreSQL 2-Part Table Reference Fix
 - 🐛 **CRITICAL: Fixed PostgreSQL spatial filtering** - Tables using `"table"."geom"` format now work correctly

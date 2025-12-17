@@ -2,7 +2,7 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [3.5.7] - 2025-12-18 - Project & Layer Loading Stability
+## [2.3.6] - 2025-12-18 - Project & Layer Loading Stability
 
 ### 🛡️ Stability Improvements
 - **Centralized Timing Constants** - All timing values now in `STABILITY_CONSTANTS` dict
@@ -48,7 +48,7 @@ STABILITY_CONSTANTS = {
 
 ---
 
-## [3.5.6] - 2025-12-17 - Code Quality & Harmonization
+## [2.3.5] - 2025-12-17 - Code Quality & Configuration v2.0
 
 ### 🛠️ Centralized Feedback System
 - **Unified Message Bar Notifications** - Consistent user feedback across all modules
@@ -64,22 +64,6 @@ STABILITY_CONSTANTS = {
   - Skip CLUSTER at init (very slow, deferred to filter time if beneficial)
   - Conditional ANALYZE only if table has no statistics (check pg_statistic first)
 
-### 🐛 Bug Fixes
-- **Fixed Syntax Errors** - Corrected unmatched parentheses in dockwidget module
-  - Line 1496: Extra `)` after `show_info()` call
-  - Line 6630: Extra `)` after `logger.info()` call
-- **Fixed Bare Except Clauses** - Specific exception handling
-  - `config_migration.py`: `except:` → `except (json.JSONDecodeError, OSError, IOError)`
-  - `ogr_backend.py`: `except:` → `except (RuntimeError, AttributeError)`
-
-### 🧹 Code Quality
-- **Score Improvement**: 8.5 → 8.9/10
-- **Obsolete Code Removal** - Removed 22 lines of dead commented code in filter_task.py
-- **Documentation** - Added comprehensive docstring to `truncate()` function
-- **Non-Vector Layer Handling** - Skip raster/mesh layers in backend forcing operations
-
-## [2.3.5] - 2025-12-17 - Configuration System v2.0 & Complete Audit
-
 ### ⚙️ Configuration System v2.0
 - **Integrated Metadata Structure** - Metadata embedded directly in parameters
   - No more fragmented `_*_META` sections
@@ -91,33 +75,22 @@ STABILITY_CONSTANTS = {
 - **Forced Backend Respect** - User choice strictly enforced
   - System always uses the backend chosen by user
   - No automatic fallback to OGR when a backend is forced
-  - Clear warnings if forced backend is not optimal
-  - Graceful handling of unavailable backends (e.g., PostgreSQL without psycopg2)
-  - **FIX**: `forced_backends` now correctly propagated at root level of `task_parameters`
-  - **FIX**: Source layer and distant layers now check forced backend with PRIORITY 1
-  - **FIX**: `_organize_layers_to_filter()` respects forced backend before auto-detection
-  - **FIX**: `_initialize_source_filtering_parameters()` applies forced backend to source layer
-
-### ⚙️ Configuration System Enhancements
-- **Configuration Metadata System** - Complete metadata-driven configuration
-  - `config/config_schema.json` - Schema with validation, widget types, descriptions  
-  - `modules/config_metadata.py` - Metadata management class
-  - Auto-generated UI widgets based on metadata (checkbox, combobox, spinbox, colorpicker, textbox)
-  - Complete validation with clear error messages
-  - User-friendly labels and descriptions for all parameters
 
 - **Automatic Configuration Migration** - v1.0 → v2.0 migration system
-  - `modules/config_migration.py` - Complete migration engine
-  - Automatic version detection (v1.0, v2.0, unknown)
-  - Backup creation before migration
-  - Rollback capability
-  - Validation after migration
-  - Command-line interface for manual migration
+  - Automatic version detection and migration
+  - Backup creation before migration with rollback capability
 
-- **Configuration Editor Widget** - Auto-generated UI
-  - `modules/config_editor_widget.py` - Auto-generated configuration forms
-  - Real-time validation and error feedback
-  - Save functionality with user feedback (UTF-8, pretty JSON)
+### 🐛 Bug Fixes
+- **Fixed Syntax Errors** - Corrected unmatched parentheses in dockwidget module
+- **Fixed Bare Except Clauses** - Specific exception handling
+
+### 🧹 Code Quality
+- **Score Improvement**: 8.5 → 8.9/10
+- **Obsolete Code Removal** - Removed 22 lines of dead commented code
+
+---
+
+## [2.3.4] - 2025-12-16 - PostgreSQL 2-Part Table Reference Fix
   - Reset to defaults option
   - Organized by categories with tooltips
 

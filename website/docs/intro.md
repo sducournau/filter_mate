@@ -7,7 +7,7 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v3.5.7 - Project & Layer Loading Stability
+## 🎉 What's New in v2.3.6 - Project & Layer Loading Stability
 
 ### Centralized Timing Constants
 - 🛡️ **STABILITY_CONSTANTS Dict** - All timing values centralized in one place
@@ -26,16 +26,13 @@ slug: /
 
 ## Previous Updates
 
-### v3.5.6 - Code Quality & Harmonization (December 17, 2025)
+### v2.3.5 - Code Quality & Configuration v2.0 (December 17, 2025)
 - 🛠️ **Centralized Feedback System** - Unified message bar notifications (`show_info/warning/error/success`)
 - ⚡ **PostgreSQL Init Optimization** - 5-50× faster layer loading with connection caching
-- 🐛 **Bug Fixes** - Fixed syntax errors and bare except clauses
-- 🧹 **Code Quality** - Score improved to 8.9/10
-
-### v2.3.5 - Configuration System v2.0 (December 17, 2025)
 - ⚙️ **Configuration v2.0** - Integrated metadata structure with auto-migration
 - 🔒 **Forced Backend Respect** - User choice strictly enforced (no fallback to OGR)
-- ⚡ **~30% Faster PostgreSQL Loading** - Fast counting via `pg_stat_user_tables` + UNLOGGED MVs
+- 🐛 **Bug Fixes** - Fixed syntax errors and bare except clauses
+- 🧹 **Code Quality** - Score improved to 8.9/10
 
 ### v2.3.4 - PostgreSQL 2-Part Table Reference Fix (December 16, 2025)
 - 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format
