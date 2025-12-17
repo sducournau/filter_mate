@@ -255,7 +255,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
             return False
     
     def _apply_buffer(self, source_layer, buffer_value):
-        """Apply buffer to source layer if specified"""
+        """Apply buffer to source layer if specified.
+        
+        CRITICAL FIX: Handles GeometryCollection results from native:buffer.
+        When buffering multiple non-overlapping geometries, QGIS Processing can
+        produce GeometryCollection which is incompatible with typed layers (MultiPolygon).
+        This method converts GeometryCollection to MultiPolygon for compatibility.
+        """
         if buffer_value and buffer_value > 0:
             self.log_debug(f"Applying buffer of {buffer_value} to source layer")
             try:
@@ -277,8 +283,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     'DISSOLVE': False,
                     'OUTPUT': 'memory:'
                 })
+                
+                buffered_layer = buffer_result['OUTPUT']
+                
+                # CRITICAL FIX: Check for and convert GeometryCollection to MultiPolygon
+                # native:buffer can produce GeometryCollection when features don't overlap
+                buffered_layer = self._convert_geometry_collection_to_multipolygon(buffered_layer)
+                
                 self.log_debug("Buffer applied successfully")
-                return buffer_result['OUTPUT']
+                return buffered_layer
             except Exception as buffer_error:
                 self.log_error(f"Buffer operation failed: {str(buffer_error)}")
                 self.log_error(f"  - Buffer value: {buffer_value} (type: {type(buffer_value).__name__})")
@@ -299,6 +312,141 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 return None
         return source_layer
     
+    def _convert_geometry_collection_to_multipolygon(self, layer):
+        """
+        Convert GeometryCollection geometries in a layer to MultiPolygon.
+        
+        CRITICAL FIX for GeoPackage/OGR layers:
+        When native:buffer processes features that don't overlap, the result
+        can contain GeometryCollection type instead of MultiPolygon.
+        This causes errors when the buffer layer is used for spatial operations
+        on typed layers (e.g., GeoPackage MultiPolygon layers).
+        
+        Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type 
+        GeometryCollection à une couche de type MultiPolygon"
+        
+        Args:
+            layer: QgsVectorLayer from buffer operation
+            
+        Returns:
+            QgsVectorLayer: Layer with geometries converted to MultiPolygon
+        """
+        from qgis.core import (
+            QgsWkbTypes, QgsFeature, QgsGeometry, 
+            QgsMemoryProviderUtils, QgsVectorLayer
+        )
+        
+        try:
+            # Check if any features have GeometryCollection type
+            has_geometry_collection = False
+            for feature in layer.getFeatures():
+                geom = feature.geometry()
+                if geom and not geom.isEmpty():
+                    geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                    if 'GeometryCollection' in geom_type:
+                        has_geometry_collection = True
+                        break
+            
+            if not has_geometry_collection:
+                self.log_debug("No GeometryCollection found in buffer result - no conversion needed")
+                return layer
+            
+            self.log_info("🔄 GeometryCollection detected in buffer result - converting to MultiPolygon")
+            
+            # Create new memory layer with MultiPolygon type
+            crs = layer.crs()
+            fields = layer.fields()
+            
+            # Create MultiPolygon memory layer
+            converted_layer = QgsMemoryProviderUtils.createMemoryLayer(
+                f"{layer.name()}_converted",
+                fields,
+                QgsWkbTypes.MultiPolygon,
+                crs
+            )
+            
+            if not converted_layer or not converted_layer.isValid():
+                self.log_error("Failed to create converted memory layer")
+                return layer
+            
+            converted_dp = converted_layer.dataProvider()
+            converted_features = []
+            conversion_count = 0
+            
+            for feature in layer.getFeatures():
+                geom = feature.geometry()
+                if not geom or geom.isEmpty():
+                    continue
+                
+                geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                new_geom = geom
+                
+                if 'GeometryCollection' in geom_type:
+                    # Extract polygon parts from GeometryCollection
+                    polygon_parts = []
+                    
+                    def extract_polygons(g):
+                        """Recursively extract all polygon geometries."""
+                        if g is None or g.isEmpty():
+                            return
+                        gt = QgsWkbTypes.displayString(g.wkbType())
+                        if 'Polygon' in gt and 'Multi' not in gt:
+                            polygon_parts.append(QgsGeometry(g))
+                        elif 'MultiPolygon' in gt or 'GeometryCollection' in gt:
+                            for part in g.asGeometryCollection():
+                                extract_polygons(part)
+                    
+                    extract_polygons(geom)
+                    
+                    if polygon_parts:
+                        # Create MultiPolygon from extracted parts
+                        if len(polygon_parts) == 1:
+                            poly_data = polygon_parts[0].asPolygon()
+                            if poly_data:
+                                new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                        else:
+                            multi_poly_parts = [p.asPolygon() for p in polygon_parts if p.asPolygon()]
+                            if multi_poly_parts:
+                                new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
+                        
+                        conversion_count += 1
+                        self.log_debug(f"Converted GeometryCollection to {QgsWkbTypes.displayString(new_geom.wkbType())}")
+                    else:
+                        self.log_warning("GeometryCollection contained no polygon parts - skipping feature")
+                        continue
+                
+                elif 'Polygon' in geom_type and 'Multi' not in geom_type:
+                    # Convert single Polygon to MultiPolygon for consistency
+                    poly_data = geom.asPolygon()
+                    if poly_data:
+                        new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                
+                # Create new feature with converted geometry
+                new_feature = QgsFeature(fields)
+                new_feature.setGeometry(new_geom)
+                new_feature.setAttributes(feature.attributes())
+                converted_features.append(new_feature)
+            
+            # Add converted features
+            if converted_features:
+                success, _ = converted_dp.addFeatures(converted_features)
+                if success:
+                    converted_layer.updateExtents()
+                    self.log_info(f"✓ Converted {conversion_count} GeometryCollection(s) to MultiPolygon")
+                    return converted_layer
+                else:
+                    self.log_error("Failed to add converted features to layer")
+                    return layer
+            else:
+                self.log_warning("No features to convert")
+                return layer
+                
+        except Exception as e:
+            self.log_error(f"Error converting GeometryCollection: {str(e)}")
+            import traceback
+            self.log_debug(f"Conversion traceback: {traceback.format_exc()}")
+            return layer
+
     def _map_predicates(self, predicates):
         """Map predicate names to QGIS processing codes.
         

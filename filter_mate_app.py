@@ -330,6 +330,14 @@ class FilterMateApp:
             
             # Connect to widgetsInitialized signal for synchronization
             self.dockwidget.widgetsInitialized.connect(self._on_widgets_initialized)
+            logger.debug("widgetsInitialized signal connected to _on_widgets_initialized")
+            
+            # CRITICAL FIX: Signal may have been emitted BEFORE connection (in dockwidget __init__)
+            # Check if widgets are already initialized and manually sync if needed
+            if hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized:
+                logger.info("Widgets already initialized before signal connection - syncing state")
+                # Call the handler directly since signal was already emitted
+                self._on_widgets_initialized()
 
             # Force retranslation to ensure tooltips/text use current translator
             try:
@@ -669,11 +677,13 @@ class FilterMateApp:
             
             self.init_filterMate_db()
             
+            # CRITICAL FIX: Don't manually call add_layers here - the layersAdded signal
+            # is already emitted by QGIS when the project loads, and _on_layers_added
+            # will handle it automatically. Calling add_layers manually would cause
+            # duplicate task execution, leading to race conditions and performance issues.
+            # Simply log that we're waiting for the signal to process the layers.
             if len(init_layers) > 0:
-                logger.info(f"FilterMate: Loading {len(init_layers)} layers from {task_name}")
-                # CRITICAL: Use QTimer to defer add_layers to prevent blocking during project load
-                # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-                QTimer.singleShot(100, lambda layers=init_layers: self.manage_task('add_layers', layers))
+                logger.info(f"FilterMate: {len(init_layers)} layers detected in {task_name} - waiting for layersAdded signal to process them")
                 
                 # CRITICAL: Force UI refresh after layers are loaded
                 # This ensures all widgets and signals are properly updated
@@ -683,22 +693,6 @@ class FilterMateApp:
                         self._refresh_ui_after_project_load()
                 
                 QTimer.singleShot(1000, refresh_after_load)
-                
-                # STABILITY FIX: Reset flags after shorter timeout (1.5s instead of 3s)
-                # Faster recovery if task fails
-                def reset_loading_flags():
-                    if self._loading_new_project:
-                        logger.warning(f"Safety timer (1.5s): Resetting _loading_new_project flag")
-                        self._loading_new_project = False
-                    if self._pending_add_layers_tasks > 0:
-                        logger.warning(f"Safety timer (1.5s): Resetting _pending_add_layers_tasks counter")
-                        self._pending_add_layers_tasks = 0
-                    # Process any queued add_layers operations
-                    if self._add_layers_queue:
-                        logger.info(f"Safety timer: Processing {len(self._add_layers_queue)} queued add_layers operations")
-                        self._process_add_layers_queue()
-
-                QTimer.singleShot(1500, reset_loading_flags)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -785,10 +779,40 @@ class FilterMateApp:
         
         # CRITICAL: For filtering tasks, ensure widgets are fully initialized AND connected
         if task_name in ('filter', 'unfilter', 'reset'):
+            # Track retry count to prevent infinite loop
+            if not hasattr(self, '_filter_retry_count'):
+                self._filter_retry_count = {}
+            
+            retry_key = f"{task_name}_{id(data)}"
+            retry_count = self._filter_retry_count.get(retry_key, 0)
+            
             if not self._is_dockwidget_ready_for_filtering():
-                logger.warning(f"Task '{task_name}' called before dockwidget is ready for filtering, deferring by 500ms...")
+                if retry_count >= 10:  # Max 10 retries = 5 seconds
+                    logger.error(f"❌ GIVING UP: Task '{task_name}' still not ready after {retry_count} retries (5 seconds)")
+                    iface.messageBar().pushCritical(
+                        "FilterMate ERROR",
+                        f"Cannot execute {task_name}: Widgets initialization failed. Try closing and reopening FilterMate."
+                    )
+                    # Reset counter
+                    self._filter_retry_count[retry_key] = 0
+                    
+                    # EMERGENCY FALLBACK: Force sync if dockwidget.widgets_initialized is True
+                    if hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized:
+                        logger.warning("⚠️ EMERGENCY: Forcing _widgets_ready = True based on dockwidget.widgets_initialized")
+                        iface.messageBar().pushWarning("FilterMate", "Emergency fallback: forcing widgets ready flag")
+                        self._widgets_ready = True
+                        # Retry immediately
+                        QTimer.singleShot(100, lambda tn=task_name, d=data: self.manage_task(tn, d))
+                    return
+                
+                # Increment retry count
+                self._filter_retry_count[retry_key] = retry_count + 1
+                logger.warning(f"Task '{task_name}' called before dockwidget is ready for filtering, deferring by 500ms (attempt {retry_count + 1}/10)...")
                 QTimer.singleShot(500, lambda tn=task_name, d=data: self.manage_task(tn, d))
                 return
+            else:
+                # Success! Reset counter for this task
+                self._filter_retry_count[retry_key] = 0
 
         if self.dockwidget is not None:
             self.PROJECT_LAYERS = self.dockwidget.PROJECT_LAYERS
@@ -1041,11 +1065,18 @@ class FilterMateApp:
             return False
         
         # Primary check: use the signal-based flag
+        # FALLBACK: If signal wasn't received but dockwidget.widgets_initialized is True, sync the flags
         if not self._widgets_ready:
-            logger.debug("Dockwidget not ready: widgetsInitialized signal not yet received")
-            return False
+            # Check if dockwidget has widgets_initialized=True despite signal not received
+            if hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized:
+                logger.warning("⚠️ FALLBACK: Signal not received but dockwidget.widgets_initialized=True, syncing flags")
+                self._widgets_ready = True
+                # Continue to other checks
+            else:
+                logger.debug(f"Dockwidget not ready: widgetsInitialized signal not yet received (_widgets_ready={self._widgets_ready})")
+                return False
         
-        # Secondary check: verify widgets_initialized attribute
+        # Secondary check: verify widgets_initialized attribute (redundant after fallback but kept for safety)
         if not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
             logger.debug("Dockwidget not ready: widgets_initialized attribute is False")
             return False
@@ -1073,6 +1104,7 @@ class FilterMateApp:
         """
         logger.info("✓ Received widgetsInitialized signal - dockwidget ready for operations")
         self._widgets_ready = True
+        logger.debug(f"_widgets_ready set to: {self._widgets_ready}")
         
         # If we have PROJECT_LAYERS but UI wasn't refreshed yet, do it now
         if len(self.PROJECT_LAYERS) > 0:

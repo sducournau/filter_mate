@@ -2173,6 +2173,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # NEW: Emit signal to notify that widgets are ready
         # This allows FilterMateApp to safely proceed with layer operations
+        logger.debug("Emitting widgetsInitialized signal")
         self.widgetsInitialized.emit()
         
         # CRITICAL: If layers were updated before widgets_initialized, refresh UI now
@@ -3219,19 +3220,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - GroupBoxes are collapsed when disabled
             - Called during initialization and when layers are added/removed
             - Central method for UI responsiveness control
+            - SAFETY: Blocks all signals during state changes to prevent race conditions
         """
         logger.debug(f"set_widgets_enabled_state({state}) called")
         widget_count = 0
         for widget_group in self.widgets:
             for widget_name in self.widgets[widget_group]:
                 if self.widgets[widget_group][widget_name]["TYPE"] not in ("JsonTreeView","LayerTreeView","JsonModel","ToolBox"):
-                    if self.widgets[widget_group][widget_name]["TYPE"] in ("PushButton", "GroupBox"):
-                        if self.widgets[widget_group][widget_name]["WIDGET"].isCheckable():
-                            if state is False:
-                                self.widgets[widget_group][widget_name]["WIDGET"].setChecked(state)
-                                if self.widgets[widget_group][widget_name]["TYPE"] == "GroupBox":
-                                    self.widgets[widget_group][widget_name]["WIDGET"].setCollapsed(True)
-                    self.widgets[widget_group][widget_name]["WIDGET"].setEnabled(state)
+                    widget = self.widgets[widget_group][widget_name]["WIDGET"]
+                    
+                    # SAFETY: Block signals to prevent race conditions during state changes
+                    # This prevents setChecked(False) from triggering toggled signals
+                    # that could cause access violations when layers are being destroyed
+                    was_blocked = widget.blockSignals(True)
+                    try:
+                        if self.widgets[widget_group][widget_name]["TYPE"] in ("PushButton", "GroupBox"):
+                            if widget.isCheckable():
+                                if state is False:
+                                    widget.setChecked(state)
+                                    if self.widgets[widget_group][widget_name]["TYPE"] == "GroupBox":
+                                        widget.setCollapsed(True)
+                        widget.setEnabled(state)
+                    finally:
+                        # Always restore signal blocking state
+                        widget.blockSignals(was_blocked)
+                    
                     widget_count += 1
         logger.debug(f"{widget_count} widgets set to enabled={state}")
 
@@ -3540,6 +3553,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._updating_groupbox:
             return
         
+        # SAFETY: Don't process if widgets not initialized or if we're in an invalid state
+        # This prevents access violations during cleanup when layers are being destroyed
+        if not self.widgets_initialized or not hasattr(self, 'widgets'):
+            logger.debug(f"_on_groupbox_clicked ignored: widgets not ready")
+            return
+        
         logger.debug(f"_on_groupbox_clicked called: groupbox={groupbox}, state={state}, widgets_initialized={self.widgets_initialized}")
         
         if self.widgets_initialized is True:
@@ -3548,9 +3567,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.exploring_groupbox_changed(groupbox)
             else:
                 # User unchecked this groupbox - check if any other is checked
-                single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
-                multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
-                custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+                # SAFETY: Verify widgets exist before accessing them
+                try:
+                    single_gb = self.widgets["DOCK"]["SINGLE_SELECTION"]["WIDGET"]
+                    multiple_gb = self.widgets["DOCK"]["MULTIPLE_SELECTION"]["WIDGET"]
+                    custom_gb = self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]
+                except (KeyError, AttributeError) as e:
+                    logger.debug(f"Groupbox widgets not accessible: {e}")
+                    return
                 
                 # Check if at least one other groupbox is checked
                 other_checked = False

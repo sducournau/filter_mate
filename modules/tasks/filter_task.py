@@ -747,7 +747,10 @@ class FilterEngineTask(QgsTask):
         def normalize_expr(expr):
             if not expr:
                 return ""
+            import re
             expr = expr.strip()
+            # Normalize whitespace: replace multiple spaces with single space
+            expr = re.sub(r'\s+', ' ', expr)
             # Remove outer parentheses if present
             while expr.startswith('(') and expr.endswith(')'):
                 # Check if these are matching outer parentheses
@@ -763,12 +766,18 @@ class FilterEngineTask(QgsTask):
                             break
                 if is_outer and depth == 0:
                     expr = expr[1:-1].strip()
+                    # Normalize whitespace again after stripping parentheses
+                    expr = re.sub(r'\s+', ' ', expr)
                 else:
                     break
             return expr
         
         normalized_new = normalize_expr(expression)
         normalized_old = normalize_expr(self.param_source_old_subset)
+        
+        logger.debug(f"FilterMate: Comparing expressions:")
+        logger.debug(f"  → normalized_new: '{normalized_new}'")
+        logger.debug(f"  → normalized_old: '{normalized_old}'")
         
         # If expressions are identical, don't duplicate
         if normalized_new == normalized_old:
@@ -782,6 +791,14 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"  → New: '{normalized_new[:60]}...'")
             logger.debug(f"  → Old: '{normalized_old[:60]}...'")
             return self.param_source_old_subset
+        
+        # CRITICAL FIX: Also check if old subset is contained in new expression
+        # This handles the case where the new expression is a superset of the old
+        if normalized_old in normalized_new:
+            logger.info(f"FilterMate: Old subset already in new expression - returning new expression only")
+            logger.debug(f"  → New: '{normalized_new[:60]}...'")
+            logger.debug(f"  → Old: '{normalized_old[:60]}...'")
+            return expression
         
         # Récupérer l'opérateur de combinaison (ou utiliser AND par défaut)
         combine_operator = self._get_source_combine_operator()
@@ -1284,6 +1301,33 @@ class FilterEngineTask(QgsTask):
                             if all_geoms:
                                 # Combine all geometries and convert to WKT
                                 combined = QgsGeometry.collectGeometry(all_geoms)
+                                
+                                # CRITICAL FIX: Prevent GeometryCollection from causing issues
+                                # Same protection as in prepare_spatialite_source_geom
+                                combined_type = QgsWkbTypes.displayString(combined.wkbType())
+                                if 'GeometryCollection' in combined_type:
+                                    logger.warning(f"OGR fallback: collectGeometry produced {combined_type} - converting")
+                                    
+                                    # Determine dominant geometry type
+                                    has_polygons = any('Polygon' in QgsWkbTypes.displayString(g.wkbType()) for g in all_geoms)
+                                    has_lines = any('Line' in QgsWkbTypes.displayString(g.wkbType()) for g in all_geoms)
+                                    has_points = any('Point' in QgsWkbTypes.displayString(g.wkbType()) for g in all_geoms)
+                                    
+                                    if has_polygons:
+                                        converted = combined.convertToType(QgsWkbTypes.PolygonGeometry, True)
+                                    elif has_lines:
+                                        converted = combined.convertToType(QgsWkbTypes.LineGeometry, True)
+                                    elif has_points:
+                                        converted = combined.convertToType(QgsWkbTypes.PointGeometry, True)
+                                    else:
+                                        converted = None
+                                    
+                                    if converted and not converted.isEmpty():
+                                        combined = converted
+                                        logger.info(f"OGR fallback: Converted to {QgsWkbTypes.displayString(combined.wkbType())}")
+                                    else:
+                                        logger.warning("OGR fallback: Conversion failed, keeping GeometryCollection")
+                                
                                 wkt = combined.asWkt()
                                 # Escape single quotes for SQL
                                 self.spatialite_source_geom = wkt.replace("'", "''")
@@ -1810,6 +1854,109 @@ class FilterEngineTask(QgsTask):
 
         # Collect all geometries into one
         collected_geometry = QgsGeometry.collectGeometry(geometries)
+        
+        # CRITICAL FIX: Prevent GeometryCollection from causing issues with typed layers
+        # GeoPackage and other backends require homogeneous geometry types
+        # collectGeometry can produce GeometryCollection when mixing types or multi-part geometries
+        collected_type = QgsWkbTypes.displayString(collected_geometry.wkbType())
+        logger.debug(f"Initial collected geometry type: {collected_type}")
+        
+        if 'GeometryCollection' in collected_type:
+            logger.warning(f"collectGeometry produced {collected_type} - converting to homogeneous type")
+            
+            # Determine the dominant geometry type from input geometries
+            has_polygons = any('Polygon' in QgsWkbTypes.displayString(g.wkbType()) for g in geometries)
+            has_lines = any('Line' in QgsWkbTypes.displayString(g.wkbType()) for g in geometries)
+            has_points = any('Point' in QgsWkbTypes.displayString(g.wkbType()) for g in geometries)
+            
+            logger.debug(f"Geometry analysis - Polygons: {has_polygons}, Lines: {has_lines}, Points: {has_points}")
+            
+            # Priority: Polygon > Line > Point (spatial filtering typically uses areas/zones)
+            if has_polygons:
+                # Extract and collect only polygon parts
+                polygon_parts = []
+                for part in collected_geometry.asGeometryCollection():
+                    part_type = QgsWkbTypes.displayString(part.wkbType())
+                    if 'Polygon' in part_type:
+                        if 'Multi' in part_type:
+                            # MultiPolygon - extract each polygon
+                            for sub_part in part.asGeometryCollection():
+                                polygon_parts.append(sub_part)
+                        else:
+                            polygon_parts.append(part)
+                    else:
+                        logger.debug(f"Skipping non-polygon part: {part_type}")
+                
+                if polygon_parts:
+                    collected_geometry = QgsGeometry.collectGeometry(polygon_parts)
+                    # Force conversion to MultiPolygon if still GeometryCollection
+                    if 'GeometryCollection' in QgsWkbTypes.displayString(collected_geometry.wkbType()):
+                        converted = collected_geometry.convertToType(QgsWkbTypes.PolygonGeometry, True)
+                        if converted and not converted.isEmpty():
+                            collected_geometry = converted
+                            logger.info(f"Converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                        else:
+                            logger.error("Polygon conversion failed - keeping original")
+                    else:
+                        logger.info(f"Successfully converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                else:
+                    logger.warning("No polygon parts found in GeometryCollection")
+                    
+            elif has_lines:
+                # Extract and collect only line parts
+                line_parts = []
+                for part in collected_geometry.asGeometryCollection():
+                    part_type = QgsWkbTypes.displayString(part.wkbType())
+                    if 'Line' in part_type:
+                        if 'Multi' in part_type:
+                            for sub_part in part.asGeometryCollection():
+                                line_parts.append(sub_part)
+                        else:
+                            line_parts.append(part)
+                    else:
+                        logger.debug(f"Skipping non-line part: {part_type}")
+                
+                if line_parts:
+                    collected_geometry = QgsGeometry.collectGeometry(line_parts)
+                    if 'GeometryCollection' in QgsWkbTypes.displayString(collected_geometry.wkbType()):
+                        converted = collected_geometry.convertToType(QgsWkbTypes.LineGeometry, True)
+                        if converted and not converted.isEmpty():
+                            collected_geometry = converted
+                            logger.info(f"Converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                        else:
+                            logger.error("Line conversion failed - keeping original")
+                    else:
+                        logger.info(f"Successfully converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                else:
+                    logger.warning("No line parts found in GeometryCollection")
+                    
+            elif has_points:
+                # Extract and collect only point parts
+                point_parts = []
+                for part in collected_geometry.asGeometryCollection():
+                    part_type = QgsWkbTypes.displayString(part.wkbType())
+                    if 'Point' in part_type:
+                        if 'Multi' in part_type:
+                            for sub_part in part.asGeometryCollection():
+                                point_parts.append(sub_part)
+                        else:
+                            point_parts.append(part)
+                    else:
+                        logger.debug(f"Skipping non-point part: {part_type}")
+                
+                if point_parts:
+                    collected_geometry = QgsGeometry.collectGeometry(point_parts)
+                    if 'GeometryCollection' in QgsWkbTypes.displayString(collected_geometry.wkbType()):
+                        converted = collected_geometry.convertToType(QgsWkbTypes.PointGeometry, True)
+                        if converted and not converted.isEmpty():
+                            collected_geometry = converted
+                            logger.info(f"Converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                        else:
+                            logger.error("Point conversion failed - keeping original")
+                    else:
+                        logger.info(f"Successfully converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                else:
+                    logger.warning("No point parts found in GeometryCollection")
         
         # CRITICAL: If we used metric CRS for buffer, transform back to target layer CRS
         if use_metric_crs:
@@ -3392,19 +3539,34 @@ class FilterEngineTask(QgsTask):
             backend = BackendFactory.get_backend(effective_provider_type, layer, self.task_parameters)
             
             # CRITICAL FIX: Use backend type to determine geometry format, not provider type
-            # The factory may return OGRGeometricFilter for PostgreSQL layers when:
-            # 1. Small dataset optimization is active (memory layer copy)
-            # 2. PostgreSQL connection failed (fallback mode)
-            # In these cases, we need QgsVectorLayer geometry (ogr), not SQL string (postgresql)
+            # The factory may return different backends than expected:
+            # 1. SpatialiteGeometricFilter for OGR layers (GeoPackage/SQLite) - needs WKT string
+            # 2. OGRGeometricFilter for PostgreSQL layers (small dataset / fallback) - needs QgsVectorLayer
+            # 3. PostgreSQLGeometricFilter for PostgreSQL layers - needs SQL expression
             backend_name = backend.get_backend_name().lower()
-            geometry_provider = effective_provider_type
             
-            # Handle OGR backend with PostgreSQL provider (fallback or small dataset opt)
-            if backend_name == 'ogr' and effective_provider_type == PROVIDER_POSTGRES:
+            # Determine geometry provider based on backend type, not layer provider
+            if backend_name == 'spatialite':
+                # Spatialite backend ALWAYS needs WKT string, regardless of layer provider type
+                geometry_provider = PROVIDER_SPATIALITE
+                logger.info(f"  → Backend is Spatialite - using WKT geometry format")
+            elif backend_name == 'ogr':
+                # OGR backend needs QgsVectorLayer
                 geometry_provider = PROVIDER_OGR
-                logger.info(f"  → Backend is OGR but provider is PostgreSQL - using OGR geometry format (fallback/optimization)")
+                if effective_provider_type == PROVIDER_POSTGRES:
+                    logger.info(f"  → Backend is OGR but provider is PostgreSQL - using OGR geometry format (fallback/optimization)")
+                else:
+                    logger.info(f"  → Backend is OGR - using QgsVectorLayer geometry format")
+            elif backend_name == 'postgresql':
+                # PostgreSQL backend needs SQL expression
+                geometry_provider = PROVIDER_POSTGRES
+                logger.info(f"  → Backend is PostgreSQL - using SQL expression geometry format")
+            else:
+                # Fallback: use effective provider type
+                geometry_provider = effective_provider_type
+                logger.warning(f"  → Unknown backend '{backend_name}' - using provider type {effective_provider_type}")
             
-            # Prepare source geometry based on backend type - use geometry_provider
+            # Prepare source geometry based on backend requirements - use geometry_provider
             logger.info(f"  → Preparing source geometry for provider: {geometry_provider}")
             logger.info(f"  → spatialite_source_geom exists: {hasattr(self, 'spatialite_source_geom')}")
             if hasattr(self, 'spatialite_source_geom'):
@@ -3412,6 +3574,8 @@ class FilterEngineTask(QgsTask):
             source_geom = self._prepare_source_geometry(geometry_provider)
             if not source_geom:
                 logger.error(f"Failed to prepare source geometry for {layer.name()}")
+                logger.error(f"  → backend_name: {backend_name}")
+                logger.error(f"  → geometry_provider: {geometry_provider}")
                 logger.error(f"  → effective_provider_type: {effective_provider_type}")
                 logger.error(f"  → spatialite_source_geom: {getattr(self, 'spatialite_source_geom', 'NOT SET')}")
                 logger.error(f"  → ogr_source_geom: {getattr(self, 'ogr_source_geom', 'NOT SET')}")
@@ -3481,7 +3645,7 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"✓ Filter operation completed for {layer.name()}")
                 logger.info(f"  - Backend returned: SUCCESS")
                 logger.info(f"  - Features after filter: {feature_count:,}")
-                logger.info(f"  - Subset string applied: '{final_expression[:200] if final_expression else '(empty)'}'")
+                logger.info(f"  - Subset string applied: {final_expression[:200] if final_expression else '(empty)'}")
                 
                 # Additional layer state verification
                 logger.info(f"  - Layer is valid: {layer.isValid()}")

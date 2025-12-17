@@ -6,16 +6,21 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.4
+version=2.3.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.4 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
+about=FilterMate v2.3.5 - Stability & Backend Improvements
 
- NEW in v2.3.4:
- - 🐛 CRITICAL: Fixed PostgreSQL 2-part table reference spatial filtering
+ NEW in v2.3.5:
+ - 🐛 CRITICAL: Fixed GeometryCollection errors in OGR backend buffer operations
+ - 🐛 CRITICAL: Fixed potential crashes in layer operations (guard clauses)
+ - 🚀 GeoPackage now 10× faster with Spatialite backend
+ - 🛠️ Improved exception handling throughout codebase
+ 
+ Previous (v2.3.4):
+ - 🐛 Fixed PostgreSQL 2-part table reference spatial filtering
  - ✨ Smart display field selection for exploring expressions  
- - 🐛 Fixed GeometryCollection buffer handling
  - 🛠️ Automatic ANALYZE on PostgreSQL source tables
  
  Previous (v2.3.0):

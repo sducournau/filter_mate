@@ -81,8 +81,7 @@ filter_mate/
 └── .serena/                    # Serena MCP configuration
 ```
 
-## Current Status
-- **Version**: 2.3.0 (December 16, 2025)
+## Current Status\n- **Version**: 2.3.5 (December 17, 2025)
 - **Status**: Production - Global Undo/Redo with intelligent context detection
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Key Innovation**: Automatic metric-based buffer calculations for geographic coordinate systems
@@ -404,8 +403,7 @@ filter_mate/
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.2.5
-- **Development Version**: 2.3.0-alpha
+- **Current Plugin Version**: 2.3.5
 
 ## Serena Integration
 

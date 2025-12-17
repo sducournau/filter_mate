@@ -274,10 +274,13 @@ class FilterMate:
         """
         # Check if auto-activation is enabled in configuration
         from .config.config import ENV_VARS
-        auto_activate_enabled = ENV_VARS.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        config_data = ENV_VARS.get('CONFIG_DATA', {})
+        auto_activate_enabled = config_data.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
         
         if not auto_activate_enabled:
             logger.info("FilterMate: Auto-activation disabled in configuration")
+            # CRITICAL: If signals were previously connected, disconnect them
+            self._disconnect_auto_activation_signals()
             return
         
         if not self._auto_activation_signals_connected:
@@ -304,6 +307,30 @@ class FilterMate:
             
             self._auto_activation_signals_connected = True
             logger.info("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded)")
+
+    def _disconnect_auto_activation_signals(self):
+        """Disconnect auto-activation signals if they were connected.
+        
+        Called when AUTO_ACTIVATE is disabled or when unloading the plugin.
+        """
+        if self._auto_activation_signals_connected:
+            try:
+                from qgis.core import QgsProject
+                
+                if self._project_read_connection:
+                    self.iface.projectRead.disconnect(self._project_read_connection)
+                    self._project_read_connection = None
+                if self._new_project_connection:
+                    self.iface.newProjectCreated.disconnect(self._new_project_connection)
+                    self._new_project_connection = None
+                if hasattr(self, '_layers_added_connection') and self._layers_added_connection:
+                    QgsProject.instance().layersAdded.disconnect(self._layers_added_connection)
+                    self._layers_added_connection = None
+                
+                self._auto_activation_signals_connected = False
+                logger.info("FilterMate: Auto-activation signals disconnected")
+            except Exception as e:
+                logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
 
     def _auto_activate_for_new_layers(self, layers):
         """Handle layersAdded signal specifically for auto-activation.
@@ -456,21 +483,8 @@ class FilterMate:
 
         #print "** UNLOAD FilterMate"
         
-        # Disconnect project change signals
-        if self._auto_activation_signals_connected:
-            try:
-                from qgis.core import QgsProject
-                
-                if self._project_read_connection:
-                    self.iface.projectRead.disconnect(self._project_read_connection)
-                if self._new_project_connection:
-                    self.iface.newProjectCreated.disconnect(self._new_project_connection)
-                if hasattr(self, '_layers_added_connection') and self._layers_added_connection:
-                    QgsProject.instance().layersAdded.disconnect(self._layers_added_connection)
-                
-                logger.info("FilterMate: Auto-activation signals disconnected")
-            except Exception as e:
-                logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
+        # Disconnect project change signals using dedicated method
+        self._disconnect_auto_activation_signals()
         
         # Nettoyer les ressources de l'application FilterMate
         if self.app:

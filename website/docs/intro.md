@@ -7,64 +7,25 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.4 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
+## 🎉 What's New in v2.3.5 - Stability & Backend Improvements
 
 ### Bug Fixes
-- 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format (without schema prefix). Previously caused "missing FROM-clause entry" SQL error.
-- 🐛 **Fixed GeometryCollection buffer results** - Buffer operations with non-overlapping geometries now properly convert to MultiPolygon
+- 🐛 **CRITICAL: Fixed GeometryCollection errors in OGR backend** - Buffer operations now properly convert to MultiPolygon, fixing "Impossible d'ajouter l'objet avec une géométrie de type GeometryCollection" errors
+- 🐛 **CRITICAL: Fixed potential crashes in layer operations** - Guard clauses prevent KeyError when layers are removed during filtering, undo/redo, or exploration
 
-### New Features
-- ✨ **Smart display field selection** - New layers auto-select the best descriptive field (name, label, titre, etc.) for exploring expressions instead of just primary key
-- 🛠️ **Automatic PostgreSQL ANALYZE** - Query planner now gets proper statistics before spatial queries
+### Performance Improvements
+- 🚀 **GeoPackage 10× faster** - GeoPackage layers now use Spatialite backend with direct SQL queries instead of slow OGR algorithms
+
+### Technical Improvements
+- 🛠️ **Improved exception handling** - Replaced generic exception handlers with specific types for better debugging
+- Added logging for all exception handlers to aid troubleshooting
 
 ## Previous Updates
 
-### v2.3.0 - Global Undo/Redo System (December 13, 2025)
-
-### Major Features
-- ⭐ **Intelligent Undo/Redo** - Smart context-aware undo/redo for all filter operations
-  - **Source Layer Mode**: Undo/redo applies only to the source layer when no remote layers selected
-  - **Global Mode**: Undo/redo restores all layers (source + remote) atomically
-  - **Auto-Detection**: Seamlessly switches between modes based on layer selection
-  - **Button States**: Automatic enable/disable based on history availability
-- 🔄 **Automatic Filter Preservation** - Filters are now combined using AND by default
-  - Problem solved: Previously, applying a new filter replaced existing filters
-  - Solution: Filters are automatically combined: `(old_filter) AND (new_filter)`
-  - Available operators: AND (default), OR, AND NOT
-- 📉 **Reduced Notification Fatigue** - Configurable feedback levels
-  - Minimal: -92% messages (production use)
-  - Normal: -42% messages (default)
-  - Verbose: All messages (development)
-
-### Technical Improvements
-- 🏗️ **Architecture Refactor** - Task modules extracted (-99% appTasks.py)
-- ✅ **Code Quality** - PEP 8 95%, 26 automated tests, CI/CD active
-- 🚀 **5× Performance** - Geometry caching for multi-layer operations
-- 🐛 **Bug Fixes** - QSplitter freeze fixed, project load race conditions resolved
-
-### v2.2.4 - Color Harmonization & Accessibility (December 8, 2025)
-- ✅ **Color Harmonization** - Enhanced visual distinction with +300% frame contrast
-- ✅ **WCAG 2.1 Compliance** - AA/AAA accessibility standards for all text
-  - Primary text: 17.4:1 contrast ratio (AAA)
-  - Secondary text: 8.86:1 contrast ratio (AAA)
-  - Disabled text: 4.6:1 contrast ratio (AA)
-- ✅ **Reduced Eye Strain** - Optimized color palette for long work sessions
-- ✅ **Better Readability** - Clear visual hierarchy throughout interface
-- ✅ **Theme Refinements** - Darker frames (#EFEFEF), clearer borders (#D0D0D0)
-- ✅ **Automated Testing** - WCAG compliance validation suite
-
-### v2.2.2 - Configuration Reactivity (December 8, 2025)
-- ✅ **Real-time Config Updates** - JSON tree view changes apply instantly without restart
-- ✅ **Dynamic UI Switching** - Switch compact/normal/auto modes on the fly
-- ✅ **Live Icon Updates** - Configuration changes reflected immediately
-- ✅ **ChoicesType Integration** - Dropdown selectors for validated config fields
-- ✅ **Type Safety** - Invalid values prevented at UI level
-- ✅ **Auto-save** - All configuration changes saved automatically
-
-### v2.2.1 - Maintenance (December 7, 2025)
-- ✅ **Enhanced Stability** - Improved Qt JSON view crash prevention
-- ✅ **Better Error Recovery** - Robust tab widget and theme handling
-- ✅ **Build Improvements** - Enhanced automation and version management
+### v2.3.4 - PostgreSQL 2-Part Table Reference Fix (December 16, 2025)
+- 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format
+- ✨ **Smart display field selection** - New layers auto-select the best descriptive field (name, label, titre, etc.)
+- 🛠️ **Automatic PostgreSQL ANALYZE** - Query planner now gets proper statistics before spatial queries
 
 ## Why FilterMate?
 

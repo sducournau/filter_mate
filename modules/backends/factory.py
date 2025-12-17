@@ -35,7 +35,8 @@ def get_small_dataset_config() -> Tuple[bool, int]:
     try:
         from ...config.config import ENV_VARS
         
-        config = ENV_VARS.get('APP', {}).get('OPTIONS', {}).get('SMALL_DATASET_OPTIMIZATION', {})
+        config_data = ENV_VARS.get('CONFIG_DATA', {})
+        config = config_data.get('APP', {}).get('OPTIONS', {}).get('SMALL_DATASET_OPTIMIZATION', {})
         enabled = config.get('enabled', DEFAULT_SMALL_DATASET_OPTIMIZATION)
         threshold = config.get('threshold', SMALL_DATASET_THRESHOLD)
         
@@ -289,6 +290,17 @@ class BackendFactory:
             backend = SpatialiteGeometricFilter(task_params)
             if backend.supports_layer(layer):
                 logger.info(f"Using Spatialite backend for {layer.name()}")
+                if return_memory_info:
+                    return (backend, None, False)
+                return backend
+        
+        # CRITICAL FIX: For OGR layers, try Spatialite backend first if it supports the layer
+        # This handles GeoPackage (.gpkg) and SQLite (.sqlite) files which can use
+        # direct SQL spatial queries instead of slower QGIS processing algorithms
+        if layer_provider_type == PROVIDER_OGR:
+            backend = SpatialiteGeometricFilter(task_params)
+            if backend.supports_layer(layer):
+                logger.info(f"🚀 Using Spatialite backend for OGR layer {layer.name()} (GeoPackage/SQLite detected)")
                 if return_memory_info:
                     return (backend, None, False)
                 return backend

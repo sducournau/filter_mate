@@ -2,15 +2,21 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [2.3.5] - 2025-12-16 - Stability Improvements: Exception Handling & Guard Clauses
+## [2.3.5] - 2025-12-17 - Stability & Backend Improvements
 
 ### 🐛 Bug Fixes
+- **CRITICAL: Fixed GeometryCollection error in OGR backend buffer operations** - When using `native:buffer` with OGR backend on GeoPackage layers, the buffer result could contain GeometryCollection type instead of MultiPolygon when buffered features don't overlap.
+  - Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type GeometryCollection à une couche de type MultiPolygon"
+  - Added automatic conversion from GeometryCollection to MultiPolygon in `_apply_buffer()` method
+  - New helper method `_convert_geometry_collection_to_multipolygon()` recursively extracts polygon parts
+  - This complements the existing fix in `prepare_spatialite_source_geom()` for Spatialite backend
 - **CRITICAL: Fixed potential KeyError crashes in PROJECT_LAYERS access** - Added guard clauses to verify layer existence before dictionary access in multiple critical methods:
   - `_build_layers_to_filter()`: Prevents crash when layer removed during filtering
   - `handle_undo()`: Validates layer exists before undo operation
   - `handle_redo()`: Validates layer exists before redo operation
   - `exploring_source_params_changed()`: Guards against invalid layer state
   - `get_exploring_features()`: Returns empty safely if layer not tracked
+- **Fixed GeoPackage geometric filtering** - GeoPackage layers now use fast Spatialite backend with direct SQL queries instead of slow OGR algorithms (10× performance improvement)
 
 ### 🛠️ Improvements
 - **Improved exception handling throughout codebase** - Replaced generic exception handlers with specific types for better debugging:
@@ -21,10 +27,13 @@ All notable changes to FilterMate will be documented in this file.
   - `filter_mate_app.py`: Connection close errors typed as `OSError, AttributeError`
 
 ### 📝 Technical Details
+- Modified `modules/backends/ogr_backend.py`:
+  - Enhanced `_apply_buffer()` to check and convert GeometryCollection results
+  - Added `_convert_geometry_collection_to_multipolygon()` method for geometry type conversion
+- Modified `modules/backends/factory.py`: GeoPackage/SQLite files now automatically use Spatialite backend
 - All bare `except:` and `except Exception:` clauses without logging replaced
 - Added logging for exception handlers to aid debugging
 - Guard clauses return early with warning log instead of crashing
-- Full audit documented in `.serena/memories/known_issues_bugs.md`
 
 ## [2.3.4] - 2025-12-16 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
 
