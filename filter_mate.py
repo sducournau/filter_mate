@@ -276,17 +276,39 @@ class FilterMate:
             
             if performed:
                 logger.info("Configuration migrated to latest version")
-                self.iface.messageBar().pushInfo(
-                    "FilterMate",
-                    self.tr("Configuration mise à jour vers la dernière version")
-                )
+                
+                # Determine the type of action performed
+                if any("missing" in str(w).lower() for w in warnings):
+                    msg = self.tr("Configuration créée avec les valeurs par défaut")
+                    msg_type = "info"
+                elif any("corrupted" in str(w).lower() or "failed to load" in str(w).lower() for w in warnings):
+                    msg = self.tr("Configuration corrompue réinitialisée. Les paramètres par défaut ont été restaurés.")
+                    msg_type = "warning"
+                elif any("obsolete" in str(w).lower() for w in warnings):
+                    msg = self.tr("Configuration obsolète réinitialisée. Les paramètres par défaut ont été restaurés.")
+                    msg_type = "warning"
+                else:
+                    msg = self.tr("Configuration mise à jour vers la dernière version")
+                    msg_type = "success"
+                
+                # Display appropriate message
+                if msg_type == "success":
+                    self.iface.messageBar().pushSuccess("FilterMate", msg)
+                elif msg_type == "warning":
+                    self.iface.messageBar().pushWarning("FilterMate", msg)
+                else:
+                    self.iface.messageBar().pushInfo("FilterMate", msg)
             
             if warnings:
                 for warning in warnings:
-                    logger.warning(f"Config migration warning: {warning}")
+                    logger.warning(f"Config migration: {warning}")
         
         except Exception as e:
             logger.error(f"Error during config migration: {e}")
+            self.iface.messageBar().pushCritical(
+                "FilterMate",
+                self.tr("Erreur lors de la migration de la configuration: {}").format(str(e))
+            )
             # Don't block plugin initialization if migration fails
     
     def _connect_auto_activation_signals(self):

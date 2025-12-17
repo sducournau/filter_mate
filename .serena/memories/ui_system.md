@@ -292,28 +292,51 @@ widget.clear()
 **Purpose:** Interactive JSON configuration editor
 **File:** `modules/qt_json_view/view.py`
 
-**Features (v2.2.2):**
+**Features (v2.3.0-alpha - Enhanced):**
 - Expandable tree structure
-- **ChoicesType support:** Dropdown selectors for validated fields
-- Inline editing
+- **ChoicesType support:** Dropdown selectors for fields with `{value, choices, ...}` format
+- **ConfigValueType support:** Typed editors (checkbox, spinbox, lineedit) for `{value, description, ...}` format
+- **Description tooltips:** Hover over values to see the description from config metadata
+- Inline editing with type preservation
 - Theme-aware styling
 - Copy/export functionality
 - Real-time validation
 
-**ChoicesType Integration:**
+**ChoicesType Format:**
 When a configuration field has format:
 ```json
 {
   "value": "auto",
-  "choices": ["auto", "compact", "normal"]
+  "choices": ["auto", "compact", "normal"],
+  "description": "UI display profile setting"
 }
 ```
 
 The tree view displays:
-- **Field name** with dropdown icon
-- **Current value** in dropdown selector
+- **Field name** with the key
+- **Current value** in dropdown selector (QComboBox)
 - **Valid choices** in dropdown menu
+- **Description** as tooltip on hover
 - **Validation** prevents invalid values
+
+**ConfigValueType Format:**
+When a configuration field has format:
+```json
+{
+  "value": true,
+  "description": "Auto-activate plugin when project loaded"
+}
+```
+
+The tree view displays:
+- **Field name** with the key
+- **Appropriate editor** based on value type:
+  - Boolean → QCheckBox
+  - Integer → QSpinBox
+  - Float → QDoubleSpinBox
+  - String → QLineEdit
+- **Description** as tooltip on hover
+- **Type preservation** when saving
 
 **Key Methods:**
 ```python
@@ -334,9 +357,10 @@ view.expandAll()
 
 **Theme Synchronization:**
 - Automatically matches QGIS theme
-- Custom delegates for ChoicesType fields
+- Custom delegates for ChoicesType and ConfigValueType fields
 - Syntax highlighting for values
 - Color-coded by data type
+
 
 ## Signal Management (v2.1.0+)
 

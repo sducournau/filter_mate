@@ -251,41 +251,47 @@ class BackendFactory:
         if forced_backend:
             logger.info(f"🔒 Using forced backend '{forced_backend.upper()}' for layer '{layer.name()}'")
             
-            # Create the forced backend
-            if forced_backend == 'postgresql' and POSTGRESQL_AVAILABLE:
+            # Create the forced backend - RESPECT USER CHOICE strictly
+            if forced_backend == 'postgresql':
+                if not POSTGRESQL_AVAILABLE:
+                    logger.warning(
+                        f"⚠️ PostgreSQL backend forced for '{layer.name()}' but psycopg2 not available. "
+                        f"Install psycopg2 to use PostgreSQL backend."
+                    )
+                    # Still create PostgreSQL backend - it will handle the error gracefully
                 backend = PostgreSQLGeometricFilter(task_params)
-                if backend.supports_layer(layer):
-                    if return_memory_info:
-                        return (backend, None, False)
-                    return backend
-                else:
-                    logger.warning(f"Forced PostgreSQL backend not available for {layer.name()}, falling back to OGR")
-                    backend = OGRGeometricFilter(task_params)
-                    if return_memory_info:
-                        return (backend, None, False)
-                    return backend
+                if not backend.supports_layer(layer):
+                    logger.warning(
+                        f"⚠️ PostgreSQL backend forced for '{layer.name()}' but layer type may not be fully supported. "
+                        f"Proceeding with forced backend as requested."
+                    )
+                if return_memory_info:
+                    return (backend, None, False)
+                return backend
             
             elif forced_backend == 'spatialite':
                 backend = SpatialiteGeometricFilter(task_params)
-                if backend.supports_layer(layer):
-                    if return_memory_info:
-                        return (backend, None, False)
-                    return backend
-                else:
-                    logger.warning(f"Forced Spatialite backend not available for {layer.name()}, falling back to OGR")
-                    backend = OGRGeometricFilter(task_params)
-                    if return_memory_info:
-                        return (backend, None, False)
-                    return backend
+                if not backend.supports_layer(layer):
+                    logger.warning(
+                        f"⚠️ Spatialite backend forced for '{layer.name()}' but layer type may not be fully supported. "
+                        f"Proceeding with forced backend as requested."
+                    )
+                if return_memory_info:
+                    return (backend, None, False)
+                return backend
             
             elif forced_backend == 'ogr':
                 backend = OGRGeometricFilter(task_params)
+                logger.info(f"✓ Using OGR backend as forced for '{layer.name()}'")
                 if return_memory_info:
                     return (backend, None, False)
                 return backend
             
             else:
-                logger.warning(f"Unknown forced backend '{forced_backend}', using auto-selection")
+                logger.warning(
+                    f"⚠️ Unknown forced backend '{forced_backend}' for '{layer.name()}', "
+                    f"falling back to auto-selection"
+                )
         
         # PRIORITY 2: Auto-selection logic
         # Check for small PostgreSQL dataset optimization

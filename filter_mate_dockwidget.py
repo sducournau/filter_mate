@@ -128,6 +128,7 @@ from .modules.appUtils import (
 from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 from .modules.ui_styles import StyleLoader
+from .modules.config_helpers import set_config_value
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
 # Import UI configuration system for dynamic dimensions
@@ -2874,12 +2875,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if is_position_change:
                     logger.info(f"ACTION_BAR_POSITION changed to: {new_value}")
                     
-                    # Update the config data in memory
-                    if 'APP' in self.CONFIG_DATA and 'DOCKWIDGET' in self.CONFIG_DATA['APP']:
-                        if isinstance(self.CONFIG_DATA['APP']['DOCKWIDGET'].get('ACTION_BAR_POSITION'), dict):
-                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION']['value'] = new_value
-                        else:
-                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_POSITION'] = new_value
+                    # Update the config data in memory using helper (handles v1.0 and v2.0 formats)
+                    set_config_value(self.CONFIG_DATA, new_value, "APP", "DOCKWIDGET", "ACTION_BAR_POSITION")
                     
                     # Apply the new position
                     self._apply_action_bar_position(new_value)
@@ -2896,12 +2893,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 elif is_alignment_change:
                     logger.info(f"ACTION_BAR_VERTICAL_ALIGNMENT changed to: {new_value}")
                     
-                    # Update the config data in memory
-                    if 'APP' in self.CONFIG_DATA and 'DOCKWIDGET' in self.CONFIG_DATA['APP']:
-                        if isinstance(self.CONFIG_DATA['APP']['DOCKWIDGET'].get('ACTION_BAR_VERTICAL_ALIGNMENT'), dict):
-                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_VERTICAL_ALIGNMENT']['value'] = new_value
-                        else:
-                            self.CONFIG_DATA['APP']['DOCKWIDGET']['ACTION_BAR_VERTICAL_ALIGNMENT'] = new_value
+                    # Update the config data in memory using helper (handles v1.0 and v2.0 formats)
+                    set_config_value(self.CONFIG_DATA, new_value, "APP", "DOCKWIDGET", "ACTION_BAR_VERTICAL_ALIGNMENT")
                     
                     # Re-apply the current position to update alignment
                     current_position = self._get_action_bar_position()
@@ -3069,7 +3062,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Recreate model with original data
             self.config_model = JsonModel(
                 data=self.CONFIG_DATA, 
-                editable_keys=True, 
+                editable_keys=False, 
                 editable_values=True, 
                 plugin_dir=self.plugin_dir
             )
@@ -3119,7 +3112,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True:
             try:
                 # Create new model
-                self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True, plugin_dir=self.plugin_dir)
+                self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
                 
                 # Update view model - safe to call here since view already exists
                 if hasattr(self, 'config_view') and self.config_view is not None:
@@ -3154,7 +3147,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         try:
             # Create model with data
-            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=True, editable_values=True, plugin_dir=self.plugin_dir)
+            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
 
             # Create view with model - setModel() is called in JsonView.__init__()
             self.config_view = JsonView(self.config_model, self.plugin_dir)

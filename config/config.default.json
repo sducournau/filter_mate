@@ -1,22 +1,25 @@
 {
+    "_CONFIG_VERSION": "2.0",
+    "_CONFIG_META": {
+        "description": "FilterMate Configuration File",
+        "version": "2.0",
+        "last_updated": "2025-12-17",
+        "compatible_with": "FilterMate 1.0+"
+    },
     "APP": {
         "AUTO_ACTIVATE": {
-            "value": false
-        },
-        "_AUTO_ACTIVATE_META": {
+            "value": false,
             "description": "Auto-activate plugin when a project with vector layers is loaded: true (automatically open plugin), false (manual activation only)",
             "applies_to": "Plugin initialization behavior"
         },
         "DOCKWIDGET": {
             "FEEDBACK_LEVEL": {
+                "value": "normal",
                 "choices": [
                     "minimal",
                     "normal",
                     "verbose"
                 ],
-                "value": "normal"
-            },
-            "_FEEDBACK_LEVEL_META": {
                 "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
                 "categories_affected": [
                     "filter_count",
@@ -28,6 +31,7 @@
                 ]
             },
             "LANGUAGE": {
+                "value": "auto",
                 "choices": [
                     "auto",
                     "en",
@@ -38,9 +42,6 @@
                     "nl",
                     "pt"
                 ],
-                "value": "auto"
-            },
-            "_LANGUAGE_META": {
                 "description": "Interface language: 'auto' (use QGIS locale), or force specific language",
                 "available_translations": [
                     "en (English)",
@@ -53,14 +54,12 @@
                 ]
             },
             "UI_PROFILE": {
+                "value": "auto",
                 "choices": [
                     "auto",
                     "compact",
                     "normal"
                 ],
-                "value": "auto"
-            },
-            "_UI_PROFILE_META": {
                 "description": "UI display profile: 'auto' (detect from screen), 'compact' for small screens, 'normal' for standard displays",
                 "auto_detection_thresholds": {
                     "compact_if_width_less_than": 1920,
@@ -68,25 +67,21 @@
                 }
             },
             "ACTION_BAR_POSITION": {
+                "value": "bottom",
                 "choices": [
                     "top",
                     "bottom",
                     "left",
                     "right"
                 ],
-                "value": "bottom"
-            },
-            "_ACTION_BAR_POSITION_META": {
                 "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
             },
             "ACTION_BAR_VERTICAL_ALIGNMENT": {
+                "value": "top",
                 "choices": [
                     "top",
                     "bottom"
                 ],
-                "value": "top"
-            },
-            "_ACTION_BAR_VERTICAL_ALIGNMENT_META": {
                 "description": "Vertical alignment of action buttons when action bar is in vertical mode (left/right): 'top' (buttons at top), 'bottom' (buttons at bottom). Use the splitter handle to adjust position."
             },
             "PushButton": {
@@ -109,8 +104,15 @@
                     }
                 },
                 "ICONS_SIZES": {
-                    "ACTION": 25,
-                    "OTHERS": 20
+                    "description": "Icon sizes in pixels",
+                    "ACTION": {
+                        "value": 25,
+                        "description": "Size for action buttons (filter, export, etc.)"
+                    },
+                    "OTHERS": {
+                        "value": 20,
+                        "description": "Size for status/info icons"
+                    }
                 },
                 "ICONS": {
                     "ACTION": {
@@ -150,21 +152,23 @@
             },
             "COLORS": {
                 "ACTIVE_THEME": {
+                    "value": "default",
                     "choices": [
                         "auto",
                         "default",
                         "dark",
                         "light"
                     ],
-                    "value": "default"
+                    "description": "Color theme for UI: 'auto' (detect from QGIS theme), 'default', 'dark', or 'light'"
                 },
                 "THEME_SOURCE": {
+                    "value": "config",
                     "choices": [
                         "config",
                         "qgis",
                         "system"
                     ],
-                    "value": "config"
+                    "description": "Theme source: 'config' (use configured theme), 'qgis' (inherit from QGIS), 'system' (use OS theme)"
                 },
                 "THEMES": {
                     "default": {
@@ -255,10 +259,21 @@
             "APP_SQLITE_PATH": "",
             "FRESH_RELOAD_FLAG": false,
             "SMALL_DATASET_OPTIMIZATION": {
-                "enabled": true,
-                "threshold": 5000,
-                "method": "ogr_memory",
-                "_description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)"
+                "description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)",
+                "enabled": {
+                    "value": true,
+                    "choices": [true, false],
+                    "description": "Enable/disable optimization"
+                },
+                "threshold": {
+                    "value": 5000,
+                    "description": "Number of features below which optimization is applied"
+                },
+                "method": {
+                    "value": "ogr_memory",
+                    "choices": ["ogr_memory", "qgis_processing"],
+                    "description": "Backend to use: 'ogr_memory' (fastest) or 'qgis_processing' (compatible)"
+                }
             }
         }
     },

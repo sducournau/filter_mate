@@ -27,7 +27,11 @@ def init_env_vars():
     Now reads config.json from PLUGIN_CONFIG_DIRECTORY (same as SQLite database)
     instead of the plugin directory. If config.json doesn't exist there,
     copies config.default.json from the plugin directory.
+    
+    Automatically detects and migrates/resets obsolete configurations.
     """
+    from qgis.core import QgsMessageLog
+    
     PROJECT = QgsProject.instance()
     PLATFORM = sys.platform
 
@@ -67,19 +71,19 @@ def init_env_vars():
     config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
     config_default_path = os.path.join(DIR_CONFIG, 'config.default.json')
     
-    # If config.json doesn't exist in PLUGIN_CONFIG_DIRECTORY, copy default
+    # If config.json doesn't exist in PLUGIN_CONFIG_DIRECTORY, copy default first
     if not os.path.exists(config_json_path):
         try:
             import shutil
             shutil.copy2(config_default_path, config_json_path)
             QgsMessageLog.logMessage(
-                f"Copied default configuration to: {config_json_path}",
+                f"FilterMate: Configuration créée avec les valeurs par défaut",
                 "FilterMate",
                 Qgis.Info
             )
         except Exception as e:
             QgsMessageLog.logMessage(
-                f"Could not copy default config: {e}. Using config from plugin directory.",
+                f"FilterMate: Impossible de copier la configuration par défaut: {e}",
                 "FilterMate",
                 Qgis.Warning
             )
@@ -109,9 +113,35 @@ def init_env_vars():
             )
             raise
 
+    # Validate that CONFIG_DATA has the expected structure
+    if not isinstance(CONFIG_DATA, dict) or "APP" not in CONFIG_DATA:
+        QgsMessageLog.logMessage(
+            f"FilterMate: Configuration invalide détectée, réinitialisation aux valeurs par défaut",
+            "FilterMate",
+            Qgis.Warning
+        )
+        # Reset to default
+        try:
+            import shutil
+            shutil.copy2(config_default_path, config_json_path)
+            with open(config_json_path) as f:
+                CONFIG_DATA = json.load(f)
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"FilterMate: Impossible de réinitialiser la configuration: {e}",
+                "FilterMate",
+                Qgis.Critical
+            )
+            raise
+
+    # Ensure OPTIONS exists in APP
+    if "OPTIONS" not in CONFIG_DATA.get("APP", {}):
+        CONFIG_DATA["APP"]["OPTIONS"] = {"APP_SQLITE_PATH": "", "FRESH_RELOAD_FLAG": False}
+
     # Validate APP_SQLITE_PATH from config
-    if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != '':
-        configured_path = os.path.normpath(CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"])
+    app_sqlite_path = CONFIG_DATA.get("APP", {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
+    if app_sqlite_path != '':
+        configured_path = os.path.normpath(app_sqlite_path)
         
         # Validate that parent directories exist and are accessible
         parent_dir = os.path.dirname(configured_path)
@@ -147,7 +177,8 @@ def init_env_vars():
             config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
     
     # Update APP_SQLITE_PATH in config if needed
-    if CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] != PLUGIN_CONFIG_DIRECTORY:
+    current_sqlite_path = CONFIG_DATA.get("APP", {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
+    if current_sqlite_path != PLUGIN_CONFIG_DIRECTORY:
         CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
         try:
             with open(config_json_path, 'w') as outfile:

@@ -35,13 +35,15 @@ class ConfigMigration:
     
     # Current target version
     CURRENT_VERSION = VERSION_2_0
+    MINIMUM_SUPPORTED_VERSION = VERSION_1_0  # Versions older than this will be reset
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, default_config_path: Optional[str] = None):
         """
         Initialize configuration migration.
         
         Args:
             config_path: Path to config.json. If None, uses default location.
+            default_config_path: Path to config.default.json. If None, looks in same directory as config_path.
         """
         if config_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,6 +52,12 @@ class ConfigMigration:
         self.config_path = os.path.abspath(config_path)
         self.config_dir = os.path.dirname(self.config_path)
         self.backup_dir = os.path.join(self.config_dir, "backups")
+        
+        # Store path to default config (may be in different directory than config.json)
+        if default_config_path is None:
+            self.default_config_path = os.path.join(self.config_dir, "config.default.json")
+        else:
+            self.default_config_path = os.path.abspath(default_config_path)
         
         # Ensure backup directory exists
         os.makedirs(self.backup_dir, exist_ok=True)
@@ -64,7 +72,10 @@ class ConfigMigration:
         Returns:
             Version string (e.g., "1.0", "2.0")
         """
-        # Check for explicit version marker
+        # Check for explicit version markers (new format)
+        if "_CONFIG_VERSION" in config_data:
+            return config_data["_CONFIG_VERSION"]
+        
         if "_schema_version" in config_data:
             return config_data["_schema_version"]
         
@@ -78,6 +89,30 @@ class ConfigMigration:
                 return self.VERSION_2_0
         
         return self.VERSION_UNKNOWN
+    
+    def is_obsolete(self, config_data: Dict[str, Any]) -> bool:
+        """
+        Check if configuration is too old and should be reset.
+        
+        Args:
+            config_data: Configuration dictionary
+        
+        Returns:
+            True if configuration should be reset to default
+        """
+        version = self.detect_version(config_data)
+        
+        # Unknown or corrupted configs should be reset
+        if version == self.VERSION_UNKNOWN:
+            return True
+        
+        # Check if version is older than minimum supported
+        # For now, only VERSION_1_0 and VERSION_2_0 are supported
+        # If we detect something else or a malformed config, reset
+        if version not in [self.VERSION_1_0, self.VERSION_2_0]:
+            return True
+        
+        return False
     
     def needs_migration(self, config_data: Dict[str, Any]) -> bool:
         """
@@ -112,6 +147,46 @@ class ConfigMigration:
         
         print(f"✓ Backup created: {backup_path}")
         return backup_path
+
+    def reset_to_default(self, reason: str = "obsolete", config_data: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+        """
+        Reset configuration to default, creating a backup first.
+        
+        Args:
+            reason: Reason for reset (for backup naming)
+            config_data: Optional current config to backup (if None, will load from file)
+        
+        Returns:
+            Tuple of (success, message)
+        """
+        # Create backup of current config
+        if config_data is not None:
+            backup_path = self.create_backup(config_data)
+        elif os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    current_config = json.load(f)
+                backup_path = self.create_backup(current_config)
+            except:
+                backup_path = None
+        else:
+            backup_path = None
+        
+        # Path to default config (stored during __init__)
+        default_config_path = self.default_config_path
+        
+        if not os.path.exists(default_config_path):
+            return False, f"Default configuration not found: {default_config_path}"
+        
+        try:
+            # Copy default config to config.json
+            shutil.copy2(default_config_path, self.config_path)
+            msg = f"Configuration reset to default (reason: {reason})"
+            if backup_path:
+                msg += f". Backup created: {backup_path}"
+            return True, msg
+        except Exception as e:
+            return False, f"Failed to reset configuration: {e}"
     
     def migrate_1_0_to_2_0(self, config_v1: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -477,23 +552,50 @@ class ConfigMigration:
     def auto_migrate_if_needed(self) -> Tuple[bool, List[str]]:
         """
         Automatically detect and migrate configuration if needed.
+        Resets to default if configuration is obsolete or corrupted.
         
         Returns:
-            Tuple of (migration_performed, list_of_warnings)
+            Tuple of (migration_performed_or_reset, list_of_warnings)
         """
         warnings = []
         
         # Load current config
         if not os.path.exists(self.config_path):
             warnings.append(f"Configuration file not found: {self.config_path}")
-            return False, warnings
+            # Try to copy default
+            success, msg = self.reset_to_default(reason="missing")
+            if success:
+                print(f"✓ {msg}")
+                return True, warnings
+            else:
+                warnings.append(msg)
+                return False, warnings
         
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
         except Exception as e:
             warnings.append(f"Failed to load configuration: {e}")
-            return False, warnings
+            # Config is corrupted, reset to default
+            success, msg = self.reset_to_default(reason="corrupted")
+            if success:
+                print(f"✓ Configuration was corrupted. {msg}")
+                return True, warnings
+            else:
+                warnings.append(msg)
+                return False, warnings
+        
+        # Check if config is obsolete
+        if self.is_obsolete(config_data):
+            current_version = self.detect_version(config_data)
+            print(f"⚠ Configuration version {current_version} is obsolete or unknown")
+            success, msg = self.reset_to_default(reason="obsolete")
+            if success:
+                print(f"✓ {msg}")
+                return True, warnings
+            else:
+                warnings.append(msg)
+                return False, warnings
         
         # Check if migration is needed
         if not self.needs_migration(config_data):

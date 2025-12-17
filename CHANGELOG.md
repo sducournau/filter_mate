@@ -2,6 +2,17 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [Unreleased]
+
+### 🔧 Fixed
+- **Forced Backend Respect** - Backend forcé par l'utilisateur maintenant strictement respecté
+  - Le système utilise maintenant toujours le backend choisi par l'utilisateur
+  - Plus de fallback automatique vers OGR quand un backend est forcé
+  - Ajout d'avertissements clairs si le backend forcé n'est pas optimal
+  - Gestion gracieuse des backends non disponibles (ex: PostgreSQL sans psycopg2)
+  - Documentation: `docs/fixes/FIX_FORCED_BACKEND_RESPECT_2025-12-17.md`
+  - Tests: `tests/test_forced_backend_respect.py`
+
 ## [2.3.5] - 2025-12-17 - Configuration System & Complete Audit
 
 ###  Configuration System Enhancements

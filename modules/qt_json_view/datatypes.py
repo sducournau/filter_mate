@@ -574,19 +574,34 @@ class FilepathTypeImages(DataType):
 class ChoicesType(DataType):
     """A combobox that allows for a number of choices.
 
-    The data has to be a dict with a value and a choices key.
+    The data has to be a dict with at least 'value' and 'choices' keys.
+    Supports extended format with optional 'description' and other metadata.
+    
+    Basic format:
     {
         "value": "A",
         "choices": ["A", "B", "C"]
     }
+    
+    Extended format (v2.0 config):
+    {
+        "value": "auto",
+        "choices": ["auto", "compact", "normal"],
+        "description": "UI display profile setting",
+        "additional_metadata": "any value"
+    }
     """
     THEME_COLOR_KEY = 'choices'
-    KEYS = ['value', 'choices']
+    REQUIRED_KEYS = ['value', 'choices']
 
     def matches(self, data):
-        if isinstance(data, dict) and len(data) == 2:
-            if all([True if k in self.KEYS else False for k in data.keys()]):
-                return True
+        """Match dict with 'value' and 'choices' keys (and optionally more)."""
+        if isinstance(data, dict):
+            # Must have both 'value' and 'choices' keys
+            if all(k in data for k in self.REQUIRED_KEYS):
+                # 'choices' must be a list
+                if isinstance(data.get('choices'), list):
+                    return True
         return False
 
     def createEditor(self, parent, option, index):
@@ -594,21 +609,24 @@ class ChoicesType(DataType):
         cbx = QtWidgets.QComboBox(parent)
         cbx.addItems([str(d) for d in data['choices']])
         cbx.setCurrentIndex(cbx.findText(str(data['value'])))
+        # Add description as tooltip if available
+        if 'description' in data:
+            cbx.setToolTip(str(data['description']))
         return cbx
 
     def setModelData(self, editor, model, index):
-        #if isinstance(model, QtWidgets.QAbstractProxyModel):
-        #    index = model.mapToSource(index)
-        #    model = model.sourceModel()
         data = index.data(QtCore.Qt.UserRole)
         data['value'] = data['choices'][editor.currentIndex()]
-        model.itemFromIndex(index).setData(data['value'] , QtCore.Qt.DisplayRole)
+        model.itemFromIndex(index).setData(data['value'], QtCore.Qt.DisplayRole)
         model.itemFromIndex(index).setData(data, QtCore.Qt.UserRole)
 
     def value_item(self, value, model, key=None):
-        """Item representing a value."""
+        """Item representing a value with optional tooltip from description."""
         value_item = super(ChoicesType, self).value_item(value['value'], model, key)
         value_item.setData(value, QtCore.Qt.UserRole)
+        # Set tooltip from description if available
+        if 'description' in value:
+            value_item.setData(str(value['description']), QtCore.Qt.ToolTipRole)
         return value_item
 
     def serialize(self, model, item, data, parent):
@@ -622,7 +640,161 @@ class ChoicesType(DataType):
             data.append(value)
 
 
+class ConfigValueType(DataType):
+    """A simple config value with description metadata.
+
+    The data has to be a dict with 'value' key and optionally 'description'.
+    This type handles config values that have metadata but no choices.
+    
+    Format:
+    {
+        "value": true,
+        "description": "Auto-activate plugin when project loaded"
+    }
+    
+    Or with additional metadata:
+    {
+        "value": "path/to/file",
+        "description": "Database file path",
+        "applies_to": "Plugin initialization"
+    }
+    
+    NOTE: This type must NOT match if 'choices' key is present - 
+    those should be handled by ChoicesType.
+    """
+    THEME_COLOR_KEY = 'string'
+
+    def matches(self, data):
+        """Match dict with 'value' key but WITHOUT 'choices' key."""
+        if isinstance(data, dict):
+            # Must have 'value' key
+            if 'value' in data:
+                # Must NOT have 'choices' key (that's for ChoicesType)
+                if 'choices' not in data:
+                    # Should have at least description or other metadata
+                    # (otherwise it's just a plain value in a dict)
+                    return len(data) >= 2
+        return False
+
+    def createEditor(self, parent, option, index):
+        """Create appropriate editor based on value type."""
+        data = index.data(QtCore.Qt.UserRole)
+        value = data.get('value')
+        
+        if isinstance(value, bool):
+            # Use checkbox for boolean
+            cbx = QtWidgets.QCheckBox(parent)
+            cbx.setChecked(value)
+            if 'description' in data:
+                cbx.setToolTip(str(data['description']))
+            return cbx
+        elif isinstance(value, int) and not isinstance(value, bool):
+            # Use spinbox for integers
+            spinbox = QtWidgets.QSpinBox(parent)
+            spinbox.setMinimum(-2147483648)
+            spinbox.setMaximum(2147483647)
+            spinbox.setValue(value)
+            if 'description' in data:
+                spinbox.setToolTip(str(data['description']))
+            return spinbox
+        elif isinstance(value, float):
+            # Use double spinbox for floats
+            spinbox = QtWidgets.QDoubleSpinBox(parent)
+            spinbox.setDecimals(6)
+            spinbox.setMinimum(-1e10)
+            spinbox.setMaximum(1e10)
+            spinbox.setValue(value)
+            if 'description' in data:
+                spinbox.setToolTip(str(data['description']))
+            return spinbox
+        else:
+            # Use line edit for strings and other types
+            line_edit = QtWidgets.QLineEdit(parent)
+            line_edit.setText(str(value) if value is not None else '')
+            if 'description' in data:
+                line_edit.setToolTip(str(data['description']))
+            return line_edit
+
+    def setModelData(self, editor, model, index):
+        """Set model data based on editor type."""
+        data = index.data(QtCore.Qt.UserRole)
+        original_value = data.get('value')
+        
+        if isinstance(editor, QtWidgets.QCheckBox):
+            new_value = editor.isChecked()
+        elif isinstance(editor, QtWidgets.QSpinBox):
+            new_value = editor.value()
+        elif isinstance(editor, QtWidgets.QDoubleSpinBox):
+            new_value = editor.value()
+        else:
+            # Line edit - try to preserve type
+            text = editor.text()
+            if isinstance(original_value, bool):
+                new_value = text.lower() in ('true', '1', 'yes', 'on')
+            elif isinstance(original_value, int) and not isinstance(original_value, bool):
+                try:
+                    new_value = int(text)
+                except ValueError:
+                    new_value = text
+            elif isinstance(original_value, float):
+                try:
+                    new_value = float(text)
+                except ValueError:
+                    new_value = text
+            else:
+                new_value = text
+        
+        data['value'] = new_value
+        # Display the value, not the full dict
+        display_text = str(new_value)
+        if isinstance(new_value, bool):
+            display_text = 'true' if new_value else 'false'
+        model.itemFromIndex(index).setData(display_text, QtCore.Qt.DisplayRole)
+        model.itemFromIndex(index).setData(data, QtCore.Qt.UserRole)
+
+    def value_item(self, value, model, key=None):
+        """Item representing a value with optional tooltip from description."""
+        actual_value = value.get('value', value)
+        # Convert bool to string for display
+        if isinstance(actual_value, bool):
+            display_text = 'true' if actual_value else 'false'
+        else:
+            display_text = str(actual_value) if actual_value is not None else ''
+        
+        value_item = QtGui.QStandardItem(display_text)
+        value_item.setData(display_text, QtCore.Qt.DisplayRole)
+        value_item.setData(value, QtCore.Qt.UserRole)
+        value_item.setData(self, TypeRole)
+        value_item.setData(QtGui.QBrush(self.get_color()), QtCore.Qt.ForegroundRole)
+        value_item.setFlags(
+            QtCore.Qt.ItemIsSelectable |
+            QtCore.Qt.ItemIsEnabled)
+        if model.editable_values:
+            value_item.setFlags(value_item.flags() | QtCore.Qt.ItemIsEditable)
+        
+        # Set tooltip from description if available
+        if isinstance(value, dict) and 'description' in value:
+            value_item.setData(str(value['description']), QtCore.Qt.ToolTipRole)
+        
+        return value_item
+
+    def serialize(self, model, item, data, parent):
+        """Serialize the full dict structure back."""
+        value_item = parent.child(item.row(), 1)
+        value = value_item.data(QtCore.Qt.UserRole)
+        if isinstance(data, dict):
+            key_item = parent.child(item.row(), 0)
+            key = key_item.data(QtCore.Qt.DisplayRole)
+            data[key] = value
+        elif isinstance(data, list):
+            data.append(value)
+
+
 # Add any custom DataType to this list
+# NOTE: Order matters! More specific types must come before generic ones.
+# - ChoicesType must match before ConfigValueType (has 'choices' key)
+# - ConfigValueType must match before DictType (has 'value' key with metadata)
+# - DictType is the fallback for all other dicts
 #
 DATA_TYPES = [
     NoneType(),
@@ -636,8 +808,9 @@ DATA_TYPES = [
     BoolType(),
     ListType(),
     RangeType(),
-    ChoicesType(),
-    DictType()
+    ChoicesType(),      # Match {value, choices, ...} - dropdown editor
+    ConfigValueType(),  # Match {value, description, ...} without choices - typed editor
+    DictType()          # Fallback for all other dicts
 ]
 
 
