@@ -1462,7 +1462,7 @@ class FilterEngineTask(QgsTask):
             # Multi-selection mode - use selected features
             logger.info(f"=== prepare_spatialite_source_geom (MULTI-SELECTION MODE) ===")
             logger.info(f"  Using {self.source_layer.selectedFeatureCount()} selected features from source layer")
-            features = self.source_layer.selectedFeatures()
+            features = list(self.source_layer.selectedFeatures())
         elif is_field_based_mode:
             # FIELD-BASED MODE: Use ALL features from filtered source layer
             # The source layer keeps its current filter (subset string)

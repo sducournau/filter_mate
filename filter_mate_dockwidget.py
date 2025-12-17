@@ -2847,9 +2847,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if layer_props["filtering"]["has_layers_to_filter"]:
                     i = 0
                     
-                    for key in self.PROJECT_LAYERS:
+                    # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
+                    for key in list(self.PROJECT_LAYERS.keys()):
                         # Verify required keys exist in layer info
-                        if "infos" not in self.PROJECT_LAYERS[key]:
+                        if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
                             continue
                         
                         layer_info = self.PROJECT_LAYERS[key]["infos"]
@@ -2882,9 +2883,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             i += 1    
                 else:
                     i = 0
-                    for key in self.PROJECT_LAYERS:
+                    # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
+                    for key in list(self.PROJECT_LAYERS.keys()):
                         # Verify required keys exist in layer info
-                        if "infos" not in self.PROJECT_LAYERS[key]:
+                        if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
                             continue
                         
                         layer_info = self.PROJECT_LAYERS[key]["infos"]
@@ -2940,9 +2942,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
             item_index = 0  # Track actual item position in widget
-            for key in self.PROJECT_LAYERS:
+            # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
+            for key in list(self.PROJECT_LAYERS.keys()):
                 # Verify required keys exist in layer info
-                if "infos" not in self.PROJECT_LAYERS[key]:
+                if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
                     continue
                 
                 layer_info = self.PROJECT_LAYERS[key]["infos"]
