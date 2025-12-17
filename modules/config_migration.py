@@ -167,7 +167,8 @@ class ConfigMigration:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     current_config = json.load(f)
                 backup_path = self.create_backup(current_config)
-            except:
+            except (json.JSONDecodeError, OSError, IOError) as e:
+                # Config file is corrupted or unreadable, continue without backup
                 backup_path = None
         else:
             backup_path = None

@@ -128,6 +128,7 @@ from .modules.appUtils import (
 from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
 from .modules.ui_styles import StyleLoader
+from .modules.feedback_utils import show_info, show_warning, show_error, show_success
 from .modules.config_helpers import set_config_value
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
@@ -1400,8 +1401,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         available_backends = self._get_available_backends_for_layer(current_layer)
         
         if not available_backends:
-            from qgis.utils import iface
-            iface.messageBar().pushWarning("FilterMate", "No alternative backends available for this layer")
+            show_warning("FilterMate", "No alternative backends available for this layer")
             return
         
         # Create context menu
@@ -1487,15 +1487,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._update_backend_indicator(self._current_provider_type, 
                                               self._current_postgresql_available,
                                               actual_backend=selected_backend)
-                from qgis.utils import iface
-                iface.messageBar().pushSuccess("FilterMate", f"Backend forced to {selected_backend.upper()} for layer '{current_layer.name()}'")
+                show_success("FilterMate", f"Backend forced to {selected_backend.upper()} for layer '{current_layer.name()}'")
             else:
                 # Reset to auto - no forced backend
                 self._update_backend_indicator(self._current_provider_type, 
                                               self._current_postgresql_available,
                                               actual_backend=None)
-                from qgis.utils import iface
-                iface.messageBar().pushInfo("FilterMate", f"Backend set to Auto for layer '{current_layer.name()}'")
+                show_info("FilterMate", f"Backend set to Auto for layer '{current_layer.name()}'")
     
     def _get_available_backends_for_layer(self, layer):
         """
@@ -1635,7 +1633,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from .modules.appUtils import POSTGRESQL_AVAILABLE
         
         if not backend_type:
-            iface.messageBar().pushWarning("FilterMate", "No backend selected to force")
+            show_warning("FilterMate", "No backend selected to force")
             return
         
         logger.info("=" * 60)
@@ -1653,7 +1651,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         task_params = {}  # Minimal params just for testing
         if backend_type == 'postgresql':
             if not POSTGRESQL_AVAILABLE:
-                iface.messageBar().pushWarning(
+                show_warning(
                     "FilterMate", 
                     "PostgreSQL backend not available (psycopg2 not installed)"
                 )
@@ -1664,10 +1662,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         elif backend_type == 'ogr':
             backend = OGRGeometricFilter(task_params)
         else:
-            iface.messageBar().pushWarning("FilterMate", f"Unknown backend type: {backend_type}")
+            show_warning("FilterMate", f"Unknown backend type: {backend_type}")
             return
         
+        from qgis.core import QgsVectorLayer
+        
         for layer in layers:
+            # Skip non-vector layers (raster, mesh, etc.)
+            if not isinstance(layer, QgsVectorLayer):
+                continue
+            
             if not layer.isValid():
                 skipped_count += 1
                 continue
@@ -1700,14 +1704,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             msg = f"Forced {forced_count} layer(s) to use {backend_type.upper()} backend"
             if skipped_count > 0:
                 msg += f" ({skipped_count} incompatible layer(s) skipped)"
-            iface.messageBar().pushSuccess("FilterMate", msg)
+            show_success("FilterMate", msg)
         else:
             msg = f"No layers compatible with {backend_type.upper()} backend"
             if incompatible_layers:
                 msg += f" - Incompatible: {', '.join(incompatible_layers[:3])}"
                 if len(incompatible_layers) > 3:
                     msg += f" and {len(incompatible_layers) - 3} more"
-            iface.messageBar().pushWarning("FilterMate", msg)
+            show_warning("FilterMate", msg)
         
         # Update indicator for current layer
         if self.current_layer:
@@ -1747,10 +1751,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Returns:
             str or None: Optimal backend type ('postgresql', 'spatialite', 'ogr'), or None for auto
         """
+        from qgis.core import QgsVectorLayer
         from .modules.appUtils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
         from .modules.backends.factory import should_use_memory_optimization
         
-        if not layer or not layer.isValid():
+        # Only process vector layers
+        if not layer or not isinstance(layer, QgsVectorLayer) or not layer.isValid():
             return None
         
         provider_type = detect_layer_provider_type(layer)
@@ -1811,11 +1817,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Analyzes each layer's characteristics and sets the most appropriate backend.
         Shows summary message with results.
         """
-        from qgis.utils import iface
         from qgis.core import QgsProject
         
         if not hasattr(self, 'PROJECT_LAYERS') or not self.PROJECT_LAYERS:
-            iface.messageBar().pushWarning("FilterMate", "No layers loaded in project")
+            show_warning("FilterMate", "No layers loaded in project")
             return
         
         logger.info("=" * 60)
@@ -1829,7 +1834,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         project = QgsProject.instance()
         layers = project.mapLayers().values()
         
+        from qgis.core import QgsVectorLayer
+        
         for layer in layers:
+            # Skip non-vector layers (raster, mesh, etc.)
+            if not isinstance(layer, QgsVectorLayer):
+                continue
+            
             if not layer.isValid():
                 skipped_count += 1
                 continue
@@ -1871,9 +1882,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if optimized_count > 0:
             summary = f"Optimized {optimized_count} layer(s): "
             summary += ", ".join([f"{count} {backend.upper()}" for backend, count in backend_stats.items() if count > 0 and backend != 'auto'])
-            iface.messageBar().pushSuccess("FilterMate", summary)
+            show_success("FilterMate", summary)
         else:
-            iface.messageBar().pushInfo("FilterMate", "All layers using auto-selection")
+            show_info("FilterMate", "All layers using auto-selection")
         
         # Update indicator for current layer
         if self.current_layer:
@@ -2883,8 +2894,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     changes_summary.append(f"Action bar position: {new_value}")
                     
                     # Show message that reload is recommended
-                    from qgis.utils import iface
-                    iface.messageBar().pushInfo(
+                    show_info(
                         "FilterMate",
                         QCoreApplication.translate("FilterMateDockWidget", 
                             "Action bar position changed. Use 'Reload Plugin' button for best results.")
@@ -2903,8 +2913,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     changes_summary.append(f"Action bar alignment: {new_value}")
                 
                 # Show confirmation message
-                from qgis.utils import iface
-                iface.messageBar().pushInfo(
+                show_info(
                     "FilterMate",
                     f"Action bar updated successfully."
                 )
@@ -3088,10 +3097,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error cancelling configuration changes: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            iface.messageBar().pushCritical(
+            show_error(
                 "FilterMate",
-                f"Error cancelling changes: {str(e)}",
-                5
+                f"Error cancelling changes: {str(e)}"
             )
 
 
@@ -5145,10 +5153,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return (False, None, None)
         try:
             if not is_layer_source_available(layer):
-                from qgis.utils import iface as _iface
                 logger.warning(f"current_layer_changed: rejecting invalid or missing-source layer '{layer.name()}'")
                 try:
-                    _iface.messageBar().pushWarning(
+                    show_warning(
                         "FilterMate",
                         "La couche sélectionnée est invalide ou sa source est introuvable. Sélection annulée."
                     )
@@ -6616,8 +6623,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Notify user when transitioning from empty to loaded state
         if was_empty and len(self.PROJECT_LAYERS) > 0:
-            from qgis.utils import iface as qgis_iface
-            qgis_iface.messageBar().pushSuccess(
+            show_success(
                 "FilterMate",
                 f"Plugin activé avec {len(self.PROJECT_LAYERS)} couche(s) vectorielle(s)"
             )
@@ -6691,6 +6697,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._updating_layers:
             logger.warning("Blocking recursive call to get_project_layers_from_app")
             return
+        
+        # STABILITY FIX: Validate input parameters
+        if project_layers is None:
+            logger.warning("get_project_layers_from_app received None for project_layers, using empty dict")
+            project_layers = {}
             
         self._updating_layers = True
         self._plugin_busy = True  # STABILITY FIX: Block other operations during layer update
@@ -6801,7 +6812,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info("FilterMate plugin reload initiated")
             else:
                 logger.warning("FilterMate plugin not found in plugins dictionary")
-                iface.messageBar().pushWarning(
+                show_warning(
                     "FilterMate",
                     "Could not reload plugin automatically. Please close and reopen the plugin."
                 )
@@ -6809,7 +6820,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error reloading plugin: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            iface.messageBar().pushCritical(
+            show_error(
                 "FilterMate",
                 f"Error reloading plugin: {str(e)}"
             )

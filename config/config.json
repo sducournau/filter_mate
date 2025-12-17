@@ -1,296 +1,132 @@
 {
-    "APP": {
-        "AUTO_ACTIVATE": {
-            "value": false
-        },
-        "_AUTO_ACTIVATE_META": {
-            "description": "Auto-activate plugin when a project with vector layers is loaded: true (automatically open plugin), false (manual activation only)",
-            "applies_to": "Plugin initialization behavior"
-        },
-        "DOCKWIDGET": {
-            "FEEDBACK_LEVEL": {
-                "choices": [
-                    "minimal",
-                    "normal",
-                    "verbose"
-                ],
-                "value": "normal"
-            },
-            "_FEEDBACK_LEVEL_META": {
-                "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
-                "categories_affected": [
-                    "filter_count",
-                    "undo_redo",
-                    "backend_info",
-                    "config_changes",
-                    "progress_info",
-                    "history_status"
-                ]
-            },
-            "LANGUAGE": {
-                "choices": [
-                    "auto",
-                    "en",
-                    "fr",
-                    "de",
-                    "es",
-                    "it",
-                    "nl",
-                    "pt"
-                ],
-                "value": "auto"
-            },
-            "_LANGUAGE_META": {
-                "description": "Interface language: 'auto' (use QGIS locale), or force specific language",
-                "available_translations": [
-                    "en (English)",
-                    "fr (Français)",
-                    "de (Deutsch)",
-                    "es (Español)",
-                    "it (Italiano)",
-                    "nl (Nederlands)",
-                    "pt (Português)"
-                ]
-            },
-            "UI_PROFILE": {
-                "choices": [
-                    "auto",
-                    "compact",
-                    "normal"
-                ],
-                "value": "auto"
-            },
-            "_UI_PROFILE_META": {
-                "description": "UI display profile: 'auto' (detect from screen), 'compact' for small screens, 'normal' for standard displays",
-                "auto_detection_thresholds": {
-                    "compact_if_width_less_than": 1920,
-                    "compact_if_height_less_than": 1080
-                }
-            },
-            "ACTION_BAR_POSITION": {
-                "choices": [
-                    "top",
-                    "bottom",
-                    "left",
-                    "right"
-                ],
-                "value": "bottom"
-            },
-            "_ACTION_BAR_POSITION_META": {
-                "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
-            },
-            "ACTION_BAR_VERTICAL_ALIGNMENT": {
-                "choices": [
-                    "top",
-                    "bottom"
-                ],
-                "value": "top"
-            },
-            "_ACTION_BAR_VERTICAL_ALIGNMENT_META": {
-                "description": "Vertical alignment of action buttons when action bar is in vertical mode (left/right): 'top' (buttons at top), 'bottom' (buttons at bottom). Use the splitter handle to adjust position."
-            },
-            "PushButton": {
-                "STYLE": {
-                    "QPushButton": {
-                        "border-radius": "10px;",
-                        "padding": "10px 10px 10px 10px;",
-                        "background-color": "#F0F0F0;"
-                    },
-                    "QPushButton:hover": {
-                        "background-color": "#CCCCCC;"
-                    },
-                    "QPushButton:pressed": {
-                        "background-color": "#CCCCCC;",
-                        "border": "2px solid black;"
-                    },
-                    "QPushButton:checked": {
-                        "background-color": "#CCCCCC;",
-                        "border": "2px solid black;"
-                    }
-                },
-                "ICONS_SIZES": {
-                    "ACTION": 25,
-                    "OTHERS": 20
-                },
-                "ICONS": {
-                    "ACTION": {
-                        "FILTER": "filter.png",
-                        "UNDO_FILTER": "undo.png",
-                        "REDO_FILTER": "redo.png",
-                        "UNFILTER": "unfilter.png",
-                        "RESET": "reset.png",
-                        "EXPORT": "export.png",
-                        "ABOUT": "icon.png"
-                    },
-                    "EXPLORING": {
-                        "IDENTIFY": "identify_alt.png",
-                        "ZOOM": "zoom.png",
-                        "IS_SELECTING": "select_black.png",
-                        "IS_TRACKING": "track.png",
-                        "IS_LINKING": "link.png",
-                        "RESET_ALL_LAYER_PROPERTIES": "save_properties.png"
-                    },
-                    "FILTERING": {
-                        "AUTO_CURRENT_LAYER": "auto_layer_white.png",
-                        "HAS_LAYERS_TO_FILTER": "layers.png",
-                        "HAS_COMBINE_OPERATOR": "add_multi.png",
-                        "HAS_GEOMETRIC_PREDICATES": "geo_predicates.png",
-                        "HAS_BUFFER_VALUE": "buffer_value.png",
-                        "HAS_BUFFER_TYPE": "buffer_type.png"
-                    },
-                    "EXPORTING": {
-                        "HAS_LAYERS_TO_EXPORT": "layers.png",
-                        "HAS_PROJECTION_TO_EXPORT": "projection_black.png",
-                        "HAS_STYLES_TO_EXPORT": "styles_black.png",
-                        "HAS_DATATYPE_TO_EXPORT": "datatype.png",
-                        "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png",
-                        "HAS_ZIP_TO_EXPORT": "zip.png"
-                    }
-                }
-            },
-            "COLORS": {
-                "ACTIVE_THEME": {
-                    "choices": [
-                        "auto",
-                        "default",
-                        "dark",
-                        "light"
-                    ],
-                    "value": "default"
-                },
-                "THEME_SOURCE": {
-                    "choices": [
-                        "config",
-                        "qgis",
-                        "system"
-                    ],
-                    "value": "config"
-                },
-                "THEMES": {
-                    "default": {
-                        "BACKGROUND": [
-                            "#F5F5F5",
-                            "#FFFFFF",
-                            "#E0E0E0",
-                            "#2196F3"
-                        ],
-                        "FONT": [
-                            "#212121",
-                            "#616161",
-                            "#BDBDBD"
-                        ],
-                        "ACCENT": {
-                            "PRIMARY": "#1976D2",
-                            "HOVER": "#2196F3",
-                            "PRESSED": "#0D47A1",
-                            "LIGHT_BG": "#E3F2FD",
-                            "DARK": "#01579B"
-                        }
-                    },
-                    "dark": {
-                        "BACKGROUND": [
-                            "#1E1E1E",
-                            "#2D2D30",
-                            "#3E3E42",
-                            "#4A4A4F"
-                        ],
-                        "FONT": [
-                            "#F5F5F5",
-                            "#E0E0E0",
-                            "#A0A0A0"
-                        ],
-                        "ACCENT": {
-                            "PRIMARY": "#007ACC",
-                            "HOVER": "#1E90FF",
-                            "PRESSED": "#005A9E",
-                            "LIGHT_BG": "#2D4A6B",
-                            "DARK": "#003D66"
-                        }
-                    },
-                    "light": {
-                        "BACKGROUND": [
-                            "#FFFFFF",
-                            "#F5F5F5",
-                            "#E0E0E0",
-                            "#2196F3"
-                        ],
-                        "FONT": [
-                            "#000000",
-                            "#424242",
-                            "#9E9E9E"
-                        ],
-                        "ACCENT": {
-                            "PRIMARY": "#2196F3",
-                            "HOVER": "#64B5F6",
-                            "PRESSED": "#1976D2",
-                            "LIGHT_BG": "#E3F2FD",
-                            "DARK": "#0D47A1"
-                        }
-                    }
-                },
-                "BACKGROUND": [
-                    "#FAFAFA",
-                    "#E0E0E0",
-                    "#BDBDBD",
-                    "#2196F3"
-                ],
-                "FONT": [
-                    "#212121",
-                    "#424242",
-                    "#9E9E9E"
-                ],
-                "ACCENT": {
-                    "PRIMARY": "#2196F3",
-                    "HOVER": "#64B5F6",
-                    "PRESSED": "#1976D2",
-                    "LIGHT_BG": "#E3F2FD",
-                    "DARK": "#0D47A1"
-                }
-            }
-        },
-        "OPTIONS": {
-            "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
-            "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
-            "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
-            "APP_SQLITE_PATH": "",
-            "FRESH_RELOAD_FLAG": false,
-            "SMALL_DATASET_OPTIMIZATION": {
-                "enabled": true,
-                "threshold": 5000,
-                "method": "ogr_memory",
-                "_description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)"
-            }
-        }
+  "_schema_version": "2.0",
+  "_migrated_from": "1.0",
+  "_migration_date": "2025-12-17T22:26:55.567018",
+  "app": {
+    "auto_activate": {
+      "value": false,
+      "choices": [
+        true,
+        false
+      ]
     },
-    "CURRENT_PROJECT": {
-        "EXPORTING": {
-            "HAS_LAYERS_TO_EXPORT": false,
-            "LAYERS_TO_EXPORT": [],
-            "HAS_PROJECTION_TO_EXPORT": false,
-            "PROJECTION_TO_EXPORT": "EPSG:3857",
-            "HAS_STYLES_TO_EXPORT": false,
-            "STYLES_TO_EXPORT": "QML",
-            "HAS_DATATYPE_TO_EXPORT": false,
-            "DATATYPE_TO_EXPORT": "GPKG",
-            "HAS_OUTPUT_FOLDER_TO_EXPORT": false,
-            "OUTPUT_FOLDER_TO_EXPORT": "",
-            "HAS_ZIP_TO_EXPORT": false,
-            "ZIP_TO_EXPORT": "",
-            "BATCH_OUTPUT_FOLDER": false,
-            "BATCH_ZIP": false
+    "ui": {
+      "feedback": {
+        "level": {
+          "value": "normal",
+          "choices": [
+            "minimal",
+            "normal",
+            "verbose"
+          ]
+        }
+      },
+      "language": {
+        "value": "auto",
+        "choices": [
+          "auto",
+          "en",
+          "fr",
+          "de",
+          "es",
+          "it",
+          "nl",
+          "pt"
+        ]
+      },
+      "profile": {
+        "value": "auto",
+        "choices": [
+          "auto",
+          "compact",
+          "normal"
+        ]
+      },
+      "theme": {
+        "active": {
+          "value": "default",
+          "choices": [
+            "auto",
+            "default",
+            "dark",
+            "light"
+          ]
         },
-        "OPTIONS": {
-            "LAYERS": {
-                "LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG": true,
-                "LAYER_PROPERTIES_COUNT": 35,
-                "FEATURE_COUNT_LIMIT": 10000
-            },
-            "PROJECT_ID": "",
-            "PROJECT_PATH": "",
-            "PROJECT_SQLITE_PATH": "",
-            "ACTIVE_POSTGRESQL": "",
-            "IS_ACTIVE_POSTGRESQL": false
-        },
-        "layers": []
+        "source": {
+          "value": "config",
+          "choices": [
+            "config",
+            "qgis",
+            "system"
+          ]
+        }
+      }
+    },
+    "themes": {
+      "default": {
+        "BACKGROUND": [
+          "#F5F5F5",
+          "#FFFFFF",
+          "#E0E0E0",
+          "#2196F3"
+        ],
+        "FONT": [
+          "#212121",
+          "#616161",
+          "#BDBDBD"
+        ],
+        "ACCENT": {
+          "PRIMARY": "#1976D2",
+          "HOVER": "#2196F3",
+          "PRESSED": "#0D47A1",
+          "LIGHT_BG": "#E3F2FD",
+          "DARK": "#01579B"
+        }
+      },
+      "dark": {
+        "BACKGROUND": [
+          "#1E1E1E",
+          "#2D2D30",
+          "#3E3E42",
+          "#4A4A4F"
+        ],
+        "FONT": [
+          "#F5F5F5",
+          "#E0E0E0",
+          "#A0A0A0"
+        ],
+        "ACCENT": {
+          "PRIMARY": "#007ACC",
+          "HOVER": "#1E90FF",
+          "PRESSED": "#005A9E",
+          "LIGHT_BG": "#2D4A6B",
+          "DARK": "#003D66"
+        }
+      },
+      "light": {
+        "BACKGROUND": [
+          "#FFFFFF",
+          "#F5F5F5",
+          "#E0E0E0",
+          "#2196F3"
+        ],
+        "FONT": [
+          "#000000",
+          "#424242",
+          "#9E9E9E"
+        ],
+        "ACCENT": {
+          "PRIMARY": "#2196F3",
+          "HOVER": "#64B5F6",
+          "PRESSED": "#1976D2",
+          "LIGHT_BG": "#E3F2FD",
+          "DARK": "#0D47A1"
+        }
+      }
+    },
+    "export": {},
+    "project": {
+      "link_legend_layers": true
     }
+  }
 }

@@ -21,6 +21,86 @@ except ImportError:
         return True  # Show all messages by default
 
 
+# =============================================================================
+# Generic Feedback Functions (for centralized message bar access)
+# =============================================================================
+
+def show_info(message: str, title: str = "FilterMate"):
+    """
+    Show an info message in the QGIS message bar.
+    
+    Args:
+        message: The message to display
+        title: The message title (default: "FilterMate")
+    
+    Example:
+        >>> show_info("Operation completed successfully")
+    """
+    try:
+        from qgis.utils import iface
+        if iface and should_show_message('info'):
+            iface.messageBar().pushInfo(title, message)
+    except Exception:
+        pass  # Graceful fallback if iface not available
+
+
+def show_warning(message: str, title: str = "FilterMate"):
+    """
+    Show a warning message in the QGIS message bar.
+    
+    Args:
+        message: The message to display
+        title: The message title (default: "FilterMate")
+    
+    Example:
+        >>> show_warning("Large dataset detected. Performance may be reduced.")
+    """
+    try:
+        from qgis.utils import iface
+        if iface and should_show_message('warning'):
+            iface.messageBar().pushWarning(title, message)
+    except Exception:
+        pass  # Graceful fallback if iface not available
+
+
+def show_error(message: str, title: str = "FilterMate"):
+    """
+    Show an error message in the QGIS message bar.
+    
+    Args:
+        message: The message to display
+        title: The message title (default: "FilterMate")
+    
+    Example:
+        >>> show_error("Failed to apply filter: connection refused")
+    """
+    try:
+        from qgis.utils import iface
+        if iface and should_show_message('error'):
+            iface.messageBar().pushCritical(title, message)
+    except Exception:
+        pass  # Graceful fallback if iface not available
+
+
+def show_success(message: str, title: str = "FilterMate"):
+    """
+    Show a success message in the QGIS message bar.
+    
+    Args:
+        message: The message to display
+        title: The message title (default: "FilterMate")
+    
+    Example:
+        >>> show_success("Filter applied successfully")
+    """
+    try:
+        from qgis.utils import iface
+        if iface and should_show_message('success'):
+            iface.messageBar().pushSuccess(title, message)
+    except Exception:
+        pass  # Graceful fallback if iface not available
+
+
 # Backend display names and icons
 BACKEND_INFO = {
     'postgresql': {

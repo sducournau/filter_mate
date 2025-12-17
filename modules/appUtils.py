@@ -295,7 +295,24 @@ def is_valid_geopackage(file_path: str) -> bool:
 
 
 def truncate(number, digits) -> float:
-    # Improve accuracy with floating point operations, to avoid truncate(16.4, 2) = 16.39 or truncate(-1.13, 2) = -1.12
+    """
+    Truncate a number to a specified number of decimal places.
+    
+    Uses improved accuracy with floating point operations to avoid
+    common truncation errors like truncate(16.4, 2) = 16.39 or 
+    truncate(-1.13, 2) = -1.12.
+    
+    Args:
+        number: The number to truncate
+        digits: Number of decimal places to keep
+        
+    Returns:
+        float: The truncated number
+        
+    Example:
+        >>> truncate(16.456, 2)
+        16.45
+    """
     nbDecimals = len(str(number).split('.')[1]) 
     if nbDecimals <= digits:
         return number

@@ -78,6 +78,17 @@ MESSAGE_TASKS_CATEGORIES = {
                             'project_read':'ManageLayers'
                             }
 
+# STABILITY CONSTANTS - Centralized timing configuration
+STABILITY_CONSTANTS = {
+    'MAX_ADD_LAYERS_QUEUE': 50,           # Maximum queued add_layers operations
+    'FLAG_TIMEOUT_MS': 30000,              # Timeout for flags (30 seconds)
+    'LAYER_RETRY_DELAY_MS': 500,           # Delay between layer operation retries
+    'UI_REFRESH_DELAY_MS': 200,            # Delay for UI refresh after operations
+    'PROJECT_LOAD_DELAY_MS': 1500,         # Delay after project load for layer processing
+    'MAX_RETRIES': 10,                     # Maximum retry count for deferred operations
+    'SIGNAL_DEBOUNCE_MS': 100,             # Debounce delay for rapid signal calls
+}
+
 class FilterMateApp:
 
     PROJECT_LAYERS = {} 
@@ -96,9 +107,27 @@ class FilterMateApp:
             return []
 
     def _on_layers_added(self, layers):
-        """Signal handler for layersAdded: ignore broken/invalid layers."""
+        """Signal handler for layersAdded: ignore broken/invalid layers.
+        
+        STABILITY: Debounces rapid layer additions and validates all layers.
+        """
+        import time
+        
+        # STABILITY FIX: Debounce rapid layer additions
+        current_time = time.time() * 1000
+        debounce_ms = STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS']
+        if current_time - self._last_layer_change_timestamp < debounce_ms:
+            logger.debug(f"Debouncing layersAdded signal (elapsed: {current_time - self._last_layer_change_timestamp:.0f}ms < {debounce_ms}ms)")
+            # Queue for later processing
+            QTimer.singleShot(debounce_ms, lambda l=layers: self._on_layers_added(l))
+            return
+        self._last_layer_change_timestamp = current_time
+        
+        # STABILITY FIX: Check and reset stale flags
+        self._check_and_reset_stale_flags()
+        
         # Check if any PostgreSQL layers are being added without psycopg2
-        postgres_layers = [l for l in layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
+        postgres_layers = [l for l in layers if self._is_layer_valid(l) and isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
         if postgres_layers and not POSTGRESQL_AVAILABLE:
             layer_names = ', '.join([l.name() for l in postgres_layers[:3]])  # Show first 3
             if len(postgres_layers) > 3:
@@ -241,11 +270,14 @@ class FilterMateApp:
         self._signals_connected = False
         self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
         self._loading_new_project = False  # Flag to track when loading a new project
+        self._loading_new_project_timestamp = 0  # Timestamp when flag was set
         self._initializing_project = False  # Flag to prevent recursive project initialization
+        self._initializing_project_timestamp = 0  # Timestamp when flag was set
         self._pending_add_layers_tasks = 0  # Counter for concurrent add_layers tasks prevention
         self._add_layers_queue = []  # Queue for deferred add_layers operations
         self._processing_queue = False  # Flag to prevent concurrent queue processing
         self._widgets_ready = False  # Flag to track when widgets are fully initialized and ready
+        self._last_layer_change_timestamp = 0  # Debounce for layer change signals
         
         # Initialize PROJECT_LAYERS as instance attribute (shadows class attribute for isolation)
         self.PROJECT_LAYERS = {}
@@ -269,6 +301,120 @@ class FilterMateApp:
             
         except Exception as e:
             logger.warning(f"FilterMate: Could not set feedback level: {e}. Using default 'normal'.")
+
+    def _check_and_reset_stale_flags(self):
+        """
+        Check for stale flags that might block operations and reset them.
+        
+        This is a STABILITY method to prevent deadlocks when flags get stuck due to
+        errors or exceptions that bypass the normal finally blocks.
+        
+        Checks:
+        - _loading_new_project: Should not be set for more than FLAG_TIMEOUT_MS
+        - _initializing_project: Should not be set for more than FLAG_TIMEOUT_MS
+        - _pending_add_layers_tasks: Should not exceed MAX_ADD_LAYERS_QUEUE
+        
+        Returns:
+            bool: True if any flags were reset, False otherwise
+        """
+        import time
+        current_time = time.time() * 1000  # Convert to milliseconds
+        timeout = STABILITY_CONSTANTS['FLAG_TIMEOUT_MS']
+        flags_reset = False
+        
+        # Check _loading_new_project flag timeout
+        if self._loading_new_project:
+            if self._loading_new_project_timestamp > 0:
+                elapsed = current_time - self._loading_new_project_timestamp
+                if elapsed > timeout:
+                    logger.warning(f"🔧 STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                    self._loading_new_project = False
+                    self._loading_new_project_timestamp = 0
+                    flags_reset = True
+            else:
+                # Timestamp not set but flag is True - set timestamp now
+                self._loading_new_project_timestamp = current_time
+        
+        # Check _initializing_project flag timeout
+        if self._initializing_project:
+            if self._initializing_project_timestamp > 0:
+                elapsed = current_time - self._initializing_project_timestamp
+                if elapsed > timeout:
+                    logger.warning(f"🔧 STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                    self._initializing_project = False
+                    self._initializing_project_timestamp = 0
+                    flags_reset = True
+            else:
+                # Timestamp not set but flag is True - set timestamp now
+                self._initializing_project_timestamp = current_time
+        
+        # Check add_layers queue size
+        max_queue = STABILITY_CONSTANTS['MAX_ADD_LAYERS_QUEUE']
+        if len(self._add_layers_queue) > max_queue:
+            logger.warning(f"🔧 STABILITY: Trimming add_layers queue from {len(self._add_layers_queue)} to {max_queue}")
+            # Keep only the most recent items
+            self._add_layers_queue = self._add_layers_queue[-max_queue:]
+            flags_reset = True
+        
+        # Check pending tasks counter sanity
+        if self._pending_add_layers_tasks < 0:
+            logger.warning(f"🔧 STABILITY: Resetting negative _pending_add_layers_tasks counter: {self._pending_add_layers_tasks}")
+            self._pending_add_layers_tasks = 0
+            flags_reset = True
+        elif self._pending_add_layers_tasks > 10:
+            logger.warning(f"🔧 STABILITY: Resetting unreasonably high _pending_add_layers_tasks counter: {self._pending_add_layers_tasks}")
+            self._pending_add_layers_tasks = 0
+            flags_reset = True
+        
+        return flags_reset
+
+    def _set_loading_flag(self, loading: bool):
+        """
+        Set _loading_new_project flag with timestamp tracking.
+        
+        Args:
+            loading: True to set loading state, False to clear it
+        """
+        import time
+        self._loading_new_project = loading
+        if loading:
+            self._loading_new_project_timestamp = time.time() * 1000
+        else:
+            self._loading_new_project_timestamp = 0
+
+    def _set_initializing_flag(self, initializing: bool):
+        """
+        Set _initializing_project flag with timestamp tracking.
+        
+        Args:
+            initializing: True to set initializing state, False to clear it
+        """
+        import time
+        self._initializing_project = initializing
+        if initializing:
+            self._initializing_project_timestamp = time.time() * 1000
+        else:
+            self._initializing_project_timestamp = 0
+
+    def _is_layer_valid(self, layer) -> bool:
+        """
+        Check if a layer object is still valid (C++ object not deleted).
+        
+        Args:
+            layer: QgsVectorLayer to check
+            
+        Returns:
+            bool: True if layer is valid and accessible, False otherwise
+        """
+        if layer is None:
+            return False
+        try:
+            # Try to access basic properties - will raise if C++ object is deleted
+            _ = layer.name()
+            _ = layer.id()
+            return layer.isValid()
+        except (RuntimeError, AttributeError):
+            return False
 
     def run(self):
         """
@@ -602,6 +748,9 @@ class FilterMateApp:
         """
         logger.debug(f"_handle_project_initialization called with task_name={task_name}")
         
+        # STABILITY FIX: Check and reset stale flags that might block operations
+        self._check_and_reset_stale_flags()
+        
         # CRITICAL: Skip if already initializing to prevent recursive calls
         if self._initializing_project:
             logger.debug(f"Skipping {task_name} - already initializing project")
@@ -617,7 +766,8 @@ class FilterMateApp:
             logger.debug(f"Skipping {task_name} - dockwidget not created yet (run() will handle)")
             return
         
-        self._initializing_project = True
+        # Use timestamp-tracked flag setter
+        self._set_initializing_flag(True)
         
         # CRITICAL: Clear layer combo box before project change to prevent access violations
         if self.dockwidget is not None:
@@ -645,7 +795,8 @@ class FilterMateApp:
             
             # Reset project datasources
             self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
-            self._loading_new_project = True
+            # Use timestamp-tracked flag setter for loading
+            self._set_loading_flag(True)
             
             init_env_vars()
             global ENV_VARS
@@ -654,7 +805,7 @@ class FilterMateApp:
             # Verify project is still valid after init
             if not self.PROJECT:
                 logger.warning(f"Project became invalid during {task_name}, skipping")
-                self._loading_new_project = False
+                self._set_loading_flag(False)
                 return
 
             # CRITICAL: Disconnect old layer store signals before updating reference
@@ -738,11 +889,12 @@ class FilterMateApp:
                         "Projet sans couches vectorielles. Ajoutez des couches pour activer le plugin."
                     )
         finally:
-            self._initializing_project = False
+            # STABILITY FIX: Use timestamp-tracked flag resetters
+            self._set_initializing_flag(False)
             # STABILITY FIX: Always reset _loading_new_project flag, even on error
             if self._loading_new_project:
                 logger.debug(f"Resetting _loading_new_project flag in finally block")
-                self._loading_new_project = False
+                self._set_loading_flag(False)
             # STABILITY FIX: Release dockwidget busy flag
             if self.dockwidget is not None:
                 self.dockwidget._plugin_busy = False
@@ -780,6 +932,9 @@ class FilterMateApp:
         
         logger.debug(f"manage_task called with task_name={task_name}, data={type(data)}")
         
+        # STABILITY FIX: Check and reset stale flags before processing
+        self._check_and_reset_stale_flags()
+        
         # CRITICAL: Skip layersAdded signals during project initialization
         # These will be handled by _handle_project_initialization which calls add_layers explicitly
         # Only check _initializing_project - _loading_new_project is used for the deferred call itself
@@ -789,8 +944,13 @@ class FilterMateApp:
         
         # STABILITY FIX: Queue concurrent add_layers tasks instead of rejecting them
         # Multiple signals (projectRead, layersAdded, timers) can trigger add_layers simultaneously
+        # STABILITY FIX: Limit queue size to prevent memory issues
+        max_queue_size = STABILITY_CONSTANTS['MAX_ADD_LAYERS_QUEUE']
         if task_name == 'add_layers':
             if self._pending_add_layers_tasks > 0:
+                if len(self._add_layers_queue) >= max_queue_size:
+                    logger.warning(f"⚠️ STABILITY: add_layers queue full ({max_queue_size}), dropping oldest entry")
+                    self._add_layers_queue.pop(0)  # Remove oldest entry
                 logger.info(f"Queueing add_layers - already {self._pending_add_layers_tasks} task(s) in progress (queue size: {len(self._add_layers_queue)})")
                 self._add_layers_queue.append(data)
                 return
@@ -994,22 +1154,25 @@ class FilterMateApp:
         """
         logger.warning(f"Layer management task '{task_name}' was terminated")
         
-        # STABILITY FIX: Reset counters and flags on task failure
+        # STABILITY FIX: Reset counters and flags on task failure using tracked flags
         if task_name == 'add_layers':
             if self._pending_add_layers_tasks > 0:
                 self._pending_add_layers_tasks -= 1
                 logger.debug(f"Reset add_layers counter after termination (remaining: {self._pending_add_layers_tasks})")
             if self._loading_new_project:
                 logger.warning("Resetting _loading_new_project flag after task termination")
-                self._loading_new_project = False
-        
-        # Reset loading flags to allow retry
-        if task_name == 'add_layers':
-            self._loading_new_project = False
+                self._set_loading_flag(False)
+            if self._initializing_project:
+                logger.warning("Resetting _initializing_project flag after task termination")
+                self._set_initializing_flag(False)
         
         # Check if we still need to initialize the UI
         if self.dockwidget is None:
             return
+        
+        # STABILITY FIX: Release dockwidget busy flag
+        if hasattr(self.dockwidget, '_plugin_busy'):
+            self.dockwidget._plugin_busy = False
         
         # If PROJECT_LAYERS is still empty, try to recover
         if len(self.PROJECT_LAYERS) == 0:
@@ -1021,7 +1184,7 @@ class FilterMateApp:
             if len(current_layers) > 0:
                 # Retry add_layers with a delay
                 logger.info(f"Recovery: Retrying add_layers with {len(current_layers)} layers")
-                QTimer.singleShot(500, lambda layers=current_layers: self.manage_task('add_layers', layers))
+                QTimer.singleShot(STABILITY_CONSTANTS['LAYER_RETRY_DELAY_MS'], lambda layers=current_layers: self.manage_task('add_layers', layers))
             else:
                 # No layers - update UI to show waiting state
                 logger.info("No layers available after task termination")
@@ -2759,14 +2922,14 @@ class FilterMateApp:
                 # Process next queued operation if any
                 if self._add_layers_queue and self._pending_add_layers_tasks == 0:
                     logger.info(f"Processing {len(self._add_layers_queue)} queued add_layers operations")
-                    QTimer.singleShot(100, self._process_add_layers_queue)
+                    QTimer.singleShot(STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS'], self._process_add_layers_queue)
             
             # If we're loading a new project, force UI refresh after add_layers completes
-            if task_name == 'add_layers' and hasattr(self, '_loading_new_project') and self._loading_new_project:
+            if task_name == 'add_layers' and self._loading_new_project:
                 logger.info("New project loaded - forcing UI refresh")
-                self._loading_new_project = False
+                self._set_loading_flag(False)  # Use timestamp-tracked flag
                 if self.dockwidget is not None and self.dockwidget.widgets_initialized:
-                    QTimer.singleShot(100, lambda: self._refresh_ui_after_project_load())
+                    QTimer.singleShot(STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS'], lambda: self._refresh_ui_after_project_load())
     
     def _validate_layer_info(self, layer_key):
         """Validate layer structure and return layer info if valid.

@@ -7,23 +7,29 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.5 - Configuration System v2.0 & Performance
+## 🎉 What's New in v3.5.6 - Code Quality & Harmonization
 
-### Configuration System v2.0
-- ⚙️ **Integrated Metadata Structure** - Metadata embedded directly in parameters (no fragmented `_*_META` sections)
-- 🔄 **Automatic Config Migration** - Seamless v1.0 → v2.0 with backup/rollback
-- 🔐 **Auto-detection of Obsolete Configs** - Corrupted or outdated configs automatically reset with backup
-- 📝 **ConfigMetadataHandler** - Intelligent extraction and tooltips for qt_json_view
+### Centralized Feedback System
+- 🛠️ **Unified Message Bar Notifications** - Consistent user feedback across all modules
+- 🔧 **Graceful Fallback** - Works even when iface is unavailable
+- 📦 **New Functions**: `show_info()`, `show_warning()`, `show_error()`, `show_success()`
 
-### Backend Improvements
-- 🔒 **Forced Backend Respect** - User choice strictly enforced (no fallback to OGR)
-- ⚡ **~30% Faster PostgreSQL Loading** - Fast counting via `pg_stat_user_tables` + UNLOGGED MVs
+### PostgreSQL Optimization
+- ⚡ **5-50× Faster Layer Loading** - Smarter initialization for PostgreSQL layers
+- 🔌 **Connection Caching** - Avoid repeated connection tests per datasource
+- 📊 **Conditional ANALYZE** - Only runs if table has no statistics
 
 ### Code Quality
-- 📊 **Complete Audit** - Score 9.0/10 with 47 usage cases documented
-- 📚 **30+ Documentation Files** - Developer guide, integration analysis, migration guides
+- 🐛 **Bug Fixes** - Fixed syntax errors and bare except clauses
+- 🧹 **Code Cleanup** - Removed obsolete code, added docstrings
+- 📈 **Quality Score**: 8.9/10
 
 ## Previous Updates
+
+### v2.3.5 - Configuration System v2.0 (December 17, 2025)
+- ⚙️ **Configuration v2.0** - Integrated metadata structure with auto-migration
+- 🔒 **Forced Backend Respect** - User choice strictly enforced (no fallback to OGR)
+- ⚡ **~30% Faster PostgreSQL Loading** - Fast counting via `pg_stat_user_tables` + UNLOGGED MVs
 
 ### v2.3.4 - PostgreSQL 2-Part Table Reference Fix (December 16, 2025)
 - 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format

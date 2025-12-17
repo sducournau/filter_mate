@@ -269,7 +269,7 @@ class FilterMate:
     def _auto_migrate_config(self):
         """Auto-migrate configuration to latest version if needed."""
         try:
-            from modules.config_migration import ConfigMigration
+            from .modules.config_migration import ConfigMigration
             
             migrator = ConfigMigration()
             performed, warnings = migrator.auto_migrate_if_needed()
@@ -323,7 +323,10 @@ class FilterMate:
         # Check if auto-activation is enabled in configuration
         from .config.config import ENV_VARS
         config_data = ENV_VARS.get('CONFIG_DATA', {})
-        auto_activate_enabled = config_data.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        # Support both uppercase (config.default.json) and lowercase (migrated config.json) keys
+        app_config = config_data.get('APP', config_data.get('app', {}))
+        auto_activate_config = app_config.get('AUTO_ACTIVATE', app_config.get('auto_activate', {}))
+        auto_activate_enabled = auto_activate_config.get('value', False)  # Default to False to prevent auto-open
         
         if not auto_activate_enabled:
             logger.info("FilterMate: Auto-activation disabled in configuration")
@@ -393,7 +396,10 @@ class FilterMate:
         # CRITICAL: Check if auto-activation is enabled
         from .config.config import ENV_VARS
         config_data = ENV_VARS.get('CONFIG_DATA', {})
-        auto_activate_enabled = config_data.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        # Support both uppercase (config.default.json) and lowercase (migrated config.json) keys
+        app_config = config_data.get('APP', config_data.get('app', {}))
+        auto_activate_config = app_config.get('AUTO_ACTIVATE', app_config.get('auto_activate', {}))
+        auto_activate_enabled = auto_activate_config.get('value', False)  # Default to False to prevent auto-open
         
         if not auto_activate_enabled:
             logger.debug("FilterMate: Auto-activation disabled, skipping layersAdded auto-activation")
@@ -445,7 +451,10 @@ class FilterMate:
         # CRITICAL: Check if auto-activation is enabled
         from .config.config import ENV_VARS
         config_data = ENV_VARS.get('CONFIG_DATA', {})
-        auto_activate_enabled = config_data.get('APP', {}).get('AUTO_ACTIVATE', {}).get('value', True)
+        # Support both uppercase (config.default.json) and lowercase (migrated config.json) keys
+        app_config = config_data.get('APP', config_data.get('app', {}))
+        auto_activate_config = app_config.get('AUTO_ACTIVATE', app_config.get('auto_activate', {}))
+        auto_activate_enabled = auto_activate_config.get('value', False)  # Default to False to prevent auto-open
         
         if not auto_activate_enabled:
             logger.debug("FilterMate: Auto-activation disabled, skipping auto-activation")
@@ -504,6 +513,10 @@ class FilterMate:
         if not self.app:
             return
         
+        # STABILITY FIX: Check and reset stale flags before processing
+        if hasattr(self.app, '_check_and_reset_stale_flags'):
+            self.app._check_and_reset_stale_flags()
+        
         # CRITICAL: Check if app is already initializing a project
         if hasattr(self.app, '_initializing_project') and self.app._initializing_project:
             logger.debug("FilterMate: Skipping _handle_project_change - already initializing")
@@ -542,6 +555,11 @@ class FilterMate:
             self.app._handle_project_initialization('project_read')
         except Exception as e:
             logger.error(f"FilterMate: Error during project reinitialization: {e}")
+            # STABILITY FIX: Reset flags on error to prevent deadlock
+            if hasattr(self.app, '_set_loading_flag'):
+                self.app._set_loading_flag(False)
+            if hasattr(self.app, '_set_initializing_flag'):
+                self.app._set_initializing_flag(False)
 
 
     def unload(self):

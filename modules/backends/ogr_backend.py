@@ -882,8 +882,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             if memory_layer:
                 try:
                     memory_layer.removeSelection()
-                except:
-                    pass
+                except (RuntimeError, AttributeError):
+                    pass  # Layer may have been deleted or is invalid
             return False
     
     def get_backend_name(self) -> str:

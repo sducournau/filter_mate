@@ -114,7 +114,9 @@ def init_env_vars():
             raise
 
     # Validate that CONFIG_DATA has the expected structure
-    if not isinstance(CONFIG_DATA, dict) or "APP" not in CONFIG_DATA:
+    # Support both uppercase (config.default.json) and lowercase (migrated config.json) keys
+    has_app_config = isinstance(CONFIG_DATA, dict) and ("APP" in CONFIG_DATA or "app" in CONFIG_DATA)
+    if not has_app_config:
         QgsMessageLog.logMessage(
             f"FilterMate: Configuration invalide détectée, réinitialisation aux valeurs par défaut",
             "FilterMate",
@@ -134,12 +136,15 @@ def init_env_vars():
             )
             raise
 
-    # Ensure OPTIONS exists in APP
-    if "OPTIONS" not in CONFIG_DATA.get("APP", {}):
-        CONFIG_DATA["APP"]["OPTIONS"] = {"APP_SQLITE_PATH": "", "FRESH_RELOAD_FLAG": False}
+    # Ensure OPTIONS exists in APP (support both uppercase and lowercase keys)
+    app_key = "APP" if "APP" in CONFIG_DATA else "app"
+    if app_key not in CONFIG_DATA:
+        CONFIG_DATA[app_key] = {}
+    if "OPTIONS" not in CONFIG_DATA.get(app_key, {}):
+        CONFIG_DATA[app_key]["OPTIONS"] = {"APP_SQLITE_PATH": "", "FRESH_RELOAD_FLAG": False}
 
     # Validate APP_SQLITE_PATH from config
-    app_sqlite_path = CONFIG_DATA.get("APP", {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
+    app_sqlite_path = CONFIG_DATA.get(app_key, {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
     if app_sqlite_path != '':
         configured_path = os.path.normpath(app_sqlite_path)
         
@@ -177,9 +182,9 @@ def init_env_vars():
             config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
     
     # Update APP_SQLITE_PATH in config if needed
-    current_sqlite_path = CONFIG_DATA.get("APP", {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
+    current_sqlite_path = CONFIG_DATA.get(app_key, {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
     if current_sqlite_path != PLUGIN_CONFIG_DIRECTORY:
-        CONFIG_DATA["APP"]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
+        CONFIG_DATA[app_key]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
         try:
             with open(config_json_path, 'w') as outfile:
                 outfile.write(json.dumps(CONFIG_DATA, indent=4))

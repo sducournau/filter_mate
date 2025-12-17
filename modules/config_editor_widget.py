@@ -36,6 +36,7 @@ try:
         set_config_value,
         validate_config_value_with_metadata
     )
+    from .feedback_utils import show_success, show_error as show_error_msg
     IMPORTS_OK = True
 except ImportError:
     IMPORTS_OK = False
@@ -303,14 +304,10 @@ class ConfigEditorWidget(QWidget):
         if not valid:
             print(f"Invalid value for {config_path}: {error}")
             # Show error message to user
-            try:
-                from qgis.utils import iface
-                iface.messageBar().pushWarning(
-                    "FilterMate - Configuration",
-                    f"Invalid value for {config_path}: {error}"
-                )
-            except Exception:
-                pass  # Fallback if iface not available
+            show_error_msg(
+                "FilterMate - Configuration",
+                f"Invalid value for {config_path}: {error}"
+            )
             return
         
         # Update config_data
@@ -376,14 +373,10 @@ class ConfigEditorWidget(QWidget):
                 json.dump(self.config_data, f, indent=2, ensure_ascii=False)
             
             # Show success message
-            try:
-                from qgis.utils import iface
-                iface.messageBar().pushSuccess(
-                    "FilterMate",
-                    f"Configuration saved to {os.path.basename(config_path)}"
-                )
-            except Exception:
-                pass  # Fallback if iface not available
+            show_success(
+                "FilterMate",
+                f"Configuration saved to {os.path.basename(config_path)}"
+            )
             
             print(f"✓ Configuration saved to {config_path}")
             
@@ -392,11 +385,7 @@ class ConfigEditorWidget(QWidget):
             print(f"✗ {error_msg}")
             
             # Show error message
-            try:
-                from qgis.utils import iface
-                iface.messageBar().pushCritical("FilterMate", error_msg)
-            except Exception:
-                pass  # Fallback if iface not available
+            show_error_msg("FilterMate", error_msg)
         
     def show_error(self, message: str):
         """Show error message when widget cannot be initialized."""

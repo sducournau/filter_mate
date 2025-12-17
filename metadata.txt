@@ -6,31 +6,30 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.5
+version=3.5.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.5 - Configuration System v2.0 & Performance
+about=FilterMate v3.5.6 - Code Quality & Harmonization
 
- NEW in v2.3.5:
+ NEW in v3.5.6:
+ - 🛠️ Centralized feedback system (show_info/warning/error/success)
+ - 🐛 Fixed syntax errors in dockwidget module
+ - ⚡ PostgreSQL init optimization (5-50× faster layer loading)
+ - 🔧 Connection caching for PostgreSQL layers
+ - 📊 Code quality score improved to 8.9/10
+ - 🧹 Removed obsolete code and fixed bare except clauses
+ 
+ Previous (v2.3.5):
  - ⚙️ Configuration v2.0 with integrated metadata structure
  - 🔄 Automatic config migration (v1.0→v2.0) with backup/rollback
  - 🔒 Forced backend respect - user choice strictly enforced
  - 🚀 PostgreSQL 30%% faster loading (fast counting + UNLOGGED MVs)
- - 📊 Complete audit (score: 9.0/10) with 47 usage cases documented
- - 🐛 Fixed config editor save & validation feedback
- - 📚 30+ documentation files (config, migration, optimization)
  
  Previous (v2.3.4):
  - 🐛 Fixed GeometryCollection errors & PostgreSQL filtering
  - ✨ Smart display field selection
  - 🛠️ Automatic ANALYZE on PostgreSQL tables
- 
- Previous (v2.3.0):
- - ⭐ Intelligent Undo/Redo with automatic context detection
- - 🏗️ Task modules extracted (appTasks.py -99%%)
- - ✅ PEP 8 95%%, 30+ automated tests, CI/CD active
- - 🚀 Geometry caching (5× speedup for multi-layer ops)
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
@@ -56,6 +55,20 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
+    Version 3.5.6 (December 2025) - Code Quality & Harmonization
+    🛠️ NEW: Centralized feedback system (show_info/warning/error/success)
+    🐛 FIX: Fixed syntax errors in dockwidget module
+    ⚡ PERF: PostgreSQL init optimization (5-50× faster layer loading)
+    🔧 IMPROVED: Connection caching for PostgreSQL layers
+    📊 QUALITY: Code quality score improved to 8.9/10
+    🧹 CLEANUP: Removed obsolete code and fixed bare except clauses
+    
+    Version 2.3.5 (December 2025) - Configuration System v2.0
+    ⚙️ Configuration v2.0 with integrated metadata structure
+    🔄 Automatic config migration (v1.0→v2.0) with backup/rollback
+    🔒 Forced backend respect - user choice strictly enforced
+    🚀 PostgreSQL 30%% faster loading (fast counting + UNLOGGED MVs)
+    
     Version 2.3.4 (December 2025) - PostgreSQL & UX Improvements
     🐛 CRITICAL FIX: PostgreSQL 2-part table references now work correctly
     ✨ FEATURE: Smart display field selection for exploring expressions

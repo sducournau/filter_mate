@@ -12,6 +12,92 @@
 
 ---
 
+## Recently Fixed (v2.3.6 - December 17, 2025)
+
+### Stability Improvements - Project and Layer Loading
+**Status:** ✅ FIXED
+
+**Issue:**
+- Plugin could become unresponsive when loading new projects or adding many layers rapidly
+- Flags (`_loading_new_project`, `_initializing_project`) could get stuck in True state
+- No protection against accumulating layer operations in queue
+- No timeout mechanism for stale flags
+
+**Impact:**
+- MEDIUM: Plugin could become stuck requiring QGIS restart
+- MEDIUM: Rapid layer additions could cause queue overflow
+- LOW: Race conditions during project switching
+
+**Solution:**
+1. **Added STABILITY_CONSTANTS** - Centralized timing configuration:
+   - `MAX_ADD_LAYERS_QUEUE`: 50 (prevents memory issues)
+   - `FLAG_TIMEOUT_MS`: 30000 (30-second timeout for stale flags)
+   - `LAYER_RETRY_DELAY_MS`: 500 (consistent retry delays)
+   - `UI_REFRESH_DELAY_MS`: 200 (consistent UI refresh delays)
+   - `SIGNAL_DEBOUNCE_MS`: 100 (debounce rapid signals)
+
+2. **Added timestamp-tracked flags**:
+   - `_set_loading_flag(bool)`: Sets flag with timestamp
+   - `_set_initializing_flag(bool)`: Sets flag with timestamp
+   - `_check_and_reset_stale_flags()`: Auto-resets flags after timeout
+
+3. **Added layer validation utility**:
+   - `_is_layer_valid(layer)`: Checks if C++ object is still valid
+   - Prevents crashes from accessing deleted layer objects
+
+4. **Improved signal handling**:
+   - Debouncing for `layersAdded` signal
+   - Queue size limit with automatic trimming
+   - Better error handling in project change handlers
+
+5. **Automatic recovery mechanisms**:
+   - Stale flag detection and auto-reset
+   - Negative counter correction
+   - Plugin busy flag release on errors
+
+**Files Changed:**
+- `filter_mate_app.py`: Added STABILITY_CONSTANTS, new utility methods, improved flag handling
+- `filter_mate.py`: Added flag reset on errors in `_handle_project_change`
+- `filter_mate_dockwidget.py`: Added input validation in `get_project_layers_from_app`
+
+**Benefits:**
+- ✅ No more stuck flags blocking operations
+- ✅ Automatic recovery from stale states (30-second timeout)
+- ✅ Protection against queue overflow (max 50 items)
+- ✅ Debounced rapid layer additions
+- ✅ Consistent timing across the codebase
+- ✅ Better error handling and recovery
+
+**Technical Details:**
+```python
+# New stability constants
+STABILITY_CONSTANTS = {
+    'MAX_ADD_LAYERS_QUEUE': 50,
+    'FLAG_TIMEOUT_MS': 30000,
+    'LAYER_RETRY_DELAY_MS': 500,
+    'UI_REFRESH_DELAY_MS': 200,
+    'SIGNAL_DEBOUNCE_MS': 100,
+}
+
+# Timestamp-tracked flag setting
+def _set_loading_flag(self, loading: bool):
+    import time
+    self._loading_new_project = loading
+    self._loading_new_project_timestamp = time.time() * 1000 if loading else 0
+
+# Auto-reset stale flags
+def _check_and_reset_stale_flags(self):
+    if elapsed > FLAG_TIMEOUT_MS:
+        self._set_loading_flag(False)
+        logger.warning("STABILITY: Resetting stale flag")
+```
+
+**References:**
+- Fix date: December 17, 2025
+- Related: Project loading stability, layer management
+
+---
+
 ## Recently Fixed (v2.3.5 - December 17, 2025)\n\n### GeoPackage Geometric Filtering - Backend Selection Fix\n**Status:** ✅ FIXED
 
 **Issue:**

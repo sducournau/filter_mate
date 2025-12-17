@@ -139,6 +139,10 @@ class LayersManagementEngineTask(QgsTask):
         self.layer_all_properties_flag = False
         self.outputs = {}
         self.message = None
+        
+        # PERFORMANCE: Cache PostgreSQL connection availability per datasource URI
+        # This avoids opening/closing connections for each layer during init
+        self._postgresql_connection_cache = {}
 
         # JSON templates for layer properties
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_table_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
@@ -538,16 +542,28 @@ class LayersManagementEngineTask(QgsTask):
         source_table_name = get_source_table_name(layer)
         
         # Check PostgreSQL connection availability for PostgreSQL layers
-        # This determines if we can use native PostgreSQL backend or need OGR fallback
+        # PERFORMANCE: Use cached connection status per datasource to avoid repeated connection tests
         postgresql_connection_available = False
         if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
+            # Extract datasource key for caching (host:port:dbname)
             try:
-                conn, _ = get_datasource_connexion_from_layer(layer)
-                if conn is not None:
-                    postgresql_connection_available = True
-                    conn.close()
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(layer.source())
+                cache_key = f"{uri.host()}:{uri.port()}:{uri.database()}"
+                
+                if cache_key in self._postgresql_connection_cache:
+                    postgresql_connection_available = self._postgresql_connection_cache[cache_key]
+                    logger.debug(f"PostgreSQL connection for {layer.name()}: using cached result ({postgresql_connection_available})")
                 else:
-                    logger.warning(f"PostgreSQL layer {layer.name()} will use OGR fallback (no connection)")
+                    # Test connection once per datasource
+                    conn, _ = get_datasource_connexion_from_layer(layer)
+                    if conn is not None:
+                        postgresql_connection_available = True
+                        conn.close()
+                    else:
+                        logger.warning(f"PostgreSQL layer {layer.name()} will use OGR fallback (no connection)")
+                    # Cache the result for other layers from same database
+                    self._postgresql_connection_cache[cache_key] = postgresql_connection_available
             except Exception as e:
                 logger.warning(f"PostgreSQL connection test failed for {layer.name()}: {e}, will use OGR fallback")
         
@@ -934,7 +950,12 @@ class LayersManagementEngineTask(QgsTask):
 
     def create_spatial_index_for_postgresql_layer(self, layer, layer_props):
         """
-        Create PostgreSQL spatial indexes (GIST + primary key).
+        Create PostgreSQL spatial indexes (GIST + primary key) with performance optimizations.
+        
+        PERFORMANCE OPTIMIZATIONS (v2.4.0):
+        - Check if indexes already exist before creating (avoids slow CREATE IF NOT EXISTS)
+        - Skip CLUSTER operation at init (very slow on large tables, ~minutes for 100k+ rows)
+        - Only run ANALYZE if table has no statistics (check pg_statistic first)
         
         Args:
             layer (QgsVectorLayer): PostgreSQL layer
@@ -971,18 +992,68 @@ class LayersManagementEngineTask(QgsTask):
             return False
 
         try:
-            sql_statement = (
-                f'CREATE INDEX IF NOT EXISTS {schema}_{table}_{geometry_field}_idx '
-                f'ON "{schema}"."{table}" USING GIST ({geometry_field});'
-                f'CREATE UNIQUE INDEX IF NOT EXISTS {schema}_{table}_{primary_key_name}_idx '
-                f'ON "{schema}"."{table}" ({primary_key_name});'
-                f'ALTER TABLE "{schema}"."{table}" CLUSTER ON {schema}_{table}_{geometry_field}_idx;'
-                f'ANALYZE VERBOSE "{schema}"."{table}";'
-            )
-
             with connexion.cursor() as cursor:
-                cursor.execute(sql_statement)
+                # PERFORMANCE: Check if GIST index already exists before creating
+                gist_index_name = f"{schema}_{table}_{geometry_field}_idx"
+                cursor.execute("""
+                    SELECT 1 FROM pg_indexes 
+                    WHERE schemaname = %s AND tablename = %s AND indexname = %s
+                """, (schema, table, gist_index_name))
+                gist_exists = cursor.fetchone() is not None
+                
+                if not gist_exists:
+                    logger.debug(f"Creating GIST spatial index on {schema}.{table}.{geometry_field}")
+                    cursor.execute(
+                        f'CREATE INDEX {gist_index_name} '
+                        f'ON "{schema}"."{table}" USING GIST ("{geometry_field}");'
+                    )
+                else:
+                    logger.debug(f"GIST index {gist_index_name} already exists, skipping")
+                
+                # PERFORMANCE: Check if primary key index already exists
+                # Note: PostgreSQL auto-creates index for PRIMARY KEY, but not for manual 'id' fields
+                pk_index_name = f"{schema}_{table}_{primary_key_name}_idx"
+                cursor.execute("""
+                    SELECT 1 FROM pg_indexes 
+                    WHERE schemaname = %s AND tablename = %s AND indexname = %s
+                """, (schema, table, pk_index_name))
+                pk_exists = cursor.fetchone() is not None
+                
+                if not pk_exists and primary_key_name != 'ctid':
+                    logger.debug(f"Creating unique index on {schema}.{table}.{primary_key_name}")
+                    try:
+                        cursor.execute(
+                            f'CREATE UNIQUE INDEX {pk_index_name} '
+                            f'ON "{schema}"."{table}" ("{primary_key_name}");'
+                        )
+                    except Exception as e:
+                        # May fail if column has duplicates - not critical
+                        logger.debug(f"Could not create unique index on {primary_key_name}: {e}")
+                else:
+                    logger.debug(f"PK index for {primary_key_name} already exists or not needed, skipping")
+                
+                # PERFORMANCE: Skip CLUSTER at init - it's very slow on large tables
+                # CLUSTER will be done lazily during first filter if beneficial
+                # (Removed: ALTER TABLE ... CLUSTER ON ...)
+                
+                # PERFORMANCE: Only ANALYZE if table has no statistics
+                cursor.execute("""
+                    SELECT 1 FROM pg_statistic s
+                    JOIN pg_class c ON s.starelid = c.oid
+                    JOIN pg_namespace n ON c.relnamespace = n.oid
+                    WHERE n.nspname = %s AND c.relname = %s
+                    LIMIT 1
+                """, (schema, table))
+                has_stats = cursor.fetchone() is not None
+                
+                if not has_stats:
+                    logger.debug(f"Running ANALYZE on {schema}.{table} (no statistics found)")
+                    cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                else:
+                    logger.debug(f"Table {schema}.{table} already has statistics, skipping ANALYZE")
+                
             connexion.commit()
+            logger.info(f"PostgreSQL layer {layer.name()}: spatial index setup completed")
         except Exception as e:
             logger.warning(f"Error creating spatial index for PostgreSQL layer {layer.name()}: {e}")
             return False

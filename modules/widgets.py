@@ -57,6 +57,7 @@ logger = logging.getLogger('FilterMate')
 
 # Utilities
 from .appUtils import safe_set_subset_string, is_layer_source_available
+from .feedback_utils import show_warning, show_error
 
 
 def get_feature_attribute(feature, field_name):
@@ -564,9 +565,9 @@ class PopulateListEngineTask(QgsTask):
                 pass
             elif self.exception is None:
                 # Task failed without exception - unexpected
-                iface.messageBar().pushMessage('FilterMate', 'Task failed unexpectedly', level=Qgis.Warning)
+                show_warning('FilterMate', 'Task failed unexpectedly')
             else:
-                iface.messageBar().pushCritical('FilterMate', f'Error occurred: {str(self.exception)}')
+                show_error('FilterMate', f'Error occurred: {str(self.exception)}')
                 logger.error(f'Task failed with exception: {self.exception}', exc_info=True)
 
 
