@@ -6439,9 +6439,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.gettingProjectLayers.emit()
 
     def closeEvent(self, event):
-
+        """Clean up resources before closing."""
         if self.widgets_initialized is True:
-
+            # CRITICAL: Clear QgsMapLayerComboBox to prevent access violations
+            # when layers are removed or project is closed
+            try:
+                if hasattr(self, 'comboBox_filtering_current_layer'):
+                    self.comboBox_filtering_current_layer.setLayer(None)
+                    self.comboBox_filtering_current_layer.clear()
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing layer combo on close: {e}")
+            
             self.closingPlugin.emit()
             event.accept()
 

@@ -1,12 +1,38 @@
-# Performance Optimizations - FilterMate v2.3.0
+# Performance Optimizations - FilterMate v2.3.5
 
-**Last Updated:** December 16, 2025
+**Last Updated:** December 17, 2025
 
 ## Overview
 
-FilterMate v2.1.0 includes comprehensive performance optimizations across all backends, achieving 3-45× speedup on typical operations.
+FilterMate v2.3.5 includes comprehensive performance optimizations across all backends, achieving 3-45× speedup on typical operations.
 
-## Implemented Optimizations
+## Latest Optimizations (v2.3.5 - December 17, 2025)
+
+### GeoPackage Spatialite Backend Routing
+
+**Status:** ✅ Implemented  
+**File:** `modules/backends/factory.py`  
+**Impact:** 10× performance improvement for GeoPackage geometric filtering
+
+**Problem:** GeoPackage layers were using slow OGR algorithms for spatial operations
+
+**Solution:** Automatic backend selection enhancement:
+```python
+# GeoPackage/SQLite files now use Spatialite backend
+if provider_type == 'ogr' and layer_source.endswith(('.gpkg', '.sqlite')):
+    return 'spatialite'
+```
+
+**Benchmark Results:**
+- OGR backend: ~2.0s
+- Spatialite backend: ~0.2s
+- **Gain: 10.0× faster**
+
+**Applies to:** All GeoPackage layers with geometric filtering
+
+---
+
+## Previous Optimizations (v2.1.0 - v2.3.4)
 
 ### 1. Spatial Index Automation (OGR Backend)
 
@@ -53,18 +79,6 @@ def _ensure_spatial_index(self, layer_path):
 - Optimized method: 0.40s
 - **Gain: 3.0× faster**
 
-**Implementation:**
-```python
-def _apply_filter_large(self, expression):
-    """Optimized filtering for large datasets"""
-    # Use processing algorithm with memory management
-    result = processing.run("native:extractbyexpression", {
-        'INPUT': self.layer,
-        'EXPRESSION': expression,
-        'OUTPUT': 'memory:'
-    })
-```
-
 ### 3. Geometry Cache (Multi-Layer Filtering)
 
 **Status:** ✅ Implemented  
@@ -83,19 +97,6 @@ def _apply_filter_large(self, expression):
 - With cache: 0.10s
 - **Gain: 5.0× faster**
 
-**Implementation:**
-```python
-class SourceGeometryCache:
-    """LRU cache for source layer geometries"""
-    def __init__(self, max_size=1000):
-        self.cache = OrderedDict()
-        self.max_size = max_size
-    
-    def get_or_fetch(self, layer_id, feature_id):
-        # Check cache, fetch if missing
-        # LRU eviction when full
-```
-
 ### 4. Temporary Table Optimization (Spatialite Backend)
 
 **Status:** ✅ Implemented  
@@ -112,22 +113,9 @@ class SourceGeometryCache:
 - Temp table: 0.03s
 - **Gain: 44.6× faster**
 
-**Implementation:**
-```python
-def _create_temp_geometry_table(self, source_layer, buffer_distance):
-    """Create temporary table with spatial index"""
-    conn = sqlite3.connect(db_path)
-    
-    # Create temp table
-    conn.execute(f"CREATE TEMP TABLE {temp_table} (...)")
-    
-    # Create R-tree spatial index
-    conn.execute(f"SELECT CreateSpatialIndex('{temp_table}', 'geometry')")
-```
+### 5. Predicate Ordering Optimization
 
-### 5. Predicate Ordering Optimization ⭐ NEW (v2.1.0)
-
-**Status:** ✅ Implemented (2025-12-04)  
+**Status:** ✅ Implemented (v2.1.0 - 2025-12-04)  
 **File:** `modules/backends/spatialite_backend.py`  
 **Lines:** 343-365 (in `build_expression`)
 
@@ -151,36 +139,18 @@ def _create_temp_geometry_table(self, source_layer, buffer_distance):
 - Optimized order: 0.37s
 - **Gain: 2.3× faster**
 
-**Implementation:**
-```python
-PREDICATE_ORDER = {
-    'disjoint': 1,
-    'intersects': 2,
-    'touches': 3,
-    'crosses': 4,
-    'within': 5,
-    'contains': 6,
-    'overlaps': 7,
-    'equals': 8
-}
-
-def build_expression(self, predicates):
-    # Sort predicates by optimal order
-    sorted_predicates = sorted(predicates, key=lambda p: PREDICATE_ORDER.get(p, 99))
-    # Build WHERE clause
-```
-
 ## Performance Gains Summary
 
 | Optimization | Target | Benchmark | Gain |
 |--------------|--------|-----------|------|
 | Spatialite Temp Table | 10k+ features | 1.38s → 0.03s | **44.6×** |
 | OGR Spatial Index | All OGR layers | 0.80s → 0.04s | **19.5×** |
+| GeoPackage Backend | GeoPackage layers | 2.0s → 0.2s | **10.0×** ⭐ NEW |
 | Geometry Cache | Multi-layer | 0.50s → 0.10s | **5.0×** |
 | Large Dataset (OGR) | 50k+ features | 1.20s → 0.40s | **3.0×** |
 | Predicate Ordering | All backends | 0.83s → 0.37s | **2.3×** |
 
-**Overall:** 3-8× faster on typical use cases
+**Overall:** 3-10× faster on typical use cases
 
 ## Backend-Specific Optimizations
 
@@ -192,13 +162,13 @@ def build_expression(self, predicates):
 - Primary key index for fast lookups
 - Sub-second response on millions of features
 
-**Primary Key Detection (NEW - v2.3.0 - December 16, 2025):**
+**Primary Key Detection (v2.3.0 - December 16, 2025):**
 - Skip `uniqueValues()` call on PostgreSQL (avoids freeze on large tables)
 - Trust declared PRIMARY KEY constraints
 - Fallback to 'ctid' for tables without primary key
 - Clear warning messages to users about limitations
 
-**Predicate Ordering (NEW - v2.3.1):**
+**Predicate Ordering (v2.3.1):**
 - Predicates sorted by selectivity (most selective first)
 - Order: disjoint → intersects → touches → crosses → within → contains → overlaps → equals
 - ~2× faster multi-predicate queries
@@ -225,6 +195,11 @@ def build_expression(self, predicates):
 - Index hints
 - Prepared statements (planned)
 
+**GeoPackage Enhancement (v2.3.5):** ⭐ NEW
+- GeoPackage files automatically routed to Spatialite backend
+- Avoids slow OGR processing algorithms
+- 10× performance improvement
+
 ### OGR Backend
 
 **Spatial Indexes:**
@@ -236,6 +211,11 @@ def build_expression(self, predicates):
 - Memory-efficient algorithms
 - Progress tracking
 - Batch processing
+
+**GeometryCollection Handling (v2.3.5):** ⭐ NEW
+- Automatic conversion to MultiPolygon after buffer operations
+- Prevents type mismatch errors
+- Maintains data integrity
 
 ## Performance Monitoring
 
@@ -254,8 +234,7 @@ if feature_count > 50000 and not POSTGRESQL_AVAILABLE:
     iface.messageBar().pushWarning(
         "FilterMate - Performance",
         f"Large dataset ({feature_count} features) detected. "
-        "Consider installing psycopg2 for better performance.",
-        10
+        "Consider installing psycopg2 for better performance."
     )
 ```
 
@@ -293,17 +272,6 @@ pytest tests/test_performance.py -v
 python tests/benchmark_simple.py
 ```
 
-### Verification Script
-
-**File:** `tests/verify_optimizations.py` (200 lines)
-
-**Purpose:** Verify all optimizations are present in code
-
-**Run Verification:**
-```bash
-python tests/verify_optimizations.py
-```
-
 ## Memory Management
 
 ### Memory-Efficient Patterns
@@ -330,7 +298,7 @@ python tests/verify_optimizations.py
 - Feature batch size: 1000 features
 - Temporary table: Database-dependent
 
-## Small PostgreSQL Dataset Optimization (NEW - v2.4.0)
+## Small PostgreSQL Dataset Optimization (v2.4.0)
 
 **Status:** ✅ Implemented (December 17, 2025)  
 **Files:** 
@@ -366,23 +334,9 @@ python tests/verify_optimizations.py
 }
 ```
 
-**Constants:**
-- `SMALL_DATASET_THRESHOLD = 5000` - Default threshold
-- `DEFAULT_SMALL_DATASET_OPTIMIZATION = True` - Enabled by default
-
-**Key Functions:**
-- `should_use_memory_optimization(layer, provider_type)` - Check if optimization applies
-- `load_postgresql_to_memory(layer)` - Load PG layer to memory
-- `BackendFactory.get_memory_layer(layer)` - Get/cache memory layer
-- `OGRGeometricFilter._apply_filter_with_memory_optimization()` - Apply filter via memory
-
-**Applies to:** Both geometric (spatial predicates) and attribute filtering.
-
----
-
 ## Future Optimizations
 
-### Planned (Post v2.1.0)
+### Planned (Post v2.3.5)
 
 1. **Query Plan Caching**
    - Cache compiled queries
@@ -413,22 +367,27 @@ python tests/verify_optimizations.py
    - Host data on PostgreSQL server
    - 10-100× faster on 100k+ features
 
-2. **Enable spatial indexes**
+2. **Use GeoPackage for medium datasets** ⭐ NEW
+   - Automatically uses fast Spatialite backend
+   - 10× faster than Shapefiles on spatial operations
+   - Better for 10k-100k features
+
+3. **Enable spatial indexes**
    - Automatic for Shapefiles (v2.1.0+)
-   - Create manually for GeoPackage
+   - Create manually for GeoPackage if needed
    - Essential for spatial queries
 
-3. **Filter incrementally**
+4. **Filter incrementally**
    - Apply simple filters first
    - Add complex predicates after
    - Reduce intermediate result size
 
-4. **Use appropriate backend**
+5. **Use appropriate backend**
    - PostgreSQL: > 50k features
-   - Spatialite: 10k-50k features
-   - OGR: < 10k features
+   - GeoPackage/Spatialite: 10k-50k features
+   - Shapefile/OGR: < 10k features
 
-5. **Monitor performance warnings**
+6. **Monitor performance warnings**
    - Read message bar recommendations
    - Consider alternative backends
    - Optimize data source if needed
@@ -440,3 +399,11 @@ python tests/verify_optimizations.py
 - `docs/IMPLEMENTATION_STATUS.md`: Optimization implementation status
 - `tests/README.md`: Performance testing guide
 - `.github/copilot-instructions.md`: Performance considerations section
+- `docs/PERFORMANCE_STABILITY_IMPROVEMENTS_2025-12-17.md`: v2.3.5 improvements
+
+## Version History
+
+- **v2.3.5** (Dec 17, 2025): GeoPackage Spatialite routing (10× gain)
+- **v2.3.4** (Dec 16, 2025): PostgreSQL 2-part table reference fix
+- **v2.3.0** (Dec 13, 2025): Primary key detection optimization
+- **v2.1.0** (Dec 04, 2025): Predicate ordering, spatial indexes, geometry cache

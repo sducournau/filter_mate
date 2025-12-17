@@ -47,6 +47,7 @@ from .modules.appUtils import (
     get_datasource_connexion_from_layer,
     is_layer_source_available,
     safe_set_subset_string,
+    detect_layer_provider_type,
 )
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
@@ -547,6 +548,15 @@ class FilterMateApp:
         
         # CRITICAL: Check if dockwidget exists before accessing its methods
         if self.dockwidget is not None:
+            # CRITICAL: Clear layer combo box to prevent access violations
+            try:
+                if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    self.dockwidget.comboBox_filtering_current_layer.clear()
+                    logger.debug("FilterMate: Layer combo cleared during remove_all_layers")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing layer combo during remove_all_layers: {e}")
+            
             # STABILITY FIX: Disconnect LAYER_TREE_VIEW signal to prevent callbacks to invalid layers
             try:
                 self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
@@ -608,6 +618,16 @@ class FilterMateApp:
             return
         
         self._initializing_project = True
+        
+        # CRITICAL: Clear layer combo box before project change to prevent access violations
+        if self.dockwidget is not None:
+            try:
+                if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    self.dockwidget.comboBox_filtering_current_layer.clear()
+                    logger.debug(f"FilterMate: Layer combo cleared before {task_name}")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing layer combo before {task_name}: {e}")
         
         # STABILITY FIX: Set dockwidget busy flag to prevent concurrent layer changes
         if self.dockwidget is not None:
@@ -1117,6 +1137,19 @@ class FilterMateApp:
             QTimer.singleShot(100, self._process_add_layers_queue)
 
     def on_remove_layer_task_begun(self):
+        """Called when layer removal task begins. Cleanup UI before layers are removed."""
+        # CRITICAL: Clear layer combo box before layers are removed to prevent access violations
+        if self.dockwidget and hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+            try:
+                # Check if current layer is about to be removed
+                current_layer = self.dockwidget.current_layer
+                if current_layer:
+                    # Clear if it's the current layer being removed
+                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    logger.debug("FilterMate: Cleared layer combo during remove_layers task")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing layer combo in on_remove_layer_task_begun: {e}")
+        
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
     
@@ -1220,17 +1253,11 @@ class FilterMateApp:
                                 logger.warning(f"Could not detect geometry column for {layer.name()}, using 'geom': {e}")
                         
                         # Fill layer_provider_type
+                        # Use detect_layer_provider_type to get correct provider for backend selection
                         if 'layer_provider_type' not in layer_info or layer_info['layer_provider_type'] is None:
-                            provider = layer.providerType()
-                            if provider == 'postgres':
-                                layer_info['layer_provider_type'] = 'postgresql'
-                            elif provider == 'spatialite':
-                                layer_info['layer_provider_type'] = 'spatialite'
-                            elif provider == 'ogr':
-                                layer_info['layer_provider_type'] = 'ogr'
-                            else:
-                                layer_info['layer_provider_type'] = 'ogr'
-                            logger.info(f"Auto-filled layer_provider_type='{layer_info['layer_provider_type']}' for layer {layer.name()}")
+                            detected_type = detect_layer_provider_type(layer)
+                            layer_info['layer_provider_type'] = detected_type
+                            logger.info(f"Auto-filled layer_provider_type='{detected_type}' for layer {layer.name()}")
                         
                         # Fill layer_schema (NULL for non-PostgreSQL layers)
                         if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:

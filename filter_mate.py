@@ -486,6 +486,16 @@ class FilterMate:
         # Disconnect project change signals using dedicated method
         self._disconnect_auto_activation_signals()
         
+        # CRITICAL: Clear QgsMapLayerComboBox before cleanup to prevent access violations
+        if self.app and self.app.dockwidget:
+            try:
+                if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
+                    self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    self.app.dockwidget.comboBox_filtering_current_layer.clear()
+                    logger.debug("FilterMate: Layer combo box cleared during unload")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error clearing layer combo during unload: {e}")
+        
         # Nettoyer les ressources de l'application FilterMate
         if self.app:
             self.app.cleanup()

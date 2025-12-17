@@ -255,6 +255,74 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         return adapted
 
+    def _normalize_column_case(self, expression: str, layer: QgsVectorLayer) -> str:
+        """
+        Normalize column names in expression to match actual PostgreSQL column case.
+        
+        PostgreSQL is case-sensitive for quoted identifiers. If columns were created
+        without quotes (standard practice), they are stored in lowercase.
+        QGIS may display or store field names with different case, causing
+        "column X does not exist" errors.
+        
+        This function corrects column names in filter expressions to match the
+        actual column names from the layer's field list.
+        
+        Example: "SUB_TYPE" → "sub_type" if the actual column is "sub_type"
+        
+        Args:
+            expression: SQL expression string with potentially incorrect column case
+            layer: QgsVectorLayer to get actual field names from
+        
+        Returns:
+            Expression with corrected column names
+        """
+        import re
+        
+        if not expression or not layer:
+            return expression
+        
+        # Get actual field names from layer
+        field_names = [field.name() for field in layer.fields()]
+        if not field_names:
+            return expression
+        
+        result_expression = expression
+        
+        # Build case-insensitive lookup map: lowercase → actual name
+        field_lookup = {name.lower(): name for name in field_names}
+        
+        # Find all quoted column names in expression (e.g., "SUB_TYPE")
+        # This regex finds quoted identifiers: "something"
+        quoted_cols = re.findall(r'"([^"]+)"', result_expression)
+        
+        corrections_made = []
+        for col_name in quoted_cols:
+            # Skip if column exists with exact case (no correction needed)
+            if col_name in field_names:
+                continue
+            
+            # Skip known non-column identifiers (schemas, tables, aliases)
+            # These are typically lowercase already or are special identifiers
+            if col_name in ['__source', 'public', 'geometry', 'geom']:
+                continue
+            
+            # Check for case-insensitive match
+            col_lower = col_name.lower()
+            if col_lower in field_lookup:
+                correct_name = field_lookup[col_lower]
+                if col_name != correct_name:  # Only replace if actually different
+                    # Replace the incorrectly cased column name with correct one
+                    result_expression = result_expression.replace(
+                        f'"{col_name}"',
+                        f'"{correct_name}"'
+                    )
+                    corrections_made.append(f'"{col_name}" → "{correct_name}"')
+        
+        if corrections_made:
+            self.log_info(f"🔧 PostgreSQL column case normalization: {', '.join(corrections_made)}")
+        
+        return result_expression
+
     def _build_simple_wkt_expression(
         self,
         geom_expr: str,
@@ -530,6 +598,14 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
                 return False
+            
+            # CRITICAL FIX: Normalize column names in expression and old_subset
+            # PostgreSQL is case-sensitive for quoted identifiers. Columns created without
+            # quotes are stored lowercase, but QGIS may use uppercase (e.g., "SUB_TYPE").
+            # This causes "column X does not exist" errors.
+            expression = self._normalize_column_case(expression, layer)
+            if old_subset:
+                old_subset = self._normalize_column_case(old_subset, layer)
             
             # Get feature count to determine strategy
             feature_count = layer.featureCount()

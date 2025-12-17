@@ -285,7 +285,7 @@ class BackendFactory:
                     return (backend, None, False)
                 return backend
         
-        # Try Spatialite backend
+        # Try Spatialite backend for Spatialite and GeoPackage/SQLite layers
         if layer_provider_type == PROVIDER_SPATIALITE:
             backend = SpatialiteGeometricFilter(task_params)
             if backend.supports_layer(layer):
@@ -293,20 +293,29 @@ class BackendFactory:
                 if return_memory_info:
                     return (backend, None, False)
                 return backend
-        
-        # CRITICAL FIX: For OGR layers, try Spatialite backend first if it supports the layer
-        # This handles GeoPackage (.gpkg) and SQLite (.sqlite) files which can use
-        # direct SQL spatial queries instead of slower QGIS processing algorithms
-        if layer_provider_type == PROVIDER_OGR:
-            backend = SpatialiteGeometricFilter(task_params)
-            if backend.supports_layer(layer):
-                logger.info(f"🚀 Using Spatialite backend for OGR layer {layer.name()} (GeoPackage/SQLite detected)")
+            else:
+                # Spatialite functions not available (e.g., GDAL without Spatialite support)
+                # Fall back to OGR backend which uses QGIS processing
+                logger.warning(
+                    f"Spatialite functions not available for {layer.name()}, "
+                    f"falling back to OGR backend"
+                )
+                backend = OGRGeometricFilter(task_params)
                 if return_memory_info:
                     return (backend, None, False)
                 return backend
         
-        # Fallback to OGR backend (supports everything)
-        logger.info(f"Using OGR backend (fallback) for {layer.name()}")
+        # For OGR layers, try Spatialite backend first (handles GeoPackage/SQLite)
+        if layer_provider_type == PROVIDER_OGR:
+            backend = SpatialiteGeometricFilter(task_params)
+            if backend.supports_layer(layer):
+                logger.info(f"🚀 Using Spatialite backend for OGR layer {layer.name()} (GeoPackage/SQLite)")
+                if return_memory_info:
+                    return (backend, None, False)
+                return backend
+        
+        # Fallback to OGR backend (Shapefiles, GeoJSON, etc.)
+        logger.info(f"Using OGR backend for {layer.name()}")
         backend = OGRGeometricFilter(task_params)
         if return_memory_info:
             return (backend, None, False)

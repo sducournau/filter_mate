@@ -40,6 +40,7 @@ from qgis.core import (
     QgsFeatureSource,
     QgsField,
     QgsGeometry,
+    QgsMemoryProviderUtils,
     QgsMessageLog,
     QgsProcessing,
     QgsProcessingContext,
@@ -560,15 +561,11 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"Auto-filled layer_id='{infos['layer_id']}' from source layer")
             
             # Auto-fill layer_provider_type
+            # Use detect_layer_provider_type to get correct provider for backend selection
             if "layer_provider_type" not in infos or infos["layer_provider_type"] is None:
-                provider = self.source_layer.providerType()
-                if provider == 'postgres':
-                    infos["layer_provider_type"] = 'postgresql'
-                elif provider == 'spatialite':
-                    infos["layer_provider_type"] = 'spatialite'
-                else:
-                    infos["layer_provider_type"] = 'ogr'
-                logger.info(f"Auto-filled layer_provider_type='{infos['layer_provider_type']}' from source layer")
+                detected_type = detect_layer_provider_type(self.source_layer)
+                infos["layer_provider_type"] = detected_type
+                logger.info(f"Auto-filled layer_provider_type='{detected_type}' from source layer")
             
             # Auto-fill layer_geometry_field
             if "layer_geometry_field" not in infos or infos["layer_geometry_field"] is None:
@@ -1285,6 +1282,9 @@ class FilterEngineTask(QgsTask):
             # Fallback to OGR if Spatialite failed
             if not spatialite_success:
                 logger.info("Falling back to OGR geometry preparation...")
+                # Set flag to prevent buffer application in OGR fallback
+                # Buffer will be applied via ST_Buffer() in SQL when we convert to WKT
+                self._spatialite_fallback_mode = True
                 try:
                     self.prepare_ogr_source_geom()
                     if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom is not None:
@@ -1345,12 +1345,18 @@ class FilterEngineTask(QgsTask):
                 except Exception as e2:
                     logger.error(f"OGR fallback failed: {e2}")
                     return False
+                finally:
+                    # Reset fallback flag
+                    self._spatialite_fallback_mode = False
 
         # Prepare OGR geometry if needed for OGR layers, buffer expressions, OR PostgreSQL layers
         # CRITICAL: Always prepare OGR geometry for PostgreSQL because BackendFactory may
         # fall back to OGR at runtime if PostgreSQL connection fails or for small datasets
+        # ALSO: Prepare for Spatialite layers because Spatialite backend may fall back to OGR
+        # if Spatialite functions are not available (e.g., GDAL without Spatialite support)
         needs_ogr_geom = (
             'ogr' in provider_list or 
+            'spatialite' in provider_list or  # Spatialite may fall back to OGR
             self.param_buffer_expression != '' or
             'postgresql' in provider_list  # PostgreSQL may use OGR fallback at runtime
         )
@@ -1796,28 +1802,16 @@ class FilterEngineTask(QgsTask):
         
         geometries = []
 
-        # Determine target CRS for buffer operations
+        # Determine target CRS
         target_crs = QgsCoordinateReferenceSystem(self.source_layer_crs_authid)
-        is_geographic = target_crs.isGeographic()
         
-        # CRITICAL: For geographic coordinates, switch to EPSG:3857 for metric calculations
-        # This ensures accurate buffer distances in meters instead of imprecise degrees
-        use_metric_crs = False
-        if is_geographic and self.param_buffer_value is not None and self.param_buffer_value > 0:
-            logger.info(f"🌍 Geographic CRS detected: {target_crs.authid()}")
-            logger.info(f"   → Switching to EPSG:3857 for metric-based buffer calculations")
-            target_crs = QgsCoordinateReferenceSystem("EPSG:3857")
-            use_metric_crs = True
-        
-        # Setup reprojection transforms
-        if self.has_to_reproject_source_layer is True or use_metric_crs:
+        # Setup reprojection transforms (only if explicitly requested)
+        # SPATIALITE OPTIMIZATION: Buffer is now applied via ST_Buffer() in SQL expression
+        # No need to reproject to metric CRS here - ST_Buffer handles it with ST_Transform
+        if self.has_to_reproject_source_layer is True:
             source_crs_obj = QgsCoordinateReferenceSystem(self.source_crs.authid())
             transform = QgsCoordinateTransform(source_crs_obj, target_crs, self.PROJECT)
-            
-            if use_metric_crs:
-                logger.debug(f"Will reproject from {self.source_crs.authid()} → EPSG:3857 (metric) for buffer")
-            else:
-                logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
+            logger.debug(f"Will reproject from {self.source_crs.authid()} to {self.source_layer_crs_authid}")
 
         # Log buffer settings for debugging
         logger.debug(f"Buffer settings: param_buffer_value={self.param_buffer_value}")
@@ -1832,18 +1826,15 @@ class FilterEngineTask(QgsTask):
                 if geom_copy.isMultipart():
                     geom_copy.convertToSingleType()
                     
-                if self.has_to_reproject_source_layer is True or use_metric_crs:
+                if self.has_to_reproject_source_layer is True:
                     geom_copy.transform(transform)
                     
-                # Apply buffer if configured (now always in meters)
+                # SPATIALITE OPTIMIZATION: Buffer is now applied via ST_Buffer() in SQL expression
+                # This avoids GeometryCollection issues from QGIS buffer and uses native Spatialite functions
+                # The buffer value is passed to build_expression() which adds ST_Buffer() to the SQL
                 if self.param_buffer_value is not None and self.param_buffer_value > 0:
-                    logger.info(f"Applying buffer of {self.param_buffer_value}m to geometry (CRS: {target_crs.authid()})")
-                    original_wkt_type = geom_copy.asWkt().split('(')[0].strip()
-                    geom_copy = geom_copy.buffer(self.param_buffer_value, 5)
-                    buffered_wkt_type = geom_copy.asWkt().split('(')[0].strip()
-                    logger.debug(f"  Geometry type: {original_wkt_type} → {buffered_wkt_type}")
-                else:
-                    logger.warning(f"No buffer applied! param_buffer_value={self.param_buffer_value}")
+                    logger.info(f"Buffer of {self.param_buffer_value}m will be applied via ST_Buffer() in SQL")
+                    # NOTE: Do NOT apply buffer here - it's done in Spatialite SQL expression
                     
                 geometries.append(geom_copy)
 
@@ -1958,21 +1949,12 @@ class FilterEngineTask(QgsTask):
                 else:
                     logger.warning("No point parts found in GeometryCollection")
         
-        # CRITICAL: If we used metric CRS for buffer, transform back to target layer CRS
-        if use_metric_crs:
-            final_crs = QgsCoordinateReferenceSystem(self.source_layer_crs_authid)
-            back_transform = QgsCoordinateTransform(target_crs, final_crs, self.PROJECT)
-            collected_geometry.transform(back_transform)
-            logger.info(f"✓ Transformed buffered geometry from EPSG:3857 back to {final_crs.authid()}")
-        
         wkt = collected_geometry.asWkt()
         
         # Log the final geometry type
         geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
         logger.info(f"  Final collected geometry type: {geom_type}")
         logger.info(f"  Number of geometries collected: {len(geometries)}")
-        if use_metric_crs:
-            logger.info(f"  ✓ Buffer calculated in EPSG:3857 (metric), result in {self.source_layer_crs_authid}")
         
         # Escape single quotes for SQL
         wkt_escaped = wkt.replace("'", "''")
@@ -2041,6 +2023,10 @@ class FilterEngineTask(QgsTask):
         memory_layer.updateExtents()
         
         logger.debug(f"  ✓ Copied {len(features_to_copy)} features to memory layer")
+        
+        # Create spatial index for improved performance
+        self._verify_and_create_spatial_index(memory_layer, layer_name)
+        
         return memory_layer
 
     def _copy_selected_features_to_memory(self, layer, layer_name="selected_copy"):
@@ -2090,6 +2076,9 @@ class FilterEngineTask(QgsTask):
         if features_to_copy:
             memory_layer.dataProvider().addFeatures(features_to_copy)
             memory_layer.updateExtents()
+            
+            # Create spatial index for improved performance
+            self._verify_and_create_spatial_index(memory_layer, layer_name)
         
         logger.debug(f"  ✓ Copied {len(features_to_copy)} selected features to memory layer")
         return memory_layer
@@ -2256,10 +2245,146 @@ class FilterEngineTask(QgsTask):
         )
         layer = self.outputs['alg_source_layer_params_buffer']['OUTPUT']
         
+        # CRITICAL FIX: Convert GeometryCollection to MultiPolygon
+        # This prevents "Impossible d'ajouter l'objet avec une géométrie de type 
+        # GeometryCollection à une couche de type MultiPolygon" errors when using
+        # the buffer result for spatial operations on typed GPKG layers
+        layer = self._convert_geometry_collection_to_multipolygon(layer)
+        
         # Create spatial index
         processing.run('qgis:createspatialindex', {"INPUT": layer})
         
         return layer
+
+    def _convert_geometry_collection_to_multipolygon(self, layer):
+        """
+        Convert GeometryCollection geometries in a layer to MultiPolygon.
+        
+        CRITICAL FIX for GeoPackage/OGR layers:
+        When qgis:buffer processes features with DISSOLVE=True, the result
+        can contain GeometryCollection type instead of MultiPolygon.
+        This causes errors when the buffer layer is used for spatial operations
+        on typed layers (e.g., GeoPackage MultiPolygon layers).
+        
+        Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type 
+        GeometryCollection à une couche de type MultiPolygon"
+        
+        Args:
+            layer: QgsVectorLayer from buffer operation
+            
+        Returns:
+            QgsVectorLayer: Layer with geometries converted to MultiPolygon
+        """
+        try:
+            # Check if any features have GeometryCollection type
+            has_geometry_collection = False
+            for feature in layer.getFeatures():
+                geom = feature.geometry()
+                if geom and not geom.isEmpty():
+                    geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                    if 'GeometryCollection' in geom_type:
+                        has_geometry_collection = True
+                        break
+            
+            if not has_geometry_collection:
+                logger.debug("No GeometryCollection found in buffer result - no conversion needed")
+                return layer
+            
+            logger.info("🔄 GeometryCollection detected in buffer result - converting to MultiPolygon")
+            
+            # Create new memory layer with MultiPolygon type
+            crs = layer.crs()
+            fields = layer.fields()
+            
+            # Create MultiPolygon memory layer
+            converted_layer = QgsMemoryProviderUtils.createMemoryLayer(
+                f"{layer.name()}_converted",
+                fields,
+                QgsWkbTypes.MultiPolygon,
+                crs
+            )
+            
+            if not converted_layer or not converted_layer.isValid():
+                logger.error("Failed to create converted memory layer")
+                return layer
+            
+            converted_dp = converted_layer.dataProvider()
+            converted_features = []
+            conversion_count = 0
+            
+            for feature in layer.getFeatures():
+                geom = feature.geometry()
+                if not geom or geom.isEmpty():
+                    continue
+                
+                geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                new_geom = geom
+                
+                if 'GeometryCollection' in geom_type:
+                    # Extract polygon parts from GeometryCollection
+                    polygon_parts = []
+                    
+                    def extract_polygons(g):
+                        """Recursively extract all polygon geometries."""
+                        if g is None or g.isEmpty():
+                            return
+                        gt = QgsWkbTypes.displayString(g.wkbType())
+                        if 'Polygon' in gt and 'Multi' not in gt:
+                            polygon_parts.append(QgsGeometry(g))
+                        elif 'MultiPolygon' in gt or 'GeometryCollection' in gt:
+                            for part in g.asGeometryCollection():
+                                extract_polygons(part)
+                    
+                    extract_polygons(geom)
+                    
+                    if polygon_parts:
+                        # Create MultiPolygon from extracted parts
+                        if len(polygon_parts) == 1:
+                            poly_data = polygon_parts[0].asPolygon()
+                            if poly_data:
+                                new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                        else:
+                            multi_poly_parts = [p.asPolygon() for p in polygon_parts if p.asPolygon()]
+                            if multi_poly_parts:
+                                new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
+                        
+                        conversion_count += 1
+                        logger.debug(f"Converted GeometryCollection to {QgsWkbTypes.displayString(new_geom.wkbType())}")
+                    else:
+                        logger.warning("GeometryCollection contained no polygon parts - skipping feature")
+                        continue
+                
+                elif 'Polygon' in geom_type and 'Multi' not in geom_type:
+                    # Convert single Polygon to MultiPolygon for consistency
+                    poly_data = geom.asPolygon()
+                    if poly_data:
+                        new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                
+                # Create new feature with converted geometry
+                new_feature = QgsFeature(fields)
+                new_feature.setGeometry(new_geom)
+                new_feature.setAttributes(feature.attributes())
+                converted_features.append(new_feature)
+            
+            # Add converted features
+            if converted_features:
+                success, _ = converted_dp.addFeatures(converted_features)
+                if success:
+                    converted_layer.updateExtents()
+                    logger.info(f"✓ Converted {conversion_count} GeometryCollection(s) to MultiPolygon")
+                    return converted_layer
+                else:
+                    logger.error("Failed to add converted features to layer")
+                    return layer
+            else:
+                logger.warning("No features to convert")
+                return layer
+                
+        except Exception as e:
+            logger.error(f"Error converting GeometryCollection: {str(e)}")
+            import traceback
+            logger.debug(f"Conversion traceback: {traceback.format_exc()}")
+            return layer
 
 
     def _evaluate_buffer_distance(self, layer, buffer_param):
@@ -2497,8 +2622,8 @@ class FilterEngineTask(QgsTask):
             logger.error(f"Failed to add feature to buffer layer. Geometry type: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
         buffered_layer.updateExtents()
         
-        # Create spatial index
-        processing.run('qgis:createspatialindex', {"INPUT": buffered_layer})
+        # Create spatial index for improved performance
+        self._verify_and_create_spatial_index(buffered_layer, "buffered_temp")
         
         return buffered_layer
 
@@ -2709,6 +2834,9 @@ class FilterEngineTask(QgsTask):
             logger.error(f"✗ Geometry repair failed: No valid features remaining after repair (0/{total_features})")
             raise Exception(f"All geometries are invalid and cannot be repaired. Total: {total_features}, Invalid: {invalid_count}")
         
+        # Create spatial index for improved performance
+        self._verify_and_create_spatial_index(repaired_layer, "repaired_geometries")
+        
         logger.info(f"✓ Geometry repair complete: {repaired_count}/{invalid_count} successfully repaired, {len(features_to_add)}/{total_features} features kept")
         return repaired_layer
 
@@ -2845,7 +2973,16 @@ class FilterEngineTask(QgsTask):
             layer = self._reproject_layer(layer, self.source_layer_crs_authid)
         
         # Step 4: Apply buffer if specified
-        if buffer_distance is not None:
+        # SPATIALITE OPTIMIZATION: If spatialite_source_geom is prepared OR we're in fallback mode,
+        # buffer will be applied via ST_Buffer() in SQL expression, so skip buffer here
+        has_spatialite_geom = hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom is not None
+        is_spatialite_fallback = hasattr(self, '_spatialite_fallback_mode') and self._spatialite_fallback_mode
+        skip_buffer = has_spatialite_geom or is_spatialite_fallback
+        
+        if buffer_distance is not None and not skip_buffer:
+            # Only apply buffer via processing if Spatialite WKT is NOT available
+            # (Spatialite backend will use ST_Buffer() in SQL instead)
+            logger.info("Applying buffer via QGIS processing (Spatialite WKT not available)")
             layer = self._apply_buffer_with_fallback(layer, buffer_distance)
             # Check if buffer resulted in empty layer
             if layer.featureCount() == 0:
@@ -2854,6 +2991,8 @@ class FilterEngineTask(QgsTask):
                 layer = self.source_layer
                 if layer.subsetString():
                     layer = self._copy_filtered_layer_to_memory(layer, "source_filtered_no_buffer")
+        elif buffer_distance is not None and skip_buffer:
+            logger.info(f"Buffer of {buffer_distance}m will be applied via ST_Buffer() in Spatialite SQL")
         
         # Store result
         self.ogr_source_geom = layer
@@ -3237,6 +3376,56 @@ class FilterEngineTask(QgsTask):
         return param_expression, expression
 
 
+    def _normalize_column_names_for_postgresql(self, expression, field_names):
+        """
+        Normalize column names in expression to match actual PostgreSQL column names.
+        
+        PostgreSQL is case-sensitive for quoted identifiers. If columns were created
+        without quotes, they are stored in lowercase. This function corrects column
+        names in filter expressions to match the actual column names.
+        
+        For example: "SUB_TYPE" → "sub_type" if the column exists as "sub_type"
+        
+        Args:
+            expression: SQL expression string
+            field_names: List of actual field names from the layer
+            
+        Returns:
+            str: Expression with corrected column names
+        """
+        if not expression or not field_names:
+            return expression
+        
+        result_expression = expression
+        
+        # Build case-insensitive lookup map: lowercase → actual name
+        field_lookup = {name.lower(): name for name in field_names}
+        
+        # Find all quoted column names in expression (e.g., "SUB_TYPE")
+        quoted_cols = re.findall(r'"([^"]+)"', result_expression)
+        
+        corrections_made = []
+        for col_name in quoted_cols:
+            # Skip if column exists with exact case (no correction needed)
+            if col_name in field_names:
+                continue
+            
+            # Check for case-insensitive match
+            col_lower = col_name.lower()
+            if col_lower in field_lookup:
+                correct_name = field_lookup[col_lower]
+                # Replace the incorrectly cased column name with correct one
+                result_expression = result_expression.replace(
+                    f'"{col_name}"',
+                    f'"{correct_name}"'
+                )
+                corrections_made.append(f'"{col_name}" → "{correct_name}"')
+        
+        if corrections_made:
+            logger.info(f"PostgreSQL column case normalization: {', '.join(corrections_made)}")
+        
+        return result_expression
+
     def _qualify_field_names_in_expression(self, expression, field_names, primary_key_name, table_name, is_postgresql):
         """
         Qualify field names with table prefix for PostgreSQL/Spatialite expressions.
@@ -3257,6 +3446,14 @@ class FilterEngineTask(QgsTask):
             str: Expression with qualified field names (PostgreSQL/Spatialite) or simple quoted names (OGR)
         """
         result_expression = expression
+        
+        # CRITICAL FIX: For PostgreSQL, first normalize column names to match actual database column case
+        # This fixes "column X does not exist" errors caused by case mismatch
+        # (e.g., "SUB_TYPE" in expression but "sub_type" in database)
+        if is_postgresql:
+            # Include primary key in field names for case normalization
+            all_fields = list(field_names) + ([primary_key_name] if primary_key_name else [])
+            result_expression = self._normalize_column_names_for_postgresql(result_expression, all_fields)
         
         # For OGR and Spatialite, just ensure field names are quoted, no table qualification
         if self.param_source_provider_type in (PROVIDER_OGR, PROVIDER_SPATIALITE):
@@ -5158,9 +5355,19 @@ class FilterEngineTask(QgsTask):
                 old_subset = layer.subsetString()
                 
                 if old_subset:
-                    # Combine with existing filter using AND
-                    final_expression = f"({old_subset}) AND ({where_clause})"
-                    logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
+                    # Check if the new filter is identical to the old one to avoid duplication
+                    # Normalize both expressions for comparison (remove extra spaces/parentheses)
+                    normalized_old = old_subset.strip().strip('()')
+                    normalized_new = where_clause.strip().strip('()')
+                    
+                    if normalized_old == normalized_new:
+                        # Identical filter - no need to combine, just use the new one
+                        final_expression = where_clause
+                        logger.debug(f"New filter identical to existing - replacing instead of combining")
+                    else:
+                        # Different filters - combine with existing filter using AND
+                        final_expression = f"({old_subset}) AND ({where_clause})"
+                        logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
                 else:
                     final_expression = where_clause
                 

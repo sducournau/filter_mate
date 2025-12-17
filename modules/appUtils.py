@@ -307,20 +307,20 @@ def detect_layer_provider_type(layer):
     """
     Detect the provider type of a QGIS vector layer.
     
-    Handles the distinction between Spatialite and OGR layers, as both
-    can report 'ogr' as providerType() but Spatialite layers have 'Transactions' capability.
-    Also checks file extension to detect .sqlite and .gpkg files as Spatialite.
+    For filtering purposes, this function returns the logical backend type:
+    - 'postgresql': PostgreSQL/PostGIS layers
+    - 'spatialite': Native Spatialite AND GeoPackage/SQLite via OGR
+    - 'ogr': Shapefiles and other OGR formats (not GPKG/SQLite)
+    - 'memory': Memory layers
+    
+    GeoPackage and SQLite files return 'spatialite' because they support
+    Spatialite SQL functions in setSubsetString (ST_Intersects, GeomFromText, etc.)
     
     Args:
         layer (QgsVectorLayer): QGIS vector layer
     
     Returns:
         str: One of 'postgresql', 'spatialite', 'ogr', 'memory', or 'unknown'
-    
-    Examples:
-        >>> layer_type = detect_layer_provider_type(layer)
-        >>> if layer_type == 'postgresql' and POSTGRESQL_AVAILABLE:
-        ...     # Use PostgreSQL optimized path
     """
     if not isinstance(layer, QgsVectorLayer):
         return 'unknown'
@@ -328,7 +328,6 @@ def detect_layer_provider_type(layer):
     provider_type = layer.providerType()
     
     # Use helper to convert QGIS provider type to FilterMate constant
-    # This handles 'postgres' -> 'postgresql' conversion
     normalized_type = get_provider_name(provider_type)
     
     if normalized_type == 'postgresql':
@@ -338,52 +337,19 @@ def detect_layer_provider_type(layer):
     elif normalized_type == PROVIDER_MEMORY:
         return 'memory'
     elif provider_type == PROVIDER_OGR:
-        # Check file extension first - .sqlite and .gpkg files are Spatialite-based
+        # Check if it's a GeoPackage or SQLite file - these support Spatialite SQL
         source = layer.source()
         source_path = source.split('|')[0] if '|' in source else source
         
-        # For .gpkg files, validate it's a real GeoPackage
         if source_path.lower().endswith('.gpkg'):
-            if is_valid_geopackage(source_path):
-                logger.debug(f"Detected valid GeoPackage: {source_path}")
-                return 'spatialite'
-            else:
-                logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
-                return 'ogr'
-        
-        # For .sqlite files, assume Spatialite
+            return 'spatialite'
         if source_path.lower().endswith('.sqlite'):
             return 'spatialite'
         
-        # Check if it's Spatialite via 'Transactions' capability
-        capabilities = layer.capabilitiesString().split(', ')
-        if 'Transactions' in capabilities:
-            return 'spatialite'
-        else:
-            return 'ogr'
+        # Other OGR formats (Shapefile, GeoJSON, etc.)
+        return 'ogr'
     else:
-        # Fallback for OGR-like providers
-        source = layer.source()
-        source_path = source.split('|')[0] if '|' in source else source
-        
-        # For .gpkg files, validate it's a real GeoPackage
-        if source_path.lower().endswith('.gpkg'):
-            if is_valid_geopackage(source_path):
-                logger.debug(f"Detected valid GeoPackage: {source_path}")
-                return 'spatialite'
-            else:
-                logger.warning(f"File has .gpkg extension but is not a valid GeoPackage: {source_path}")
-                return 'ogr'
-        
-        # For .sqlite files, assume Spatialite
-        if source_path.lower().endswith('.sqlite'):
-            return 'spatialite'
-        
-        capabilities = layer.capabilitiesString().split(', ')
-        if 'Transactions' in capabilities:
-            return 'spatialite'
-        else:
-            return 'ogr'
+        return 'ogr'
 
 
 def get_geopackage_path(layer):

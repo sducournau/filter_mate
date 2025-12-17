@@ -53,19 +53,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         Supports:
         - Native Spatialite layers (providerType == 'spatialite')
-        - GeoPackage files via OGR (direct SQLite connection with spatial functions)
+        - GeoPackage files via OGR IF Spatialite functions are available
+        - SQLite files via OGR IF Spatialite functions are available
         
-        Strategy for GeoPackage:
-        - GeoPackage uses SQLite internally with spatial support
-        - This backend opens a direct SQLite connection to the .gpkg file
-        - Uses spatial SQL functions (ST_Intersects, GeomFromText, etc.) via direct SQL
-        - Bypasses OGR's limited SQL dialect by working with SQLite directly
+        CRITICAL: GeoPackage/SQLite support depends on GDAL being compiled with Spatialite.
+        This method now tests if spatial functions actually work before returning True.
         
         Args:
             layer: QGIS vector layer to check
         
         Returns:
-            True if layer is Spatialite or GeoPackage
+            True if layer supports Spatialite spatial functions
         """
         provider_type = layer.providerType()
         
@@ -74,26 +72,87 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"✓ Native Spatialite layer: {layer.name()}")
             return True
         
-        # GeoPackage/SQLite via OGR - supported via direct SQLite connection
+        # GeoPackage/SQLite via OGR - need to test if Spatialite functions work
         if provider_type == 'ogr':
             source = layer.source()
             source_path = source.split('|')[0] if '|' in source else source
             
-            if source_path.lower().endswith('.gpkg'):
-                self.log_info(
-                    f"✓ GeoPackage layer detected: {layer.name()}. "
-                    f"Will use direct SQLite connection with spatial functions."
-                )
-                return True
-            
-            if source_path.lower().endswith('.sqlite'):
-                self.log_info(
-                    f"✓ SQLite layer detected: {layer.name()}. "
-                    f"Will use direct SQLite connection with spatial functions."
-                )
-                return True
+            if source_path.lower().endswith('.gpkg') or source_path.lower().endswith('.sqlite'):
+                # Test if Spatialite functions are available via setSubsetString
+                if self._test_spatialite_functions(layer):
+                    file_type = "GeoPackage" if source_path.lower().endswith('.gpkg') else "SQLite"
+                    self.log_info(f"✓ {file_type} layer: {layer.name()} - Spatialite functions available")
+                    return True
+                else:
+                    self.log_warning(
+                        f"⚠️ {layer.name()}: GeoPackage/SQLite detected but Spatialite functions NOT available.\n"
+                        f"   This happens when GDAL was not compiled with Spatialite support.\n"
+                        f"   Falling back to OGR backend (QGIS processing)."
+                    )
+                    return False
         
         return False
+    
+    def _test_spatialite_functions(self, layer: QgsVectorLayer) -> bool:
+        """
+        Test if Spatialite spatial functions work on this layer.
+        
+        Tests by trying a simple GeomFromText expression in setSubsetString.
+        If it fails, Spatialite functions are not available.
+        
+        Uses a cached result per layer ID to avoid repeated testing.
+        
+        Args:
+            layer: Layer to test
+            
+        Returns:
+            True if Spatialite functions work, False otherwise
+        """
+        # Use class-level cache to avoid repeated tests
+        if not hasattr(self.__class__, '_spatialite_support_cache'):
+            self.__class__._spatialite_support_cache = {}
+        
+        layer_id = layer.id()
+        if layer_id in self.__class__._spatialite_support_cache:
+            cached = self.__class__._spatialite_support_cache[layer_id]
+            self.log_debug(f"Using cached Spatialite support result for {layer.name()}: {cached}")
+            return cached
+        
+        try:
+            # Get geometry column name
+            geom_col = layer.geometryColumn()
+            if not geom_col:
+                geom_col = "geom"  # Default fallback
+            
+            # Save current subset string
+            original_subset = layer.subsetString()
+            
+            # Try a simple Spatialite function test
+            # Use a simple GeomFromText that should return no features (false condition)
+            # This tests if GeomFromText is recognized as a function
+            test_expr = f"ST_Intersects(\"{geom_col}\", GeomFromText('POINT(0 0)', 4326)) = 1 AND 1 = 0"
+            
+            # Try to apply the test expression
+            result = layer.setSubsetString(test_expr)
+            
+            # Restore original subset immediately
+            layer.setSubsetString(original_subset if original_subset else "")
+            
+            # Cache the result
+            self.__class__._spatialite_support_cache[layer_id] = result
+            
+            if result:
+                self.log_debug(f"✓ Spatialite function test PASSED for {layer.name()}")
+                return True
+            else:
+                self.log_debug(f"✗ Spatialite function test FAILED for {layer.name()}")
+                return False
+                
+        except Exception as e:
+            self.log_debug(f"✗ Spatialite function test ERROR for {layer.name()}: {e}")
+            # Cache as False on error
+            self.__class__._spatialite_support_cache[layer_id] = False
+            return False
     
     def _get_spatialite_db_path(self, layer: QgsVectorLayer) -> Optional[str]:
         """
@@ -507,10 +566,39 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 source_geom_expr = f"GeomFromText('{source_geom}', {target_srid})"
                 self.log_debug(f"Using SRID {target_srid} (same as target)")
         
-        # NOTE: Buffer is already applied in prepare_spatialite_source_geom()
+        # Apply buffer using ST_Buffer() SQL function if specified
+        # This uses Spatialite native spatial functions instead of QGIS processing
+        if buffer_value is not None and buffer_value > 0:
+            # Check if CRS is geographic - buffer needs to be in appropriate units
+            is_target_geographic = target_srid == 4326 or (layer and layer.crs().isGeographic())
+            
+            if is_target_geographic:
+                # Geographic CRS: buffer is in degrees, which is problematic
+                # Use ST_Transform to project to Web Mercator (EPSG:3857) for metric buffer
+                # Then transform back to original CRS
+                self.log_info(f"🌍 Geographic CRS (SRID={target_srid}) - applying buffer in EPSG:3857")
+                source_geom_expr = (
+                    f"ST_Transform("
+                    f"ST_Buffer("
+                    f"ST_Transform({source_geom_expr}, 3857), "
+                    f"{buffer_value}), "
+                    f"{target_srid})"
+                )
+                self.log_info(f"✓ Applied ST_Buffer({buffer_value}m) via EPSG:3857 reprojection")
+            else:
+                # Projected CRS: buffer value is directly in map units (usually meters)
+                source_geom_expr = f"ST_Buffer({source_geom_expr}, {buffer_value})"
+                self.log_info(f"✓ Applied ST_Buffer({buffer_value}) in native CRS (SRID={target_srid})")
+        
+        # Dynamic buffer expressions use attribute values
         if buffer_expression:
-            self.log_warning("Dynamic buffer expressions not yet fully supported for Spatialite")
-            self.log_info("Note: Static buffer values are already applied in geometry preparation")
+            self.log_info(f"Using dynamic buffer expression: {buffer_expression}")
+            # Replace any table prefix in buffer expression for subset string context
+            clean_buffer_expr = buffer_expression
+            if '"' in clean_buffer_expr and '.' not in clean_buffer_expr:
+                # Expression like "field_name" - use as-is for attribute-based buffer
+                source_geom_expr = f"ST_Buffer({source_geom_expr}, {clean_buffer_expr})"
+                self.log_info(f"✓ Applied dynamic ST_Buffer with expression: {clean_buffer_expr}")
         
         # Build predicate expressions with OPTIMIZED order
         # Order by selectivity (most selective first = fastest short-circuit)
