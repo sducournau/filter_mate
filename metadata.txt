@@ -10,13 +10,14 @@ version=2.3.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.5 - Configuration System & Performance
+about=FilterMate v2.3.5 - Configuration System v2.0 & Performance
 
  NEW in v2.3.5:
- - ⚙️ Advanced configuration system with metadata & auto-generated UI
+ - ⚙️ Configuration v2.0 with integrated metadata structure
  - 🔄 Automatic config migration (v1.0→v2.0) with backup/rollback
+ - 🔒 Forced backend respect - user choice strictly enforced
  - 🚀 PostgreSQL 30%% faster loading (fast counting + UNLOGGED MVs)
- - 📊 Complete performance & stability audit (score: 9.0/10)
+ - 📊 Complete audit (score: 9.0/10) with 47 usage cases documented
  - 🐛 Fixed config editor save & validation feedback
  - 📚 30+ documentation files (config, migration, optimization)
  

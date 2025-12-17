@@ -19,41 +19,46 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 
 ## Current Status
 - **Version**: 2.3.5 (December 17, 2025)
-- **Status**: Production - Stable with configuration system, performance optimizations, and comprehensive auditing
+- **Status**: Production - Stable with configuration system v2.0, performance optimizations, and comprehensive auditing
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Recent Additions**: 
-  - Configuration migration system (v1.0 → v2.0)
-  - Auto-generated configuration UI with metadata
-  - Complete audit and critical TODOs implementation
+  - Configuration v2.0 with integrated metadata structure
+  - Forced backend respect - user choice strictly enforced
+  - Auto-detection and reset of obsolete/corrupted configurations
+  - ConfigMetadataHandler for intelligent extraction and tooltips
+  - Complete audit with 47 usage cases documented
   - PostgreSQL loading optimizations (~30% faster)
 
 ## Recent Development (December 17, 2025)
 
-### Configuration System Enhancements (✅ Complete)
+### Configuration System v2.0 (✅ Complete)
 **Date**: December 17, 2025
 
 **New Components:**
-- **Configuration Metadata**: `config/config_schema.json` - Complete schema with validation, widget types, descriptions
+- **Integrated Metadata Structure**: Metadata embedded directly in parameters (no fragmented `_*_META` sections)
+- **ConfigMetadataHandler**: `modules/config_metadata_handler.py` - Intelligent extraction and tooltips
 - **Migration System**: `modules/config_migration.py` - Automatic v1.0 → v2.0 migration with backup/rollback
-- **Config Editor Widget**: `modules/config_editor_widget.py` - Auto-generated UI from metadata
-- **Validation**: Complete value validation with user-friendly error messages
-- **Documentation**: Comprehensive guides (CONFIG_SYSTEM.md, CONFIG_MIGRATION.md, etc.)
+- **Auto-Reset**: Obsolete/corrupted configs automatically detected and reset with backup
+- **Forced Backend Respect**: User backend choice strictly enforced (no fallback)
 
 **Features:**
-- Auto-detect configuration version
+- Auto-detect configuration version (v1.0, v2.0, unknown)
 - Automatic backup before migration
-- User-friendly widgets (checkbox, combobox, spinbox, colorpicker)
-- Real-time validation
-- Markdown documentation export
+- Pattern uniforme: `{value, choices, description, ...}`
+- 47 usage cases documented and validated
+- Real-time validation with WCAG-compliant error messages
+
+**Documentation (30+ files):**
+- `docs/CONFIG_DEVELOPER_GUIDE_2025-12-17.md` - Quick reference for developers
+- `docs/CONFIG_INTEGRATION_ANALYSIS_2025-12-17.md` - Complete integration analysis
+- `docs/CONFIG_USAGE_CASES_2025-12-17.md` - 47 usage patterns documented
+- `docs/INTEGRATION_SUMMARY_2025-12-17.md` - Executive summary
+- `docs/fixes/FIX_FORCED_BACKEND_RESPECT_2025-12-17.md` - Backend respect fix
 
 **Testing:**
-- 20+ unit tests for migration
-- Demo scripts for all features
-- WCAG-compliant error messages
-
-**Commits:**
-- Multiple commits for config system development
-- All new files added and documented
+- `tests/test_auto_config_reset.py` - Migration and reset tests
+- `tests/test_config_improved_structure.py` - Structure validation
+- `tests/test_forced_backend_respect.py` - Backend respect tests
 
 ### Performance & Stability Audit (✅ Complete)
 **Date**: December 17, 2025
@@ -127,28 +132,42 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - PostgreSQL statistics-based fast counting
 - UNLOGGED materialized views for temporary data
 
-## Configuration System (v2.3.5+)
+## Configuration System v2.0
 
 ### Features
-- **Metadata-driven**: All config parameters documented in `config_schema.json`
-- **Auto-generated UI**: Widgets created automatically based on metadata
+- **Integrated Metadata**: Metadata embedded directly in parameters (no fragmented sections)
+- **Auto-detection**: Version detection (v1.0, v2.0, unknown) with automatic migration
+- **Auto-reset**: Obsolete/corrupted configs automatically reset with backup
+- **Forced Backend Respect**: User backend choice strictly enforced
 - **Validation**: Complete value validation with clear error messages
-- **Migration**: Automatic v1.0 → v2.0 migration with backup
 - **User-friendly**: Labels, descriptions, tooltips for all parameters
 
 ### Components
-- `config/config_schema.json`: Metadata and validation rules
-- `modules/config_metadata.py`: Metadata management
-- `modules/config_helpers.py`: Helper functions with validation
+- `config/config.default.json`: Config with integrated metadata structure
+- `modules/config_metadata_handler.py`: Intelligent extraction and tooltips
+- `modules/config_helpers.py`: Helper functions (get_config_value, set_config_value)
+- `modules/config_migration.py`: Version migration system with backup
 - `modules/config_editor_widget.py`: Auto-generated UI
-- `modules/config_migration.py`: Version migration system
 
-### Widget Types Supported
-- Checkbox (boolean values)
-- Combobox (predefined choices)
-- Spinbox (integer ranges)
-- Textbox (free text)
-- Colorpicker (hex colors)
+### Config Value Pattern
+```json
+{
+  "PARAMETER": {
+    "value": "default",
+    "choices": ["option1", "option2"],
+    "description": "User-friendly description"
+  }
+}
+```
+
+### Access Patterns
+```python
+# Reading (handles both v1.0 and v2.0)
+value = get_config_value(config, "APP", "DOCKWIDGET", "PARAMETER")
+
+# Writing (preserves metadata)
+set_config_value(config, new_value, "APP", "DOCKWIDGET", "PARAMETER")
+```
 
 ## Architecture Patterns
 

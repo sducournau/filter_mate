@@ -7,18 +7,21 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.5 - Stability & Backend Improvements
+## 🎉 What's New in v2.3.5 - Configuration System v2.0 & Performance
 
-### Bug Fixes
-- 🐛 **CRITICAL: Fixed GeometryCollection errors in OGR backend** - Buffer operations now properly convert to MultiPolygon, fixing "Impossible d'ajouter l'objet avec une géométrie de type GeometryCollection" errors
-- 🐛 **CRITICAL: Fixed potential crashes in layer operations** - Guard clauses prevent KeyError when layers are removed during filtering, undo/redo, or exploration
+### Configuration System v2.0
+- ⚙️ **Integrated Metadata Structure** - Metadata embedded directly in parameters (no fragmented `_*_META` sections)
+- 🔄 **Automatic Config Migration** - Seamless v1.0 → v2.0 with backup/rollback
+- 🔐 **Auto-detection of Obsolete Configs** - Corrupted or outdated configs automatically reset with backup
+- 📝 **ConfigMetadataHandler** - Intelligent extraction and tooltips for qt_json_view
 
-### Performance Improvements
-- 🚀 **GeoPackage 10× faster** - GeoPackage layers now use Spatialite backend with direct SQL queries instead of slow OGR algorithms
+### Backend Improvements
+- 🔒 **Forced Backend Respect** - User choice strictly enforced (no fallback to OGR)
+- ⚡ **~30% Faster PostgreSQL Loading** - Fast counting via `pg_stat_user_tables` + UNLOGGED MVs
 
-### Technical Improvements
-- 🛠️ **Improved exception handling** - Replaced generic exception handlers with specific types for better debugging
-- Added logging for all exception handlers to aid troubleshooting
+### Code Quality
+- 📊 **Complete Audit** - Score 9.0/10 with 47 usage cases documented
+- 📚 **30+ Documentation Files** - Developer guide, integration analysis, migration guides
 
 ## Previous Updates
 

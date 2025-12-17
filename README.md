@@ -1,14 +1,20 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-**Version 2.3.5** | December 2025
+**Version 2.3.5** | December 17, 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.3.5 - Configuration System & Performance
+### 🎉 What's New in v2.3.5 - Configuration System v2.0 & Performance
 
-- ⚙️ **Advanced Configuration System** - Metadata-driven configuration with auto-generated UI
-  - Auto-generated widgets (checkbox, combobox, spinbox, colorpicker)
-  - Real-time validation with clear error messages
-  - Complete metadata schema with descriptions and validation rules
+- ⚙️ **Configuration System v2.0** - Integrated metadata structure
+  - Metadata embedded directly in parameters (no fragmented `_*_META` sections)
+  - Auto-detection and reset of obsolete/corrupted configurations
+  - Automatic backup before any migration
+  - `ConfigMetadataHandler` for intelligent extraction and tooltips
+  
+- 🔒 **Forced Backend Respect** - User choice strictly enforced
+  - System always uses the backend chosen by user
+  - No automatic fallback to OGR when a backend is forced
+  - Clear warnings if forced backend is not optimal
   
 - 🔄 **Automatic Configuration Migration** - Seamless v1.0 → v2.0 migration
   - Automatic version detection and migration
@@ -22,33 +28,22 @@
   - 1M features: 32s vs 46s previously
   
 - 📊 **Complete Code Audit** - Quality score 9.0/10
+  - 47 configuration usage cases documented and validated
   - Fixed config editor save functionality (P0 - CRITICAL)
   - Improved validation error messages (P1 - HIGH)
   - 40+ try/finally blocks for resource management
   - Test coverage: ~70% (target: 80%)
   
 - 📚 **30+ New Documentation Files** - Comprehensive guides
-  - Configuration system & migration guides
+  - Configuration system v2.0 & migration guides
+  - Developer quick reference guide
   - PostgreSQL optimization documentation
   - Performance & stability audit reports
-  - Integration examples and quick start guides
 
 ### Previous Updates (v2.3.4) - PostgreSQL 2-Part Table Reference Fix
 - 🐛 **CRITICAL: Fixed PostgreSQL spatial filtering** - Tables using `"table"."geom"` format now work correctly
 - ✨ **Smart display field selection** - Auto-selects best descriptive field (name, label, etc.)
 - 🛠️ **Automatic PostgreSQL ANALYZE** - Optimal query performance with proper statistics
-
-### 🎉 What's New in v2.3.5 - Stability & Backend Improvements
-- 🐛 **CRITICAL: Fixed GeometryCollection errors in OGR backend** - Buffer operations now properly convert to MultiPolygon
-- 🐛 **CRITICAL: Fixed potential crashes in layer operations** - Guard clauses prevent KeyError when layers are removed
-- 🚀 **GeoPackage 10× faster** - Now uses Spatialite backend with direct SQL queries
-- 🛠️ **Improved exception handling** - Better debugging with specific exception types
-
-### Previous Updates (v2.3.4) - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
-- 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format
-- ✨ **Smart display field selection** - New layers auto-select the best descriptive field (name, label, etc.)
-- 🐛 **Fixed GeometryCollection buffer results** - Buffer operations now properly handle non-overlapping geometries
-- 🛠️ **Automatic PostgreSQL ANALYZE** - Query planner now has proper statistics for optimal performance
 
 ### Previous Updates (v2.3.0) - Global Undo/Redo System
 - ⭐ **Intelligent Undo/Redo** - Smart context-aware undo/redo for filters

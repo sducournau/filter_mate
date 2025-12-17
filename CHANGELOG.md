@@ -2,20 +2,23 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [Unreleased]
+## [2.3.5] - 2025-12-17 - Configuration System v2.0 & Complete Audit
 
-### 🔧 Fixed
-- **Forced Backend Respect** - Backend forcé par l'utilisateur maintenant strictement respecté
-  - Le système utilise maintenant toujours le backend choisi par l'utilisateur
-  - Plus de fallback automatique vers OGR quand un backend est forcé
-  - Ajout d'avertissements clairs si le backend forcé n'est pas optimal
-  - Gestion gracieuse des backends non disponibles (ex: PostgreSQL sans psycopg2)
-  - Documentation: `docs/fixes/FIX_FORCED_BACKEND_RESPECT_2025-12-17.md`
-  - Tests: `tests/test_forced_backend_respect.py`
+### ⚙️ Configuration System v2.0
+- **Integrated Metadata Structure** - Metadata embedded directly in parameters
+  - No more fragmented `_*_META` sections
+  - Pattern uniforme: `{value, choices, description, ...}`
+  - `modules/config_metadata_handler.py` - Intelligent extraction and tooltips
+  - Auto-detection and reset of obsolete/corrupted configurations
+  - Automatic backup before any migration
 
-## [2.3.5] - 2025-12-17 - Configuration System & Complete Audit
+- **Forced Backend Respect** - User choice strictly enforced
+  - System always uses the backend chosen by user
+  - No automatic fallback to OGR when a backend is forced
+  - Clear warnings if forced backend is not optimal
+  - Graceful handling of unavailable backends (e.g., PostgreSQL without psycopg2)
 
-###  Configuration System Enhancements
+### ⚙️ Configuration System Enhancements
 - **Configuration Metadata System** - Complete metadata-driven configuration
   - `config/config_schema.json` - Schema with validation, widget types, descriptions  
   - `modules/config_metadata.py` - Metadata management class
@@ -94,30 +97,18 @@ All notable changes to FilterMate will be documented in this file.
   - `.serena/memories/project_overview.md` - Updated with v2.3.5 features
   - `.serena/memories/code_quality_improvements_2025.md` - Audit results
 
----
+### 📚 Additional Documentation
+- `docs/CONFIG_DEVELOPER_GUIDE_2025-12-17.md` - Quick reference for developers
+- `docs/CONFIG_INTEGRATION_ANALYSIS_2025-12-17.md` - Complete integration analysis (47 usage cases)
+- `docs/CONFIG_USAGE_CASES_2025-12-17.md` - All usage patterns documented
+- `docs/INTEGRATION_SUMMARY_2025-12-17.md` - Executive summary
+- `docs/fixes/FIX_FORCED_BACKEND_RESPECT_2025-12-17.md` - Backend respect fix
+- `docs/fixes/FIX_AUTO_CONFIG_RESET_2025-12-17.md` - Auto-reset documentation
 
-
-All notable changes to FilterMate will be documented in this file.
-
-## [2.3.8] - 2025-12-17 - Code Quality & Configuration Editor
-
-### 🔧 Fixed
-- **Configuration Editor - Save Functionality** (P0 - CRITICAL)
-  - Implemented `save_configuration()` method in ConfigEditorWidget
-  - Configuration now properly persisted to config.json
-  - User feedback with success/error messages
-  - UTF-8 encoding with pretty-printed JSON
-- **Configuration Editor - Validation Feedback** (P1 - HIGH)
-  - Added user-visible error messages for validation failures
-  - Clear feedback with config path and error description
-  - Improved user experience for invalid values
-
-### 📊 Code Quality Improvements
-- **Complete Performance & Stability Audit** performed
-  - Overall score: 8.5/10 → 9.0/10
-  - 0 critical TODOs remaining (2 implemented, 2 backlogged)
-  - 40+ try/finally blocks for resource management
-  - Test coverage: ~70% (target: 80%)
+### ✅ New Tests
+- `tests/test_auto_config_reset.py` - Migration and reset tests
+- `tests/test_config_improved_structure.py` - Structure validation
+- `tests/test_forced_backend_respect.py` - Backend respect tests
 - **Pattern Analysis**
   - Identified 48+ iface.messageBar() calls for future centralization
   - No critical code duplication detected
