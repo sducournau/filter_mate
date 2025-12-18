@@ -107,7 +107,7 @@ Choose format and CRS, click Export
 </div>
 
 :::tip Sample Data Available
-Don't have data to test? Download our [sample dataset](./getting-started/sample-data.md) (Paris 10th - 5 MB) with pre-configured QGIS project.
+Don't have data to test? Download our [sample dataset](https://github.com/sducournau/filter_mate/releases) (Paris 10th - 5 MB) with pre-configured QGIS project.
 :::
 
 ---

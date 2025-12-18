@@ -52,7 +52,7 @@ In the **Layer Selection** dropdown at the top of the FilterMate panel:
 
 **Don't have a cities layer?**
 - Use any layer with a numeric field
-- Or download our [sample dataset](./sample-data.md) (5 MB)
+- Or download our [sample dataset](https://github.com/sducournau/filter_mate/releases) (5 MB)
 
 ---
 

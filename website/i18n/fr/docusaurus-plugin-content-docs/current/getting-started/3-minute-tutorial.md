@@ -52,7 +52,7 @@ Dans le menu déroulant **Sélection de couche** en haut du panneau FilterMate :
 
 **Vous n'avez pas de couche de villes ?**
 - Utilisez n'importe quelle couche avec un champ numérique
-- Ou téléchargez notre [jeu de données exemple](./sample-data.md) (5 Mo)
+- Ou téléchargez notre [jeu de données exemple](https://github.com/sducournau/filter_mate/releases) (5 Mo)
 
 ---
 
