@@ -124,7 +124,85 @@ ui_config.update_profile(DisplayProfile.NORMAL)
 - **Consistent spacing** across all UI elements
 - **Automatic adaptation** based on screen size
 
-## Theme System (v2.1.0+)
+## Theme System (v2.4.0 - Enhanced with Auto Dark Mode)
+
+### Automatic Theme Detection (NEW in v2.3.8)
+
+**File:** `modules/ui_styles.py` - `QGISThemeWatcher` class
+
+**Features:**
+- Monitors `QApplication.paletteChanged` signal in real-time
+- Automatically detects theme changes when user switches QGIS theme
+- Luminance-based detection: `palette.color(QPalette.Window).lightness() < 128`
+- Singleton pattern ensures single watcher instance
+
+**Usage:**
+```python
+from modules.ui_styles import QGISThemeWatcher
+
+# Get singleton instance
+watcher = QGISThemeWatcher()
+
+# Register callback
+def on_theme_change(new_theme: str):
+    print(f"Theme changed to: {new_theme}")  # 'dark' or 'default'
+
+watcher.add_callback(on_theme_change)
+watcher.start_watching()
+
+# Cleanup on close
+watcher.remove_callback(on_theme_change)
+```
+
+### Icon Theming (NEW in v2.3.8)
+
+**File:** `modules/icon_utils.py`
+
+**Classes:**
+- `IconThemeManager`: Singleton for theme-aware icon management
+
+**Features:**
+- Automatic icon inversion using `QImage.invertPixels(QImage.InvertRgb)`
+- Support for `_black`/`_white` icon variants
+- Caching for optimal performance
+
+**Methods:**
+```python
+from modules.icon_utils import IconThemeManager, get_themed_icon
+
+# Set current theme
+IconThemeManager.set_theme('dark')  # or 'default'
+
+# Get themed icon
+icon = get_themed_icon('/path/to/icon.png')
+
+# Invert a pixmap manually
+inverted = IconThemeManager.invert_pixmap(pixmap)
+
+# Refresh all button icons
+IconThemeManager.refresh_all_button_icons(parent_widget)
+```
+
+**Icon Variant Support:**
+```python
+# Define icon variants
+VARIANT_ICONS = {
+    'filter': ('filter_black.png', 'filter_white.png'),
+    'export': ('export_black.png', 'export_white.png'),
+}
+
+# IconThemeManager automatically selects correct variant
+icon = IconThemeManager.get_icon_for_theme('/path/to/filter_black.png')
+```
+
+### JsonView Theme Refresh (NEW in v2.3.8)
+
+**File:** `modules/qt_json_view/view.py`
+
+**Method:** `refresh_theme_stylesheet(force_dark=None)`
+- Called when QGIS theme changes
+- Updates JsonView stylesheet to match main UI
+- Optional `force_dark` parameter overrides auto-detection
 
 ### Theme Synchronization
 

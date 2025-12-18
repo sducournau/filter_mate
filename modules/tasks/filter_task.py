@@ -1454,33 +1454,39 @@ class FilterEngineTask(QgsTask):
         """
         logger.info("🚀 Using PARALLEL filtering mode")
         
-        # Prepare flat list of (layer, layer_props, provider_type) tuples
+        # Prepare flat list of (layer, layer_props) tuples with provider_type stored in layer_props
         all_layers = []
         for provider_type in self.layers:
             for layer, layer_props in self.layers[provider_type]:
-                all_layers.append((layer, layer_props, provider_type))
+                # Store provider_type in layer_props for the filter function
+                layer_props_with_provider = layer_props.copy()
+                layer_props_with_provider['_effective_provider_type'] = provider_type
+                all_layers.append((layer, layer_props_with_provider))
         
         # Create executor with config
         config = ParallelConfig(
             max_workers=max_workers if max_workers > 0 else None,
             min_layers_for_parallel=1  # Already checked threshold
         )
-        executor = ParallelFilterExecutor(config)
+        executor = ParallelFilterExecutor(config.max_workers)
         
-        # Define filter function for each layer
-        def filter_layer_func(layer_tuple):
-            layer, layer_props, provider_type = layer_tuple
-            return self.execute_geometric_filtering(provider_type, layer, layer_props)
-        
-        # Execute parallel filtering
-        results = executor.filter_layers_parallel(all_layers, filter_layer_func)
+        # Execute parallel filtering with required task_parameters
+        task_parameters = {
+            'task': self,
+            'filter_type': getattr(self, 'filter_type', 'geometric')
+        }
+        results = executor.filter_layers_parallel(
+            all_layers, 
+            self.execute_geometric_filtering,
+            task_parameters
+        )
         
         # Process results and update progress
         successful_filters = 0
         failed_filters = 0
         
         for i, (layer_tuple, result) in enumerate(zip(all_layers, results), 1):
-            layer, layer_props, provider_type = layer_tuple
+            layer, layer_props = layer_tuple
             self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer.name()}")
             
             if result.success:
@@ -1488,7 +1494,8 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"✅ {layer.name()} has been filtered → {layer.featureCount()} features")
             else:
                 failed_filters += 1
-                logger.error(f"❌ {layer.name()} - errors occurred during filtering: {result.error}")
+                error_msg = result.error_message if hasattr(result, 'error_message') else getattr(result, 'error', 'Unknown error')
+                logger.error(f"❌ {layer.name()} - errors occurred during filtering: {error_msg}")
             
             progress_percent = int((i / self.layers_count) * 100)
             self.setProgress(progress_percent)

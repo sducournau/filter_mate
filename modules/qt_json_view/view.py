@@ -49,14 +49,18 @@ class JsonView(QtWidgets.QTreeView):
 
     def _apply_theme_stylesheet(self):
         """Apply stylesheet based on detected theme (dark/light)."""
-        # Détection simple du thème basée sur la palette
-        try:
-            from qgis.core import QgsApplication
-            palette = QgsApplication.palette()
-            bg_color = palette.color(QtGui.QPalette.Window)
-            is_dark = bg_color.lightness() < 128
-        except (ImportError, AttributeError):
-            is_dark = False
+        # Check if theme was forced externally
+        if hasattr(self, '_forced_dark') and self._forced_dark is not None:
+            is_dark = self._forced_dark
+        else:
+            # Détection simple du thème basée sur la palette
+            try:
+                from qgis.core import QgsApplication
+                palette = QgsApplication.palette()
+                bg_color = palette.color(QtGui.QPalette.Window)
+                is_dark = bg_color.lightness() < 128
+            except (ImportError, AttributeError):
+                is_dark = False
         
         if is_dark:
             # Thème sombre optimisé

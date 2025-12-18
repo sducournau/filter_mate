@@ -2,6 +2,52 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.3.8] - 2025-12-19 - Automatic Dark Mode Support
+
+### ✨ New Features
+- **Automatic Dark Mode Detection** - Plugin now detects QGIS theme in real-time
+  - Added `QGISThemeWatcher` class that monitors `QApplication.paletteChanged` signal
+  - Automatically switches UI theme when user changes QGIS theme settings
+  - Supports Night Mapping and other dark themes
+
+- **Icon Inversion for Dark Mode** - PNG icons now visible in dark themes
+  - Added `IconThemeManager` class for theme-aware icon management
+  - Automatic icon color inversion using `QImage.invertPixels()`
+  - Support for `_black`/`_white` icon variants
+  - Icon caching for optimal performance
+
+- **New `modules/icon_utils.py` Module**
+  - `IconThemeManager`: Singleton for managing themed icons
+  - `invert_pixmap()`: Inverts dark icons to white
+  - `get_icon_for_theme()`: Returns appropriate icon for current theme
+  - `apply_icon_to_button()`: Applies themed icons to QPushButton/QToolButton
+  - `get_themed_icon()`: High-level utility function for easy icon theming
+
+### 🎨 UI/UX Improvements
+- **JsonView Theme Synchronization** - Config editor updates with main theme
+  - Added `refresh_theme_stylesheet()` method to JsonView
+  - Config editor now matches plugin theme
+  - Smooth transition when switching themes
+
+- **Enhanced Theme Change Notification**
+  - Brief info message when theme changes
+  - Logs theme transitions for debugging
+
+### 🛠️ Technical Improvements
+- **Theme Detection** - Luminance-based algorithm (threshold: 128)
+  - Uses `QgsApplication.palette().color(QPalette.Window).lightness()`
+  - Consistent detection across QGIS versions
+
+- **Resource Cleanup** - Theme watcher properly cleaned up on plugin close
+  - Callback removed in `closeEvent`
+  - Prevents memory leaks and dangling signal connections
+
+### 📁 Files Changed
+- `modules/icon_utils.py` - New file for icon theming
+- `modules/ui_styles.py` - Added `QGISThemeWatcher` class
+- `modules/qt_json_view/view.py` - Added `refresh_theme_stylesheet()` method
+- `filter_mate_dockwidget.py` - Theme watcher integration
+
 ## [2.3.7] - 2025-12-18 - Project Change Stability Enhancement
 
 ### 🛡️ Stability Improvements

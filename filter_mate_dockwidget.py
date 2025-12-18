@@ -127,10 +127,17 @@ from .modules.appUtils import (
 )
 from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
-from .modules.ui_styles import StyleLoader
+from .modules.ui_styles import StyleLoader, QGISThemeWatcher
 from .modules.feedback_utils import show_info, show_warning, show_error, show_success
 from .modules.config_helpers import set_config_value
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
+
+# Import icon utilities for dark mode support
+try:
+    from .modules.icon_utils import IconThemeManager, get_themed_icon
+    ICON_THEME_AVAILABLE = True
+except ImportError:
+    ICON_THEME_AVAILABLE = False
 
 # Import UI configuration system for dynamic dimensions
 try:
@@ -189,6 +196,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Signal connection state tracking to avoid redundant connect/disconnect calls
         # Key format: "WIDGET_GROUP.WIDGET_NAME.SIGNAL_NAME" -> bool (True=connected, False=disconnected)
         self._signal_connection_states = {}
+        
+        # Theme watcher for automatic dark/light mode switching
+        self._theme_watcher = None
         
         # Initialize layer state
         self._initialize_layer_state()
@@ -252,6 +262,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Initialize config changes tracking
         self.pending_config_changes = []
         self.config_changes_pending = False
+
+        # Initialize IconThemeManager early (before any icons are set)
+        if ICON_THEME_AVAILABLE:
+            try:
+                current_theme = StyleLoader.detect_qgis_theme()
+                IconThemeManager.set_theme(current_theme)
+                logger.debug(f"Early IconThemeManager init: {current_theme}")
+            except Exception as e:
+                logger.warning(f"Could not initialize IconThemeManager early: {e}")
 
         logger.info("FilterMate DockWidget: Starting setupUi()")
         self.setupUi(self)
@@ -517,7 +536,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for index, icon_file in toolbox_icons.items():
             icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
             if os.path.exists(icon_path):
-                icon = QtGui.QIcon(icon_path)
+                # Use themed icon for dark mode support
+                if ICON_THEME_AVAILABLE:
+                    icon = get_themed_icon(icon_path)
+                else:
+                    icon = QtGui.QIcon(icon_path)
                 self.toolBox_tabTools.setItemIcon(index, icon)
 
 
@@ -3298,15 +3321,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     file_path = os.path.join(self.plugin_dir, "icons", config_path)
                     self.widgets[config_widget_path[4]][config_widget_path[5]]["ICON"] = file_path
 
-                icon = QtGui.QIcon(file_path)
+                # Use themed icon for dark mode support
+                if ICON_THEME_AVAILABLE:
+                    icon = get_themed_icon(file_path)
+                else:
+                    icon = QtGui.QIcon(file_path)
                 self.widgets[config_widget_path[4]][config_widget_path[5]]["WIDGET"].setIcon(icon)
 
 
     def switch_widget_icon(self, widget_path, state):
         if state is True:
-            icon = QtGui.QIcon(self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_TRUE"])
+            icon_path = self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_TRUE"]
         else:
-            icon = QtGui.QIcon(self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_FALSE"])
+            icon_path = self.widgets[widget_path[0].upper()][widget_path[1].upper()]["ICON_ON_FALSE"]
+        
+        # Use themed icon for dark mode support
+        if ICON_THEME_AVAILABLE:
+            icon = get_themed_icon(icon_path)
+        else:
+            icon = QtGui.QIcon(icon_path)
         self.widgets[widget_path[0].upper()][widget_path[1].upper()]["WIDGET"].setIcon(icon)
 
 
@@ -3698,21 +3731,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Orchestrates UI styling by:
         1. Auto-detecting UI profile and theme
         2. Applying stylesheet via StyleLoader
-        3. Configuring push buttons
-        4. Configuring other widgets
-        5. Setting key widget sizes
+        3. Initializing theme and icon manager
+        4. Configuring push buttons
+        5. Configuring other widgets
+        6. Setting key widget sizes
+        7. Starting QGIS theme watcher for automatic dark/light mode switching
         
         Benefits:
         - Centralized style management
         - Automatic adaptation to screen size and QGIS theme
         - Proper error handling and fallbacks
         - Easy theme customization via config.json
+        - Automatic theme sync when QGIS theme changes
         """
         # Auto-configure UI profile and theme
         self._apply_auto_configuration()
         
         # Apply stylesheet
         self._apply_stylesheet()
+        
+        # Initialize IconThemeManager with current QGIS theme BEFORE configuring icons
+        if ICON_THEME_AVAILABLE:
+            current_theme = StyleLoader.detect_qgis_theme()
+            IconThemeManager.set_theme(current_theme)
+            logger.info(f"IconThemeManager pre-initialized with theme: {current_theme}")
         
         # Get configuration
         pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
@@ -3726,12 +3768,144 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         font = QFont("Segoe UI Semibold", 8)
         font.setBold(True)
         
-        # Configure widgets
+        # Configure widgets (icons will now use correct theme)
         self._configure_pushbuttons(pushButton_config, icons_sizes, font)
         self._configure_other_widgets(font)
         self._configure_key_widgets_sizes(icons_sizes)
         
+        # Start theme watcher for automatic dark/light mode switching
+        self._setup_theme_watcher()
+        
         logger.debug("UI stylesheet loaded and applied successfully")
+    
+    def _setup_theme_watcher(self):
+        """
+        Setup QGIS theme watcher for automatic dark/light mode switching.
+        
+        Connects to QGIS paletteChanged signal to detect theme changes.
+        When QGIS theme changes (e.g., user switches to Night Mapping),
+        the plugin automatically updates its stylesheet and icons.
+        """
+        try:
+            # Get or create theme watcher singleton
+            self._theme_watcher = QGISThemeWatcher.get_instance()
+            
+            # Detect current theme and initialize IconThemeManager
+            current_theme = StyleLoader.detect_qgis_theme()
+            if ICON_THEME_AVAILABLE:
+                IconThemeManager.set_theme(current_theme)
+                logger.info(f"IconThemeManager initialized with theme: {current_theme}")
+            
+            # Add our callback for theme changes
+            self._theme_watcher.add_callback(self._on_qgis_theme_changed)
+            
+            # Start watching if not already
+            if not self._theme_watcher.is_watching:
+                self._theme_watcher.start_watching()
+            
+            # Refresh icons for initial theme (important for dark mode at startup)
+            if current_theme == 'dark':
+                self._refresh_icons_for_theme()
+            
+            logger.info(f"Theme watcher initialized - current theme: {current_theme}")
+            
+        except Exception as e:
+            logger.warning(f"Could not setup theme watcher: {e}")
+    
+    def _on_qgis_theme_changed(self, new_theme: str):
+        """
+        Handle QGIS theme change event.
+        
+        Called automatically when QGIS theme changes (e.g., user switches
+        between default and Night Mapping themes).
+        
+        Args:
+            new_theme: New theme name ('dark' or 'default')
+        """
+        logger.info(f"QGIS theme changed to: {new_theme}")
+        
+        try:
+            # Update IconThemeManager
+            if ICON_THEME_AVAILABLE:
+                IconThemeManager.set_theme(new_theme)
+            
+            # Reapply stylesheet with new theme
+            StyleLoader.set_theme_from_config(
+                self.dockWidgetContents,
+                self.CONFIG_DATA,
+                new_theme
+            )
+            
+            # Refresh all button icons for new theme
+            self._refresh_icons_for_theme()
+            
+            # Update JsonView (config editor) theme
+            if hasattr(self, 'config_view') and self.config_view is not None:
+                is_dark = (new_theme == 'dark')
+                self.config_view.refresh_theme_stylesheet(force_dark=is_dark)
+                logger.debug("JsonView theme updated")
+            
+            # Show brief notification
+            theme_name = "Mode sombre" if new_theme == 'dark' else "Mode clair"
+            show_info("FilterMate", f"Thème adapté: {theme_name}")
+            
+        except Exception as e:
+            logger.error(f"Error applying theme change: {e}")
+    
+    def _refresh_icons_for_theme(self):
+        """
+        Refresh all button icons for the current theme.
+        
+        Iterates through all PushButton widgets and reapplies their icons
+        using the IconThemeManager to get theme-appropriate versions.
+        """
+        if not ICON_THEME_AVAILABLE:
+            return
+        
+        if not self.widgets_initialized:
+            return
+        
+        try:
+            # Refresh toolbox icons
+            toolbox_icons = {
+                0: "filter_multi.png",   # FILTERING tab
+                1: "save.png",           # EXPORTING tab
+                2: "parameters.png"      # CONFIGURATION tab
+            }
+            for index, icon_file in toolbox_icons.items():
+                icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
+                if os.path.exists(icon_path):
+                    themed_icon = get_themed_icon(icon_path)
+                    self.toolBox_tabTools.setItemIcon(index, themed_icon)
+            
+            # Refresh pushbutton icons
+            pushButton_config_path = ['APP', 'DOCKWIDGET', 'PushButton']
+            
+            for widget_group in self.widgets:
+                for widget_name in self.widgets[widget_group]:
+                    widget_info = self.widgets[widget_group][widget_name]
+                    widget_type = widget_info.get("TYPE")
+                    
+                    if widget_type == "PushButton":
+                        widget_obj = widget_info.get("WIDGET")
+                        
+                        # Get icon path from stored config
+                        icon_path = widget_info.get("ICON")
+                        if not icon_path:
+                            icon_path = widget_info.get("ICON_ON_FALSE")
+                        
+                        if icon_path and os.path.exists(icon_path):
+                            # Apply themed icon
+                            themed_icon = get_themed_icon(icon_path)
+                            widget_obj.setIcon(themed_icon)
+                            
+                            # Store path for future reference
+                            widget_obj.setProperty('icon_path', icon_path)
+            
+            logger.debug(f"Refreshed icons for theme: {StyleLoader.get_current_theme()}")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing icons: {e}")
 
 
     def set_widgets_enabled_state(self, state):
@@ -7073,6 +7247,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.comboBox_filtering_current_layer.clear()
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo on close: {e}")
+            
+            # Clean up theme watcher
+            try:
+                if self._theme_watcher is not None:
+                    self._theme_watcher.remove_callback(self._on_qgis_theme_changed)
+                    logger.debug("Theme watcher callback removed")
+            except Exception as e:
+                logger.debug(f"FilterMate: Error cleaning up theme watcher: {e}")
             
             self.closingPlugin.emit()
             event.accept()

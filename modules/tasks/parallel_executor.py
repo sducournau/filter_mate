@@ -342,6 +342,24 @@ class ParallelConfig:
     # Timeout per layer in seconds
     LAYER_TIMEOUT = 300
     
+    def __init__(self, max_workers: Optional[int] = None, 
+                 min_layers_for_parallel: int = 2,
+                 enabled: bool = True,
+                 layer_timeout: int = 300):
+        """
+        Initialize ParallelConfig with optional custom values.
+        
+        Args:
+            max_workers: Maximum number of worker threads (None = auto-detect)
+            min_layers_for_parallel: Minimum layers to trigger parallel execution
+            enabled: Enable/disable parallel execution
+            layer_timeout: Timeout per layer in seconds
+        """
+        self.max_workers = max_workers if max_workers is not None else self.MAX_WORKERS
+        self.min_layers_for_parallel = min_layers_for_parallel
+        self.enabled = enabled
+        self.layer_timeout = layer_timeout
+    
     @classmethod
     def is_parallel_recommended(cls, layer_count: int, total_features: int) -> bool:
         """
