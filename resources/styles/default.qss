@@ -345,6 +345,7 @@ QScrollBar:vertical {
     border: none;
     background: transparent;
     width: 4px;
+    cursor: pointer;
 }
 
 QScrollBar::handle:vertical {
@@ -353,10 +354,12 @@ QScrollBar::handle:vertical {
     width: 4px;
     border-radius: 2px;
     min-height: 20px;
+    cursor: pointer;
 }
 
 QScrollBar::handle:vertical:hover {
     background: {color_font_1};
+    cursor: pointer;
 }
 
 QScrollBar::handle:vertical:pressed {
@@ -388,6 +391,7 @@ QScrollBar:horizontal {
     background: transparent;
     height: 4px;
     margin: 0px;
+    cursor: pointer;
 }
 
 QScrollBar::handle:horizontal {
@@ -395,10 +399,12 @@ QScrollBar::handle:horizontal {
     min-width: 20px;
     border-radius: 2px;
     margin: 0px;
+    cursor: pointer;
 }
 
 QScrollBar::handle:horizontal:hover {
     background: {color_font_1};
+    cursor: pointer;
 }
 
 QScrollBar::handle:horizontal:pressed {
