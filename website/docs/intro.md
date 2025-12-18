@@ -68,6 +68,88 @@ slug: /
 
 👉 **[Complete Installation Guide](./installation.md)**
 
+---
+
+## ⚡ Try FilterMate in 3 Minutes
+
+New to FilterMate? Start with a quick task to see it in action immediately:
+
+<div class="quick-tasks-grid">
+
+### 🔍 Task 1: Filter by Attribute
+**Time**: 2 minutes | **Difficulty**: ⭐  
+**Goal**: Show only large cities
+
+Filter expression: `"population" > 100000`
+
+[▶️ Start Tutorial](./getting-started/3-minute-tutorial.md)
+
+---
+
+### 📐 Task 2: Geometric Filter  
+**Time**: 3 minutes | **Difficulty**: ⭐  
+**Goal**: Find buildings near roads
+
+Use spatial predicates with 200m buffer
+
+[▶️ Start Tutorial](./getting-started/first-filter.md)
+
+---
+
+### 💾 Task 3: Export Filtered Data
+**Time**: 2 minutes | **Difficulty**: ⭐  
+**Goal**: Save filtered features to GeoPackage
+
+Choose format and CRS, click Export
+
+[▶️ Start Tutorial](./user-guide/export-features.md)
+
+</div>
+
+:::tip Sample Data Available
+Don't have data to test? Download our [sample dataset](./getting-started/sample-data.md) (Paris 10th - 5 MB) with pre-configured QGIS project.
+:::
+
+---
+
+## 💡 Popular Use Cases
+
+Explore what you can achieve with FilterMate:
+
+### 🏙️ Urban Planning
+**Find properties within walking distance of transit stations**
+
+Combine buffer operations with attribute filtering for transit-oriented development analysis.
+
+[View Workflow →](./workflows/urban-planning-transit.md)
+
+---
+
+### 🏠 Real Estate Analysis
+**Filter homes by price, size, and school proximity**
+
+Multi-criteria filtering for investment opportunities and market analysis.
+
+[View Workflow →](./workflows/real-estate-analysis.md)
+
+---
+
+### 🌳 Environmental Protection
+**Identify industrial sites in protected zones**
+
+Geometric filtering to assess regulatory compliance and environmental impact.
+
+[View Workflow →](./workflows/environmental-protection.md)
+
+---
+
+### 🚒 Emergency Services
+**Analyze service coverage areas**
+
+Distance calculations to identify underserved areas.
+
+[View Workflow →](./workflows/emergency-services.md)
+
 ## Key Features
 
 ### Advanced Filtering

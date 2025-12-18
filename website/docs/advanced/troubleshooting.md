@@ -111,6 +111,50 @@ sqlite3.OperationalError: database is locked
    - Restart QGIS
    - Reopen project
 
+## Project Loading Issues
+
+### Layers Not Loading After Project Change
+
+**Symptoms:**
+- Plugin dockwidget empty after switching projects
+- Layers present in project but not showing in FilterMate
+- "No layers available" message
+
+**Solutions:**
+
+1. **Force Reload Layers (F5):**  ⭐ **NEW in v2.3.7**
+   - Press **F5** while FilterMate dockwidget is focused
+   - Wait for reload indicator ("⟳") to complete
+   - All project layers will be reloaded
+   - This is the fastest solution
+
+2. **Reload plugin:**
+   - Plugins → Plugin Manager
+   - Find FilterMate
+   - Click "Reload Plugin"
+
+3. **Close and reopen dockwidget:**
+   - Click FilterMate toolbar icon to close
+   - Click again to reopen
+
+4. **Restart QGIS (last resort):**
+   - Save your project first
+   - Restart QGIS
+   - Reopen project
+
+**Why This Happens:**
+- QGIS signal timing can vary between systems
+- PostgreSQL layers may need extra initialization time
+- Project state cleanup may be incomplete
+
+**Technical Details:**
+The F5 reload feature (v2.3.7) forces a complete state reset:
+- Clears all cached layer references
+- Cancels pending tasks
+- Resets all state flags
+- Reinitializes database connections
+- Reloads all vector layers from current project
+
 ## Filtering Issues
 
 ### Filter Not Applied

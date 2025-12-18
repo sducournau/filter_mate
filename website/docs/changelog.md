@@ -6,6 +6,144 @@ sidebar_position: 100
 
 All notable changes to FilterMate are documented here.
 
+## [2.3.7] - December 18, 2025 - Project Change Stability Enhancement
+
+### 🛡️ Stability Improvements
+- **Enhanced Project Change Handling** - Complete rewrite of project change detection
+  - Forces cleanup of previous project state before reinitializing
+  - Clears layer cache, task queue, and all state flags
+  - Resets dockwidget layer references to prevent stale data
+
+- **New `cleared` Signal Handler** - Proper cleanup on project close/clear
+  - Ensures plugin state is reset when project is closed or new project created
+  - Disables UI widgets while waiting for new layers
+
+- **Updated Timing Constants** - Improved delays for better stability with PostgreSQL
+
+### ✨ New Features
+- **Force Reload Layers (F5 Shortcut)** - Manual layer reload when project change fails
+  - Press F5 in dockwidget to force complete layer reload
+  - Shows status indicator during reload ("⟳")
+  - Useful recovery option when automatic project change detection fails
+
+### 🐛 Bug Fixes
+- **Fixed Project Change Not Reloading Layers** - More aggressive cleanup prevents stale state
+- **Fixed Dockwidget Not Updating After Project Switch** - Full reset of layer references
+- **Fixed Signal Timing Issue** - QGIS emits `layersAdded` signal BEFORE `projectRead` handler completes
+
+---
+
+## [2.3.6] - December 18, 2025 - Project & Layer Loading Stability
+
+### 🛡️ Stability Improvements
+- **Centralized Timing Constants** - All timing values now in `STABILITY_CONSTANTS` dict
+  - `MAX_ADD_LAYERS_QUEUE`: 50 (prevents memory overflow)
+  - `FLAG_TIMEOUT_MS`: 30000 (30-second timeout for stale flags)
+
+- **Timestamp-Tracked Flags** - Automatic stale flag detection and reset
+  - Prevents plugin from getting stuck in "loading" state
+  - Auto-resets flags after 30 seconds
+
+- **Layer Validation** - Better C++ object validation
+  - Prevents crashes from accessing deleted layer objects
+
+- **Signal Debouncing** - Rapid signal handling
+  - Queue size limit with automatic trimming (FIFO)
+  - Graceful handling of rapid project/layer changes
+
+### 🐛 Bug Fixes
+- **Fixed Stuck Flags** - Flags now auto-reset after 30-second timeout
+- **Fixed Queue Overflow** - add_layers queue capped at 50 items
+- **Fixed Error Recovery** - Flags properly reset on exception
+
+---
+
+## [2.3.5] - December 17, 2025 - Code Quality & Configuration v2.0
+
+### 🛠️ Centralized Feedback System
+- **Unified Message Bar Notifications** - Consistent user feedback across all modules
+  - New `show_info()`, `show_warning()`, `show_error()`, `show_success()` functions
+  - Graceful fallback when iface is unavailable
+
+### ⚡ PostgreSQL Init Optimization
+- **5-50× Faster Layer Loading** - Smarter initialization for PostgreSQL layers
+  - Check index existence before creating
+  - Connection caching per datasource
+  - Skip CLUSTER at init (deferred to filter time)
+  - Conditional ANALYZE only if table has no statistics
+
+### ⚙️ Configuration System v2.0
+- **Integrated Metadata Structure** - Metadata embedded directly in parameters
+- **Automatic Configuration Migration** - v1.0 → v2.0 migration system
+- **Forced Backend Respect** - User choice strictly enforced (no fallback to OGR)
+
+### 🐛 Bug Fixes
+- **Fixed Syntax Errors** - Corrected unmatched parentheses
+- **Fixed Bare Except Clauses** - Specific exception handling
+
+### 🧹 Code Quality
+- **Score Improvement**: 8.5 → 8.9/10
+
+---
+
+## [2.3.4] - December 16, 2025 - PostgreSQL 2-Part Table Reference Fix
+
+### 🐛 Bug Fixes
+- **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format
+- **Fixed GeometryCollection buffer results** - Now properly extracts polygons and converts to MultiPolygon
+- **Fixed PostgreSQL virtual_id error** - Informative error for layers without primary key
+
+### ✨ New Features
+- **Smart display field selection** - New layers auto-select the best descriptive field (name, label, titre, etc.)
+- **Automatic ANALYZE on source tables** - PostgreSQL query planner now has proper statistics
+
+### ⚡ Performance Improvements
+- **~30% Faster PostgreSQL Layer Loading**
+  - Fast feature count using `pg_stat_user_tables` (500× faster than COUNT(*))
+  - UNLOGGED materialized views (30-50% faster creation)
+
+---
+
+## [2.3.3] - December 15, 2025 - Project Loading Auto-Activation Fix
+
+### 🐛 Bug Fixes
+- **CRITICAL: Fixed plugin auto-activation on project load** - Plugin now correctly activates when loading a QGIS project containing vector layers
+
+---
+
+## [2.3.2] - December 15, 2025 - Interactive Backend Selector
+
+### ✨ New Features
+- **Interactive Backend Selector** - Backend indicator is now clickable to manually force a specific backend
+  - Click on backend badge to open context menu with available backends
+  - Forced backends marked with ⚡ lightning bolt symbol
+  - Per-layer backend preferences
+
+- **🎯 Auto-select Optimal Backends** - Automatically optimize all layers
+  - Analyzes each layer's characteristics (provider type, feature count)
+  - Intelligently selects the best backend for each layer
+
+### 🎨 UI Improvements
+- **Enhanced Backend Indicator**
+  - Added hover effect with cursor change to pointer
+  - Visual feedback for forced backend with ⚡ symbol
+
+---
+
+## [2.3.1] - December 14, 2025 - Stability & Backend Improvements
+
+### 🐛 Bug Fixes
+- **CRITICAL: Fixed GeometryCollection error in OGR backend buffer operations**
+  - Added automatic conversion from GeometryCollection to MultiPolygon
+- **CRITICAL: Fixed potential KeyError crashes in PROJECT_LAYERS access**
+  - Added guard clauses to verify layer existence before dictionary access
+- **Fixed GeoPackage geometric filtering** - GeoPackage layers now use fast Spatialite backend (10× performance improvement)
+
+### 🛠️ Improvements
+- **Improved exception handling throughout codebase** - Replaced generic exception handlers with specific types
+
+---
+
 ## [2.3.0] - December 13, 2025 - Global Undo/Redo & Automatic Filter Preservation
 
 ### 🚀 Major Features

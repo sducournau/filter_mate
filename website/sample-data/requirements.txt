@@ -1,0 +1,17 @@
+# FilterMate Sample Dataset Generator - Requirements
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+requests>=2.31.0
+geopandas>=0.14.0
+shapely>=2.0.0
+pyproj>=3.6.0
+
+# Optional for enhanced functionality
+pandas>=2.1.0
+numpy>=1.24.0
+
+# QGIS Python API (if generating within QGIS)
+# Note: These are automatically available within QGIS Python environment
+# qgis-core
+# PyQt5

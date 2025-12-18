@@ -6,6 +6,144 @@ sidebar_position: 100
 
 Toutes les modifications notables de FilterMate sont documentées ici.
 
+## [2.3.7] - 18 décembre 2025 - Amélioration de la Stabilité du Changement de Projet
+
+### 🛡️ Améliorations de Stabilité
+- **Gestion Améliorée du Changement de Projet** - Réécriture complète de la détection de changement de projet
+  - Force le nettoyage de l'état du projet précédent avant réinitialisation
+  - Vide le cache des couches, la file de tâches et tous les drapeaux d'état
+  - Réinitialise les références de couches du dockwidget pour éviter les données périmées
+
+- **Nouveau Gestionnaire de Signal `cleared`** - Nettoyage approprié à la fermeture/effacement du projet
+  - Assure la réinitialisation de l'état du plugin quand le projet est fermé ou qu'un nouveau projet est créé
+  - Désactive les widgets UI en attendant les nouvelles couches
+
+- **Constantes de Timing Mises à Jour** - Délais améliorés pour une meilleure stabilité avec PostgreSQL
+
+### ✨ Nouvelles Fonctionnalités
+- **Forcer le Rechargement des Couches (Raccourci F5)** - Rechargement manuel quand le changement de projet échoue
+  - Appuyez sur F5 dans le dockwidget pour forcer un rechargement complet
+  - Affiche un indicateur de statut pendant le rechargement ("⟳")
+  - Option de récupération utile quand la détection automatique échoue
+
+### 🐛 Corrections de Bugs
+- **Correction du Non-Rechargement des Couches au Changement de Projet** - Nettoyage plus agressif
+- **Correction du Dockwidget Non Mis à Jour Après Changement de Projet** - Réinitialisation complète
+- **Correction du Problème de Timing des Signaux** - QGIS émet `layersAdded` AVANT la fin de `projectRead`
+
+---
+
+## [2.3.6] - 18 décembre 2025 - Stabilité du Chargement de Projet et Couches
+
+### 🛡️ Améliorations de Stabilité
+- **Constantes de Timing Centralisées** - Toutes les valeurs dans le dict `STABILITY_CONSTANTS`
+  - `MAX_ADD_LAYERS_QUEUE`: 50 (empêche le débordement mémoire)
+  - `FLAG_TIMEOUT_MS`: 30000 (timeout de 30 secondes pour les drapeaux périmés)
+
+- **Drapeaux avec Horodatage** - Détection et réinitialisation automatique des drapeaux périmés
+  - Empêche le plugin de rester bloqué en état "chargement"
+  - Réinitialise automatiquement les drapeaux après 30 secondes
+
+- **Validation des Couches** - Meilleure validation des objets C++
+  - Empêche les crashs lors de l'accès à des couches supprimées
+
+- **Anti-Rebond des Signaux** - Gestion des signaux rapides
+  - Limite de taille de file avec élagage automatique (FIFO)
+  - Gestion gracieuse des changements rapides de projet/couches
+
+### 🐛 Corrections de Bugs
+- **Correction des Drapeaux Bloqués** - Réinitialisation automatique après 30 secondes
+- **Correction du Débordement de File** - File add_layers limitée à 50 éléments
+- **Correction de la Récupération d'Erreur** - Drapeaux réinitialisés correctement
+
+---
+
+## [2.3.5] - 17 décembre 2025 - Qualité du Code et Configuration v2.0
+
+### 🛠️ Système de Feedback Centralisé
+- **Notifications Unifiées** - Feedback utilisateur cohérent dans tous les modules
+  - Nouvelles fonctions `show_info()`, `show_warning()`, `show_error()`, `show_success()`
+  - Fallback gracieux quand iface n'est pas disponible
+
+### ⚡ Optimisation Init PostgreSQL
+- **Chargement 5-50× Plus Rapide** - Initialisation plus intelligente
+  - Vérification de l'existence des index avant création
+  - Cache des connexions par source de données
+  - CLUSTER différé au moment du filtrage
+  - ANALYZE conditionnel seulement si pas de statistiques
+
+### ⚙️ Système de Configuration v2.0
+- **Structure de Métadonnées Intégrée** - Métadonnées directement dans les paramètres
+- **Migration Automatique de Configuration** - Système de migration v1.0 → v2.0
+- **Respect du Backend Forcé** - Le choix utilisateur est strictement respecté (pas de fallback vers OGR)
+
+### 🐛 Corrections de Bugs
+- **Correction d'Erreurs de Syntaxe** - Parenthèses non fermées corrigées
+- **Correction des Clauses Except Génériques** - Gestion d'exception spécifique
+
+### 🧹 Qualité du Code
+- **Amélioration du Score** : 8.5 → 8.9/10
+
+---
+
+## [2.3.4] - 16 décembre 2025 - Correction Référence Table PostgreSQL 2 Parties
+
+### 🐛 Corrections de Bugs
+- **CRITIQUE : Correction des références de table PostgreSQL 2 parties** - Le filtrage spatial fonctionne maintenant correctement avec les tables utilisant le format `"table"."geom"`
+- **Correction des résultats GeometryCollection des tampons** - Extraction et conversion correctes en MultiPolygon
+- **Correction de l'erreur virtual_id PostgreSQL** - Erreur informative pour les couches sans clé primaire
+
+### ✨ Nouvelles Fonctionnalités
+- **Sélection intelligente du champ d'affichage** - Les nouvelles couches sélectionnent automatiquement le meilleur champ descriptif (name, label, titre, etc.)
+- **ANALYZE automatique sur les tables sources** - Le planificateur de requêtes PostgreSQL a maintenant des statistiques correctes
+
+### ⚡ Améliorations de Performance
+- **Chargement ~30% Plus Rapide des Couches PostgreSQL**
+  - Comptage rapide avec `pg_stat_user_tables` (500× plus rapide que COUNT(*))
+  - Vues matérialisées UNLOGGED (30-50% plus rapide)
+
+---
+
+## [2.3.3] - 15 décembre 2025 - Correction Auto-Activation au Chargement de Projet
+
+### 🐛 Corrections de Bugs
+- **CRITIQUE : Correction de l'auto-activation au chargement de projet** - Le plugin s'active maintenant correctement au chargement d'un projet QGIS contenant des couches vecteur
+
+---
+
+## [2.3.2] - 15 décembre 2025 - Sélecteur de Backend Interactif
+
+### ✨ Nouvelles Fonctionnalités
+- **Sélecteur de Backend Interactif** - L'indicateur de backend est maintenant cliquable pour forcer manuellement un backend
+  - Cliquez sur le badge pour ouvrir le menu contextuel
+  - Backends forcés marqués avec le symbole ⚡
+  - Préférences de backend par couche
+
+- **🎯 Auto-sélection des Backends Optimaux** - Optimisation automatique de toutes les couches
+  - Analyse les caractéristiques de chaque couche (type de provider, nombre d'entités)
+  - Sélectionne intelligemment le meilleur backend
+
+### 🎨 Améliorations de l'Interface
+- **Indicateur de Backend Amélioré**
+  - Effet de survol avec changement de curseur
+  - Feedback visuel avec symbole ⚡ pour les backends forcés
+
+---
+
+## [2.3.1] - 14 décembre 2025 - Stabilité et Améliorations Backend
+
+### 🐛 Corrections de Bugs
+- **CRITIQUE : Correction erreur GeometryCollection dans les tampons backend OGR**
+  - Conversion automatique de GeometryCollection vers MultiPolygon
+- **CRITIQUE : Correction crashs KeyError potentiels dans l'accès PROJECT_LAYERS**
+  - Clauses de garde pour vérifier l'existence des couches
+- **Correction filtrage géométrique GeoPackage** - Les couches GeoPackage utilisent maintenant le backend Spatialite rapide (10× plus performant)
+
+### 🛠️ Améliorations
+- **Gestion d'exception améliorée** - Remplacement des gestionnaires génériques par des types spécifiques
+
+---
+
 ## [2.3.0] - 13 décembre 2025 - Annuler/Rétablir Global et Préservation Automatique des Filtres
 
 ### 🚀 Fonctionnalités majeures

@@ -6,6 +6,144 @@ sidebar_position: 100
 
 Todas as alterações notáveis do FilterMate são documentadas aqui.
 
+## [2.3.7] - 18 de dezembro de 2025 - Melhoria da Estabilidade na Troca de Projeto
+
+### 🛡️ Melhorias de Estabilidade
+- **Tratamento Aprimorado de Troca de Projeto** - Reescrita completa da detecção de troca de projeto
+  - Força limpeza do estado do projeto anterior antes de reinicializar
+  - Limpa cache de camadas, fila de tarefas e todos os flags de estado
+  - Reseta referências de camadas do dockwidget para evitar dados obsoletos
+
+- **Novo Handler de Sinal `cleared`** - Limpeza adequada no fechamento/limpeza de projeto
+  - Garante reset do estado do plugin quando o projeto é fechado ou novo projeto criado
+  - Desabilita widgets da UI enquanto aguarda novas camadas
+
+- **Constantes de Timing Atualizadas** - Atrasos melhorados para melhor estabilidade com PostgreSQL
+
+### ✨ Novas Funcionalidades
+- **Forçar Recarga de Camadas (Atalho F5)** - Recarga manual quando a troca de projeto falha
+  - Pressione F5 no dockwidget para forçar recarga completa
+  - Mostra indicador de status durante a recarga ("⟳")
+  - Opção de recuperação útil quando a detecção automática falha
+
+### 🐛 Correções de Bugs
+- **Corrigido Não-Recarga de Camadas na Troca de Projeto** - Limpeza mais agressiva
+- **Corrigido Dockwidget Não Atualizando Após Troca de Projeto** - Reset completo
+- **Corrigido Problema de Timing de Sinais** - QGIS emite `layersAdded` ANTES de `projectRead` completar
+
+---
+
+## [2.3.6] - 18 de dezembro de 2025 - Estabilidade de Carregamento de Projeto e Camadas
+
+### 🛡️ Melhorias de Estabilidade
+- **Constantes de Timing Centralizadas** - Todos os valores no dict `STABILITY_CONSTANTS`
+  - `MAX_ADD_LAYERS_QUEUE`: 50 (previne overflow de memória)
+  - `FLAG_TIMEOUT_MS`: 30000 (timeout de 30 segundos para flags obsoletos)
+
+- **Flags com Timestamp** - Detecção e reset automático de flags obsoletos
+  - Previne plugin de ficar preso em estado "carregando"
+  - Reset automático de flags após 30 segundos
+
+- **Validação de Camadas** - Melhor validação de objetos C++
+  - Previne crashes ao acessar camadas deletadas
+
+- **Debouncing de Sinais** - Tratamento de sinais rápidos
+  - Limite de tamanho de fila com trimming automático (FIFO)
+  - Tratamento gracioso de mudanças rápidas de projeto/camadas
+
+### 🐛 Correções de Bugs
+- **Corrigido Flags Travados** - Reset automático após 30 segundos
+- **Corrigido Overflow de Fila** - Fila add_layers limitada a 50 itens
+- **Corrigido Recuperação de Erro** - Flags resetados corretamente
+
+---
+
+## [2.3.5] - 17 de dezembro de 2025 - Qualidade de Código e Configuração v2.0
+
+### 🛠️ Sistema de Feedback Centralizado
+- **Notificações Unificadas** - Feedback de usuário consistente em todos os módulos
+  - Novas funções `show_info()`, `show_warning()`, `show_error()`, `show_success()`
+  - Fallback gracioso quando iface não disponível
+
+### ⚡ Otimização Init PostgreSQL
+- **Carregamento 5-50× Mais Rápido** - Inicialização mais inteligente
+  - Verificação de existência de índice antes de criar
+  - Cache de conexão por fonte de dados
+  - CLUSTER adiado para o momento do filtro
+  - ANALYZE condicional apenas se não houver estatísticas
+
+### ⚙️ Sistema de Configuração v2.0
+- **Estrutura de Metadados Integrada** - Metadados diretamente nos parâmetros
+- **Migração Automática de Configuração** - Sistema de migração v1.0 → v2.0
+- **Respeito ao Backend Forçado** - Escolha do usuário estritamente respeitada (sem fallback para OGR)
+
+### 🐛 Correções de Bugs
+- **Corrigido Erros de Sintaxe** - Parênteses não fechados corrigidos
+- **Corrigido Cláusulas Except Genéricas** - Tratamento de exceção específico
+
+### 🧹 Qualidade do Código
+- **Melhoria de Pontuação**: 8.5 → 8.9/10
+
+---
+
+## [2.3.4] - 16 de dezembro de 2025 - Correção de Referência de Tabela PostgreSQL 2 Partes
+
+### 🐛 Correções de Bugs
+- **CRÍTICO: Corrigido referências de tabela PostgreSQL 2 partes** - Filtragem espacial agora funciona corretamente com tabelas usando formato `"table"."geom"`
+- **Corrigido resultados GeometryCollection de buffers** - Extração e conversão corretas para MultiPolygon
+- **Corrigido erro virtual_id PostgreSQL** - Erro informativo para camadas sem chave primária
+
+### ✨ Novas Funcionalidades
+- **Seleção inteligente de campo de exibição** - Novas camadas auto-selecionam o melhor campo descritivo (name, label, titulo, etc.)
+- **ANALYZE automático nas tabelas fonte** - Planejador de consultas PostgreSQL agora tem estatísticas corretas
+
+### ⚡ Melhorias de Performance
+- **Carregamento ~30% Mais Rápido de Camadas PostgreSQL**
+  - Contagem rápida com `pg_stat_user_tables` (500× mais rápido que COUNT(*))
+  - Views materializadas UNLOGGED (30-50% mais rápido)
+
+---
+
+## [2.3.3] - 15 de dezembro de 2025 - Correção Auto-Ativação no Carregamento de Projeto
+
+### 🐛 Correções de Bugs
+- **CRÍTICO: Corrigido auto-ativação no carregamento de projeto** - Plugin agora ativa corretamente ao carregar projeto QGIS contendo camadas vetoriais
+
+---
+
+## [2.3.2] - 15 de dezembro de 2025 - Seletor de Backend Interativo
+
+### ✨ Novas Funcionalidades
+- **Seletor de Backend Interativo** - O indicador de backend agora é clicável para forçar manualmente um backend
+  - Clique no badge para abrir menu de contexto
+  - Backends forçados marcados com símbolo ⚡
+  - Preferências de backend por camada
+
+- **🎯 Auto-seleção de Backends Ótimos** - Otimização automática de todas as camadas
+  - Analisa características de cada camada (tipo de provider, contagem de feições)
+  - Seleciona inteligentemente o melhor backend
+
+### 🎨 Melhorias de Interface
+- **Indicador de Backend Aprimorado**
+  - Efeito hover com mudança de cursor
+  - Feedback visual com símbolo ⚡ para backends forçados
+
+---
+
+## [2.3.1] - 14 de dezembro de 2025 - Estabilidade e Melhorias de Backend
+
+### 🐛 Correções de Bugs
+- **CRÍTICO: Corrigido erro GeometryCollection em operações de buffer backend OGR**
+  - Conversão automática de GeometryCollection para MultiPolygon
+- **CRÍTICO: Corrigido potenciais crashes KeyError no acesso PROJECT_LAYERS**
+  - Cláusulas de guarda para verificar existência de camadas
+- **Corrigido filtragem geométrica GeoPackage** - Camadas GeoPackage agora usam backend Spatialite rápido (10× mais performante)
+
+### 🛠️ Melhorias
+- **Tratamento de exceção melhorado** - Substituição de handlers genéricos por tipos específicos
+
+---
+
 ## [2.3.0] - 13 de dezembro de 2025 - Desfazer/Refazer Global e Preservação Automática de Filtros
 
 ### 🚀 Funcionalidades Principais
