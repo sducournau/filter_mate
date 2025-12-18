@@ -402,9 +402,9 @@ Find correct zone: https://epsg.io/
 
 ### Related Workflows
 
-- **[Emergency Services Coverage](emergency-services.md)**: Similar buffer analysis techniques
-- **[Urban Planning Transit](urban-planning-transit.md)**: Multi-layer spatial filtering
-- **[Real Estate Analysis](real-estate-analysis.md)**: Combining spatial + attribute filters
+- **[Emergency Services Coverage](./emergency-services.md)**: Similar buffer analysis techniques
+- **[Urban Planning Transit](./urban-planning-transit.md)**: Multi-layer spatial filtering
+- **[Real Estate Analysis](./real-estate-analysis.md)**: Combining spatial + attribute filters
 
 ### Advanced Techniques
 

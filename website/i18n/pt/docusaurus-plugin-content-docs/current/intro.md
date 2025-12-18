@@ -65,7 +65,7 @@ slug: /
 3. **Filtrar**: Selecione uma camada, escreva uma expressão, clique em Aplicar
 4. **Exportar**: Escolha o formato e exporte seus dados filtrados
 
-👉 **[Guia completo de instalação](./installation.md)**
+👉 **[Guia completo de instalação](./installation)**
 
 ## Recursos principais
 
@@ -80,7 +80,7 @@ slug: /
 - **Spatialite**: Bom para conjuntos de dados médios (`<50k` feições)
 - **OGR**: Compatibilidade universal (Shapefiles, GeoPackage, etc.)
 
-**FilterMate escolhe automaticamente o melhor backend** para sua fonte de dados - nenhuma configuração necessária! Saiba mais no [Guia de seleção de backend](./backends/choosing-backend.md).
+**FilterMate escolhe automaticamente o melhor backend** para sua fonte de dados - nenhuma configuração necessária! Saiba mais na [Visão geral dos backends](./backends/overview).
 
 ### Capacidades de exportação
 - Múltiplos formatos: GPKG, SHP, GeoJSON, KML, CSV, PostGIS
@@ -100,26 +100,28 @@ Antes de usar o FilterMate:
 
 Novo no FilterMate? Siga este caminho:
 
-1. **[Instalação](./installation.md)** - Instale o plugin e dependências opcionais
-2. **[Início rápido](./getting-started/quick-start.md)** - Tutorial de 5 minutos
-3. **[Seu primeiro filtro](./getting-started/first-filter.md)** - Exemplo completo passo a passo
-4. **[Visão geral da interface](./user-guide/interface-overview.md)** - Entenda a interface
-5. **[Noções básicas de filtragem](./user-guide/filtering-basics.md)** - Domine as técnicas de filtragem
+1. **[Instalação](./installation)** - Instale o plugin e dependências opcionais
+2. **[Início rápido](./getting-started/quick-start)** - Tutorial de 5 minutos
+3. **[Seu primeiro filtro](./getting-started/first-filter)** - Exemplo completo passo a passo
+4. **[Visão geral da interface](./user-guide/interface-overview)** - Entenda a interface
+5. **[Noções básicas de filtragem](./user-guide/filtering-basics)** - Domine as técnicas de filtragem
 
 ## Obtendo ajuda
 
-- 📖 **Documentação**: Navegue pelo [Guia do usuário](./user-guide/introduction.md)
+- 📖 **Documentação**: Navegue pelo [Guia do usuário](./user-guide/introduction)
 - 🐛 **Problemas**: Relate bugs em [GitHub Issues](https://github.com/sducournau/filter_mate/issues)
 - 💬 **Discussões**: Participe das [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
 - 🎥 **Vídeo**: Assista ao nosso [tutorial no YouTube](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
 
 ## Seções de documentação
 
-- **[Começar](./getting-started/index.md)** - Tutoriais e guias de início rápido
-- **[Guia do usuário](./user-guide/introduction.md)** - Documentação completa de recursos
-- **[Backends](./backends/overview.md)** - Entendendo backends de fonte de dados
-- **[Avançado](./advanced/configuration.md)** - Configuração e ajuste de desempenho
-- **[Guia do desenvolvedor](./developer-guide/architecture.md)** - Contribuição e desenvolvimento
+- **[Começar](./getting-started/index)** - Tutoriais e guias de início rápido
+- **[Guia do usuário](./user-guide/introduction)** - Documentação completa de recursos
+- **[Backends](./backends/overview)** - Entendendo backends de fonte de dados
+
+:::note Tradução em andamento
+Algumas seções da documentação ainda não estão disponíveis em português. Consulte a [documentação em inglês](/docs) para acessar todos os recursos.
+:::
 
 ### v2.2.0 e anteriores
 - ✅ **Multi-Backend completo** - Implementações PostgreSQL, Spatialite e OGR
@@ -142,8 +144,8 @@ Novo no FilterMate? Siga este caminho:
 
 ## Links rápidos
 
-- [Guia de instalação](./installation.md)
-- [Tutorial de início rápido](./getting-started/quick-start.md)
+- [Guia de instalação](./installation)
+- [Tutorial de início rápido](./getting-started/quick-start)
 - [Repositório GitHub](https://github.com/sducournau/filter_mate)
 - [Repositório de plugins QGIS](https://plugins.qgis.org/plugins/filter_mate)
 
@@ -155,4 +157,4 @@ Veja o FilterMate em ação:
 
 ## Começar
 
-Pronto para começar? Vá para o [Guia de instalação](./installation.md) para configurar o FilterMate em seu ambiente QGIS.
+Pronto para começar? Vá para o [Guia de instalação](./installation) para configurar o FilterMate em seu ambiente QGIS.

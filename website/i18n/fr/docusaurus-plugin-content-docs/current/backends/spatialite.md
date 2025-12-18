@@ -509,11 +509,11 @@ uri.setDataSource("public", "ma_couche", "geometry")
 
 ## Voir aussi
 
-- [Vue d'ensemble des backends](./overview.md) — Architecture multi-backend
-- [Sélection du backend](./choosing-backend.md) — Logique de sélection automatique
-- [Backend PostgreSQL](./postgresql.md) — Pour les plus grands jeux de données
-- [Comparaison des performances](./performance-benchmarks.md) — Benchmarks détaillés
-- [Dépannage](../advanced/troubleshooting.md) — Problèmes courants
+- [Vue d'ensemble des backends](./overview) — Architecture multi-backend
+- [Sélection du backend](./choosing-backend) — Logique de sélection automatique
+- [Backend PostgreSQL](./postgresql) — Pour les plus grands jeux de données
+- [Comparaison des performances](./performance-benchmarks) — Benchmarks détaillés
+- [Dépannage](../advanced/troubleshooting) — Problèmes courants
 
 ## Détails techniques
 

@@ -297,6 +297,6 @@ Antes de desfazer:
 
 ## Tópicos Relacionados
 
-- [Noções Básicas de Filtragem](filtering-basics.md) - Criar filtros
-- [Filtragem Geométrica](geometric-filtering.md) - Operações espaciais
-- [Visão Geral da Interface](interface-overview.md) - Navegar na interface
+- [Noções Básicas de Filtragem](./filtering-basics) - Criar filtros
+- [Filtragem Geométrica](./geometric-filtering) - Operações espaciais
+- [Visão Geral da Interface](./interface-overview) - Navegar na interface

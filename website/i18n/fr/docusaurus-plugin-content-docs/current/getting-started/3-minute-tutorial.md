@@ -126,25 +126,25 @@ Les données d'origine sont **inchangées** - FilterMate crée une vue filtrée 
 
 **Filtrage Géométrique** (10 min)  
 Trouvez des entités en fonction de leur localisation et de leurs relations spatiales  
-[▶️ Votre Premier Filtre Géométrique](./first-filter.md)
+[▶️ Votre Premier Filtre Géométrique](./first-filter)
 
 **Exporter Vos Résultats** (5 min)  
 Enregistrez les entités filtrées au format GeoPackage, Shapefile ou PostGIS  
-[▶️ Guide d'Export](../user-guide/export-features.md)
+[▶️ Guide d'Export](../user-guide/export-features)
 
 **Annuler/Rétablir** (3 min)  
 Naviguez dans votre historique de filtres avec annulation/rétablissement intelligent  
-[▶️ Historique des Filtres](../user-guide/filter-history.md)
+[▶️ Historique des Filtres](../user-guide/filter-history)
 
 ### Explorer les Workflows du Monde Réel
 
 **Urbanisme** (10 min)  
 Trouvez des propriétés à proximité des stations de transport  
-[▶️ Développement Axé sur le Transit](../workflows/urban-planning-transit.md)
+[▶️ Développement Axé sur le Transit](../workflows/urban-planning-transit)
 
 **Immobilier** (8 min)  
 Filtrage de propriétés multi-critères  
-[▶️ Analyse de Marché](../workflows/real-estate-analysis.md)
+[▶️ Analyse de Marché](../workflows/real-estate-analysis)
 
 ---
 
@@ -213,11 +213,11 @@ Vous pouvez combiner les filtres FilterMate avec l'outil de sélection manuelle 
 Vous avez appliqué avec succès votre premier filtre ! Vous êtes maintenant prêt à explorer les fonctionnalités plus avancées de FilterMate.
 
 **Continuer l'Apprentissage :**
-- [Bases du Filtrage](../user-guide/filtering-basics.md) - Maîtrisez les expressions QGIS
-- [Filtrage Géométrique](../user-guide/geometric-filtering.md) - Relations spatiales
-- [Tous les Workflows](../workflows/index.md) - Scénarios du monde réel
+- [Bases du Filtrage](../user-guide/filtering-basics) - Maîtrisez les expressions QGIS
+- [Filtrage Géométrique](../user-guide/geometric-filtering) - Relations spatiales
+- [Tous les Workflows](../workflows/index) - Scénarios du monde réel
 
 **Besoin d'Aide ?**
-- 📖 [Guide Utilisateur](../user-guide/introduction.md)
+- 📖 [Guide Utilisateur](../user-guide/introduction)
 - 🐛 [Signaler des Problèmes](https://github.com/sducournau/filter_mate/issues)
 - 💬 [Poser des Questions](https://github.com/sducournau/filter_mate/discussions)

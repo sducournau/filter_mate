@@ -173,10 +173,10 @@ Configurez dans `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
 
 ## Prochaines étapes
 
-- **[Tutoriel premier filtre](./first-filter.md)** - Exemple détaillé étape par étape
-- **[Bases du filtrage](../user-guide/filtering-basics.md)** - Apprenez les expressions et prédicats
-- **[Filtrage géométrique](../user-guide/geometric-filtering.md)** - Opérations spatiales avancées
-- **[Comparaison des backends](../backends/performance-benchmarks.md)** - Comprendre les performances des backends
+- **[Tutoriel premier filtre](./first-filter)** - Exemple détaillé étape par étape
+- **[Bases du filtrage](../user-guide/filtering-basics)** - Apprenez les expressions et prédicats
+- **[Filtrage géométrique](../user-guide/geometric-filtering)** - Opérations spatiales avancées
+- **[Comparaison des backends](../backends/performance-benchmarks)** - Comprendre les performances des backends
 
 ## Dépannage
 
@@ -189,18 +189,18 @@ Vérifiez :
 
 ### Performances lentes ?
 
-- Pour les grands jeux de données, envisagez d'[installer le backend PostgreSQL](../installation.md#optional-postgresql-backend-recommended-for-large-datasets)
-- Consultez le guide [Optimisation des performances](../advanced/performance-tuning.md)
+- Pour les grands jeux de données, envisagez d'[installer le backend PostgreSQL](../installation#optional-postgresql-backend-recommended-for-large-datasets)
+- Consultez le guide [Optimisation des performances](../advanced/performance-tuning)
 
 ### Backend non détecté ?
 
 FilterMate affichera quel backend est utilisé. Si PostgreSQL n'est pas disponible :
 1. Vérifiez si psycopg2 est installé : `import psycopg2`
 2. Vérifiez que la source de la couche est PostgreSQL/PostGIS
-3. Voir [Dépannage de l'installation](../installation.md#troubleshooting)
+3. Voir [Dépannage de l'installation](../installation#troubleshooting)
 
 ## Besoin d'aide ?
 
-- 📖 [Guide utilisateur complet](../user-guide/introduction.md)
+- 📖 [Guide utilisateur complet](../user-guide/introduction)
 - 🐛 [Signaler un bug](https://github.com/sducournau/filter_mate/issues)
 - 💬 [Poser une question](https://github.com/sducournau/filter_mate/discussions)

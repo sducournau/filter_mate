@@ -718,9 +718,9 @@ For Shapefile:
 
 ### Related Workflows
 
-- **[Real Estate Analysis](real-estate-analysis.md)**: Attribute filtering techniques
-- **[Emergency Services](emergency-services.md)**: Buffer-based selection
-- **[Urban Planning Transit](urban-planning-transit.md)**: Multi-layer spatial filtering
+- **[Real Estate Analysis](./real-estate-analysis.md)**: Attribute filtering techniques
+- **[Emergency Services](./emergency-services.md)**: Buffer-based selection
+- **[Urban Planning Transit](./urban-planning-transit.md)**: Multi-layer spatial filtering
 
 ### Advanced Techniques
 

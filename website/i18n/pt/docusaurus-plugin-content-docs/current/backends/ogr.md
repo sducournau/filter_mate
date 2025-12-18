@@ -370,11 +370,11 @@ QgsVectorFileWriter.writeAsVectorFormatV3(
 
 ## Veja também
 
-- [Visão geral dos backends](./overview.md) — Arquitetura multi-backend
-- [Seleção de backend](./choosing-backend.md) — Lógica de seleção automática
-- [Backend PostgreSQL](./postgresql.md) — Para melhor desempenho
-- [Backend Spatialite](./spatialite.md) — Para conjuntos de dados médios
-- [Comparação de desempenho](./performance-benchmarks.md) — Benchmarks detalhados
+- [Visão geral dos backends](./overview) — Arquitetura multi-backend
+- [Seleção de backend](./choosing-backend) — Lógica de seleção automática
+- [Backend PostgreSQL](./postgresql) — Para melhor desempenho
+- [Backend Spatialite](./spatialite) — Para conjuntos de dados médios
+- [Comparação de desempenho](./performance-benchmarks) — Benchmarks detalhados
 
 ---
 

@@ -301,7 +301,7 @@ import TabItem from '@theme/TabItem';
 - Pas de changement de flux de travail nécessaire
 - Optimisation transparente
 
-**Voir** : [Comparaison des Backends](../backends/choosing-backend.md)
+**Voir** : [Comparaison des Backends](../backends/choosing-backend)
 
 ---
 
@@ -596,10 +596,10 @@ Installez FilterMate. Utilisez-le pour le filtrage quotidien. Revenez à QGIS na
 
 ## Prochaines Étapes
 
-1. **Installer FilterMate** : [Guide d'installation](../installation.md)
-2. **Démarrage Rapide** : [Tutoriel de 5 minutes](../getting-started/quick-start.md)
-3. **Apprendre les Flux de Travail** : [Exemples du monde réel](../workflows/index.md)
-4. **Optimiser les Performances** : [Configuration des backends](../backends/choosing-backend.md)
+1. **Installer FilterMate** : [Guide d'installation](../installation)
+2. **Démarrage Rapide** : [Tutoriel de 5 minutes](../getting-started/quick-start)
+3. **Apprendre les Flux de Travail** : [Exemples du monde réel](../workflows/index)
+4. **Optimiser les Performances** : [Configuration des backends](../backends/choosing-backend)
 
 ---
 

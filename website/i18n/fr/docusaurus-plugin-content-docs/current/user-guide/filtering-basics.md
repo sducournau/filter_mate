@@ -11,8 +11,8 @@ Apprenez à filtrer des données vectorielles en utilisant les expressions QGIS 
 L'**onglet FILTRAGE** est votre centre de contrôle pour configurer tous les types de filtres sur les couches vectorielles. Il offre trois capacités de filtrage principales :
 
 1. **Filtrage par attributs** - Filtrer les entités en fonction de leurs valeurs d'attributs en utilisant les expressions QGIS
-2. **Filtrage géométrique** - Filtrer selon des relations spatiales (voir [Filtrage géométrique](geometric-filtering.md))
-3. **Opérations de tampon** - Ajouter des zones de proximité pour l'analyse spatiale (voir [Opérations de tampon](buffer-operations.md))
+2. **Filtrage géométrique** - Filtrer selon des relations spatiales (voir [Filtrage géométrique](./geometric-filtering))
+3. **Opérations de tampon** - Ajouter des zones de proximité pour l'analyse spatiale (voir [Opérations de tampon](./buffer-operations))
 
 Cette page se concentre sur le **filtrage par attributs** en utilisant les expressions QGIS.
 
@@ -572,17 +572,17 @@ frequence_service < 4 AND population_a_proximite > 5000
 
 ## Sujets connexes
 
-- [Filtrage géométrique](geometric-filtering.md) - Prédicats spatiaux et couches de référence dans l'onglet FILTRAGE
-- [Opérations de tampon](buffer-operations.md) - Ajouter des zones de proximité dans l'onglet FILTRAGE
-- [Aperçu de l'interface](interface-overview.md) - Guide complet des composants de l'onglet FILTRAGE
-- [Historique des filtres](filter-history.md) - Gérer et réutiliser les filtres enregistrés
+- [Filtrage géométrique](./geometric-filtering) - Prédicats spatiaux et couches de référence dans l'onglet FILTRAGE
+- [Opérations de tampon](./buffer-operations) - Ajouter des zones de proximité dans l'onglet FILTRAGE
+- [Aperçu de l'interface](./interface-overview) - Guide complet des composants de l'onglet FILTRAGE
+- [Historique des filtres](./filter-history) - Gérer et réutiliser les filtres enregistrés
 
 ## Prochaines étapes
 
 Maintenant que vous comprenez le filtrage par attributs dans l'onglet FILTRAGE, découvrez :
 
-1. **[Filtrage géométrique](geometric-filtering.md)** - Ajouter des prédicats spatiaux pour trouver des entités en fonction de leur emplacement
-2. **[Opérations de tampon](buffer-operations.md)** - Créer des zones de proximité pour l'analyse spatiale
-3. **[Exporter des entités](export-features.md)** - Enregistrer vos résultats filtrés dans divers formats
+1. **[Filtrage géométrique](./geometric-filtering)** - Ajouter des prédicats spatiaux pour trouver des entités en fonction de leur emplacement
+2. **[Opérations de tampon](./buffer-operations)** - Créer des zones de proximité pour l'analyse spatiale
+3. **[Exporter des entités](./export-features)** - Enregistrer vos résultats filtrés dans divers formats
 
-**Flux de travail complet** : Voir [Guide de démarrage rapide](../getting-started/quick-start.md) pour un exemple de filtrage étape par étape.
+**Flux de travail complet** : Voir [Guide de démarrage rapide](../getting-started/quick-start) pour un exemple de filtrage étape par étape.

@@ -593,23 +593,23 @@ Transformações SRC frequentes podem desacelerar operações em grandes conjunt
 
 ## Tópicos Relacionados
 
-- [Operações de Buffer](buffer-operations.md) - Configurar zonas de buffer na aba FILTRAGEM para análise de proximidade
-- [Noções Básicas de Filtragem](filtering-basics.md) - Combinar filtros geométricos com filtros de atributos
-- [Visão Geral da Interface](interface-overview.md) - Guia completo de componentes da aba FILTRAGEM
-- [Exportar Feições](export-features.md) - Exportar resultados filtrados da aba EXPORTAÇÃO
+- [Operações de Buffer](./buffer-operations) - Configurar zonas de buffer na aba FILTRAGEM para análise de proximidade
+- [Noções Básicas de Filtragem](./filtering-basics) - Combinar filtros geométricos com filtros de atributos
+- [Visão Geral da Interface](./interface-overview) - Guia completo de componentes da aba FILTRAGEM
+- [Exportar Feições](./export-features) - Exportar resultados filtrados da aba EXPORTAÇÃO
 
 :::info Componentes da Aba FILTRAGEM
 A aba FILTRAGEM combina três tipos de filtros:
-1. **Filtros de atributos** - Construtor de expressões (veja [Noções Básicas de Filtragem](filtering-basics.md))
+1. **Filtros de atributos** - Construtor de expressões (veja [Noções Básicas de Filtragem](./filtering-basics))
 2. **Filtros geométricos** - Predicados espaciais + camada de referência (esta página)
-3. **Operações de buffer** - Zonas de distância (veja [Operações de Buffer](buffer-operations.md))
+3. **Operações de buffer** - Zonas de distância (veja [Operações de Buffer](./buffer-operations))
 
 Os três podem ser usados juntos em uma única operação de filtragem.
 :::
 
 ## Próximos Passos
 
-- **[Operações de Buffer](buffer-operations.md)** - Adicionar zonas de proximidade baseadas em distância a filtros geométricos
-- **[Exportar Feições](export-features.md)** - Salvar resultados filtrados em vários formatos
+- **[Operações de Buffer](./buffer-operations)** - Adicionar zonas de proximidade baseadas em distância a filtros geométricos
+- **[Exportar Feições](./export-features)** - Salvar resultados filtrados em vários formatos
 
-**Fluxo de Trabalho Completo**: Veja [Guia do Primeiro Filtro](../getting-started/first-filter.md) para um exemplo completo combinando filtros de atributos, geométricos e buffers.
+**Fluxo de Trabalho Completo**: Veja [Guia do Primeiro Filtro](../getting-started/first-filter) para um exemplo completo combinando filtros de atributos, geométricos e buffers.

@@ -1,18 +1,18 @@
 {
   "title": {
     "message": "FilterMate",
-    "description": "O título na barra de navegação"
+    "description": "The title in the navbar"
   },
   "logo.alt": {
     "message": "Logo do plugin FilterMate - ícone de funil com camadas de mapa representando recursos avançados de filtragem QGIS",
-    "description": "O texto alternativo do logo da barra de navegação"
+    "description": "The alt text of navbar logo"
   },
   "item.label.Documentation": {
     "message": "Documentação",
-    "description": "Item da barra de navegação com rótulo Documentação"
+    "description": "Navbar item with label Documentation"
   },
   "item.label.GitHub": {
     "message": "GitHub",
-    "description": "Item da barra de navegação com rótulo GitHub"
+    "description": "Navbar item with label GitHub"
   }
 }

@@ -811,10 +811,10 @@ Pour exporter des couches complètes (sans filtres) :
 
 ## Sujets connexes
 
-- [Bases du filtrage](filtering-basics.md) - Créer des filtres pour exporter des sous-ensembles filtrés (onglet FILTERING)
-- [Filtrage géométrique](geometric-filtering.md) - Appliquer des filtres spatiaux avant l'export
-- [Opérations de tampon](buffer-operations.md) - Filtrage basé sur la proximité avant l'export
-- [Vue d'ensemble de l'interface](interface-overview.md) - Guide complet des composants de l'onglet EXPORTING
+- [Bases du filtrage](./filtering-basics) - Créer des filtres pour exporter des sous-ensembles filtrés (onglet FILTERING)
+- [Filtrage géométrique](./geometric-filtering) - Appliquer des filtres spatiaux avant l'export
+- [Opérations de tampon](./buffer-operations) - Filtrage basé sur la proximité avant l'export
+- [Vue d'ensemble de l'interface](./interface-overview) - Guide complet des composants de l'onglet EXPORTING
 
 :::info Flux de travail des trois onglets principaux
 1. **Onglet FILTERING** : Créer des sous-ensembles filtrés (optionnel)
@@ -826,5 +826,5 @@ Les trois onglets fonctionnent ensemble pour fournir un flux de travail complet 
 
 ## Étapes suivantes
 
-- **[Historique des filtres](filter-history.md)** - Réutiliser les configurations de filtres pour les exports
-- **[Vue d'ensemble de l'interface](interface-overview.md)** - Découvrir les trois onglets principaux
+- **[Historique des filtres](./filter-history)** - Réutiliser les configurations de filtres pour les exports
+- **[Vue d'ensemble de l'interface](./interface-overview)** - Découvrir les trois onglets principaux

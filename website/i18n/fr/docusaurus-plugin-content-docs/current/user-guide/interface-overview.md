@@ -66,7 +66,7 @@ FilterMate organise les fonctionnalités en 3 onglets principaux :
 - Sélectionner des géométries à l'intérieur/près d'autres entités
 - Créer des sous-ensembles temporaires pour l'analyse
 
-**Voir :** [Bases du filtrage](./filtering-basics.md), [Filtrage géométrique](./geometric-filtering.md), [Opérations de tampon](./buffer-operations.md)
+**Voir :** [Bases du filtrage](./filtering-basics), [Filtrage géométrique](./geometric-filtering), [Opérations de tampon](./buffer-operations)
 
 ---
 
@@ -179,7 +179,7 @@ FilterMate organise les fonctionnalités en 3 onglets principaux :
 - Convertir entre formats
 - Préparer des données pour la cartographie web
 
-**Voir :** [Exporter des entités](./export-features.md)
+**Voir :** [Exporter des entités](./export-features)
 
 ---
 
@@ -192,7 +192,7 @@ FilterMate organise les fonctionnalités en 3 onglets principaux :
 - **Sélecteur de thème :** Choisir le thème de l'interface (par défaut/sombre/clair/auto)
 - **Options avancées :** Paramètres du plugin
 
-**Voir :** [Configuration](../advanced/configuration.md)
+**Voir :** [Configuration](../advanced/configuration)
 
 ---
 
@@ -235,10 +235,10 @@ Backend détecté automatiquement en fonction du type de couche.
 
 ## En savoir plus
 
-- **Premiers pas :** [Guide de démarrage rapide](../getting-started/quick-start.md)
-- **Utilisation détaillée :** [Bases du filtrage](./filtering-basics.md), [Filtrage géométrique](./geometric-filtering.md)
-- **Options d'export :** [Exporter des entités](./export-features.md)
-- **Avancé :** [Configuration](../advanced/configuration.md), [Optimisation des performances](../advanced/performance-tuning.md)
+- **Premiers pas :** [Guide de démarrage rapide](../getting-started/quick-start)
+- **Utilisation détaillée :** [Bases du filtrage](./filtering-basics), [Filtrage géométrique](./geometric-filtering)
+- **Options d'export :** [Exporter des entités](./export-features)
+- **Avancé :** [Configuration](../advanced/configuration), [Optimisation des performances](../advanced/performance-tuning)
 
 ## Disposition de l'interface
 
@@ -319,16 +319,16 @@ graph TB
 
 Pour des guides détaillés sur chaque fonctionnalité :
 
-- **[Bases du filtrage](./filtering-basics.md)** - Guide complet du filtrage par attributs et des expressions QGIS
-- **[Filtrage géométrique](./geometric-filtering.md)** - Prédicats spatiaux, opérations de tampon et flux de travail géométriques
-- **[Opérations de tampon](./buffer-operations.md)** - Configuration des tampons, types et paramètres de distance
-- **[Exporter des entités](./export-features.md)** - Formats d'export, transformation SCR et opérations par lots
-- **[Historique des filtres](./filter-history.md)** - Gestion de l'historique, annuler/refaire et favoris
+- **[Bases du filtrage](./filtering-basics)** - Guide complet du filtrage par attributs et des expressions QGIS
+- **[Filtrage géométrique](./geometric-filtering)** - Prédicats spatiaux, opérations de tampon et flux de travail géométriques
+- **[Opérations de tampon](./buffer-operations)** - Configuration des tampons, types et paramètres de distance
+- **[Exporter des entités](./export-features)** - Formats d'export, transformation SCR et opérations par lots
+- **[Historique des filtres](./filter-history)** - Gestion de l'historique, annuler/refaire et favoris
 
 Pour débuter :
 
-- **[Guide de démarrage rapide](../getting-started/quick-start.md)** - Introduction de 5 minutes
-- **[Votre premier filtre](../getting-started/first-filter.md)** - Tutoriel pas à pas
+- **[Guide de démarrage rapide](../getting-started/quick-start)** - Introduction de 5 minutes
+- **[Votre premier filtre](../getting-started/first-filter)** - Tutoriel pas à pas
 
 ---
 
@@ -353,7 +353,7 @@ Pour débuter :
 
 ## Personnalisation de l'interface
 
-Vous pouvez personnaliser l'apparence des icônes et des thèmes FilterMate dans l'onglet **CONFIGURATION**. Consultez le [Guide de configuration](../advanced/configuration.md) pour plus de détails sur :
+Vous pouvez personnaliser l'apparence des icônes et des thèmes FilterMate dans l'onglet **CONFIGURATION**. Consultez le [Guide de configuration](../advanced/configuration) pour plus de détails sur :
 
 - Basculer entre les thèmes clair/sombre/auto
 - Ajuster les tailles d'icônes (si pris en charge par le thème)

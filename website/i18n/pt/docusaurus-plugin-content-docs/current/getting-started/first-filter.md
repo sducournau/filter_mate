@@ -181,10 +181,10 @@ Para salvar os edifícios filtrados:
 
 Agora que você criou seu primeiro filtro, explore mais:
 
-- **[Fundamentos de Filtragem](../user-guide/filtering-basics.md)** - Aprenda expressões QGIS
-- **[Filtragem Geométrica](../user-guide/geometric-filtering.md)** - Predicados espaciais avançados
-- **[Operações de Buffer](../user-guide/buffer-operations.md)** - Diferentes tipos de buffer
-- **[Exportar Feições](../user-guide/export-features.md)** - Opções avançadas de exportação
+- **[Fundamentos de Filtragem](../user-guide/filtering-basics)** - Aprenda expressões QGIS
+- **[Filtragem Geométrica](../user-guide/geometric-filtering)** - Predicados espaciais avançados
+- **[Operações de Buffer](../user-guide/buffer-operations)** - Diferentes tipos de buffer
+- **[Exportar Feições](../user-guide/export-features)** - Opções avançadas de exportação
 
 ## Problemas Comuns
 
@@ -199,7 +199,7 @@ Verifique:
 
 Para grandes conjuntos de dados:
 - Instale o backend PostgreSQL para aceleração de 10-50×
-- Veja [Ajuste de Desempenho](../advanced/performance-tuning.md)
+- Veja [Ajuste de Desempenho](../advanced/performance-tuning)
 
 ### SRC errado?
 

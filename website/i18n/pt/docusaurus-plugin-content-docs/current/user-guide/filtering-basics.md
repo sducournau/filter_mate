@@ -11,8 +11,8 @@ Aprenda a filtrar dados vetoriais usando expressões QGIS e condições de atrib
 A **aba FILTRAGEM** é seu centro de controle para configurar todos os tipos de filtros em camadas vetoriais. Ela fornece três capacidades principais de filtragem:
 
 1. **Filtragem por Atributos** - Filtrar feições com base em seus valores de atributos usando expressões QGIS
-2. **Filtragem Geométrica** - Filtrar com base em relacionamentos espaciais (veja [Filtragem Geométrica](geometric-filtering.md))
-3. **Operações de Buffer** - Adicionar zonas de proximidade para análise espacial (veja [Operações de Buffer](buffer-operations.md))
+2. **Filtragem Geométrica** - Filtrar com base em relacionamentos espaciais (veja [Filtragem Geométrica](./geometric-filtering))
+3. **Operações de Buffer** - Adicionar zonas de proximidade para análise espacial (veja [Operações de Buffer](./buffer-operations))
 
 Esta página foca na **filtragem por atributos** usando expressões QGIS.
 
@@ -572,17 +572,17 @@ frequencia_servico < 4 AND populacao_proxima > 5000
 
 ## Tópicos Relacionados
 
-- [Filtragem Geométrica](geometric-filtering.md) - Predicados espaciais e camadas de referência na aba FILTRAGEM
-- [Operações de Buffer](buffer-operations.md) - Adicionar zonas de proximidade na aba FILTRAGEM
-- [Visão Geral da Interface](interface-overview.md) - Guia completo de componentes da aba FILTRAGEM
-- [Histórico de Filtros](filter-history.md) - Gerenciar e reutilizar filtros salvos
+- [Filtragem Geométrica](./geometric-filtering) - Predicados espaciais e camadas de referência na aba FILTRAGEM
+- [Operações de Buffer](./buffer-operations) - Adicionar zonas de proximidade na aba FILTRAGEM
+- [Visão Geral da Interface](./interface-overview) - Guia completo de componentes da aba FILTRAGEM
+- [Histórico de Filtros](./filter-history) - Gerenciar e reutilizar filtros salvos
 
 ## Próximos Passos
 
 Agora que você entende a filtragem por atributos na aba FILTRAGEM, aprenda sobre:
 
-1. **[Filtragem Geométrica](geometric-filtering.md)** - Adicionar predicados espaciais para encontrar feições com base na localização
-2. **[Operações de Buffer](buffer-operations.md)** - Criar zonas de proximidade para análise espacial
-3. **[Exportar Feições](export-features.md)** - Salvar seus resultados filtrados em vários formatos
+1. **[Filtragem Geométrica](./geometric-filtering)** - Adicionar predicados espaciais para encontrar feições com base na localização
+2. **[Operações de Buffer](./buffer-operations)** - Criar zonas de proximidade para análise espacial
+3. **[Exportar Feições](./export-features)** - Salvar seus resultados filtrados em vários formatos
 
-**Fluxo de Trabalho Completo**: Veja o [Guia de Início Rápido](../getting-started/quick-start.md) para um exemplo passo a passo de filtragem.
+**Fluxo de Trabalho Completo**: Veja o [Guia de Início Rápido](../getting-started/quick-start) para um exemplo passo a passo de filtragem.

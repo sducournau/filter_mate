@@ -27,7 +27,7 @@ FilterMate est disponible via le dépôt de plugins QGIS et fonctionne directeme
 
 C'est tout ! FilterMate est maintenant prêt à être utilisé avec les backends OGR et Spatialite.
 
-## Optionnel : Backend PostgreSQL (Recommandé pour les grands jeux de données)
+## Optionnel : Backend PostgreSQL (Recommandé pour les grands jeux de données) {#optional-postgresql-backend-recommended-for-large-datasets}
 
 Pour des performances optimales avec les couches PostgreSQL/PostGIS, installez le package `psycopg2`.
 
@@ -82,9 +82,9 @@ FilterMate sélectionne automatiquement le backend optimal en fonction de votre 
 | Spatialite | Spatialite | Aucune (intégré) |
 | Shapefile, GeoPackage, etc. | OGR | Aucune (intégré) |
 
-En savoir plus sur les backends dans [Aperçu des backends](./backends/overview.md).
+En savoir plus sur les backends dans [Aperçu des backends](./backends/overview).
 
-## Dépannage
+## Dépannage {#troubleshooting}
 
 ### PostgreSQL n'est pas utilisé ?
 
@@ -105,6 +105,6 @@ except ImportError:
 
 ## Prochaines étapes
 
-- [Tutoriel de démarrage rapide](./getting-started/quick-start.md) - Apprenez les bases
-- [Premier filtre](./getting-started/first-filter.md) - Créez votre premier filtre
-- [Benchmarks de performance](./backends/performance-benchmarks.md) - Comprendre les performances des backends
+- [Tutoriel de démarrage rapide](./getting-started/quick-start) - Apprenez les bases
+- [Premier filtre](./getting-started/first-filter) - Créez votre premier filtre
+- [Benchmarks de performance](./backends/performance-benchmarks) - Comprendre les performances des backends

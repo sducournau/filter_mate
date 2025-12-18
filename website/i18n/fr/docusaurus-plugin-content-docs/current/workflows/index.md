@@ -2,150 +2,150 @@
 sidebar_position: 1
 ---
 
-# Real-World Workflows
+# Flux de travail réels
 
-Practical, scenario-based tutorials showing how to use FilterMate for common GIS tasks.
+Tutoriels pratiques et scénarisés montrant comment utiliser FilterMate pour des tâches SIG courantes.
 
-## About These Workflows
+## À propos de ces flux de travail
 
-Each workflow tutorial is designed to:
-- ✅ **Solve a real-world problem** faced by GIS professionals
-- ✅ **Teach multiple FilterMate features** in practical context
-- ✅ **Be completed in 10-15 minutes** with provided sample data
-- ✅ **Include best practices** for performance and accuracy
+Chaque tutoriel de flux de travail est conçu pour :
+- ✅ **Résoudre un problème réel** rencontré par les professionnels SIG
+- ✅ **Enseigner plusieurs fonctionnalités FilterMate** dans un contexte pratique
+- ✅ **Être complété en 10-15 minutes** avec les données d'exemple fournies
+- ✅ **Inclure les meilleures pratiques** pour la performance et la précision
 
-## Available Workflows
+## Flux de travail disponibles
 
-### 🏙️ Urban Planning & Development
+### 🏙️ Urbanisme et développement
 
-**[Finding Properties Near Transit](urban-planning-transit.md)**
-- **Scenario**: Identify all residential parcels within 500m of subway stations
-- **Skills**: Buffer operations, spatial predicates, multi-layer filtering
-- **Backend**: PostgreSQL (recommended for large parcel datasets)
-- **Time**: ~10 minutes
-- **Difficulty**: ⭐⭐ Intermediate
-
----
-
-### 🌳 Environmental Analysis
-
-**[Protected Zone Impact Assessment](environmental-protection.md)**
-- **Scenario**: Find industrial sites within protected water buffer zones
-- **Skills**: Geometric filtering, attribute constraints, geometry repair
-- **Backend**: Spatialite (good for regional datasets)
-- **Time**: ~15 minutes
-- **Difficulty**: ⭐⭐⭐ Advanced
+**[Trouver des propriétés près des transports](./urban-planning-transit)**
+- **Scénario** : Identifier toutes les parcelles résidentielles dans un rayon de 500m des stations de métro
+- **Compétences** : Opérations de tampon, prédicats spatiaux, filtrage multi-couches
+- **Backend** : PostgreSQL (recommandé pour les grands jeux de données cadastrales)
+- **Durée** : ~10 minutes
+- **Difficulté** : ⭐⭐ Intermédiaire
 
 ---
 
-### 🚒 Emergency Services
+### 🌳 Analyse environnementale
 
-**[Service Coverage Analysis](emergency-services.md)**
-- **Scenario**: Identify areas more than 5km from nearest fire station
-- **Skills**: Inverse spatial queries, distance calculations, export results
-- **Backend**: OGR (universal compatibility)
-- **Time**: ~12 minutes
-- **Difficulty**: ⭐⭐ Intermediate
-
----
-
-### 🏠 Real Estate Analysis
-
-**[Market Filtering & Export](real-estate-analysis.md)**
-- **Scenario**: Filter properties by price, area, and school proximity
-- **Skills**: Combined attribute + geometric filtering, history management
-- **Backend**: Multi-backend comparison
-- **Time**: ~8 minutes
-- **Difficulty**: ⭐ Beginner
+**[Évaluation d'impact des zones protégées](./environmental-protection)**
+- **Scénario** : Trouver les sites industriels dans les zones tampons d'eau protégées
+- **Compétences** : Filtrage géométrique, contraintes d'attributs, réparation de géométrie
+- **Backend** : Spatialite (bon pour les jeux de données régionaux)
+- **Durée** : ~15 minutes
+- **Difficulté** : ⭐⭐⭐ Avancé
 
 ---
 
-### 🚗 Transportation Planning
+### 🚒 Services d'urgence
 
-**[Road Network Data Preparation](transportation-planning.md)**
-- **Scenario**: Export road segments within municipality with specific attributes
-- **Skills**: Attribute filtering, CRS transformation, batch export
-- **Backend**: Any (focuses on export features)
-- **Time**: ~10 minutes
-- **Difficulty**: ⭐ Beginner
+**[Analyse de couverture des services](./emergency-services)**
+- **Scénario** : Identifier les zones à plus de 5km de la caserne de pompiers la plus proche
+- **Compétences** : Requêtes spatiales inverses, calculs de distance, export des résultats
+- **Backend** : OGR (compatibilité universelle)
+- **Durée** : ~12 minutes
+- **Difficulté** : ⭐⭐ Intermédiaire
 
 ---
 
-## Workflow Structure
+### 🏠 Analyse immobilière
 
-Each tutorial follows a consistent format:
+**[Filtrage et export du marché](./real-estate-analysis)**
+- **Scénario** : Filtrer les propriétés par prix, surface et proximité des écoles
+- **Compétences** : Filtrage combiné attributs + géométrie, gestion de l'historique
+- **Backend** : Comparaison multi-backend
+- **Durée** : ~8 minutes
+- **Difficulté** : ⭐ Débutant
 
-1. **Scenario Overview** - The real-world problem
-2. **Prerequisites** - Required data and setup
-3. **Step-by-Step Instructions** - Detailed walkthrough with screenshots
-4. **Understanding the Results** - Interpreting output
-5. **Best Practices** - Tips for optimization
-6. **Common Issues** - Troubleshooting guide
-7. **Next Steps** - Related workflows and advanced techniques
+---
 
-## Sample Data
+### 🚗 Planification des transports
 
-Most workflows can be completed with **OpenStreetMap data**:
+**[Préparation des données du réseau routier](./transportation-planning)**
+- **Scénario** : Exporter les segments de route dans une municipalité avec des attributs spécifiques
+- **Compétences** : Filtrage d'attributs, transformation SCR, export par lots
+- **Backend** : Tous (se concentre sur les fonctionnalités d'export)
+- **Durée** : ~10 minutes
+- **Difficulté** : ⭐ Débutant
 
-- Download from [Geofabrik](https://download.geofabrik.de/)
-- Use QGIS **QuickOSM** plugin to fetch specific areas
-- Or use your own project data
+---
 
-:::tip Getting Sample Data
-Install the **QuickOSM** plugin in QGIS:
-1. Plugins → Manage and Install Plugins
-2. Search "QuickOSM"
-3. Install and restart QGIS
-4. Vector → QuickOSM → Quick Query
+## Structure des flux de travail
+
+Chaque tutoriel suit un format cohérent :
+
+1. **Aperçu du scénario** - Le problème réel
+2. **Prérequis** - Données et configuration requises
+3. **Instructions étape par étape** - Guide détaillé avec captures d'écran
+4. **Comprendre les résultats** - Interprétation des sorties
+5. **Meilleures pratiques** - Conseils d'optimisation
+6. **Problèmes courants** - Guide de dépannage
+7. **Prochaines étapes** - Flux de travail connexes et techniques avancées
+
+## Données d'exemple
+
+La plupart des flux de travail peuvent être complétés avec des **données OpenStreetMap** :
+
+- Télécharger depuis [Geofabrik](https://download.geofabrik.de/)
+- Utiliser le plugin QGIS **QuickOSM** pour récupérer des zones spécifiques
+- Ou utiliser vos propres données de projet
+
+:::tip Obtenir des données d'exemple
+Installez le plugin **QuickOSM** dans QGIS :
+1. Extensions → Installer/Gérer les extensions
+2. Rechercher "QuickOSM"
+3. Installer et redémarrer QGIS
+4. Vecteur → QuickOSM → Requête rapide
 :::
 
-## Choose Your Learning Path
+## Choisissez votre parcours d'apprentissage
 
-### New to FilterMate?
-Start with **beginner workflows** (⭐):
-1. [Real Estate Analysis](real-estate-analysis.md) - Simple filtering
-2. [Transportation Planning](transportation-planning.md) - Export focus
+### Nouveau sur FilterMate ?
+Commencez par les **flux de travail débutants** (⭐) :
+1. [Analyse immobilière](./real-estate-analysis) - Filtrage simple
+2. [Planification des transports](./transportation-planning) - Focus export
 
-### Comfortable with Basics?
-Try **intermediate workflows** (⭐⭐):
-1. [Urban Planning](urban-planning-transit.md) - Spatial operations
-2. [Emergency Services](emergency-services.md) - Distance analysis
+### À l'aise avec les bases ?
+Essayez les **flux de travail intermédiaires** (⭐⭐) :
+1. [Urbanisme](./urban-planning-transit) - Opérations spatiales
+2. [Services d'urgence](./emergency-services) - Analyse de distance
 
-### Ready for Complex Tasks?
-Tackle **advanced workflows** (⭐⭐⭐):
-1. [Environmental Analysis](environmental-protection.md) - Multi-criteria filtering
-
----
-
-## Workflow Goals
-
-By completing these workflows, you'll learn:
-
-- 🎯 **Efficient filtering** - Attribute and geometric techniques
-- 📐 **Spatial analysis** - Buffers, predicates, distance calculations
-- 🗺️ **Multi-layer operations** - Working with related datasets
-- 💾 **Export strategies** - Format selection and CRS transformation
-- ⚡ **Performance optimization** - Backend selection and tuning
-- 🔧 **Troubleshooting** - Common issues and solutions
-- 📝 **History management** - Undo/redo and filter favorites
+### Prêt pour des tâches complexes ?
+Attaquez les **flux de travail avancés** (⭐⭐⭐) :
+1. [Analyse environnementale](./environmental-protection) - Filtrage multi-critères
 
 ---
 
-## Contributing Workflows
+## Objectifs des flux de travail
 
-Have a real-world use case? We'd love to add it!
+En complétant ces flux de travail, vous apprendrez :
 
-**Submit your workflow:**
-1. Open an issue on [GitHub](https://github.com/sducournau/filter_mate/issues)
-2. Describe your scenario and data requirements
-3. Include screenshots if possible
-4. We'll help you create a tutorial
+- 🎯 **Filtrage efficace** - Techniques d'attributs et géométriques
+- 📐 **Analyse spatiale** - Tampons, prédicats, calculs de distance
+- 🗺️ **Opérations multi-couches** - Travail avec des jeux de données liés
+- 💾 **Stratégies d'export** - Sélection de format et transformation SCR
+- ⚡ **Optimisation des performances** - Sélection et réglage du backend
+- 🔧 **Dépannage** - Problèmes courants et solutions
+- 📝 **Gestion de l'historique** - Annuler/rétablir et filtres favoris
 
 ---
 
-## Need Help?
+## Contribuer des flux de travail
 
-- 📖 **Reference Docs**: [User Guide](../user-guide/introduction.md)
-- 🐛 **Report Issues**: [GitHub Issues](https://github.com/sducournau/filter_mate/issues)
-- 💬 **Ask Questions**: [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
-- 🎥 **Watch Tutorial**: [YouTube Video](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+Vous avez un cas d'utilisation réel ? Nous serions ravis de l'ajouter !
+
+**Soumettre votre flux de travail :**
+1. Ouvrez un ticket sur [GitHub](https://github.com/sducournau/filter_mate/issues)
+2. Décrivez votre scénario et les exigences en matière de données
+3. Incluez des captures d'écran si possible
+4. Nous vous aiderons à créer un tutoriel
+
+---
+
+## Besoin d'aide ?
+
+- 📖 **Documentation de référence** : [Guide utilisateur](../user-guide/introduction)
+- 🐛 **Signaler des problèmes** : [GitHub Issues](https://github.com/sducournau/filter_mate/issues)
+- 💬 **Poser des questions** : [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
+- 🎥 **Regarder le tutoriel** : [Vidéo YouTube](https://www.youtube.com/watch?v=2gOEPrdl2Bo)

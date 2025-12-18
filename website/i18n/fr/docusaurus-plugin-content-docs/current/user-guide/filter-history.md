@@ -297,6 +297,6 @@ Avant d'annuler :
 
 ## Sujets Connexes
 
-- [Bases du Filtrage](filtering-basics.md) - Créer des filtres
-- [Filtrage Géométrique](geometric-filtering.md) - Opérations spatiales
-- [Aperçu de l'Interface](interface-overview.md) - Naviguer dans l'interface
+- [Bases du Filtrage](./filtering-basics) - Créer des filtres
+- [Filtrage Géométrique](./geometric-filtering) - Opérations spatiales
+- [Aperçu de l'Interface](./interface-overview) - Naviguer dans l'interface

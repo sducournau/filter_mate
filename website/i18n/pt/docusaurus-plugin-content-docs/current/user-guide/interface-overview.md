@@ -66,7 +66,7 @@ O FilterMate organiza recursos em 3 abas principais:
 - Selecionar geometrias dentro/perto de outras feições
 - Criar subconjuntos temporários para análise
 
-**Veja:** [Noções básicas de filtragem](./filtering-basics.md), [Filtragem geométrica](./geometric-filtering.md), [Operações de buffer](./buffer-operations.md)
+**Veja:** [Noções básicas de filtragem](./filtering-basics), [Filtragem geométrica](./geometric-filtering), [Operações de buffer](./buffer-operations)
 
 ---
 
@@ -179,7 +179,7 @@ O FilterMate organiza recursos em 3 abas principais:
 - Converter entre formatos
 - Preparar dados para mapeamento web
 
-**Veja:** [Exportar feições](./export-features.md)
+**Veja:** [Exportar feições](./export-features)
 
 ---
 
@@ -192,7 +192,7 @@ O FilterMate organiza recursos em 3 abas principais:
 - **Seletor de tema:** Escolher tema da UI (padrão/escuro/claro/auto)
 - **Opções avançadas:** Configurações do plugin
 
-**Veja:** [Configuração](../advanced/configuration.md)
+**Veja:** [Configuração](../advanced/configuration)
 
 ---
 
@@ -235,10 +235,10 @@ Backend detectado automaticamente com base no tipo de camada.
 
 ## Saiba Mais
 
-- **Primeiros Passos:** [Guia de Início Rápido](../getting-started/quick-start.md)
-- **Uso Detalhado:** [Noções básicas de filtragem](./filtering-basics.md), [Filtragem geométrica](./geometric-filtering.md)
-- **Opções de Exportação:** [Exportar feições](./export-features.md)
-- **Avançado:** [Configuração](../advanced/configuration.md), [Ajuste de Desempenho](../advanced/performance-tuning.md)
+- **Primeiros Passos:** [Guia de Início Rápido](../getting-started/quick-start)
+- **Uso Detalhado:** [Noções básicas de filtragem](./filtering-basics), [Filtragem geométrica](./geometric-filtering)
+- **Opções de Exportação:** [Exportar feições](./export-features)
+- **Avançado:** [Configuração](../advanced/configuration), [Ajuste de Desempenho](../advanced/performance-tuning)
 
 ## Layout da Interface
 
@@ -319,16 +319,16 @@ graph TB
 
 Para guias detalhados sobre cada recurso:
 
-- **[Noções básicas de filtragem](./filtering-basics.md)** - Guia completo para filtragem de atributos e expressões QGIS
-- **[Filtragem geométrica](./geometric-filtering.md)** - Predicados espaciais, operações de buffer e fluxos de trabalho geométricos
-- **[Operações de buffer](./buffer-operations.md)** - Configuração de buffer, tipos e configurações de distância
-- **[Exportar feições](./export-features.md)** - Formatos de exportação, transformação SRC e operações em lote
-- **[Histórico de filtros](./filter-history.md)** - Gerenciamento de histórico, desfazer/refazer e favoritos
+- **[Noções básicas de filtragem](./filtering-basics)** - Guia completo para filtragem de atributos e expressões QGIS
+- **[Filtragem geométrica](./geometric-filtering)** - Predicados espaciais, operações de buffer e fluxos de trabalho geométricos
+- **[Operações de buffer](./buffer-operations)** - Configuração de buffer, tipos e configurações de distância
+- **[Exportar feições](./export-features)** - Formatos de exportação, transformação SRC e operações em lote
+- **[Histórico de filtros](./filter-history)** - Gerenciamento de histórico, desfazer/refazer e favoritos
 
 Para começar:
 
-- **[Guia de Início Rápido](../getting-started/quick-start.md)** - Introdução de 5 minutos
-- **[Seu Primeiro Filtro](../getting-started/first-filter.md)** - Tutorial passo a passo
+- **[Guia de Início Rápido](../getting-started/quick-start)** - Introdução de 5 minutos
+- **[Seu Primeiro Filtro](../getting-started/first-filter)** - Tutorial passo a passo
 
 ---
 
@@ -353,7 +353,7 @@ Para começar:
 
 ## Personalização da Interface
 
-Você pode personalizar a aparência dos ícones e temas do FilterMate na aba **CONFIGURAÇÃO**. Consulte o [Guia de Configuração](../advanced/configuration.md) para detalhes sobre:
+Você pode personalizar a aparência dos ícones e temas do FilterMate na aba **CONFIGURAÇÃO**. Consulte o [Guia de Configuração](../advanced/configuration) para detalhes sobre:
 
 - Alternar entre temas claro/escuro/auto
 - Ajustar tamanhos de ícones (se suportado pelo tema)

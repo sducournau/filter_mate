@@ -429,7 +429,7 @@ Crosses: Interseção linear apenas
 ```
 
 **Solução**:
-Veja o [Guia de Predicados Espaciais](../reference/cheat-sheets/spatial-predicates.md) para um guia visual.
+Veja o [Guia de Predicados Espaciais](../reference/cheat-sheets/spatial-predicates) para um guia visual.
 
 ---
 
@@ -771,4 +771,4 @@ Antes de filtrar, verifique:
 
 ---
 
-**Ainda travado?** Consulte o [Guia de Solução de Problemas](../advanced/troubleshooting.md) ou pergunte no [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).
+**Ainda travado?** Consulte o [Guia de Solução de Problemas](../advanced/troubleshooting) ou pergunte no [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).

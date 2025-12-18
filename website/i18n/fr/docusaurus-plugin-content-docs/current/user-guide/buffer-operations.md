@@ -544,10 +544,10 @@ Configuration onglet FILTRAGE :
 
 ## Sujets connexes
 
-- [Filtrage géométrique](geometric-filtering.md) - Prédicats spatiaux utilisés avec tampons
-- [Bases du filtrage](filtering-basics.md) - Combiner tampons avec filtres d'attributs
-- [Aperçu de l'interface](interface-overview.md) - Guide complet onglet FILTRAGE
-- [Exporter des entités](export-features.md) - Enregistrer résultats tamponnés
+- [Filtrage géométrique](./geometric-filtering) - Prédicats spatiaux utilisés avec tampons
+- [Bases du filtrage](./filtering-basics) - Combiner tampons avec filtres d'attributs
+- [Aperçu de l'interface](./interface-overview) - Guide complet onglet FILTRAGE
+- [Exporter des entités](./export-features) - Enregistrer résultats tamponnés
 
 :::info Intégration onglet FILTRAGE
 Les tampons font partie de la configuration de **filtrage géométrique** dans l'onglet FILTRAGE. Ils fonctionnent parfaitement avec :
@@ -559,7 +559,7 @@ Les tampons font partie de la configuration de **filtrage géométrique** dans l
 
 ## Prochaines étapes
 
-- **[Exporter des entités](export-features.md)** - Enregistrer vos résultats filtrés avec tampons appliqués
-- **[Historique des filtres](filter-history.md)** - Réutiliser configurations de tampon depuis l'historique
+- **[Exporter des entités](./export-features)** - Enregistrer vos résultats filtrés avec tampons appliqués
+- **[Historique des filtres](./filter-history)** - Réutiliser configurations de tampon depuis l'historique
 
-**Guide complet** : Voir [Premier filtre](../getting-started/first-filter.md) pour un flux de travail complet combinant filtres d'attributs, prédicats géométriques et tampons.
+**Guide complet** : Voir [Premier filtre](../getting-started/first-filter) pour un flux de travail complet combinant filtres d'attributs, prédicats géométriques et tampons.

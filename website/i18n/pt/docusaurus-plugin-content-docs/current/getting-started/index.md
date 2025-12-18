@@ -8,7 +8,7 @@ Bem-vindo ao FilterMate! Estes tutoriais ajudarão você a se tornar produtivo r
 
 ## Tutoriais nesta seção
 
-### [Início rápido](./quick-start.md)
+### [Início rápido](./quick-start)
 **Tempo: 5 minutos**
 
 Aprenda o fluxo de trabalho essencial:
@@ -17,7 +17,7 @@ Aprenda o fluxo de trabalho essencial:
 - Entender a seleção de backend
 - Exportar resultados filtrados
 
-### [Seu primeiro filtro](./first-filter.md)
+### [Seu primeiro filtro](./first-filter)
 **Tempo: 10-15 minutos**
 
 Tutorial completo passo a passo:
@@ -31,7 +31,7 @@ Tutorial completo passo a passo:
 Certifique-se de ter:
 
 - ✅ **QGIS 3.x** instalado
-- ✅ **Plugin FilterMate** instalado ([Guia de instalação](../installation.md))
+- ✅ **Plugin FilterMate** instalado ([Guia de instalação](../installation))
 - ✅ **Camada vetorial** carregada em seu projeto
 
 ## Dicas de desempenho
@@ -52,11 +52,11 @@ Prefere aprender com vídeo? Assista ao nosso passo a passo completo:
 
 Depois de completar estes tutoriais:
 
-1. **[Visão geral da interface](../user-guide/interface-overview.md)** - Explore todos os componentes da UI
-2. **[Noções básicas de filtragem](../user-guide/filtering-basics.md)** - Domine a filtragem de atributos
-3. **[Filtragem geométrica](../user-guide/geometric-filtering.md)** - Operações espaciais avançadas
-4. **[Visão geral dos backends](../backends/overview.md)** - Entenda a otimização de desempenho
+1. **[Visão geral da interface](../user-guide/interface-overview)** - Explore todos os componentes da UI
+2. **[Noções básicas de filtragem](../user-guide/filtering-basics)** - Domine a filtragem de atributos
+3. **[Filtragem geométrica](../user-guide/geometric-filtering)** - Operações espaciais avançadas
+4. **[Visão geral dos backends](../backends/overview)** - Entenda a otimização de desempenho
 
 :::tip Precisa de ajuda?
-Consulte o [Guia de solução de problemas](../advanced/troubleshooting.md) ou visite [GitHub Issues](https://github.com/sducournau/filter_mate/issues).
+Consulte o [Guia de solução de problemas](../advanced/troubleshooting) ou visite [GitHub Issues](https://github.com/sducournau/filter_mate/issues).
 :::

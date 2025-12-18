@@ -1,42 +1,42 @@
 {
   "link.title.Docs": {
     "message": "Documentação",
-    "description": "O título da coluna de links do rodapé com title=Docs no rodapé"
+    "description": "The title of the footer links column with title=Docs in the footer"
   },
   "link.title.Community": {
     "message": "Comunidade",
-    "description": "O título da coluna de links do rodapé com title=Community no rodapé"
+    "description": "The title of the footer links column with title=Community in the footer"
   },
   "link.title.More": {
     "message": "Mais",
-    "description": "O título da coluna de links do rodapé com title=More no rodapé"
+    "description": "The title of the footer links column with title=More in the footer"
   },
   "link.item.label.Getting Started": {
     "message": "Começar",
-    "description": "O rótulo do link do rodapé com label=Getting Started para /docs/installation"
+    "description": "The label of footer link with label=Getting Started linking to /docs/installation"
   },
   "link.item.label.User Guide": {
     "message": "Guia do usuário",
-    "description": "O rótulo do link do rodapé com label=User Guide para /docs/user-guide/introduction"
+    "description": "The label of footer link with label=User Guide linking to /docs/user-guide/introduction"
   },
   "link.item.label.GitHub": {
     "message": "GitHub",
-    "description": "O rótulo do link do rodapé com label=GitHub para https://github.com/sducournau/filter_mate"
+    "description": "The label of footer link with label=GitHub linking to https://github.com/sducournau/filter_mate"
   },
   "link.item.label.Issues": {
     "message": "Problemas",
-    "description": "O rótulo do link do rodapé com label=Issues para https://github.com/sducournau/filter_mate/issues"
+    "description": "The label of footer link with label=Issues linking to https://github.com/sducournau/filter_mate/issues"
   },
   "link.item.label.QGIS Plugin Repository": {
     "message": "Repositório de Plugins QGIS",
-    "description": "O rótulo do link do rodapé com label=QGIS Plugin Repository para https://plugins.qgis.org/plugins/filter_mate"
+    "description": "The label of footer link with label=QGIS Plugin Repository linking to https://plugins.qgis.org/plugins/filter_mate"
   },
   "link.item.label.Accessibility": {
     "message": "Acessibilidade",
-    "description": "O rótulo do link do rodapé com label=Accessibility para /docs/accessibility"
+    "description": "The label of footer link with label=Accessibility linking to /docs/accessibility"
   },
   "copyright": {
     "message": "Copyright © 2025 FilterMate. Construído com Docusaurus.",
-    "description": "O copyright do rodapé"
+    "description": "The footer copyright"
   }
 }

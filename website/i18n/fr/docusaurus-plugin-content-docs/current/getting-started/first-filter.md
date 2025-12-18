@@ -181,10 +181,10 @@ Pour sauvegarder les bâtiments filtrés :
 
 Maintenant que vous avez créé votre premier filtre, explorez davantage :
 
-- **[Bases du filtrage](../user-guide/filtering-basics.md)** - Apprenez les expressions QGIS
-- **[Filtrage géométrique](../user-guide/geometric-filtering.md)** - Prédicats spatiaux avancés
-- **[Opérations de tampon](../user-guide/buffer-operations.md)** - Différents types de tampons
-- **[Exporter des entités](../user-guide/export-features.md)** - Options d'exportation avancées
+- **[Bases du filtrage](../user-guide/filtering-basics)** - Apprenez les expressions QGIS
+- **[Filtrage géométrique](../user-guide/geometric-filtering)** - Prédicats spatiaux avancés
+- **[Opérations de tampon](../user-guide/buffer-operations)** - Différents types de tampons
+- **[Exporter des entités](../user-guide/export-features)** - Options d'exportation avancées
 
 ## Problèmes Courants
 
@@ -199,7 +199,7 @@ Vérifiez :
 
 Pour les grands jeux de données :
 - Installez le backend PostgreSQL pour une accélération de 10 à 50×
-- Voir [Optimisation des performances](../advanced/performance-tuning.md)
+- Voir [Optimisation des performances](../advanced/performance-tuning)
 
 ### Mauvais SCR ?
 

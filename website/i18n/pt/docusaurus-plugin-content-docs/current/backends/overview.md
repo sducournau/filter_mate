@@ -86,7 +86,7 @@ graph TD
 
 **Desempenho**: O melhor da categoria para grandes conjuntos de dados
 
-[Saiba mais →](./postgresql.md)
+[Saiba mais →](./postgresql)
 
 ---
 
@@ -107,7 +107,7 @@ graph TD
 
 **Desempenho**: Bom equilíbrio entre velocidade e simplicidade
 
-[Saiba mais →](./spatialite.md)
+[Saiba mais →](./spatialite)
 
 ---
 
@@ -128,7 +128,7 @@ graph TD
 
 **Desempenho**: Bom para conjuntos de dados pequenos a médios (`<10k`)
 
-[Saiba mais →](./ogr.md)
+[Saiba mais →](./ogr)
 
 ---
 
@@ -238,18 +238,18 @@ O FilterMate inclui otimizações automáticas para todos os backends:
 - **Spatialite com `>50k` feições**: Migrar para PostgreSQL
 - **PostgreSQL sem psycopg2**: Instalar psycopg2
 
-Veja [Escolhendo o Backend certo](./choosing-backend.md) para guias de migração detalhados.
+Veja [Escolhendo o Backend certo](./choosing-backend) para guias de migração detalhados.
 
 ## Próximos passos
 
-- **[Escolher um Backend](./choosing-backend.md)** - Árvore de decisão interativa para ajudá-lo a escolher o melhor backend
-- **[Benchmarks de desempenho](./performance-benchmarks.md)** - Resultados detalhados dos benchmarks
-- **[Configuração PostgreSQL](./postgresql.md)** - Configurar PostgreSQL para desempenho máximo
-- **[Detalhes Spatialite](./spatialite.md)** - Conhecer as capacidades do Spatialite
-- **[Limitações OGR](./ogr.md)** - Entender as restrições do backend OGR
+- **[Escolher um Backend](./choosing-backend)** - Árvore de decisão interativa para ajudá-lo a escolher o melhor backend
+- **[Benchmarks de desempenho](./performance-benchmarks)** - Resultados detalhados dos benchmarks
+- **[Configuração PostgreSQL](./postgresql)** - Configurar PostgreSQL para desempenho máximo
+- **[Detalhes Spatialite](./spatialite)** - Conhecer as capacidades do Spatialite
+- **[Limitações OGR](./ogr)** - Entender as restrições do backend OGR
 
-- [Detalhes do Backend PostgreSQL](./postgresql.md)
-- [Detalhes do Backend Spatialite](./spatialite.md)
-- [Detalhes do Backend OGR](./ogr.md)
-- [Comparação de desempenho](./performance-benchmarks.md)
+- [Detalhes do Backend PostgreSQL](./postgresql)
+- [Detalhes do Backend Spatialite](./spatialite)
+- [Detalhes do Backend OGR](./ogr)
+- [Comparação de desempenho](./performance-benchmarks)
 - [Guia de seleção de backend](./choosing-backend)

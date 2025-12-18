@@ -252,7 +252,7 @@ Ou no FilterMate:
 **Tempo estimado**: 5-15 minutos
 **Ganho de desempenho**: 10-50×
 
-Veja: [Guia de configuração PostgreSQL](../backends/postgresql.md)
+Veja: [Guia de configuração PostgreSQL](../backends/postgresql)
 
 ---
 
@@ -368,8 +368,8 @@ print(psycopg2.__version__)
 
 ## Precisa de ajuda?
 
-- 📖 [Configuração PostgreSQL](../backends/postgresql.md)
-- 📖 [Guia Spatialite](../backends/spatialite.md)
-- 📖 [Backend OGR](../backends/ogr.md)
-- 📖 [Configuração](../advanced/configuration.md)
+- 📖 [Configuração PostgreSQL](../backends/postgresql)
+- 📖 [Guia Spatialite](../backends/spatialite)
+- 📖 [Backend OGR](../backends/ogr)
+- 📖 [Configuração](../advanced/configuration)
 - 💬 [Pergunte no GitHub](https://github.com/sducournau/filter_mate/discussions)

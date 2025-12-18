@@ -593,23 +593,23 @@ Les transformations SCR fréquentes peuvent ralentir les opérations sur de gran
 
 ## Sujets connexes
 
-- [Opérations de tampon](buffer-operations.md) - Configurer des zones tampons dans l'onglet FILTRAGE pour l'analyse de proximité
-- [Bases du filtrage](filtering-basics.md) - Combiner les filtres géométriques avec les filtres d'attributs
-- [Aperçu de l'interface](interface-overview.md) - Guide complet des composants de l'onglet FILTRAGE
-- [Exporter des entités](export-features.md) - Exporter les résultats filtrés depuis l'onglet EXPORT
+- [Opérations de tampon](./buffer-operations) - Configurer des zones tampons dans l'onglet FILTRAGE pour l'analyse de proximité
+- [Bases du filtrage](./filtering-basics) - Combiner les filtres géométriques avec les filtres d'attributs
+- [Aperçu de l'interface](./interface-overview) - Guide complet des composants de l'onglet FILTRAGE
+- [Exporter des entités](./export-features) - Exporter les résultats filtrés depuis l'onglet EXPORT
 
 :::info Composants de l'onglet FILTRAGE
 L'onglet FILTRAGE combine trois types de filtres :
-1. **Filtres d'attributs** - Constructeur d'expression (voir [Bases du filtrage](filtering-basics.md))
+1. **Filtres d'attributs** - Constructeur d'expression (voir [Bases du filtrage](./filtering-basics))
 2. **Filtres géométriques** - Prédicats spatiaux + couche de référence (cette page)
-3. **Opérations de tampon** - Zones de distance (voir [Opérations de tampon](buffer-operations.md))
+3. **Opérations de tampon** - Zones de distance (voir [Opérations de tampon](./buffer-operations))
 
 Les trois peuvent être utilisés ensemble dans une seule opération de filtrage.
 :::
 
 ## Prochaines étapes
 
-- **[Opérations de tampon](buffer-operations.md)** - Ajouter des zones de proximité basées sur la distance aux filtres géométriques
-- **[Exporter des entités](export-features.md)** - Enregistrer les résultats filtrés dans divers formats
+- **[Opérations de tampon](./buffer-operations)** - Ajouter des zones de proximité basées sur la distance aux filtres géométriques
+- **[Exporter des entités](./export-features)** - Enregistrer les résultats filtrés dans divers formats
 
-**Flux de travail complet** : Voir [Guide du premier filtre](../getting-started/first-filter.md) pour un exemple complet combinant filtres d'attributs, géométriques et tampons.
+**Flux de travail complet** : Voir [Guide du premier filtre](../getting-started/first-filter) pour un exemple complet combinant filtres d'attributs, géométriques et tampons.

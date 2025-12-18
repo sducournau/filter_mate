@@ -91,34 +91,47 @@ graph TB
 #### 2. Application Orchestrator Layer
 **Responsibility:** Central coordination and state management
 
-- **File:** `filter_mate_app.py` (~1100 lines)
+- **File:** `filter_mate_app.py` (~3433 lines - v2.3.7)
 - **Key Responsibilities:**
   - Task management and dispatch
   - Layer state management (`PROJECT_LAYERS`)
   - Project configuration persistence
   - Result processing and callback handling
   - Database initialization
+  - **Global undo/redo with intelligent context detection** (v2.3.0+)
+  - **Forced backend management** (v2.4+)
+  - **Filter history management** with per-layer tracking
 
 #### 3. UI Management Layer
 **Responsibility:** User interface and interaction handling
 
-- **File:** `filter_mate_dockwidget.py` (~2500 lines)
+- **File:** `filter_mate_dockwidget.py` (~5077 lines - v2.3.7)
 - **Key Responsibilities:**
   - Widget initialization and layout
   - User input validation
   - Layer property management
   - Signal/slot connections
   - UI state synchronization
+  - **Backend indicator and forced backend selection** (v2.4+)
+  - **Configuration JSON tree editor** (v2.2+)
+  - **Undo/redo button management**
 
 #### 4. Task Execution Layer
 **Responsibility:** Asynchronous operations using QgsTask
 
-- **File:** `modules/appTasks.py` (~2800 lines)
+- **Directory:** `modules/tasks/` (refactored v2.3+)
+  - `filter_task.py`: FilterEngineTask (~2100 lines)
+  - `layer_management_task.py`: LayersManagementEngineTask (~1125 lines)
+  - `task_utils.py`: Common utilities (~328 lines)
+  - `geometry_cache.py`: SourceGeometryCache (~146 lines)
+- **Legacy:** `modules/appTasks.py` (~58 lines, re-exports for compatibility)
+
 - **Key Classes:**
-  - `FilterEngineTask`: Filtering operations
+  - `FilterEngineTask`: Filtering operations with backend delegation
   - `LayersManagementEngineTask`: Layer metadata extraction
-  - `PopulateListEngineTask`: Feature list population
+  - `PopulateListEngineTask`: Feature list population (non-blocking)
   - `ExportEngineTask`: Feature export operations
+  - **SourceGeometryCache**: Geometry caching for multi-layer operations
 
 #### 5. Backend Layer
 **Responsibility:** Data source-specific implementations
@@ -201,6 +214,73 @@ class BackendFactory:
             # Universal fallback
             return OGRBackend(layer)
 ```
+
+### Forced Backend System (v2.4+)
+
+**New Feature**: Users can manually force a specific backend for any layer, overriding automatic detection.
+
+**UI Location**: Backend indicator (icon next to layer name in dockwidget)
+- Click backend icon to force PostgreSQL/Spatialite/OGR
+- **🔒 symbol** indicates forced backend
+- **Auto symbol** indicates automatic detection
+
+**Priority System**:
+
+```mermaid
+graph TD
+    Start[Backend Selection] --> Force{Backend<br/>Forced by User?}
+    Force -->|Yes| F1{Valid for Layer?}
+    F1 -->|Yes| UseForced[✓ Use Forced Backend]
+    F1 -->|No| Warn[⚠️ Invalid Choice] --> Auto[Use Auto]
+    
+    Force -->|No| PG{PostgreSQL Available<br/>but Layer Not PG?}
+    PG -->|Yes| Fallback[⚠️ Force OGR<br/>PostgreSQL Unavailable]
+    PG -->|No| Auto
+    
+    Auto --> Detect[Auto-Detect Provider Type]
+    Detect --> UseAuto[✓ Use Detected Backend]
+    
+    UseForced --> Execute[Execute Operations]
+    Fallback --> Execute
+    UseAuto --> Execute
+    
+    style UseForced fill:#4CAF50
+    style UseAuto fill:#8BC34A
+    style Warn fill:#FF9800
+    style Fallback fill:#FF5722
+```
+
+**Implementation Flow**:
+
+```python
+# 1. User forces backend via UI
+dockwidget.forced_backends = {layer_id: 'postgresql'}  # or 'spatialite'/'ogr'
+
+# 2. FilterMateApp passes to task
+task_parameters['forced_backends'] = dockwidget.forced_backends
+
+# 3. FilterTask checks priority
+# PRIORITY 1: Check forced backend
+forced_backend = task_parameters.get('forced_backends', {}).get(layer_id)
+if forced_backend:
+    provider_type = forced_backend  # Use forced
+    layer_props['_forced_backend'] = True
+# PRIORITY 2: Check PostgreSQL fallback
+elif not POSTGRESQL_AVAILABLE and original_provider == 'postgres':
+    provider_type = 'ogr'  # Fallback
+# PRIORITY 3: Auto-detection
+else:
+    provider_type = layer.providerType()  # Auto
+
+# 4. BackendFactory creates backend
+backend = BackendFactory.get_backend(layer, task_parameters)
+```
+
+**Key Files**:
+- `filter_mate_dockwidget.py`: UI management, `forced_backends` dict
+- `filter_mate_app.py`: `get_task_parameters()` adds to task params
+- `modules/tasks/filter_task.py`: Priority logic in `_organize_layers_to_filter()`
+- `modules/backends/factory.py`: `get_backend()` respects forced backends
 
 ### Backend Comparison
 

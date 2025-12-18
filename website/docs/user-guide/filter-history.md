@@ -297,6 +297,6 @@ Before undoing:
 
 ## Related Topics
 
-- [Filtering Basics](filtering-basics.md) - Create filters
-- [Geometric Filtering](geometric-filtering.md) - Spatial operations
-- [Interface Overview](interface-overview.md) - Navigate the UI
+- [Filtering Basics](./filtering-basics.md) - Create filters
+- [Geometric Filtering](./geometric-filtering.md) - Spatial operations
+- [Interface Overview](./interface-overview.md) - Navigate the UI

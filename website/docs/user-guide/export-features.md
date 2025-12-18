@@ -811,10 +811,10 @@ To export complete layers (without filters):
 
 ## Related Topics
 
-- [Filtering Basics](filtering-basics.md) - Create filters to export filtered subsets (FILTERING tab)
-- [Geometric Filtering](geometric-filtering.md) - Apply spatial filters before export
-- [Buffer Operations](buffer-operations.md) - Proximity-based filtering before export
-- [Interface Overview](interface-overview.md) - Complete EXPORTING tab component guide
+- [Filtering Basics](./filtering-basics.md) - Create filters to export filtered subsets (FILTERING tab)
+- [Geometric Filtering](./geometric-filtering.md) - Apply spatial filters before export
+- [Buffer Operations](./buffer-operations.md) - Proximity-based filtering before export
+- [Interface Overview](./interface-overview.md) - Complete EXPORTING tab component guide
 
 :::info Three Main Tabs Workflow
 1. **FILTERING tab**: Create filtered subsets (optional)
@@ -826,5 +826,5 @@ All three tabs work together to provide complete data processing workflow.
 
 ## Next Steps
 
-- **[Filter History](filter-history.md)** - Reuse filter configurations for exports
-- **[Interface Overview](interface-overview.md)** - Learn about all three main tabs
+- **[Filter History](./filter-history.md)** - Reuse filter configurations for exports
+- **[Interface Overview](./interface-overview.md)** - Learn about all three main tabs

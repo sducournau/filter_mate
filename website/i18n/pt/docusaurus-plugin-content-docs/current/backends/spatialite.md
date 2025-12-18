@@ -241,10 +241,10 @@ ogr2ogr -f PostgreSQL \
 
 ## Veja também
 
-- [Visão geral dos backends](./overview.md) — Arquitetura multi-backend
-- [Seleção de backend](./choosing-backend.md) — Lógica de seleção automática
-- [Backend PostgreSQL](./postgresql.md) — Para maiores conjuntos de dados
-- [Comparação de desempenho](./performance-benchmarks.md) — Benchmarks detalhados
+- [Visão geral dos backends](./overview) — Arquitetura multi-backend
+- [Seleção de backend](./choosing-backend) — Lógica de seleção automática
+- [Backend PostgreSQL](./postgresql) — Para maiores conjuntos de dados
+- [Comparação de desempenho](./performance-benchmarks) — Benchmarks detalhados
 
 ---
 

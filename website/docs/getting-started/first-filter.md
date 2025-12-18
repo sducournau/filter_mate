@@ -86,6 +86,7 @@ import TabItem from '@theme/TabItem';
 <Tabs>
   <TabItem value="postgresql" label="PostgreSQL Backend" default>
     ```sql
+    -- For large datasets (≥10k features):
     -- Creates a materialized view with spatial index
     CREATE MATERIALIZED VIEW temp_filter AS
     SELECT b.*
@@ -93,25 +94,29 @@ import TabItem from '@theme/TabItem';
     JOIN roads r ON ST_DWithin(b.geom, r.geom, 200);
     
     CREATE INDEX idx_temp_geom ON temp_filter USING GIST(geom);
+    
+    -- For small datasets (<10k features):
+    -- Uses direct subset string (no materialized view)
     ```
-    ⚡ **Ultra-fast** (sub-second on 100k+ features)
+    ⚡ **Ultra-fast** (sub-second on 100k+ features with MV)
   </TabItem>
   <TabItem value="spatialite" label="Spatialite Backend">
     ```sql
-    -- Creates temporary table with R-tree index
-    CREATE TEMP TABLE filtered_buildings AS
+    -- Uses setSubsetString with Spatialite spatial functions
+    -- Leverages existing R-tree indexes on geometry columns
     SELECT b.*
     FROM buildings b
-    JOIN roads r ON ST_Distance(b.geom, r.geom) <= 200;
-    
-    -- Uses R-tree spatial index
-    SELECT CreateSpatialIndex('filtered_buildings', 'geom');
+    WHERE EXISTS (
+        SELECT 1 FROM roads r 
+        WHERE ST_Distance(b.geom, r.geom) <= 200
+    );
     ```
-    ✅ **Fast** (~2-10s on 50k features)
+    ✅ **Fast** (good performance on &lt;50k features with spatial indexes)
   </TabItem>
   <TabItem value="ogr" label="OGR Backend">
     ```python
     # Uses QGIS processing framework
+    # Fallback for formats without SQL support
     processing.run("native:buffer", {
         'INPUT': roads,
         'DISTANCE': 200,
@@ -124,7 +129,7 @@ import TabItem from '@theme/TabItem';
         'METHOD': 0
     })
     ```
-    ⚠️ **Slower** (~10-30s on 50k features)
+    ⚠️ **Slower** (compatible with all formats, best for small datasets)
   </TabItem>
 </Tabs>
 

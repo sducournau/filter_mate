@@ -65,7 +65,7 @@ slug: /
 3. **Filtrer** : Sélectionnez une couche, écrivez une expression, cliquez sur Appliquer
 4. **Exporter** : Choisissez le format et exportez vos données filtrées
 
-👉 **[Guide d'installation complet](./installation.md)**
+👉 **[Guide d'installation complet](installation)**
 
 ## Fonctionnalités clés
 
@@ -80,7 +80,7 @@ slug: /
 - **Spatialite** : Bon pour les jeux de données moyens (`<50k` entités)
 - **OGR** : Compatibilité universelle (Shapefiles, GeoPackage, etc.)
 
-**FilterMate choisit automatiquement le meilleur backend** pour votre source de données - aucune configuration nécessaire ! En savoir plus dans le [Guide de sélection des backends](./backends/choosing-backend.md).
+**FilterMate choisit automatiquement le meilleur backend** pour votre source de données - aucune configuration nécessaire ! En savoir plus dans l'[Aperçu des backends](./backends/overview.md).
 
 ### Capacités d'export
 - Formats multiples : GPKG, SHP, GeoJSON, KML, CSV, PostGIS
@@ -106,6 +106,10 @@ Nouveau sur FilterMate ? Suivez ce parcours :
 4. **[Aperçu de l'interface](./user-guide/interface-overview.md)** - Comprendre l'interface
 5. **[Bases du filtrage](./user-guide/filtering-basics.md)** - Maîtriser les techniques de filtrage
 
+:::note Traduction en cours
+Certaines sections de la documentation ne sont pas encore disponibles en français. Consultez la [documentation anglaise](/docs) pour accéder à toutes les fonctionnalités.
+:::
+
 ## Obtenir de l'aide
 
 - 📖 **Documentation** : Parcourez le [Guide utilisateur](./user-guide/introduction.md)
@@ -118,8 +122,6 @@ Nouveau sur FilterMate ? Suivez ce parcours :
 - **[Premiers pas](./getting-started/index.md)** - Tutoriels et guides de démarrage rapide
 - **[Guide utilisateur](./user-guide/introduction.md)** - Documentation complète des fonctionnalités
 - **[Backends](./backends/overview.md)** - Comprendre les backends de sources de données
-- **[Avancé](./advanced/configuration.md)** - Configuration et optimisation des performances
-- **[Guide développeur](./developer-guide/architecture.md)** - Contribution et développement
 
 ### v2.2.0 et antérieures
 - ✅ **Multi-Backend complet** - Implémentations PostgreSQL, Spatialite et OGR

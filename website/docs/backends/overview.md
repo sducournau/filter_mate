@@ -35,7 +35,9 @@ FilterMate intelligently selects the best backend based on your layer:
 
 ```mermaid
 graph TD
-    A[Layer Loaded] --> B{Provider Type?}
+    A[Layer Loaded] --> AB{Manual Backend<br/>Selection?}
+    AB -->|Yes| AC[🔒 Use Forced Backend]
+    AB -->|No| B{Provider Type?}
     B -->|postgres| C{psycopg2 Available?}
     B -->|spatialite| E[Spatialite Backend]
     B -->|ogr| F[OGR Backend]
@@ -46,14 +48,25 @@ graph TD
     H -->|Yes| I[Info: Consider PostgreSQL]
     H -->|No| J[Continue]
     F --> H
+    AC --> H
+    
+    style AC fill:#FFC107
 ```
 
 **How It Works:**
 
-1. **Detects layer provider type** (PostgreSQL, Spatialite, or OGR)
-2. **Checks PostgreSQL availability** (is psycopg2 installed?)
-3. **Selects optimal backend** with performance warnings when needed
-4. **Falls back gracefully** if the best option is unavailable
+1. **Checks for manual backend selection** (v2.4+) - User can force specific backend
+2. **Detects layer provider type** (PostgreSQL, Spatialite, or OGR)
+3. **Checks PostgreSQL availability** (is psycopg2 installed?)
+4. **Selects optimal backend** with performance warnings when needed
+5. **Falls back gracefully** if the best option is unavailable
+
+:::tip Manual Backend Selection (v2.4+)
+**New!** You can now force a specific backend by clicking the backend indicator icon next to each layer name. This is useful for:
+- Testing different backends
+- Using Spatialite on small PostgreSQL layers
+- Forcing OGR when you want file-based operations
+:::
 
 ## Backend Comparison
 
@@ -132,13 +145,57 @@ graph TD
 
 ---
 
+## Manual Backend Selection (v2.4+)
+
+:::info New Feature
+**FilterMate v2.4+** allows you to manually force a specific backend for any layer, overriding automatic detection.
+:::
+
+### How to Force a Backend
+
+1. **Locate the backend indicator** next to your layer name in FilterMate panel
+2. **Click the backend icon** (shows current backend: PG/SQLite/OGR)
+3. **Select desired backend** from dropdown menu
+4. **Forced backend is indicated** with 🔒 symbol
+
+### Why Force a Backend?
+
+**Common Use Cases:**
+- **Testing**: Compare performance between backends
+- **Small PostgreSQL layers**: Force Spatialite for simplicity
+- **Network issues**: Force OGR to work offline
+- **Debugging**: Isolate backend-specific issues
+
+### Priority System
+
+FilterMate uses this priority order:
+
+1. **🔒 FORCED** - User explicitly selected backend
+2. **⚠️ FALLBACK** - PostgreSQL unavailable, force OGR
+3. **🤖 AUTO** - Automatic detection based on provider type
+
+:::warning Validation
+FilterMate validates your forced backend selection:
+- Can't force PostgreSQL if psycopg2 not installed
+- Can't force Spatialite on non-SQLite files
+- Invalid selections fall back to auto-detection
+:::
+
 ## Checking Your Active Backend
+
+### Via Backend Indicator (UI)
+
+The backend indicator shows:
+- **Icon**: Current backend (PG/SQLite/OGR)
+- **🔒 Symbol**: Backend is forced by user
+- **Tooltip**: Full backend name and mode
 
 ### Via FilterMate Messages
 
 FilterMate displays info messages when loading layers:
 
 - **"Using PostgreSQL backend"** → PostgreSQL mode (best performance)
+- **"🔒 Using FORCED backend 'postgresql'"** → User forced PostgreSQL
 - **"Using Spatialite backend"** → Spatialite mode
 - **"Using OGR backend"** → OGR mode (file-based)
 

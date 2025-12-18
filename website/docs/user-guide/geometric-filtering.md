@@ -594,23 +594,23 @@ Frequent CRS transformations can slow down operations on large datasets. For bes
 
 ## Related Topics
 
-- [Buffer Operations](buffer-operations.md) - Configure buffer zones in FILTERING tab for proximity analysis
-- [Filtering Basics](filtering-basics.md) - Combine geometric filters with attribute filters
-- [Interface Overview](interface-overview.md) - Complete FILTERING tab component guide
-- [Export Features](export-features.md) - Export filtered results from EXPORTING tab
+- [Buffer Operations](./buffer-operations.md) - Configure buffer zones in FILTERING tab for proximity analysis
+- [Filtering Basics](./filtering-basics.md) - Combine geometric filters with attribute filters
+- [Interface Overview](./interface-overview.md) - Complete FILTERING tab component guide
+- [Export Features](./export-features.md) - Export filtered results from EXPORTING tab
 
 :::info FILTERING Tab Components
 The FILTERING tab combines three types of filters:
-1. **Attribute filters** - Expression builder (see [Filtering Basics](filtering-basics.md))
+1. **Attribute filters** - Expression builder (see [Filtering Basics](./filtering-basics.md))
 2. **Geometric filters** - Spatial predicates + reference layer (this page)
-3. **Buffer operations** - Distance zones (see [Buffer Operations](buffer-operations.md))
+3. **Buffer operations** - Distance zones (see [Buffer Operations](./buffer-operations.md))
 
 All three can be used together in a single filter operation.
 :::
 
 ## Next Steps
 
-- **[Buffer Operations](buffer-operations.md)** - Add distance-based proximity zones to geometric filters
-- **[Export Features](export-features.md)** - Save filtered results in various formats
+- **[Buffer Operations](./buffer-operations.md)** - Add distance-based proximity zones to geometric filters
+- **[Export Features](./export-features.md)** - Save filtered results in various formats
 
 **Complete Workflow**: See [First Filter Guide](../getting-started/first-filter.md) for a comprehensive example combining attribute, geometric, and buffer filters.

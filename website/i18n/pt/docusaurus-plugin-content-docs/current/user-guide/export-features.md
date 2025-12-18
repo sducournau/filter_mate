@@ -811,10 +811,10 @@ Para exportar camadas completas (sem filtros):
 
 ## Tópicos Relacionados
 
-- [Fundamentos de Filtragem](filtering-basics.md) - Criar filtros para exportar subconjuntos filtrados (aba FILTERING)
-- [Filtragem Geométrica](geometric-filtering.md) - Aplicar filtros espaciais antes da exportação
-- [Operações de Buffer](buffer-operations.md) - Filtragem baseada em proximidade antes da exportação
-- [Visão Geral da Interface](interface-overview.md) - Guia completo dos componentes da aba EXPORTING
+- [Fundamentos de Filtragem](./filtering-basics) - Criar filtros para exportar subconjuntos filtrados (aba FILTERING)
+- [Filtragem Geométrica](./geometric-filtering) - Aplicar filtros espaciais antes da exportação
+- [Operações de Buffer](./buffer-operations) - Filtragem baseada em proximidade antes da exportação
+- [Visão Geral da Interface](./interface-overview) - Guia completo dos componentes da aba EXPORTING
 
 :::info Fluxo de Trabalho das Três Abas Principais
 1. **Aba FILTERING**: Criar subconjuntos filtrados (opcional)
@@ -826,5 +826,5 @@ Todas as três abas trabalham juntas para fornecer um fluxo de trabalho completo
 
 ## Próximos Passos
 
-- **[Histórico de Filtros](filter-history.md)** - Reutilizar configurações de filtros para exportações
-- **[Visão Geral da Interface](interface-overview.md)** - Aprender sobre as três abas principais
+- **[Histórico de Filtros](./filter-history)** - Reutilizar configurações de filtros para exportações
+- **[Visão Geral da Interface](./interface-overview)** - Aprender sobre as três abas principais

@@ -252,7 +252,7 @@ Ou dans FilterMate :
 **Temps estimé** : 5-15 minutes
 **Gain de performance** : 10-50×
 
-Voir : [Guide de configuration PostgreSQL](../backends/postgresql.md)
+Voir : [Guide de configuration PostgreSQL](../backends/postgresql)
 
 ---
 
@@ -522,8 +522,8 @@ VACUUM;
 
 ## Besoin d'aide ?
 
-- 📖 [Configuration PostgreSQL](../backends/postgresql.md)
-- 📖 [Guide Spatialite](../backends/spatialite.md)
-- 📖 [Backend OGR](../backends/ogr.md)
-- 📖 [Configuration](../advanced/configuration.md)
+- 📖 [Configuration PostgreSQL](../backends/postgresql)
+- 📖 [Guide Spatialite](../backends/spatialite)
+- 📖 [Backend OGR](../backends/ogr)
+- 📖 [Configuration](../advanced/configuration)
 - 💬 [Demander sur GitHub](https://github.com/sducournau/filter_mate/discussions)

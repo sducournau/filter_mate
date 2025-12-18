@@ -243,10 +243,10 @@ Desempenho real em hardware típico (Core i7, 16GB RAM, SSD):
 
 ## Veja também
 
-- [Visão geral dos backends](./overview.md) - Arquitetura multi-backend
-- [Seleção de backend](./choosing-backend.md) - Lógica de seleção automática
-- [Comparação de desempenho](./performance-benchmarks.md) - Benchmarks detalhados
-- [Backend Spatialite](./spatialite.md) - Alternativa para conjuntos menores
+- [Visão geral dos backends](./overview) - Arquitetura multi-backend
+- [Seleção de backend](./choosing-backend) - Lógica de seleção automática
+- [Comparação de desempenho](./performance-benchmarks) - Benchmarks detalhados
+- [Backend Spatialite](./spatialite) - Alternativa para conjuntos menores
 
 ---
 

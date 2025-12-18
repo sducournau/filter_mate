@@ -29,7 +29,7 @@ FilterMate is available through the QGIS Plugin Repository and works out of the 
 
 That's it! FilterMate is now ready to use with OGR and Spatialite backends.
 
-## Optional: PostgreSQL Backend (Recommended for Large Datasets)
+## Optional: PostgreSQL Backend (Recommended for Large Datasets) {#optional-postgresql-backend-recommended-for-large-datasets}
 
 For optimal performance with PostgreSQL/PostGIS layers, install the `psycopg2` package.
 
@@ -86,7 +86,7 @@ FilterMate automatically selects the optimal backend based on your data source:
 
 Learn more about backends in the [Backends Overview](./backends/overview.md).
 
-## Troubleshooting
+## Troubleshooting {#troubleshooting}
 
 ### PostgreSQL not being used?
 
