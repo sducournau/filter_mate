@@ -307,6 +307,37 @@ class FilterMateApp:
         except Exception as e:
             logger.warning(f"FilterMate: Could not set feedback level: {e}. Using default 'normal'.")
 
+    def _get_dock_position(self):
+        """
+        Get the dock widget position from configuration.
+        
+        Returns the Qt.DockWidgetArea corresponding to the configured
+        DOCK_POSITION value in config.json.
+        
+        Returns:
+            Qt.DockWidgetArea: The dock position (Left, Right, Top, or Bottom)
+        
+        Default:
+            Qt.RightDockWidgetArea if configuration is missing or invalid
+        """
+        try:
+            dock_position_str = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("DOCK_POSITION", {}).get("value", "right")
+            
+            position_mapping = {
+                "left": Qt.LeftDockWidgetArea,
+                "right": Qt.RightDockWidgetArea,
+                "top": Qt.TopDockWidgetArea,
+                "bottom": Qt.BottomDockWidgetArea,
+            }
+            
+            dock_position = position_mapping.get(dock_position_str.lower(), Qt.RightDockWidgetArea)
+            logger.debug(f"FilterMate: Dock position configured as '{dock_position_str}'")
+            return dock_position
+            
+        except Exception as e:
+            logger.warning(f"FilterMate: Could not get dock position: {e}. Using default 'right'.")
+            return Qt.RightDockWidgetArea
+
     def _check_and_reset_stale_flags(self):
         """
         Check for stale flags that might block operations and reset them.
@@ -634,11 +665,11 @@ class FilterMateApp:
             except Exception as e:
                 logger.warning(f"FilterMate: Failed to retranslate DockWidget UI: {e}")
 
-            # show the dockwidget
-            # TODO: fix to allow choice of dock location
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
+            # Get dock position from configuration
+            dock_position = self._get_dock_position()
+            self.iface.addDockWidget(dock_position, self.dockwidget)
             self.dockwidget.show()
-            logger.info("FilterMate App.run(): DockWidget shown")
+            logger.info(f"FilterMate App.run(): DockWidget shown at position {dock_position}")
             
             # Process existing layers AFTER dockwidget is shown and fully initialized
             # Use QTimer to ensure widgets_initialized is True and event loop has processed show()

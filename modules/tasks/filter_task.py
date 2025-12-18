@@ -121,11 +121,23 @@ from .task_utils import (
 # Import geometry cache (Phase 3a extraction)
 from .geometry_cache import SourceGeometryCache
 
+# Import query expression cache (Phase 4 optimization)
+from .query_cache import QueryExpressionCache, get_query_cache
+
+# Import parallel executor (Phase 4 optimization)
+from .parallel_executor import ParallelFilterExecutor, ParallelConfig
+
+# Import streaming exporter (Phase 4 optimization)
+from .result_streaming import StreamingExporter, StreamingConfig
+
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
     
     # Cache de classe (partagé entre toutes les instances de FilterEngineTask)
     _geometry_cache = SourceGeometryCache()
+    
+    # Cache d'expressions (partagé entre toutes les instances)
+    _expression_cache = None  # Initialized lazily via get_query_cache()
 
     def __init__(self, description, task_action, task_parameters):
 
@@ -137,6 +149,9 @@ class FilterEngineTask(QgsTask):
         
         # Référence au cache partagé
         self.geom_cache = FilterEngineTask._geometry_cache
+        
+        # Référence au cache d'expressions (lazy init)
+        self.expr_cache = get_query_cache()
 
         self.db_file_path = None
         self.project_uuid = None
@@ -1394,6 +1409,7 @@ class FilterEngineTask(QgsTask):
         """
         Iterate through all layers and apply filtering with progress tracking.
         
+        Supports parallel execution when enabled in configuration.
         Updates task description to show current layer being processed.
         Progress is visible in QGIS task manager panel.
         
@@ -1413,6 +1429,86 @@ class FilterEngineTask(QgsTask):
             total_layers += len(layer_list)
         logger.info(f"  TOTAL: {total_layers} couches à filtrer")
         logger.info("=" * 70)
+        
+        # Check if parallel filtering is enabled
+        parallel_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('PARALLEL_FILTERING', {})
+        parallel_enabled = parallel_config.get('enabled', {}).get('value', True)
+        min_layers_for_parallel = parallel_config.get('min_layers', {}).get('value', 2)
+        max_workers = parallel_config.get('max_workers', {}).get('value', 0)
+        
+        # Use parallel execution if enabled and enough layers
+        if parallel_enabled and total_layers >= min_layers_for_parallel:
+            return self._filter_all_layers_parallel(max_workers)
+        else:
+            return self._filter_all_layers_sequential()
+    
+    def _filter_all_layers_parallel(self, max_workers: int = 0):
+        """
+        Filter all layers using parallel execution.
+        
+        Args:
+            max_workers: Maximum worker threads (0 = auto-detect)
+        
+        Returns:
+            bool: True if all layers processed successfully
+        """
+        logger.info("🚀 Using PARALLEL filtering mode")
+        
+        # Prepare flat list of (layer, layer_props, provider_type) tuples
+        all_layers = []
+        for provider_type in self.layers:
+            for layer, layer_props in self.layers[provider_type]:
+                all_layers.append((layer, layer_props, provider_type))
+        
+        # Create executor with config
+        config = ParallelConfig(
+            max_workers=max_workers if max_workers > 0 else None,
+            min_layers_for_parallel=1  # Already checked threshold
+        )
+        executor = ParallelFilterExecutor(config)
+        
+        # Define filter function for each layer
+        def filter_layer_func(layer_tuple):
+            layer, layer_props, provider_type = layer_tuple
+            return self.execute_geometric_filtering(provider_type, layer, layer_props)
+        
+        # Execute parallel filtering
+        results = executor.filter_layers_parallel(all_layers, filter_layer_func)
+        
+        # Process results and update progress
+        successful_filters = 0
+        failed_filters = 0
+        
+        for i, (layer_tuple, result) in enumerate(zip(all_layers, results), 1):
+            layer, layer_props, provider_type = layer_tuple
+            self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer.name()}")
+            
+            if result.success:
+                successful_filters += 1
+                logger.info(f"✅ {layer.name()} has been filtered → {layer.featureCount()} features")
+            else:
+                failed_filters += 1
+                logger.error(f"❌ {layer.name()} - errors occurred during filtering: {result.error}")
+            
+            progress_percent = int((i / self.layers_count) * 100)
+            self.setProgress(progress_percent)
+            
+            if self.isCanceled():
+                logger.warning(f"⚠️ Filtering canceled at layer {i}/{self.layers_count}")
+                return False
+        
+        # DIAGNOSTIC: Summary of filtering results
+        self._log_filtering_summary(successful_filters, failed_filters)
+        return True
+    
+    def _filter_all_layers_sequential(self):
+        """
+        Filter all layers sequentially (original behavior).
+        
+        Returns:
+            bool: True if all layers processed successfully
+        """
+        logger.info("🔄 Using SEQUENTIAL filtering mode")
         
         i = 1
         successful_filters = 0
@@ -1446,6 +1542,11 @@ class FilterEngineTask(QgsTask):
                     return False
         
         # DIAGNOSTIC: Summary of filtering results
+        self._log_filtering_summary(successful_filters, failed_filters)
+        return True
+    
+    def _log_filtering_summary(self, successful_filters: int, failed_filters: int):
+        """Log summary of filtering results."""
         logger.info("")
         logger.info("=" * 70)
         logger.info("📊 RÉSUMÉ DU FILTRAGE GÉOMÉTRIQUE")
@@ -1454,8 +1555,6 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  ✅ Succès: {successful_filters}")
         logger.info(f"  ❌ Échecs: {failed_filters}")
         logger.info("=" * 70)
-        
-        return True
 
     def manage_distant_layers_geometric_filtering(self):
         """
@@ -3610,6 +3709,7 @@ class FilterEngineTask(QgsTask):
         Build filter expression using backend.
         
         For PostgreSQL with few source features, passes WKT for simplified expressions.
+        Uses expression cache for repeated operations (Phase 4 optimization).
         
         Args:
             backend: Backend instance
@@ -3671,6 +3771,32 @@ class FilterEngineTask(QgsTask):
                 
                 logger.debug(f"PostgreSQL simple mode: {source_feature_count} features, SRID={source_srid}")
         
+        # Phase 4: Check expression cache before building
+        layer = layer_props.get('layer')
+        layer_id = layer.id() if layer and hasattr(layer, 'id') else None
+        
+        if layer_id and self.expr_cache:
+            # Compute cache key
+            source_hash = self.expr_cache.compute_source_hash(source_geom)
+            buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
+            provider_type = backend.get_backend_name().lower()
+            
+            cache_key = self.expr_cache.get_cache_key(
+                layer_id=layer_id,
+                predicates=self.current_predicates,
+                buffer_value=buffer_value,
+                source_geometry_hash=source_hash,
+                provider_type=provider_type
+            )
+            
+            # Try to get cached expression
+            cached_expression = self.expr_cache.get(cache_key)
+            if cached_expression:
+                logger.info(f"✓ Expression cache HIT for {layer.name() if layer else 'unknown'}")
+                return cached_expression
+        else:
+            cache_key = None
+        
         expression = backend.build_expression(
             layer_props=layer_props,
             predicates=self.current_predicates,
@@ -3686,6 +3812,11 @@ class FilterEngineTask(QgsTask):
         if not expression:
             logger.warning(f"No expression generated by backend")
             return None
+        
+        # Phase 4: Store in cache for future use
+        if cache_key and self.expr_cache:
+            self.expr_cache.put(cache_key, expression)
+            logger.debug(f"Expression cached for {layer.name() if layer else 'unknown'}")
         
         return expression
 
@@ -4785,6 +4916,7 @@ class FilterEngineTask(QgsTask):
         - Standard export (single file or directory)
         - Batch output folder mode (one file per layer)
         - Batch ZIP mode (one ZIP per layer)
+        - Streaming export for large datasets (Phase 4 optimization)
         
         Returns:
             bool: True if export successful
@@ -4804,6 +4936,12 @@ class FilterEngineTask(QgsTask):
         batch_output_folder = export_config.get('batch_output_folder', False)
         batch_zip = export_config.get('batch_zip', False)
         save_styles = self.task_parameters["task"]['EXPORTING'].get("HAS_STYLES_TO_EXPORT", False)
+        
+        # Check streaming export configuration
+        streaming_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('STREAMING_EXPORT', {})
+        streaming_enabled = streaming_config.get('enabled', {}).get('value', True)
+        feature_threshold = streaming_config.get('feature_threshold', {}).get('value', 10000)
+        chunk_size = streaming_config.get('chunk_size', {}).get('value', 5000)
         
         # Execute export based on mode and format
         export_success = False
@@ -4831,6 +4969,28 @@ class FilterEngineTask(QgsTask):
             else:
                 self.message = f'Batch ZIP export failed for {len(layers)} layer(s)'
             return export_success
+        
+        # STANDARD MODE: Check if streaming should be used for large layers
+        if streaming_enabled:
+            # Check total feature count across all layers
+            total_features = self._calculate_total_features(layers)
+            if total_features >= feature_threshold:
+                logger.info(f"🚀 Using STREAMING export mode ({total_features} features >= {feature_threshold} threshold)")
+                export_success = self._export_with_streaming(
+                    layers, output_folder, projection, datatype, style_format, save_styles, chunk_size
+                )
+                if export_success:
+                    self.message = f'Streaming export: {len(layers)} layer(s) ({total_features} features) exported to <a href="file:///{output_folder}">{output_folder}</a>'
+                else:
+                    self.message = f'Streaming export failed for {len(layers)} layer(s)'
+                
+                # Create zip if requested
+                if export_success and zip_path:
+                    zip_created = self._create_zip_archive(zip_path, output_folder)
+                    if zip_created:
+                        self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
+                
+                return export_success
         
         # STANDARD MODE: Original behavior
         if datatype == 'GPKG':
@@ -4888,6 +5048,94 @@ class FilterEngineTask(QgsTask):
         
         logger.info("Export completed successfully")
         return True
+
+    def _calculate_total_features(self, layers) -> int:
+        """
+        Calculate total feature count across all layers.
+        
+        Args:
+            layers: List of layer info dicts or layer names
+        
+        Returns:
+            int: Total feature count
+        """
+        total = 0
+        for layer_info in layers:
+            layer_name = layer_info['layer_name'] if isinstance(layer_info, dict) else layer_info
+            layer = self._get_layer_by_name(layer_name)
+            if layer:
+                total += layer.featureCount()
+        return total
+    
+    def _export_with_streaming(self, layers, output_folder, projection, datatype, style_format, save_styles, chunk_size):
+        """
+        Export layers using streaming for large datasets.
+        
+        Args:
+            layers: List of layer info dicts or layer names
+            output_folder: Output directory path
+            projection: Target CRS
+            datatype: Output format (GPKG, SHP, etc.)
+            style_format: Style format (QML, SLD, etc.)
+            save_styles: Whether to save styles
+            chunk_size: Number of features per batch
+        
+        Returns:
+            bool: True if export successful
+        """
+        try:
+            config = StreamingConfig(chunk_size=chunk_size)
+            exporter = StreamingExporter(config)
+            
+            # Progress callback
+            def progress_callback(progress):
+                self.setProgress(int(progress.percentage))
+                self.setDescription(f"Streaming export: {progress.features_exported}/{progress.total_features} features")
+            
+            for layer_info in layers:
+                layer_name = layer_info['layer_name'] if isinstance(layer_info, dict) else layer_info
+                layer = self._get_layer_by_name(layer_name)
+                
+                if not layer:
+                    logger.warning(f"Layer not found: {layer_name}")
+                    continue
+                
+                # Determine output path
+                if datatype == 'GPKG':
+                    output_path = os.path.join(output_folder, f"{layer_name}.gpkg")
+                elif datatype == 'SHP':
+                    output_path = os.path.join(output_folder, f"{layer_name}.shp")
+                elif datatype == 'GEOJSON':
+                    output_path = os.path.join(output_folder, f"{layer_name}.geojson")
+                else:
+                    output_path = os.path.join(output_folder, f"{layer_name}.{datatype.lower()}")
+                
+                logger.info(f"Streaming export: {layer_name} → {output_path}")
+                
+                success = exporter.export_layer_streaming(
+                    layer=layer,
+                    output_path=output_path,
+                    target_crs=projection,
+                    progress_callback=progress_callback
+                )
+                
+                if not success:
+                    logger.error(f"Streaming export failed for {layer_name}")
+                    return False
+                
+                # Save styles if requested
+                if save_styles and style_format:
+                    self._save_layer_style(layer, output_path, style_format)
+                
+                if self.isCanceled():
+                    logger.info("Export cancelled by user")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Streaming export error: {e}")
+            return False
 
     def _get_spatialite_datasource(self, layer):
         """

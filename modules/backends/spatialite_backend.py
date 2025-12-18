@@ -46,6 +46,58 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         # When we create a TEMP table in our connection, QGIS cannot see it.
         # Solution: Always use inline WKT in GeomFromText() for subset strings.
         self._use_temp_table = False  # DISABLED: doesn't work with setSubsetString
+
+    def _get_buffer_endcap_style(self) -> str:
+        """
+        Get the Spatialite buffer endcap style from task_params.
+        
+        Spatialite ST_Buffer supports endcap parameter (same as PostGIS):
+        - 'round' (default)
+        - 'flat' 
+        - 'square'
+        
+        Returns:
+            Spatialite endcap style string
+        """
+        if not self.task_params:
+            return 'round'
+        
+        filtering_params = self.task_params.get("filtering", {})
+        if not filtering_params.get("has_buffer_type", False):
+            return 'round'
+        
+        buffer_type_str = filtering_params.get("buffer_type", "Round")
+        
+        # Map FilterMate buffer types to Spatialite endcap styles
+        buffer_type_mapping = {
+            "Round": "round",
+            "Flat": "flat", 
+            "Square": "square"
+        }
+        
+        endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+        self.log_debug(f"Using buffer endcap style: {endcap_style}")
+        return endcap_style
+    
+    def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
+        """
+        Build ST_Buffer expression with endcap style from task_params.
+        
+        Args:
+            geom_expr: Geometry expression to buffer
+            buffer_value: Buffer distance
+            
+        Returns:
+            Spatialite ST_Buffer expression with style parameter
+        """
+        endcap_style = self._get_buffer_endcap_style()
+        
+        if endcap_style == 'round':
+            # Default style - no need to specify
+            return f"ST_Buffer({geom_expr}, {buffer_value})"
+        else:
+            # Spatialite uses same syntax as PostGIS for endcap
+            return f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -572,6 +624,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Check if CRS is geographic - buffer needs to be in appropriate units
             is_target_geographic = target_srid == 4326 or (layer and layer.crs().isGeographic())
             
+            # Get buffer endcap style from task_params
+            endcap_style = self._get_buffer_endcap_style()
+            buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
+            
             if is_target_geographic:
                 # Geographic CRS: buffer is in degrees, which is problematic
                 # Use ST_Transform to project to Web Mercator (EPSG:3857) for metric buffer
@@ -581,14 +637,14 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     f"ST_Transform("
                     f"ST_Buffer("
                     f"ST_Transform({source_geom_expr}, 3857), "
-                    f"{buffer_value}), "
+                    f"{buffer_value}{buffer_style_param}), "
                     f"{target_srid})"
                 )
-                self.log_info(f"✓ Applied ST_Buffer({buffer_value}m) via EPSG:3857 reprojection")
+                self.log_info(f"✓ Applied ST_Buffer({buffer_value}m, endcap={endcap_style}) via EPSG:3857 reprojection")
             else:
                 # Projected CRS: buffer value is directly in map units (usually meters)
-                source_geom_expr = f"ST_Buffer({source_geom_expr}, {buffer_value})"
-                self.log_info(f"✓ Applied ST_Buffer({buffer_value}) in native CRS (SRID={target_srid})")
+                source_geom_expr = self._build_st_buffer_with_style(source_geom_expr, buffer_value)
+                self.log_info(f"✓ Applied ST_Buffer({buffer_value}, endcap={endcap_style}) in native CRS (SRID={target_srid})")
         
         # Dynamic buffer expressions use attribute values
         if buffer_expression:
@@ -597,8 +653,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             clean_buffer_expr = buffer_expression
             if '"' in clean_buffer_expr and '.' not in clean_buffer_expr:
                 # Expression like "field_name" - use as-is for attribute-based buffer
-                source_geom_expr = f"ST_Buffer({source_geom_expr}, {clean_buffer_expr})"
-                self.log_info(f"✓ Applied dynamic ST_Buffer with expression: {clean_buffer_expr}")
+                # Apply endcap style if configured
+                endcap_style = self._get_buffer_endcap_style()
+                if endcap_style == 'round':
+                    source_geom_expr = f"ST_Buffer({source_geom_expr}, {clean_buffer_expr})"
+                else:
+                    source_geom_expr = f"ST_Buffer({source_geom_expr}, {clean_buffer_expr}, 'endcap={endcap_style}')"
+                self.log_info(f"✓ Applied dynamic ST_Buffer with expression: {clean_buffer_expr} (endcap={endcap_style})")
         
         # Build predicate expressions with OPTIMIZED order
         # Order by selectivity (most selective first = fastest short-circuit)

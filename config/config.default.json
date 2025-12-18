@@ -66,6 +66,16 @@
                     "compact_if_height_less_than": 1080
                 }
             },
+            "DOCK_POSITION": {
+                "value": "right",
+                "choices": [
+                    "left",
+                    "right",
+                    "top",
+                    "bottom"
+                ],
+                "description": "Position of the FilterMate dockwidget in QGIS: 'left' (left side), 'right' (right side), 'top' (top area), 'bottom' (bottom area)"
+            },
             "ACTION_BAR_POSITION": {
                 "value": "bottom",
                 "choices": [
@@ -273,6 +283,38 @@
                     "value": "ogr_memory",
                     "choices": ["ogr_memory", "qgis_processing"],
                     "description": "Backend to use: 'ogr_memory' (fastest) or 'qgis_processing' (compatible)"
+                }
+            },
+            "PARALLEL_FILTERING": {
+                "description": "Use parallel execution for filtering multiple layers simultaneously (Phase 4 optimization)",
+                "enabled": {
+                    "value": true,
+                    "choices": [true, false],
+                    "description": "Enable/disable parallel layer filtering"
+                },
+                "min_layers": {
+                    "value": 2,
+                    "description": "Minimum number of layers to trigger parallel execution"
+                },
+                "max_workers": {
+                    "value": 0,
+                    "description": "Maximum worker threads (0 = auto-detect based on CPU cores)"
+                }
+            },
+            "STREAMING_EXPORT": {
+                "description": "Use batch streaming for exporting large datasets to avoid memory issues (Phase 4 optimization)",
+                "enabled": {
+                    "value": true,
+                    "choices": [true, false],
+                    "description": "Enable/disable streaming export"
+                },
+                "feature_threshold": {
+                    "value": 10000,
+                    "description": "Number of features above which streaming is automatically used"
+                },
+                "chunk_size": {
+                    "value": 5000,
+                    "description": "Number of features per batch during streaming export"
                 }
             }
         }

@@ -18,7 +18,7 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
 ## Current Status
-- **Version**: 2.3.7 (December 18, 2025)
+- **Version**: 2.3.8 (December 18, 2025)
 - **Status**: Production - Stable with project change stability enhancements
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Recent Additions**: 

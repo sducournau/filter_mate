@@ -318,12 +318,27 @@ class OGRGeometricFilter(GeometricFilterBackend):
         When buffering multiple non-overlapping geometries, QGIS Processing can
         produce GeometryCollection which is incompatible with typed layers (MultiPolygon).
         This method converts GeometryCollection to MultiPolygon for compatibility.
+        
+        Uses buffer_type from task_params for END_CAP_STYLE:
+        - 0: Round (default)
+        - 1: Flat
+        - 2: Square
         """
         if buffer_value and buffer_value > 0:
             self.log_debug(f"Applying buffer of {buffer_value} to source layer")
             try:
                 # Ensure buffer_value is numeric
                 buffer_dist = float(buffer_value)
+                
+                # Get buffer_type from task_params (default: 0 = Round)
+                buffer_type = 0  # Default: Round
+                if self.task_params:
+                    filtering_params = self.task_params.get("filtering", {})
+                    if filtering_params.get("has_buffer_type", False):
+                        buffer_type_str = filtering_params.get("buffer_type", "Round")
+                        buffer_type_mapping = {"Round": 0, "Flat": 1, "Square": 2}
+                        buffer_type = buffer_type_mapping.get(buffer_type_str, 0)
+                        self.log_debug(f"Using buffer type: {buffer_type_str} (END_CAP_STYLE={buffer_type})")
                 
                 # Log layer details for debugging
                 self.log_debug(f"Buffer source layer: {source_layer.name()}, "
@@ -334,7 +349,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     'INPUT': source_layer,
                     'DISTANCE': buffer_dist,
                     'SEGMENTS': int(5),
-                    'END_CAP_STYLE': int(0),  # Round
+                    'END_CAP_STYLE': int(buffer_type),  # Use configured buffer type
                     'JOIN_STYLE': int(0),  # Round
                     'MITER_LIMIT': float(2.0),
                     'DISSOLVE': False,

@@ -73,6 +73,58 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.logger = logger
         self.mv_schema = "public"  # Default schema for materialized views
         self.mv_prefix = "filtermate_mv_"  # Prefix for MV names
+
+    def _get_buffer_endcap_style(self) -> str:
+        """
+        Get the PostGIS buffer endcap style from task_params.
+        
+        PostGIS ST_Buffer supports 'endcap' parameter:
+        - 'round' (default)
+        - 'flat' 
+        - 'square'
+        
+        Returns:
+            PostGIS endcap style string
+        """
+        if not self.task_params:
+            return 'round'
+        
+        filtering_params = self.task_params.get("filtering", {})
+        if not filtering_params.get("has_buffer_type", False):
+            return 'round'
+        
+        buffer_type_str = filtering_params.get("buffer_type", "Round")
+        
+        # Map FilterMate buffer types to PostGIS endcap styles
+        buffer_type_mapping = {
+            "Round": "round",
+            "Flat": "flat", 
+            "Square": "square"
+        }
+        
+        endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+        self.log_debug(f"Using buffer endcap style: {endcap_style}")
+        return endcap_style
+    
+    def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
+        """
+        Build ST_Buffer expression with endcap style from task_params.
+        
+        Args:
+            geom_expr: Geometry expression to buffer
+            buffer_value: Buffer distance
+            
+        Returns:
+            PostGIS ST_Buffer expression with style parameter
+        """
+        endcap_style = self._get_buffer_endcap_style()
+        
+        if endcap_style == 'round':
+            # Default style - no need to specify
+            return f"ST_Buffer({geom_expr}, {buffer_value})"
+        else:
+            # Use optional style parameter
+            return f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -132,8 +184,18 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         import re
         
+        # Get buffer endcap style for use in buffer expressions
+        endcap_style = self._get_buffer_endcap_style()
+        
+        def build_buffer_expr(geom_ref: str, buffer_value: str) -> str:
+            """Build ST_Buffer expression with appropriate endcap style."""
+            if endcap_style == 'round':
+                return f'ST_Buffer({geom_ref}, {buffer_value})'
+            else:
+                return f"ST_Buffer({geom_ref}, {buffer_value}, 'endcap={endcap_style}')"
+        
         # Pattern 1: ST_Buffer("schema"."table"."geom", value) - 3-part with buffer
-        buffer_pattern_3part = r'ST_Buffer\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*([^)]+)\)'
+        buffer_pattern_3part = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^)]+)\)'
         match = re.match(buffer_pattern_3part, source_geom, re.IGNORECASE)
         if match:
             schema, table, geom_field, buffer_value = match.groups()
@@ -141,11 +203,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 'schema': schema,
                 'table': table,
                 'geom_field': geom_field,
-                'buffer_expr': f'ST_Buffer(__source."{geom_field}", {buffer_value})'
+                'buffer_expr': build_buffer_expr(f'__source."{geom_field}"', buffer_value)
             }
         
         # Pattern 2: ST_Buffer("table"."geom", value) - 2-part with buffer (no schema)
-        buffer_pattern_2part = r'ST_Buffer\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*([^)]+)\)'
+        buffer_pattern_2part = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^)]+)\)'
         match = re.match(buffer_pattern_2part, source_geom, re.IGNORECASE)
         if match:
             table, geom_field, buffer_value = match.groups()
@@ -158,11 +220,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 'schema': 'public',
                 'table': table,
                 'geom_field': geom_field,
-                'buffer_expr': f'ST_Buffer(__source."{geom_field}", {buffer_value})'
+                'buffer_expr': build_buffer_expr(f'__source."{geom_field}"', buffer_value)
             }
         
         # Pattern 3: "schema"."table"."geom" (3-part identifier)
-        three_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"\s*\.\s*"([^"]+)"'
+        three_part_pattern = r'\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"'
         match = re.match(three_part_pattern, source_geom)
         if match:
             schema, table, geom_field = match.groups()
@@ -178,7 +240,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         # Pattern 4: "table"."geom" (2-part, table reference without schema)
         # CRITICAL FIX: Handle 2-part table references for regular tables, not just MVs
-        two_part_pattern = r'"([^"]+)"\s*\.\s*"([^"]+)"'
+        two_part_pattern = r'\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"'
         match = re.match(two_part_pattern, source_geom)
         if match:
             table, geom_field = match.groups()
@@ -383,9 +445,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Build source geometry from WKT
         source_geom_sql = f"ST_GeomFromText('{source_wkt}', {source_srid})"
         
-        # Apply buffer if specified
+        # Apply buffer if specified (with endcap style)
         if buffer_value and buffer_value > 0:
-            source_geom_sql = f"ST_Buffer({source_geom_sql}, {buffer_value})"
+            source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
         
         return f"{predicate_func}({geom_expr}, {source_geom_sql})"
 
@@ -457,11 +519,16 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Build geometry expression
         geom_expr = f'"{table}"."{geom_field}"'
         
-        # Apply buffer if specified
+        # Apply buffer if specified (with endcap style from task_params)
         if buffer_value and buffer_value > 0:
-            geom_expr = f"ST_Buffer({geom_expr}, {buffer_value})"
+            geom_expr = self._build_st_buffer_with_style(geom_expr, buffer_value)
         elif buffer_expression:
-            geom_expr = f"ST_Buffer({geom_expr}, {buffer_expression})"
+            # Dynamic buffer expression - use endcap style
+            endcap_style = self._get_buffer_endcap_style()
+            if endcap_style == 'round':
+                geom_expr = f"ST_Buffer({geom_expr}, {buffer_expression})"
+            else:
+                geom_expr = f"ST_Buffer({geom_expr}, {buffer_expression}, 'endcap={endcap_style}')"
         
         # Determine strategy based on source feature count
         use_simple_wkt = (
