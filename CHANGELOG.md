@@ -2,6 +2,76 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.3.7] - 2025-12-18 - Project Change Stability Enhancement
+
+### 🛡️ Stability Improvements
+- **Enhanced Project Change Handling** - Complete rewrite of `_handle_project_change()`
+  - Forces cleanup of previous project state before reinitializing
+  - Clears `PROJECT_LAYERS`, add_layers queue, and all state flags
+  - Resets dockwidget layer references to prevent stale data
+  - Added 300ms delay before reinitialization for QGIS signal processing
+
+- **New `cleared` Signal Handler** - Proper cleanup on project close/clear
+  - Added `_handle_project_cleared()` method
+  - Connected to `QgsProject.instance().cleared` signal
+  - Ensures plugin state is reset when project is closed or new project created
+  - Disables UI widgets while waiting for new layers
+
+- **Updated Timing Constants** - Improved delays for better stability
+  - `UI_REFRESH_DELAY_MS`: 300 (was 200)
+  - `PROJECT_LOAD_DELAY_MS`: 2500 (was 1500)
+  - `SIGNAL_DEBOUNCE_MS`: 150 (was 100)
+  - New: `PROJECT_CHANGE_CLEANUP_DELAY_MS`: 300
+  - New: `PROJECT_CHANGE_REINIT_DELAY_MS`: 500
+  - New: `POSTGRESQL_EXTRA_DELAY_MS`: 1000
+
+### ✨ New Features
+- **Force Reload Layers (F5 Shortcut)** - Manual layer reload when project change fails
+  - Press F5 in dockwidget to force complete layer reload
+  - Also available via `launchingTask.emit('reload_layers')`
+  - Resets all state flags and reloads all vector layers from current project
+  - Shows status indicator during reload ("⟳")
+  - Useful recovery option when automatic project change detection fails
+
+- **`force_reload_layers()` Method** - Programmatic layer reload
+  - New method in `FilterMateApp` class
+  - Cancels all pending tasks, clears queues, resets flags
+  - Reinitializes database and reloads all vector layers
+  - Adds extra delay for PostgreSQL layers
+
+### 🐛 Bug Fixes
+- **Fixed Project Change Not Reloading Layers** - More aggressive cleanup prevents stale state
+- **Fixed Dockwidget Not Updating After Project Switch** - Full reset of layer references
+- **Fixed Plugin Requiring Reload After Project Change** - Proper signal handling
+- **Fixed Signal Timing Issue** - Root cause identified and fixed:
+  - QGIS emits `layersAdded` signal BEFORE `projectRead` handler completes
+  - Old code was waiting for a signal that had already passed
+  - Now manually triggers `add_layers` after cleanup instead of waiting for missed signal
+
+### 📝 Technical Details
+```python
+# Updated stability constants
+STABILITY_CONSTANTS = {
+    'MAX_ADD_LAYERS_QUEUE': 50,
+    'FLAG_TIMEOUT_MS': 30000,
+    'LAYER_RETRY_DELAY_MS': 500,
+    'UI_REFRESH_DELAY_MS': 300,            # Increased from 200
+    'PROJECT_LOAD_DELAY_MS': 2500,         # Increased from 1500
+    'PROJECT_CHANGE_CLEANUP_DELAY_MS': 300, # NEW
+    'PROJECT_CHANGE_REINIT_DELAY_MS': 500,  # NEW
+    'MAX_RETRIES': 10,
+    'SIGNAL_DEBOUNCE_MS': 150,             # Increased from 100
+    'POSTGRESQL_EXTRA_DELAY_MS': 1000,     # NEW
+}
+```
+
+### 🔧 Files Changed
+- `filter_mate.py`: Rewrote `_handle_project_change()`, added `_handle_project_cleared()`, updated signal connections
+- `filter_mate_app.py`: Added `force_reload_layers()`, updated `STABILITY_CONSTANTS`, added `reload_layers` task
+- `filter_mate_dockwidget.py`: Added F5 shortcut via `_setup_keyboard_shortcuts()` and `_on_reload_layers_shortcut()`
+
+---
+
 ## [2.3.6] - 2025-12-18 - Project & Layer Loading Stability
 
 ### 🛡️ Stability Improvements

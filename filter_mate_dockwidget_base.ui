@@ -1580,7 +1580,7 @@
                            <enum>Qt::ClickFocus</enum>
                           </property>
                           <property name="toolTip">
-                           <string>Filtrage multicouche</string>
+                           <string>Multi-layer filtering</string>
                           </property>
                           <property name="layoutDirection">
                            <enum>Qt::LeftToRight</enum>
@@ -1667,7 +1667,7 @@
                            <enum>Qt::ClickFocus</enum>
                           </property>
                           <property name="toolTip">
-                           <string>Filtrage additif pour la couche sélectionnée</string>
+                           <string>Additive filtering for the selected layer</string>
                           </property>
                           <property name="layoutDirection">
                            <enum>Qt::LeftToRight</enum>
@@ -1953,7 +1953,7 @@
                            <enum>Qt::ClickFocus</enum>
                           </property>
                           <property name="toolTip">
-                           <string>Filtrage géospatial</string>
+                           <string>Geospatial filtering</string>
                           </property>
                           <property name="layoutDirection">
                            <enum>Qt::LeftToRight</enum>
@@ -2043,7 +2043,7 @@
                            <enum>Qt::ClickFocus</enum>
                           </property>
                           <property name="toolTip">
-                           <string>Tampon</string>
+                           <string>Buffer</string>
                           </property>
                           <property name="layoutDirection">
                            <enum>Qt::LeftToRight</enum>
@@ -2229,7 +2229,7 @@
                           <bool>true</bool>
                          </property>
                          <property name="toolTip">
-                          <string>Couche de l'expression</string>
+                          <string>Expression layer</string>
                          </property>
                          <property name="layoutDirection">
                           <enum>Qt::LeftToRight</enum>
@@ -2351,7 +2351,7 @@
                         <bool>true</bool>
                        </property>
                        <property name="toolTip">
-                        <string>Prédicat géométrique</string>
+                        <string>Geometric predicate</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -2472,7 +2472,7 @@
                           <cursorShape>IBeamCursor</cursorShape>
                          </property>
                          <property name="toolTip">
-                          <string>Valeur en mètres</string>
+                          <string>Value in meters</string>
                          </property>
                          <property name="layoutDirection">
                           <enum>Qt::LeftToRight</enum>
@@ -3183,7 +3183,7 @@
                         <cursorShape>PointingHandCursor</cursorShape>
                        </property>
                        <property name="toolTip">
-                        <string>Sélectionnez le CRS pour l'export</string>
+                        <string>Select CRS for export</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -3283,7 +3283,7 @@
                         <cursorShape>PointingHandCursor</cursorShape>
                        </property>
                        <property name="toolTip">
-                        <string>Format de sortie</string>
+                        <string>Output format</string>
                        </property>
                        <property name="layoutDirection">
                         <enum>Qt::LeftToRight</enum>
@@ -3545,13 +3545,13 @@
               <enum>Qt::DefaultContextMenu</enum>
              </property>
              <property name="toolTip">
-              <string>Filtrer</string>
+              <string>Filter</string>
              </property>
              <property name="statusTip">
-              <string>Filtrer</string>
+              <string>Filter</string>
              </property>
              <property name="whatsThis">
-              <string>Filtrer</string>
+              <string>Filter</string>
              </property>
              <property name="layoutDirection">
               <enum>Qt::LeftToRight</enum>
@@ -3607,13 +3607,13 @@
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
-              <string>Réinitialiser</string>
+              <string>Reset</string>
              </property>
              <property name="statusTip">
-              <string>Réinitialiser</string>
+              <string>Reset</string>
              </property>
              <property name="whatsThis">
-              <string>Réinitialiser</string>
+              <string>Reset</string>
              </property>
              <property name="autoFillBackground">
               <bool>false</bool>

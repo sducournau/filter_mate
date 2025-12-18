@@ -6,25 +6,25 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.6
+version=2.3.7
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.6 - Project & Layer Loading Stability
+about=FilterMate v2.3.7 - Project Change Stability Enhancement
 
- NEW in v2.3.6:
+ NEW in v2.3.7:
+ - 🛡️ Enhanced project change handling with forced cleanup
+ - 🔄 New `cleared` signal handler for proper cleanup on project close
+ - ⏱️ Updated timing constants for better PostgreSQL stability
+ - ⌨️ F5 shortcut to force reload layers when project change fails
+ - 🐛 Fixed project change not reloading layers (root cause identified)
+ - 🐛 Fixed signal timing issue (layersAdded before projectRead completion)
+ 
+ Previous (v2.3.6):
  - 🛡️ Centralized timing constants (STABILITY_CONSTANTS dict)
  - ⏱️ Timestamp-tracked flags with auto-reset (30s timeout)
  - ✅ Layer validation (C++ object validity checks)
  - 🔄 Signal debouncing for rapid layer changes
- - 🐛 Fixed stuck flags, queue overflow, error recovery
- - 📊 Queue size limit (50 items) with automatic trimming
- 
- Previous (v2.3.5):
- - ⚙️ Configuration v2.0 with integrated metadata structure
- - 🔄 Automatic config migration (v1.0→v2.0) with backup/rollback
- - 🔒 Forced backend respect - user choice strictly enforced
- - 🚀 PostgreSQL 30%% faster loading (fast counting + UNLOGGED MVs)
  
  Previous (v2.3.4):
  - 🐛 Fixed GeometryCollection errors & PostgreSQL filtering

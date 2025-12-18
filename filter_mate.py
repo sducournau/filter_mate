@@ -67,7 +67,12 @@ class FilterMate:
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                    config_language = config_data.get('APP', {}).get('DOCKWIDGET', {}).get('LANGUAGE', {}).get('value', 'auto')
+                    # Support both old format (APP.DOCKWIDGET.LANGUAGE) and new format (app.ui.language)
+                    config_language = (
+                        config_data.get('app', {}).get('ui', {}).get('language', {}).get('value') or
+                        config_data.get('APP', {}).get('DOCKWIDGET', {}).get('LANGUAGE', {}).get('value') or
+                        'auto'
+                    )
         except Exception as e:
             logger.warning(f"Could not load language from config: {e}")
         
@@ -75,8 +80,15 @@ class FilterMate:
         if config_language and config_language != 'auto':
             locale = config_language
         else:
+            # Get QGIS locale setting
             locale_setting = QSettings().value('locale/userLocale')
-            locale = locale_setting[0:2] if locale_setting else 'en'
+            if locale_setting:
+                # Handle both 'fr' and 'fr_FR' formats
+                locale = locale_setting.split('_')[0] if '_' in locale_setting else locale_setting[0:2]
+            else:
+                locale = 'en'
+        
+        logger.debug(f"Language detection: config_language={config_language}, locale_setting={QSettings().value('locale/userLocale')}, final locale={locale}")
         
         locale_path = os.path.join(
             self.plugin_dir,
@@ -314,9 +326,12 @@ class FilterMate:
     def _connect_auto_activation_signals(self):
         """Connect signals to handle project changes and reload layers.
         
-        Connects projectRead, newProjectCreated, and layersAdded signals to automatically
+        Connects projectRead, newProjectCreated, cleared, and layersAdded signals to automatically
         activate the plugin when layers are available. The layersAdded signal is now
         connected with proper guards to avoid freeze issues when the plugin is already active.
+        
+        The cleared signal is connected to handle project close/clear events, which ensures
+        proper cleanup of plugin state when user creates a new project or closes current one.
         
         This behavior can be disabled by setting APP.AUTO_ACTIVATE.value to false in the configuration.
         """
@@ -343,6 +358,10 @@ class FilterMate:
             self._project_read_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
             self._new_project_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
             
+            # NEW: Connect to cleared signal for proper cleanup on project close/new
+            # This ensures plugin state is properly reset when project is cleared
+            self._project_cleared_connection = lambda: self._handle_project_cleared()
+            
             # NEW: Connect layersAdded to handle the case where user loads a layer 
             # into an empty project (no projectRead signal in that case)
             # The guard in _auto_activate_for_new_layers ensures this only triggers
@@ -355,9 +374,11 @@ class FilterMate:
             self.iface.newProjectCreated.connect(self._new_project_connection)
             # Auto-activate when layers are added to an empty project
             QgsProject.instance().layersAdded.connect(self._layers_added_connection)
+            # NEW: Handle project cleared/closed
+            QgsProject.instance().cleared.connect(self._project_cleared_connection)
             
             self._auto_activation_signals_connected = True
-            logger.info("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded)")
+            logger.info("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded, cleared)")
 
     def _disconnect_auto_activation_signals(self):
         """Disconnect auto-activation signals if they were connected.
@@ -377,11 +398,87 @@ class FilterMate:
                 if hasattr(self, '_layers_added_connection') and self._layers_added_connection:
                     QgsProject.instance().layersAdded.disconnect(self._layers_added_connection)
                     self._layers_added_connection = None
+                # NEW: Disconnect cleared signal
+                if hasattr(self, '_project_cleared_connection') and self._project_cleared_connection:
+                    try:
+                        QgsProject.instance().cleared.disconnect(self._project_cleared_connection)
+                    except (TypeError, RuntimeError):
+                        pass  # Signal may already be disconnected
+                    self._project_cleared_connection = None
                 
                 self._auto_activation_signals_connected = False
                 logger.info("FilterMate: Auto-activation signals disconnected")
             except Exception as e:
                 logger.warning(f"FilterMate: Error disconnecting auto-activation signals: {e}")
+
+    def _handle_project_cleared(self):
+        """Handle project cleared signal.
+        
+        Called when the current project is cleared (new project created, project closed).
+        This ensures proper cleanup of plugin state to prevent stale references.
+        """
+        logger.info("FilterMate: Project cleared signal received - cleaning up plugin state")
+        
+        if not self.app:
+            return
+        
+        try:
+            # Reset all protection flags
+            if hasattr(self.app, '_set_loading_flag'):
+                self.app._set_loading_flag(False)
+            if hasattr(self.app, '_set_initializing_flag'):
+                self.app._set_initializing_flag(False)
+            
+            # Cancel pending tasks
+            if hasattr(self.app, '_safe_cancel_all_tasks'):
+                self.app._safe_cancel_all_tasks()
+            
+            # Clear the add_layers queue
+            if hasattr(self.app, '_add_layers_queue'):
+                self.app._add_layers_queue.clear()
+                self.app._pending_add_layers_tasks = 0
+            
+            # Clear PROJECT_LAYERS
+            if hasattr(self.app, 'PROJECT_LAYERS'):
+                self.app.PROJECT_LAYERS = {}
+            
+            # Reset dockwidget state
+            if self.app.dockwidget:
+                self.app.dockwidget.current_layer = None
+                self.app.dockwidget.has_loaded_layers = False
+                self.app.dockwidget.PROJECT_LAYERS = {}
+                self.app.dockwidget._plugin_busy = False
+                self.app.dockwidget._updating_layers = False
+                
+                # Clear combobox safely
+                try:
+                    if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
+                        self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                        self.app.dockwidget.comboBox_filtering_current_layer.clear()
+                except Exception as e:
+                    logger.debug(f"Error clearing layer combobox on project cleared: {e}")
+                
+                # Update indicator to show waiting state
+                if hasattr(self.app.dockwidget, 'backend_indicator_label') and self.app.dockwidget.backend_indicator_label:
+                    self.app.dockwidget.backend_indicator_label.setText("...")
+                    self.app.dockwidget.backend_indicator_label.setStyleSheet("""
+                        QLabel#label_backend_indicator {
+                            color: #7f8c8d;
+                            font-size: 9pt;
+                            font-weight: 600;
+                            padding: 3px 10px;
+                            border-radius: 12px;
+                            border: none;
+                            background-color: #ecf0f1;
+                        }
+                    """)
+                
+                # Disable UI while waiting for new layers
+                if hasattr(self.app.dockwidget, 'set_widgets_enabled_state'):
+                    self.app.dockwidget.set_widgets_enabled_state(False)
+                    
+        except Exception as e:
+            logger.warning(f"FilterMate: Error during project cleared cleanup: {e}")
 
     def _auto_activate_for_new_layers(self, layers):
         """Handle layersAdded signal specifically for auto-activation.
@@ -507,11 +604,17 @@ class FilterMate:
         Reinitializes FilterMateApp with new project data without recreating
         the dockwidget. This is called when projectRead signal is emitted
         while the plugin is already active.
+        
+        STABILITY IMPROVEMENT: This method now performs a more thorough cleanup
+        before reinitializing to prevent stale state issues.
         """
         from qgis.core import QgsProject, QgsVectorLayer
+        from qgis.PyQt.QtCore import QTimer
         
         if not self.app:
             return
+        
+        logger.info("FilterMate: _handle_project_change triggered - starting project reinitialization")
         
         # STABILITY FIX: Check and reset stale flags before processing
         if hasattr(self.app, '_check_and_reset_stale_flags'):
@@ -531,15 +634,56 @@ class FilterMate:
         if not project:
             return
         
+        # STABILITY IMPROVEMENT: Force cleanup of old project state BEFORE reinitializing
+        # This prevents stale data from the previous project lingering
+        try:
+            logger.info("FilterMate: Forcing cleanup of previous project state")
+            
+            # 1. Cancel any pending tasks
+            if hasattr(self.app, '_safe_cancel_all_tasks'):
+                self.app._safe_cancel_all_tasks()
+            
+            # 2. Clear the add_layers queue to prevent stale operations
+            if hasattr(self.app, '_add_layers_queue'):
+                self.app._add_layers_queue.clear()
+                self.app._pending_add_layers_tasks = 0
+            
+            # 3. Reset all state flags using the proper methods
+            if hasattr(self.app, '_set_loading_flag'):
+                self.app._set_loading_flag(False)
+            if hasattr(self.app, '_set_initializing_flag'):
+                self.app._set_initializing_flag(False)
+            
+            # 4. Clear PROJECT_LAYERS immediately to prevent stale references
+            if hasattr(self.app, 'PROJECT_LAYERS'):
+                self.app.PROJECT_LAYERS = {}
+            
+            # 5. Clear the combobox to prevent access violations
+            if (self.app.dockwidget and 
+                hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer')):
+                try:
+                    self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    self.app.dockwidget.comboBox_filtering_current_layer.clear()
+                except Exception as e:
+                    logger.debug(f"Error clearing layer combobox: {e}")
+            
+            # 6. Reset dockwidget layer references
+            if self.app.dockwidget:
+                self.app.dockwidget.current_layer = None
+                self.app.dockwidget.has_loaded_layers = False
+                self.app.dockwidget.PROJECT_LAYERS = {}
+                self.app.dockwidget._plugin_busy = False
+                self.app.dockwidget._updating_layers = False
+                
+        except Exception as e:
+            logger.warning(f"FilterMate: Error during pre-change cleanup: {e}")
+        
         # Check if there are vector layers in the new project
         vector_layers = [layer for layer in project.mapLayers().values() 
                         if isinstance(layer, QgsVectorLayer)]
         
         if not vector_layers:
             logger.info("FilterMate: New project has no vector layers")
-            # Clear old data and disable UI
-            if hasattr(self.app, 'PROJECT_LAYERS'):
-                self.app.PROJECT_LAYERS = {}
             # Only access dockwidget if it exists and has widgets_initialized
             if (self.app.dockwidget and 
                 hasattr(self.app.dockwidget, 'widgets_initialized') and 
@@ -549,17 +693,24 @@ class FilterMate:
         
         logger.info(f"FilterMate: Reinitializing for new project with {len(vector_layers)} vector layers")
         
-        # Reinitialize the app for the new project
-        try:
-            # Call the existing project initialization handler
-            self.app._handle_project_initialization('project_read')
-        except Exception as e:
-            logger.error(f"FilterMate: Error during project reinitialization: {e}")
-            # STABILITY FIX: Reset flags on error to prevent deadlock
-            if hasattr(self.app, '_set_loading_flag'):
-                self.app._set_loading_flag(False)
-            if hasattr(self.app, '_set_initializing_flag'):
-                self.app._set_initializing_flag(False)
+        # STABILITY IMPROVEMENT: Use a longer delay for project reinitialization
+        # This gives QGIS time to fully load the project and all layers
+        # especially important for PostgreSQL layers
+        def perform_reinitialization():
+            try:
+                # Call the existing project initialization handler
+                self.app._handle_project_initialization('project_read')
+            except Exception as e:
+                logger.error(f"FilterMate: Error during project reinitialization: {e}")
+                # STABILITY FIX: Reset flags on error to prevent deadlock
+                if hasattr(self.app, '_set_loading_flag'):
+                    self.app._set_loading_flag(False)
+                if hasattr(self.app, '_set_initializing_flag'):
+                    self.app._set_initializing_flag(False)
+        
+        # STABILITY IMPROVEMENT: Increased delay from immediate to 300ms
+        # This ensures all QGIS signals have been processed before we reinitialize
+        QTimer.singleShot(300, perform_reinitialization)
 
 
     def unload(self):

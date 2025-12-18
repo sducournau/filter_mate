@@ -18,18 +18,52 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
 ## Current Status
-- **Version**: 2.3.5 (December 17, 2025)
-- **Status**: Production - Stable with configuration system v2.0, performance optimizations, and comprehensive auditing
+- **Version**: 2.3.7 (December 18, 2025)
+- **Status**: Production - Stable with project change stability enhancements
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Recent Additions**: 
-  - Configuration v2.0 with integrated metadata structure
-  - Forced backend respect - user choice strictly enforced
-  - Auto-detection and reset of obsolete/corrupted configurations
-  - ConfigMetadataHandler for intelligent extraction and tooltips
-  - Complete audit with 47 usage cases documented
-  - PostgreSQL loading optimizations (~30% faster)
+  - Enhanced project change handling with forced cleanup
+  - New `cleared` signal handler for project close/clear events
+  - F5 shortcut to force reload layers when project change fails
+  - Fixed signal timing issue (root cause: layersAdded before projectRead completion)
+  - Updated timing constants for better PostgreSQL stability
 
-## Recent Development (December 17, 2025)
+## Recent Development (December 18, 2025)
+
+### v2.3.7 - Project Change Stability Enhancement (✅ Complete)
+**Date**: December 18, 2025
+
+**Problem Solved:**
+- Plugin required manual reload when switching between projects
+- Dockwidget didn't properly refresh layers after project change
+- **ROOT CAUSE IDENTIFIED**: QGIS emits `layersAdded` signal BEFORE `projectRead` handler completes
+- Old code was waiting for a signal that had already passed
+
+**Solutions Implemented:**
+1. **Rewrote `_handle_project_change()`** - Forces complete cleanup before reinitializing
+2. **Added `cleared` signal handler** - `_handle_project_cleared()` for project close/clear
+3. **Fixed signal timing** - Now manually calls `add_layers` after cleanup
+4. **Added F5 shortcut** - Force reload layers when automatic detection fails
+5. **Updated timing constants** - Better stability with PostgreSQL
+
+**Files Changed:**
+- `filter_mate.py`: `_handle_project_change()`, `_handle_project_cleared()`, signal connections
+- `filter_mate_app.py`: `force_reload_layers()`, `STABILITY_CONSTANTS`, `reload_layers` task
+- `filter_mate_dockwidget.py`: F5 shortcut via `_setup_keyboard_shortcuts()`
+
+---
+
+### v2.3.6 - Project & Layer Loading Stability (✅ Complete)
+**Date**: December 18, 2025
+
+**Features:**
+- Centralized timing constants (`STABILITY_CONSTANTS` dict)
+- Timestamp-tracked flags with automatic stale detection (30s timeout)
+- Layer validation (`_is_layer_valid()` for C++ object checks)
+- Signal debouncing for rapid layer changes
+- Queue management with FIFO trimming
+
+---
 
 ### Configuration System v2.0 (✅ Complete)
 **Date**: December 17, 2025
@@ -286,7 +320,7 @@ pytest --cov=modules --cov-report=html
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.3.5
+- **Current Plugin Version**: 2.3.7
 
 ## Serena Integration
 

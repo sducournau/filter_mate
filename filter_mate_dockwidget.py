@@ -1370,7 +1370,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Make clickable for backend selection
         self.backend_indicator_label.setCursor(Qt.PointingHandCursor)
-        self.backend_indicator_label.setToolTip("Click to change backend")
+        self.backend_indicator_label.setToolTip("Click to change backend\n(When '...' is shown: click to reload layers)")
         self.backend_indicator_label.mousePressEvent = self._on_backend_indicator_clicked
         
         # Initialize backend preference storage
@@ -1387,14 +1387,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Handle click on backend indicator to show backend selection menu.
         Allows user to force a specific backend for the current layer.
+        
+        NEW: If indicator shows "..." (no layers loaded), clicking triggers
+        a force reload of layers instead of showing the backend menu.
         """
         from qgis.PyQt.QtWidgets import QMenu
         from qgis.PyQt.QtGui import QCursor
         from .modules.appUtils import POSTGRESQL_AVAILABLE
         from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
         
+        # NEW: If indicator shows "..." (waiting state), trigger reload instead
+        if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
+            current_text = self.backend_indicator_label.text()
+            if current_text == "..." or current_text == "⟳":
+                logger.info("Backend indicator clicked while in waiting state - triggering reload")
+                self._trigger_reload_layers()
+                return
+        
         current_layer = self.current_layer
         if not current_layer:
+            # No current layer - trigger reload as fallback
+            logger.info("Backend indicator clicked with no current layer - triggering reload")
+            self._trigger_reload_layers()
             return
         
         # Get available backends for this layer
@@ -2699,6 +2713,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # This allows FilterMateApp to safely proceed with layer operations
         logger.debug("Emitting widgetsInitialized signal")
         self.widgetsInitialized.emit()
+        
+        # STABILITY IMPROVEMENT: Add F5 shortcut to force reload layers
+        # This helps users recover when project change doesn't properly reload layers
+        self._setup_keyboard_shortcuts()
         
         # CRITICAL: If layers were updated before widgets_initialized, refresh UI now
         if self._pending_layers_update:
@@ -7203,6 +7221,57 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 refresh()
             except Exception as error:
                 logger.debug(f"FilterMate: Could not refresh dynamic tooltip: {error}")
+
+    def _setup_keyboard_shortcuts(self):
+        """
+        Setup keyboard shortcuts for the dockwidget.
+        
+        F5: Force reload all layers from current project.
+             Useful when project change doesn't properly refresh the layer list.
+        """
+        from qgis.PyQt.QtWidgets import QShortcut
+        from qgis.PyQt.QtGui import QKeySequence
+        
+        # F5 - Force reload layers
+        self._reload_shortcut = QShortcut(QKeySequence("F5"), self)
+        self._reload_shortcut.activated.connect(self._on_reload_layers_shortcut)
+        self._reload_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+        
+        logger.debug("Keyboard shortcuts initialized: F5 = Reload layers")
+    
+    def _on_reload_layers_shortcut(self):
+        """
+        Handle F5 shortcut to reload layers.
+        
+        Emits the launchingTask signal with 'reload_layers' to trigger
+        a complete reload of all layers from the current project.
+        """
+        logger.info("F5 pressed - Force reloading layers")
+        self._trigger_reload_layers()
+    
+    def _trigger_reload_layers(self):
+        """
+        Trigger layer reload from shortcut (F5) or backend indicator click.
+        
+        Shows visual feedback on the indicator and emits the reload signal.
+        """
+        # Visual feedback - show loading state on backend indicator
+        if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
+            self.backend_indicator_label.setText("⟳")
+            self.backend_indicator_label.setStyleSheet("""
+                QLabel#label_backend_indicator {
+                    color: #3498db;
+                    font-size: 9pt;
+                    font-weight: 600;
+                    padding: 3px 10px;
+                    border-radius: 12px;
+                    border: none;
+                    background-color: #e8f4fc;
+                }
+            """)
+        
+        # Emit reload signal
+        self.launchingTask.emit('reload_layers')
 
 
 

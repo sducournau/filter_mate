@@ -7,24 +7,35 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.6 - Project & Layer Loading Stability
+## 🎉 What's New in v2.3.7 - Project Change Stability Enhancement
 
-### Centralized Timing Constants
-- 🛡️ **STABILITY_CONSTANTS Dict** - All timing values centralized in one place
-- ⏱️ **FLAG_TIMEOUT_MS**: 30000 (30-second timeout for stale flags)
-- 📊 **MAX_ADD_LAYERS_QUEUE**: 50 (prevents memory overflow)
+### Enhanced Project Change Handling
+- 🛡️ **Complete Rewrite of `_handle_project_change()`** - Forces cleanup of previous project state
+- 🗑️ **Full State Reset** - Clears `PROJECT_LAYERS`, add_layers queue, and all state flags
+- 🔗 **Dockwidget Sync** - Resets layer references to prevent stale data access
 
-### Timestamp-Tracked Flags
-- ⏱️ **Automatic Stale Detection** - Flags auto-reset after 30 seconds
-- 🔧 **New Methods**: `_set_loading_flag()`, `_set_initializing_flag()`, `_check_and_reset_stale_flags()`
-- 🛡️ **Prevents Stuck State** - Plugin never stays in "loading" indefinitely
+### New `cleared` Signal Handler
+- 📢 **`_handle_project_cleared()` Method** - Proper cleanup on project close/clear
+- 🔌 **Connected to `QgsProject.instance().cleared`** - Handles new project and project close events
+- 🛡️ **State Reset** - Ensures plugin state is properly reset when project changes
 
-### Layer Validation & Signal Debouncing
-- ✅ **C++ Object Validation** - `_is_layer_valid()` checks layer validity
-- 🔄 **Signal Debouncing** - Rapid `layersAdded` signals gracefully handled
-- 📈 **Queue Management** - FIFO trimming when queue exceeds 50 items
+### F5 Shortcut: Force Reload Layers
+- ⌨️ **Press F5** in dockwidget to force complete layer reload
+- 🔄 **Manual Recovery** when automatic project change detection fails
+- 📊 **Status Indicator** shows reload in progress ("⟳")
+
+### Bug Fixes
+- 🐛 **Fixed Project Change Not Reloading Layers** - Root cause identified and fixed
+- 🐛 **Fixed Signal Timing Issue** - QGIS emits `layersAdded` BEFORE `projectRead` handler completes
+- 🔧 **Now manually triggers `add_layers`** after cleanup instead of waiting for missed signal
 
 ## Previous Updates
+
+### v2.3.6 - Project & Layer Loading Stability (December 18, 2025)
+- 🛡️ **Centralized Timing Constants** - `STABILITY_CONSTANTS` dict
+- ⏱️ **Timestamp-Tracked Flags** - Auto-reset after 30 seconds
+- ✅ **Layer Validation** - `_is_layer_valid()` checks C++ object validity
+- 🔄 **Signal Debouncing** - Graceful handling of rapid signals
 
 ### v2.3.5 - Code Quality & Configuration v2.0 (December 17, 2025)
 - 🛠️ **Centralized Feedback System** - Unified message bar notifications (`show_info/warning/error/success`)

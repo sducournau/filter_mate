@@ -75,7 +75,8 @@ MESSAGE_TASKS_CATEGORIES = {
                             'remove_layers':'ManageLayers',
                             'remove_all_layers':'ManageLayers',
                             'new_project':'ManageLayers',
-                            'project_read':'ManageLayers'
+                            'project_read':'ManageLayers',
+                            'reload_layers':'ManageLayers'
                             }
 
 # STABILITY CONSTANTS - Centralized timing configuration
@@ -83,10 +84,13 @@ STABILITY_CONSTANTS = {
     'MAX_ADD_LAYERS_QUEUE': 50,           # Maximum queued add_layers operations
     'FLAG_TIMEOUT_MS': 30000,              # Timeout for flags (30 seconds)
     'LAYER_RETRY_DELAY_MS': 500,           # Delay between layer operation retries
-    'UI_REFRESH_DELAY_MS': 200,            # Delay for UI refresh after operations
-    'PROJECT_LOAD_DELAY_MS': 1500,         # Delay after project load for layer processing
+    'UI_REFRESH_DELAY_MS': 300,            # Delay for UI refresh after operations (increased from 200)
+    'PROJECT_LOAD_DELAY_MS': 2500,         # Delay after project load for layer processing (increased from 1500)
+    'PROJECT_CHANGE_CLEANUP_DELAY_MS': 300, # Delay before cleanup on project change
+    'PROJECT_CHANGE_REINIT_DELAY_MS': 500,  # Delay before reinitializing after project change
     'MAX_RETRIES': 10,                     # Maximum retry count for deferred operations
-    'SIGNAL_DEBOUNCE_MS': 100,             # Debounce delay for rapid signal calls
+    'SIGNAL_DEBOUNCE_MS': 150,             # Debounce delay for rapid signal calls (increased from 100)
+    'POSTGRESQL_EXTRA_DELAY_MS': 1000,     # Extra delay for PostgreSQL layers
 }
 
 class FilterMateApp:
@@ -231,7 +235,8 @@ class FilterMateApp:
                                     'remove_layers':'Removing layers',
                                     'remove_all_layers':'Removing all layers',
                                     'new_project':'New project',
-                                    'project_read':'Existing project loaded'
+                                    'project_read':'Existing project loaded',
+                                    'reload_layers':'Reloading layers'
                                     }
         
         # Initialize filter history manager for undo/redo functionality
@@ -395,6 +400,138 @@ class FilterMateApp:
             self._initializing_project_timestamp = time.time() * 1000
         else:
             self._initializing_project_timestamp = 0
+
+    def force_reload_layers(self):
+        """
+        Force a complete reload of all layers in the current project.
+        
+        This method is useful when the dockwidget gets out of sync with the
+        current project, or when switching projects doesn't properly reload layers.
+        
+        Workflow:
+        1. Cancel all pending tasks
+        2. Reset all state flags
+        3. Clear PROJECT_LAYERS
+        4. Reinitialize the database
+        5. Reload all vector layers from current project
+        
+        Can be called from UI (refresh button) or programmatically.
+        """
+        import time
+        from qgis.PyQt.QtCore import QTimer
+        from qgis.utils import iface
+        
+        logger.info("FilterMate: Force reload layers requested")
+        
+        # 1. Reset all protection flags immediately
+        self._check_and_reset_stale_flags()
+        self._set_loading_flag(False)
+        self._set_initializing_flag(False)
+        
+        # 2. Cancel all pending tasks
+        self._safe_cancel_all_tasks()
+        
+        # 3. Clear the add_layers queue
+        self._add_layers_queue.clear()
+        self._pending_add_layers_tasks = 0
+        
+        # 4. Clear PROJECT_LAYERS
+        self.PROJECT_LAYERS = {}
+        
+        # 5. Reset dockwidget state
+        if self.dockwidget:
+            self.dockwidget.current_layer = None
+            self.dockwidget.has_loaded_layers = False
+            self.dockwidget.PROJECT_LAYERS = {}
+            self.dockwidget._plugin_busy = False
+            self.dockwidget._updating_layers = False
+            
+            # Clear combobox safely
+            try:
+                if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+                    self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
+                    self.dockwidget.comboBox_filtering_current_layer.clear()
+            except Exception as e:
+                logger.debug(f"Error clearing layer combobox during reload: {e}")
+            
+            # Update indicator to show reloading state
+            if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                self.dockwidget.backend_indicator_label.setText("⟳")
+                self.dockwidget.backend_indicator_label.setStyleSheet("""
+                    QLabel#label_backend_indicator {
+                        color: #3498db;
+                        font-size: 9pt;
+                        font-weight: 600;
+                        padding: 3px 10px;
+                        border-radius: 12px;
+                        border: none;
+                        background-color: #e8f4fc;
+                    }
+                """)
+        
+        # 6. Update project reference
+        init_env_vars()
+        global ENV_VARS
+        self.PROJECT = ENV_VARS["PROJECT"]
+        self.MapLayerStore = self.PROJECT.layerStore()
+        
+        # 7. Reinitialize database
+        try:
+            self.init_filterMate_db()
+        except Exception as e:
+            logger.error(f"Error reinitializing database during reload: {e}")
+        
+        # 8. Get all current vector layers and add them
+        current_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
+        
+        if current_layers:
+            logger.info(f"FilterMate: Reloading {len(current_layers)} layers")
+            
+            # Check if any PostgreSQL layers - need longer delay
+            has_postgres = any(
+                layer.providerType() == 'postgres' 
+                for layer in current_layers
+            )
+            delay = STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS']
+            if has_postgres:
+                delay += STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS']
+            
+            # Set loading flag so the UI refresh is triggered after add_layers completes
+            self._set_loading_flag(True)
+            
+            QTimer.singleShot(delay, lambda layers=current_layers: self.manage_task('add_layers', layers))
+            
+            # CRITICAL: Force UI refresh after layers are loaded
+            # Schedule refresh with enough time for add_layers to complete
+            refresh_delay = delay + 2000  # add_layers + 2s safety margin
+            QTimer.singleShot(refresh_delay, self._force_ui_refresh_after_reload)
+            
+            # Show success message
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                f"Rechargement de {len(current_layers)} couche(s) en cours..."
+            )
+        else:
+            logger.info("FilterMate: No layers to reload")
+            iface.messageBar().pushInfo(
+                "FilterMate",
+                "Aucune couche vectorielle à recharger."
+            )
+            
+            # Update indicator to show waiting state
+            if self.dockwidget and hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                self.dockwidget.backend_indicator_label.setText("...")
+                self.dockwidget.backend_indicator_label.setStyleSheet("""
+                    QLabel#label_backend_indicator {
+                        color: #7f8c8d;
+                        font-size: 9pt;
+                        font-weight: 600;
+                        padding: 3px 10px;
+                        border-radius: 12px;
+                        border: none;
+                        background-color: #ecf0f1;
+                    }
+                """)
 
     def _is_layer_valid(self, layer) -> bool:
         """
@@ -848,17 +985,31 @@ class FilterMateApp:
             
             self.init_filterMate_db()
             
-            # CRITICAL FIX: Don't manually call add_layers here - the layersAdded signal
-            # is already emitted by QGIS when the project loads, and _on_layers_added
-            # will handle it automatically. Calling add_layers manually would cause
-            # duplicate task execution, leading to race conditions and performance issues.
-            # Simply log that we're waiting for the signal to process the layers.
+            # CRITICAL FIX v2.3.7: When switching projects, the layersAdded signal has ALREADY
+            # been emitted by QGIS BEFORE we reach this point (it's emitted with projectRead).
+            # Since we just reconnected signals, we missed it. We MUST manually trigger add_layers.
+            # 
+            # Previous comment was WRONG: "waiting for layersAdded signal" - the signal already passed!
             if len(init_layers) > 0:
-                logger.info(f"FilterMate: {len(init_layers)} layers detected in {task_name} - waiting for layersAdded signal to process them")
+                logger.info(f"FilterMate: {len(init_layers)} layers detected in {task_name} - manually triggering add_layers (signal already passed)")
+                
+                # CRITICAL: Manually call add_layers since we missed the signal
+                # Use a short delay to allow flag resets to complete
+                def trigger_add_layers():
+                    # Reset flags before calling add_layers to prevent blocking
+                    self._set_initializing_flag(False)
+                    self._set_loading_flag(False)
+                    
+                    # Now trigger the add_layers task
+                    logger.info(f"FilterMate: Triggering add_layers for {len(init_layers)} layers")
+                    self.manage_task('add_layers', init_layers)
+                
+                # Use delay to ensure QGIS is stable
+                QTimer.singleShot(STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS'], trigger_add_layers)
                 
                 # CRITICAL: Force UI refresh after layers are loaded
                 # This ensures all widgets and signals are properly updated
-                # Use longer delay (2000ms) and verify PROJECT_LAYERS is populated
+                # Use longer delay (3000ms) and verify PROJECT_LAYERS is populated
                 def refresh_after_load():
                     if not self.dockwidget or not self.dockwidget.widgets_initialized:
                         return
@@ -873,8 +1024,8 @@ class FilterMateApp:
                     logger.info(f"Forcing UI refresh after {task_name} layer load with {len(self.PROJECT_LAYERS)} layers")
                     self._refresh_ui_after_project_load()
                 
-                # Start with 2000ms delay to give layer tasks time to complete
-                QTimer.singleShot(2000, refresh_after_load)
+                # Start with 3000ms delay to give layer tasks time to complete
+                QTimer.singleShot(3000, refresh_after_load)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -1024,6 +1175,11 @@ class FilterMateApp:
         
         if task_name == 'redo':
             self.handle_redo()
+            return
+        
+        # Handle reload_layers - force complete reload of all layers
+        if task_name == 'reload_layers':
+            self.force_reload_layers()
             return
 
         task_parameters = self.get_task_parameters(task_name, data)
@@ -3027,6 +3183,89 @@ class FilterMateApp:
             if absolute_path in self.project_datasources[layer_source_type].keys():
                 if uri in self.project_datasources[layer_source_type][absolute_path]:
                     self.project_datasources[layer_source_type][absolute_path].remove(uri)
+    
+    def _force_ui_refresh_after_reload(self):
+        """
+        Force complete UI refresh after force_reload_layers.
+        
+        This method ensures the UI is updated even if PROJECT_LAYERS was empty initially.
+        It retries a few times with increasing delays if layers aren't ready yet.
+        """
+        from qgis.PyQt.QtCore import QTimer
+        
+        logger.info(f"Force UI refresh after reload - PROJECT_LAYERS count: {len(self.PROJECT_LAYERS)}")
+        
+        # Reset loading flag
+        self._set_loading_flag(False)
+        
+        if self.dockwidget is None or not self.dockwidget.widgets_initialized:
+            logger.debug("Cannot refresh UI: dockwidget not initialized")
+            return
+        
+        # If PROJECT_LAYERS is still empty, retry after a delay (max 3 retries)
+        if not hasattr(self, '_reload_retry_count'):
+            self._reload_retry_count = 0
+        
+        if len(self.PROJECT_LAYERS) == 0:
+            self._reload_retry_count += 1
+            if self._reload_retry_count < 3:
+                logger.warning(f"PROJECT_LAYERS still empty, retry {self._reload_retry_count}/3")
+                QTimer.singleShot(1000, self._force_ui_refresh_after_reload)
+                return
+            else:
+                logger.error("PROJECT_LAYERS still empty after 3 retries - layer loading may have failed")
+                self._reload_retry_count = 0
+                # Update indicator to show error state
+                if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
+                    self.dockwidget.backend_indicator_label.setText("!")
+                    self.dockwidget.backend_indicator_label.setStyleSheet("""
+                        QLabel#label_backend_indicator {
+                            color: #e74c3c;
+                            font-size: 9pt;
+                            font-weight: 600;
+                            padding: 3px 10px;
+                            border-radius: 12px;
+                            border: none;
+                            background-color: #fadbd8;
+                        }
+                    """)
+                    self.dockwidget.backend_indicator_label.setToolTip("Layer loading failed - click to retry")
+                return
+        
+        # Reset retry counter on success
+        self._reload_retry_count = 0
+        
+        # CRITICAL: Sync PROJECT_LAYERS to dockwidget
+        self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
+        self.dockwidget.has_loaded_layers = True
+        
+        # Enable UI widgets
+        if hasattr(self.dockwidget, 'set_widgets_enabled_state'):
+            self.dockwidget.set_widgets_enabled_state(True)
+        
+        # If there's an active layer, trigger current_layer_changed
+        if self.iface.activeLayer() is not None:
+            active_layer = self.iface.activeLayer()
+            if isinstance(active_layer, QgsVectorLayer) and active_layer.id() in self.PROJECT_LAYERS:
+                self.dockwidget.current_layer_changed(active_layer)
+                logger.info(f"UI refreshed with active layer: {active_layer.name()}")
+        else:
+            # Select first layer if no active layer
+            if self.PROJECT_LAYERS:
+                first_layer_id = list(self.PROJECT_LAYERS.keys())[0]
+                first_layer = self.PROJECT.mapLayer(first_layer_id)
+                if first_layer:
+                    self.dockwidget.current_layer_changed(first_layer)
+                    logger.info(f"UI refreshed with first layer: {first_layer.name()}")
+        
+        logger.info(f"UI refresh completed with {len(self.PROJECT_LAYERS)} layers")
+        
+        # Show success notification
+        from qgis.utils import iface
+        iface.messageBar().pushSuccess(
+            "FilterMate",
+            f"{len(self.PROJECT_LAYERS)} couche(s) chargée(s) avec succès"
+        )
     
     def _refresh_ui_after_project_load(self):
         """

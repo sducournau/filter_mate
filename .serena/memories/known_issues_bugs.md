@@ -12,6 +12,68 @@
 
 ---
 
+## Recently Fixed (v2.3.7 - December 18, 2025)
+
+### Project Change Stability Enhancement
+**Status:** ✅ FIXED (Updated December 18, 2025)
+
+**Issue:**
+- Plugin required manual reload when switching between projects
+- Dockwidget didn't properly refresh layers after project change
+- Stale PROJECT_LAYERS data caused UI inconsistencies
+- **ROOT CAUSE IDENTIFIED**: The `layersAdded` signal is emitted by QGIS simultaneously with `projectRead`, 
+  but our handler was waiting for a signal that had already passed after reconnecting
+
+**Impact:**
+- HIGH: Users had to reload plugin frequently when changing projects
+- MEDIUM: Layer list could show layers from previous project
+
+**Solution:**
+1. **Rewrote `_handle_project_change()`** - Forces complete cleanup before reinitializing:
+   - Cancels all pending tasks
+   - Clears add_layers queue and pending task counter
+   - Resets all state flags using timestamp-tracked methods
+   - Clears PROJECT_LAYERS immediately
+   - Resets dockwidget layer references
+   - Added 300ms delay before reinitialization
+
+2. **Fixed signal timing issue in `_handle_project_initialization()`**:
+   - **ROOT CAUSE**: QGIS emits `layersAdded` BEFORE our handler reconnects signals
+   - Old code was "waiting for layersAdded signal" that had already passed
+   - **FIX**: Now manually calls `manage_task('add_layers', init_layers)` after cleanup
+   - Reset flags before calling add_layers to prevent blocking
+
+2. **Added `cleared` signal handler** - `_handle_project_cleared()`:
+   - Properly handles project close/clear events
+   - Resets all plugin state
+   - Disables UI widgets while waiting for new layers
+
+3. **Added F5 shortcut** - Force reload layers:
+   - Manual recovery option when automatic detection fails
+   - Triggers `force_reload_layers()` method
+   - Shows reload indicator during operation
+
+4. **Updated timing constants**:
+   - Increased delays for better stability with slow PostgreSQL connections
+   - Added PostgreSQL-specific extra delay (1000ms)
+
+**Files Changed:**
+- `filter_mate.py`: `_handle_project_change()`, `_handle_project_cleared()`, `_connect_auto_activation_signals()`
+- `filter_mate_app.py`: `force_reload_layers()`, `STABILITY_CONSTANTS`, `manage_task()`
+- `filter_mate_dockwidget.py`: `_setup_keyboard_shortcuts()`, `_on_reload_layers_shortcut()`
+
+**Benefits:**
+- ✅ No more plugin reload required when switching projects
+- ✅ F5 shortcut for manual recovery if needed
+- ✅ Better handling of PostgreSQL layer delays
+- ✅ Proper cleanup prevents stale state issues
+
+**References:**
+- Fix date: December 18, 2025
+- Related: Project change handling, layer management stability
+
+---
+
 ## Recently Fixed (v2.3.6 - December 17, 2025)
 
 ### Stability Improvements - Project and Layer Loading

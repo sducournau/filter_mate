@@ -1,27 +1,27 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-**Version 2.3.6** | December 18, 2025
+**Version 2.3.7** | December 18, 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.3.6 - Project & Layer Loading Stability
+### 🎉 What's New in v2.3.7 - Project Change Stability Enhancement
 
-- 🛡️ **Centralized Timing Constants** - All timing values in `STABILITY_CONSTANTS` dict
-  - `MAX_ADD_LAYERS_QUEUE`: 50 (prevents memory overflow)
-  - `FLAG_TIMEOUT_MS`: 30000 (30-second timeout for stale flags)
-  - `LAYER_RETRY_DELAY_MS`: 500 / `UI_REFRESH_DELAY_MS`: 200
+- 🛡️ **Enhanced Project Change Handling** - Complete rewrite of `_handle_project_change()`
+  - Forces cleanup of previous project state before reinitializing
+  - Clears `PROJECT_LAYERS`, add_layers queue, and all state flags
+  - Resets dockwidget layer references to prevent stale data
   
-- ⏱️ **Timestamp-Tracked Flags** - Automatic stale flag detection and reset
-  - `_set_loading_flag()` / `_set_initializing_flag()` with timestamps
-  - `_check_and_reset_stale_flags()` auto-resets after 30 seconds
-  - Prevents plugin from getting stuck in "loading" state
+- 🔄 **New `cleared` Signal Handler** - Proper cleanup on project close/clear
+  - Added `_handle_project_cleared()` connected to `QgsProject.instance().cleared`
+  - Ensures plugin state is reset when project is closed or new project created
   
-- ✅ **Layer Validation** - Better C++ object validation
-  - `_is_layer_valid()` checks if layer object is still valid
-  - Prevents crashes from accessing deleted layer objects
+- ⌨️ **F5 Shortcut: Force Reload Layers** - Manual recovery when project change fails
+  - Press F5 in dockwidget to force complete layer reload
+  - Also available via `launchingTask.emit('reload_layers')`
   
-- 🔄 **Signal Debouncing** - Graceful handling of rapid signals
-  - `layersAdded` signal debounced to prevent flood
-  - Queue size limit (50) with automatic FIFO trimming
+- 🐛 **Bug Fixes** - Root cause identified and fixed
+  - Fixed project change not reloading layers
+  - Fixed signal timing issue (QGIS emits `layersAdded` BEFORE `projectRead` handler completes)
+  - Now manually triggers `add_layers` after cleanup instead of waiting for missed signal
 
 ### Previous Updates (v2.3.5) - Code Quality & Configuration v2.0
 
