@@ -74,7 +74,7 @@ modules/backends/
 - `use_qgis_processing()`: Processing algorithm calls
 - `memory_layer_filtering()`: In-memory operations
 
-## Forced Backend System (v2.4+)
+## Forced Backend System (v2.3.5+)
 
 ### User-Controlled Backend Selection
 
