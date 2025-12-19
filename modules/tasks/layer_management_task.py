@@ -1340,7 +1340,8 @@ class LayersManagementEngineTask(QgsTask):
                        WHERE fk_project = ? and layer_id = ?""",
                     (str(self.project_uuid), layer_id)
                 )
-                results = cur.fetchall()   
+                results = cur.fetchall()
+                logger.debug(f"📖 Loaded {len(results)} properties from DB for layer {layer_id}")
                 cur.close()
                 return results
             finally:

@@ -7361,6 +7361,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setEnabled(True)
                 else:
                     self.widgets[property_path[0].upper()][property_path[1].upper()]["WIDGET"].setEnabled(state)
+            
+            # CRITICAL FIX: Persist reset properties to database
+            # When resetting properties, we update PROJECT_LAYERS in memory but must also save to DB
+            # Otherwise, on project reload, old values come back from database
+            if state is False and self.current_layer is not None:
+                if group_name in self.layer_properties_tuples_dict:
+                    # Collect properties that were reset for layer properties
+                    properties_to_save = []
+                    for property_path in tuple_group:
+                        # Only save layer properties (not project properties)
+                        if property_path[0] in ("infos", "exploring", "filtering"):
+                            if property_path[0] in self.PROJECT_LAYERS[self.current_layer.id()]:
+                                if property_path[1] in self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]]:
+                                    value = self.PROJECT_LAYERS[self.current_layer.id()][property_path[0]][property_path[1]]
+                                    properties_to_save.append((
+                                        property_path[0],  # key_group: 'infos', 'exploring', or 'filtering'
+                                        property_path[1],  # key: property name
+                                        value,             # value: reset value
+                                        type(value)        # type: for proper serialization
+                                    ))
+                    
+                    # Save reset properties to database via FilterMateApp
+                    if properties_to_save and hasattr(self, 'app') and self.app is not None:
+                        try:
+                            logger.debug(f"💾 Persisting {len(properties_to_save)} reset properties for layer {self.current_layer.name()}")
+                            self.app.save_variables_from_layer(self.current_layer, properties_to_save)
+                        except Exception as e:
+                            logger.warning(f"Failed to persist reset properties to DB: {e}")
 
     def filtering_init_buffer_property(self):
 

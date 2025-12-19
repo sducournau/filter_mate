@@ -170,6 +170,9 @@ class FavoritesManager:
     
     CREATE_INDEX_SQL = """
     CREATE INDEX IF NOT EXISTS idx_fm_favorites_project ON fm_favorites(project_uuid);
+    CREATE INDEX IF NOT EXISTS idx_fm_favorites_last_used ON fm_favorites(project_uuid, last_used DESC);
+    CREATE INDEX IF NOT EXISTS idx_fm_favorites_use_count ON fm_favorites(project_uuid, use_count DESC);
+    CREATE INDEX IF NOT EXISTS idx_fm_favorites_name ON fm_favorites(project_uuid, name);
     """
     
     def __init__(self, db_path: Optional[str] = None, project_uuid: Optional[str] = None, max_favorites: int = 50):
@@ -766,6 +769,84 @@ class FavoritesManager:
             'least_used': least_used.name,
             'never_used': never_used
         }
+    
+    def validate_favorite(self, favorite_id: str) -> tuple[bool, Optional[str]]:
+        """
+        Validate that a favorite can be applied (layer exists, expression valid).
+        
+        Args:
+            favorite_id: ID of the favorite to validate
+            
+        Returns:
+            tuple: (is_valid: bool, error_message: Optional[str])
+        """
+        from qgis.core import QgsProject, QgsExpression
+        
+        favorite = self.get_favorite(favorite_id)
+        if not favorite:
+            return False, f"Favorite {favorite_id} not found"
+        
+        # Check if layer exists in current project
+        project = QgsProject.instance()
+        matching_layers = project.mapLayersByName(favorite.layer_name)
+        
+        if not matching_layers:
+            return False, f"Layer '{favorite.layer_name}' not found in current project"
+        
+        # If expression exists, validate it
+        if favorite.expression:
+            expr = QgsExpression(favorite.expression)
+            if expr.hasParserError():
+                return False, f"Invalid expression: {expr.parserErrorString()}"
+        
+        return True, None
+    
+    def cleanup_orphaned_favorites(self) -> tuple[int, list[str]]:
+        """
+        Remove favorites whose layers no longer exist in the current project.
+        
+        Returns:
+            tuple: (removed_count: int, removed_names: list[str])
+        """
+        from qgis.core import QgsProject
+        
+        project = QgsProject.instance()
+        project_layer_names = {layer.name() for layer in project.mapLayers().values()}
+        
+        removed_count = 0
+        removed_names = []
+        
+        # Collect favorites to remove (avoid modifying dict during iteration)
+        favorites_to_remove = []
+        for fav in list(self._favorites.values()):
+            if fav.layer_name and fav.layer_name not in project_layer_names:
+                favorites_to_remove.append(fav)
+        
+        # Remove orphaned favorites
+        for fav in favorites_to_remove:
+            self.remove_favorite(fav.id)
+            removed_count += 1
+            removed_names.append(fav.name)
+            logger.info(f"Removed orphaned favorite '{fav.name}' (layer '{fav.layer_name}' not found)")
+        
+        # Save changes if any were made
+        if removed_count > 0:
+            self.save_to_project()
+            logger.info(f"🧹 Cleaned up {removed_count} orphaned favorite(s)")
+        
+        return removed_count, removed_names
+    
+    def validate_all_favorites(self) -> dict[str, tuple[bool, Optional[str]]]:
+        """
+        Validate all favorites in the manager.
+        
+        Returns:
+            dict: {favorite_id: (is_valid, error_message)}
+        """
+        results = {}
+        for fav_id in self._favorites.keys():
+            results[fav_id] = self.validate_favorite(fav_id)
+        return results
     
     def __repr__(self):
         return f"FavoritesManager({len(self._favorites)} favorites)"

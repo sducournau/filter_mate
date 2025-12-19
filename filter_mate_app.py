@@ -2530,8 +2530,17 @@ class FilterMateApp:
 
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
+        
+        # Debug logging for persistence tracking
+        if layer_all_properties_flag:
+            logger.debug(f"💾 Saving ALL properties for layer '{layer.name()}' ({layer.id()})")
+        else:
+            logger.debug(f"💾 Saving {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
+            for prop in layer_properties[:3]:  # Log first 3 properties
+                logger.debug(f"  - {prop[0]}.{prop[1]} = {str(prop[2])[:50]}..." if len(str(prop[2])) > 50 else f"  - {prop[0]}.{prop[1]} = {prop[2]}")
 
         if layer.id() not in self.PROJECT_LAYERS.keys():
+            logger.warning(f"Layer {layer.name()} not in PROJECT_LAYERS, cannot save properties")
             return
         
         conn = self.get_spatialite_connection()
@@ -2587,11 +2596,16 @@ class FilterMateApp:
         if not isinstance(layer, QgsVectorLayer):
             logger.error(f"remove_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
             return
-
+        
+        # Debug logging for deletion tracking
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
+            logger.debug(f"🗑️ Removing ALL properties for layer '{layer.name()}' ({layer.id()})")
+        else:
+            logger.debug(f"🗑️ Removing {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
         
         if layer.id() not in self.PROJECT_LAYERS.keys():
+            logger.warning(f"Layer {layer.name()} not in PROJECT_LAYERS, cannot remove properties")
             return
         
         conn = self.get_spatialite_connection()
@@ -2756,6 +2770,18 @@ class FilterMateApp:
                         CONSTRAINT property_unicity
                         UNIQUE(fk_project, layer_id, meta_type, meta_key) ON CONFLICT REPLACE);
                         """)
+        
+        # Create indexes for better query performance
+        cursor.execute("""CREATE INDEX IF NOT EXISTS idx_layer_properties_lookup 
+                        ON fm_project_layers_properties(fk_project, layer_id, meta_type);""")
+        
+        cursor.execute("""CREATE INDEX IF NOT EXISTS idx_layer_properties_by_project 
+                        ON fm_project_layers_properties(fk_project);""")
+        
+        cursor.execute("""CREATE INDEX IF NOT EXISTS idx_subset_history_by_project 
+                        ON fm_subset_history(fk_project, layer_id);""")
+        
+        logger.info("✓ Created database indexes for optimized queries")
         
         self.project_uuid = uuid.uuid4()
     
