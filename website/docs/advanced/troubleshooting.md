@@ -517,6 +517,6 @@ Include:
 
 ## Further Reading
 
-- [Installation Guide](../installation.md)
-- [Configuration Guide](./configuration.md)
-- [Performance Tuning](./performance-tuning.md)
+- [Installation Guide](../installation)
+- [Configuration Guide](./configuration)
+- [Performance Tuning](./performance-tuning)

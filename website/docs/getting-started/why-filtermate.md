@@ -301,7 +301,7 @@ import TabItem from '@theme/TabItem';
 - No workflow changes needed
 - Transparent optimization
 
-**See**: [Backend Comparison](../backends/choosing-backend.md)
+**See**: [Backend Comparison](../backends/choosing-backend)
 
 ---
 
@@ -548,7 +548,7 @@ Use **FilterMate for 80% of filtering tasks**, QGIS native for specialized 20%.
 
 ✅ **Convenience matters**
 - Need undo/redo capability
-- Want to save filter favorites
+- Filter history with session tracking
 - Prefer integrated interface
 
 ---
@@ -596,10 +596,10 @@ Install FilterMate. Use it for daily filtering. Fall back to QGIS native for spe
 
 ## Next Steps
 
-1. **Install FilterMate**: [Installation Guide](../installation.md)
-2. **Quick Start**: [5-minute tutorial](../getting-started/quick-start.md)
-3. **Learn Workflows**: [Real-world examples](../workflows/index.md)
-4. **Optimize Performance**: [Backend setup](../backends/choosing-backend.md)
+1. **Install FilterMate**: [Installation Guide](../installation)
+2. **Quick Start**: [5-minute tutorial](../getting-started/quick-start)
+3. **Learn Workflows**: [Real-world examples](../workflows/)
+4. **Optimize Performance**: [Backend setup](../backends/choosing-backend)
 
 ---
 

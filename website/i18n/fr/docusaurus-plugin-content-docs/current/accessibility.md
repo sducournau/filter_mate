@@ -1,207 +1,207 @@
 ---
 sidebar_position: 100
-title: Accessibility Statement
-description: FilterMate documentation accessibility commitment and compliance information
-keywords: [accessibility, WCAG, screen reader, keyboard navigation, a11y]
+title: Déclaration d'Accessibilité
+description: Engagement et informations de conformité en matière d'accessibilité de la documentation FilterMate
+keywords: [accessibilité, WCAG, lecteur d'écran, navigation clavier, a11y]
 ---
 
-# Accessibility Statement
+# Déclaration d'Accessibilité
 
-**Last Updated**: December 9, 2025
+**Dernière mise à jour** : 9 décembre 2025
 
-FilterMate documentation is committed to ensuring digital accessibility for all users, including those using assistive technologies. We strive to meet or exceed the Web Content Accessibility Guidelines (WCAG) 2.1 Level AA standards.
+La documentation FilterMate s'engage à garantir l'accessibilité numérique pour tous les utilisateurs, y compris ceux utilisant des technologies d'assistance. Nous nous efforçons de respecter ou de dépasser les normes Web Content Accessibility Guidelines (WCAG) 2.1 niveau AA.
 
-## Our Commitment
+## Notre Engagement
 
-We believe that everyone should have equal access to information about FilterMate, regardless of ability or the technology they use. Accessibility is an ongoing effort, and we continuously work to improve the user experience for all visitors.
+Nous croyons que chacun devrait avoir un accès égal aux informations sur FilterMate, quelle que soit sa capacité ou la technologie qu'il utilise. L'accessibilité est un effort continu, et nous travaillons continuellement pour améliorer l'expérience utilisateur de tous les visiteurs.
 
-## Conformance Status
+## Statut de Conformité
 
-**WCAG 2.1 Level AA**: Partially Conformant
+**WCAG 2.1 Niveau AA** : Partiellement Conforme
 
-This means that some parts of the content do not fully conform to the WCAG 2.1 Level AA standard, but we are actively working to achieve full conformance.
+Cela signifie que certaines parties du contenu ne sont pas entièrement conformes à la norme WCAG 2.1 niveau AA, mais nous travaillons activement pour atteindre une conformité complète.
 
-## Accessibility Features
+## Fonctionnalités d'Accessibilité
 
-### ✅ Keyboard Navigation
-- All interactive elements are accessible via keyboard
-- Tab order follows a logical sequence
-- Focus indicators are clearly visible
-- Skip navigation link provided for quick access to main content
+### ✅ Navigation au Clavier
+- Tous les éléments interactifs sont accessibles via le clavier
+- L'ordre de tabulation suit une séquence logique
+- Les indicateurs de focus sont clairement visibles
+- Lien de saut de navigation fourni pour un accès rapide au contenu principal
 
-### ✅ Screen Reader Compatibility
-- Semantic HTML5 structure with proper landmarks
-- ARIA labels where appropriate
-- Descriptive alt text for all informational images
-- Heading hierarchy follows logical structure (h1 → h2 → h3)
+### ✅ Compatibilité avec les Lecteurs d'Écran
+- Structure HTML5 sémantique avec des repères appropriés
+- Labels ARIA lorsque approprié
+- Texte alternatif descriptif pour toutes les images informatives
+- La hiérarchie des titres suit une structure logique (h1 → h2 → h3)
 
-### ✅ Visual Accessibility
-- **Color Contrast**: Minimum 4.5:1 ratio for normal text (WCAG AA)
-- **Text Resize**: Content readable at 200% zoom without loss of functionality
-- **Focus Indicators**: 3px outline with 2px offset on all interactive elements
-- **Font Size**: Base font size of 16px for improved readability
-- **Line Height**: 1.65 line-height for comfortable reading
+### ✅ Accessibilité Visuelle
+- **Contraste des Couleurs** : Ratio minimum de 4,5:1 pour le texte normal (WCAG AA)
+- **Redimensionnement du Texte** : Contenu lisible à 200% de zoom sans perte de fonctionnalité
+- **Indicateurs de Focus** : Contour de 3px avec décalage de 2px sur tous les éléments interactifs
+- **Taille de Police** : Taille de police de base de 16px pour une meilleure lisibilité
+- **Hauteur de Ligne** : Interligne de 1,65 pour une lecture confortable
 
-### ✅ Responsive Design
-- Mobile-friendly layouts
-- Touch targets minimum 44x44 pixels
-- Adapts to different screen sizes and orientations
+### ✅ Design Responsive
+- Mises en page adaptées aux mobiles
+- Cibles tactiles de minimum 44x44 pixels
+- S'adapte aux différentes tailles et orientations d'écran
 
-### ✅ Content Structure
-- Clear headings and landmarks
-- Table of contents for long pages
-- Breadcrumb navigation
-- Consistent navigation patterns
+### ✅ Structure du Contenu
+- Titres et repères clairs
+- Table des matières pour les pages longues
+- Navigation par fil d'Ariane
+- Modèles de navigation cohérents
 
-### ✅ Media
-- Code blocks with syntax highlighting
-- Diagrams include text alternatives
-- Videos include captions (when available)
+### ✅ Médias
+- Blocs de code avec coloration syntaxique
+- Les diagrammes incluent des alternatives textuelles
+- Les vidéos incluent des sous-titres (lorsque disponible)
 
-### ✅ Motion & Animation
-- Respects `prefers-reduced-motion` setting
-- No flashing content above 3Hz
-- Animations can be disabled via browser settings
+### ✅ Mouvement et Animation
+- Respecte le paramètre `prefers-reduced-motion`
+- Aucun contenu clignotant au-dessus de 3Hz
+- Les animations peuvent être désactivées via les paramètres du navigateur
 
-## Known Limitations
+## Limitations Connues
 
-We are aware of the following accessibility limitations and are working to address them:
+Nous sommes conscients des limitations d'accessibilité suivantes et travaillons à les résoudre :
 
-### 🔨 In Progress
-- **Video Captions**: Some embedded videos may lack captions
-- **PDF Accessibility**: Exported PDFs need accessibility tagging
-- **Code Example Alternatives**: Text descriptions for complex code samples
+### 🔨 En Cours
+- **Sous-titres Vidéo** : Certaines vidéos intégrées peuvent manquer de sous-titres
+- **Accessibilité des PDF** : Les PDF exportés nécessitent un balisage d'accessibilité
+- **Alternatives aux Exemples de Code** : Descriptions textuelles pour les exemples de code complexes
 
-### 📋 Planned Improvements
-- Enhanced screen reader announcements for dynamic content
-- Additional keyboard shortcuts documentation
-- Improved color palette for colorblind users
-- Live region announcements for AJAX updates
+### 📋 Améliorations Prévues
+- Annonces améliorées par lecteur d'écran pour le contenu dynamique
+- Documentation supplémentaire des raccourcis clavier
+- Palette de couleurs améliorée pour les utilisateurs daltoniens
+- Annonces en région live pour les mises à jour AJAX
 
-## Testing Methodology
+## Méthodologie de Test
 
-Our accessibility testing includes:
+Nos tests d'accessibilité incluent :
 
-- **Automated Testing**: 
+- **Tests Automatisés** :
   - axe-core DevTools
   - pa11y-ci
-  - Lighthouse Accessibility Audit
-  
-- **Manual Testing**:
-  - Keyboard-only navigation
-  - Screen reader testing (NVDA, JAWS, VoiceOver)
-  - Color contrast analysis
-  - Browser zoom testing (up to 200%)
-  
-- **Real User Testing**:
-  - Feedback from users with disabilities
-  - Assistive technology user groups
+  - Audit d'Accessibilité Lighthouse
 
-## Browser & Assistive Technology Support
+- **Tests Manuels** :
+  - Navigation au clavier uniquement
+  - Tests avec lecteurs d'écran (NVDA, JAWS, VoiceOver)
+  - Analyse du contraste des couleurs
+  - Tests de zoom du navigateur (jusqu'à 200%)
 
-This documentation has been tested with:
+- **Tests avec de Vrais Utilisateurs** :
+  - Retours d'utilisateurs handicapés
+  - Groupes d'utilisateurs de technologies d'assistance
 
-### Browsers
-- Chrome (latest)
-- Firefox (latest)
-- Safari (latest)
-- Edge (latest)
+## Support des Navigateurs et Technologies d'Assistance
 
-### Screen Readers
+Cette documentation a été testée avec :
+
+### Navigateurs
+- Chrome (dernière version)
+- Firefox (dernière version)
+- Safari (dernière version)
+- Edge (dernière version)
+
+### Lecteurs d'Écran
 - NVDA (Windows)
 - JAWS (Windows)
 - VoiceOver (macOS/iOS)
 - TalkBack (Android)
 
-### Keyboard Navigation
-All features accessible via keyboard in supported browsers
+### Navigation au Clavier
+Toutes les fonctionnalités accessibles via le clavier dans les navigateurs supportés
 
-## Feedback & Complaints
+## Retours et Réclamations
 
-We welcome feedback on the accessibility of FilterMate documentation. If you encounter accessibility barriers, please let us know:
+Nous accueillons les retours sur l'accessibilité de la documentation FilterMate. Si vous rencontrez des obstacles d'accessibilité, veuillez nous en informer :
 
-### Report an Issue
-- **GitHub Issues**: [github.com/sducournau/filter_mate/issues](https://github.com/sducournau/filter_mate/issues)
-- **Label**: Use the `accessibility` label
-- **Information to Include**:
-  - URL of the page
-  - Description of the problem
-  - Browser and assistive technology used
-  - Steps to reproduce
+### Signaler un Problème
+- **Issues GitHub** : [github.com/sducournau/filter_mate/issues](https://github.com/sducournau/filter_mate/issues)
+- **Label** : Utilisez le label `accessibility`
+- **Informations à Inclure** :
+  - URL de la page
+  - Description du problème
+  - Navigateur et technologie d'assistance utilisés
+  - Étapes pour reproduire
 
-### Response Timeline
-We aim to respond to accessibility feedback within:
-- Critical issues: 2 business days
-- Important issues: 1 week
-- Minor issues: 2 weeks
+### Délai de Réponse
+Nous visons à répondre aux retours d'accessibilité dans les délais suivants :
+- Problèmes critiques : 2 jours ouvrables
+- Problèmes importants : 1 semaine
+- Problèmes mineurs : 2 semaines
 
-## Technical Specifications
+## Spécifications Techniques
 
-FilterMate documentation accessibility relies on the following technologies:
+L'accessibilité de la documentation FilterMate repose sur les technologies suivantes :
 
-- **HTML5**: Semantic markup
-- **CSS3**: Responsive and accessible styling
-- **JavaScript**: Progressive enhancement (site works without JS)
-- **React**: Component-based architecture
-- **Docusaurus**: Documentation framework
+- **HTML5** : Balisage sémantique
+- **CSS3** : Styles responsive et accessibles
+- **JavaScript** : Amélioration progressive (le site fonctionne sans JS)
+- **React** : Architecture basée sur les composants
+- **Docusaurus** : Framework de documentation
 
-## Accessibility Standards
+## Normes d'Accessibilité
 
-We reference the following standards and guidelines:
+Nous nous référons aux normes et directives suivantes :
 
 - [WCAG 2.1](https://www.w3.org/WAI/WCAG21/quickref/) (Web Content Accessibility Guidelines)
 - [Section 508](https://www.section508.gov/) (U.S. Rehabilitation Act)
 - [ARIA 1.2](https://www.w3.org/TR/wai-aria-1.2/) (Accessible Rich Internet Applications)
 - [ATAG 2.0](https://www.w3.org/WAI/standards-guidelines/atag/) (Authoring Tool Accessibility Guidelines)
 
-## Third-Party Content
+## Contenu Tiers
 
-Some content on this site may come from third-party sources (e.g., embedded videos, external links). We strive to ensure third-party content is accessible but cannot guarantee full control over external resources.
+Certains contenus sur ce site peuvent provenir de sources tierces (par exemple, vidéos intégrées, liens externes). Nous nous efforçons de garantir que le contenu tiers est accessible mais ne pouvons garantir un contrôle total sur les ressources externes.
 
-## Continuous Improvement
+## Amélioration Continue
 
-Accessibility is an ongoing commitment. Our roadmap includes:
+L'accessibilité est un engagement continu. Notre feuille de route inclut :
 
-### Short Term (Next 3 Months)
-- Complete alt text audit for all images
-- Add captions to all tutorial videos
-- Implement feedback widget on all pages
-- Conduct comprehensive screen reader testing
+### Court Terme (3 Prochains Mois)
+- Audit complet du texte alternatif pour toutes les images
+- Ajout de sous-titres à toutes les vidéos tutorielles
+- Mise en place d'un widget de retour sur toutes les pages
+- Réalisation de tests complets avec lecteurs d'écran
 
-### Medium Term (3-6 Months)
-- Achieve full WCAG 2.1 AA compliance
-- Add keyboard shortcuts documentation
-- Implement live region announcements
-- Enhance color contrast for all UI elements
+### Moyen Terme (3-6 Mois)
+- Atteindre une conformité WCAG 2.1 AA complète
+- Ajout de documentation sur les raccourcis clavier
+- Mise en place d'annonces en région live
+- Amélioration du contraste des couleurs pour tous les éléments UI
 
-### Long Term (6-12 Months)
-- Target WCAG 2.1 AAA compliance where feasible
-- Multilingual accessibility features
-- Advanced assistive technology support
-- Regular accessibility audits (quarterly)
+### Long Terme (6-12 Mois)
+- Viser une conformité WCAG 2.1 AAA lorsque réalisable
+- Fonctionnalités d'accessibilité multilingues
+- Support avancé des technologies d'assistance
+- Audits d'accessibilité réguliers (trimestriels)
 
-## Resources
+## Ressources
 
-### For Users
-- [WebAIM: Introduction to Web Accessibility](https://webaim.org/intro/)
-- [NVDA Screen Reader](https://www.nvaccess.org/download/)
-- [Color Contrast Checker](https://webaim.org/resources/contrastchecker/)
+### Pour les Utilisateurs
+- [WebAIM : Introduction à l'Accessibilité Web](https://webaim.org/intro/)
+- [Lecteur d'Écran NVDA](https://www.nvaccess.org/download/)
+- [Vérificateur de Contraste des Couleurs](https://webaim.org/resources/contrastchecker/)
 
-### For Developers
-- [ARIA Authoring Practices Guide](https://www.w3.org/WAI/ARIA/apg/)
-- [Accessible Components Library](https://www.a11yproject.com/)
-- [WebAIM Quick Reference](https://webaim.org/resources/quickref/)
+### Pour les Développeurs
+- [Guide des Pratiques d'Écriture ARIA](https://www.w3.org/WAI/ARIA/apg/)
+- [Bibliothèque de Composants Accessibles](https://www.a11yproject.com/)
+- [Référence Rapide WebAIM](https://webaim.org/resources/quickref/)
 
-## Legal Information
+## Informations Légales
 
-This accessibility statement applies to the FilterMate documentation website hosted at [https://sducournau.github.io/filter_mate/](https://sducournau.github.io/filter_mate/).
+Cette déclaration d'accessibilité s'applique au site web de documentation FilterMate hébergé sur [https://sducournau.github.io/filter_mate/](https://sducournau.github.io/filter_mate/).
 
-For questions about the plugin itself, please refer to the main [QGIS Plugin Repository](https://plugins.qgis.org/plugins/filter_mate/).
+Pour les questions concernant le plugin lui-même, veuillez vous référer au [Dépôt Principal de Plugins QGIS](https://plugins.qgis.org/plugins/filter_mate/).
 
 ---
 
-**Note**: This statement was created on December 9, 2025, and will be reviewed and updated quarterly to reflect our ongoing accessibility improvements.
+**Note** : Cette déclaration a été créée le 9 décembre 2025 et sera révisée et mise à jour trimestriellement pour refléter nos améliorations continues en matière d'accessibilité.
 
-:::tip Help Us Improve
-Your feedback helps us make FilterMate documentation more accessible. If you use assistive technology and have suggestions, please [open an issue](https://github.com/sducournau/filter_mate/issues/new?labels=accessibility).
+:::tip Aidez-nous à Nous Améliorer
+Vos retours nous aident à rendre la documentation FilterMate plus accessible. Si vous utilisez une technologie d'assistance et avez des suggestions, veuillez [ouvrir une issue](https://github.com/sducournau/filter_mate/issues/new?labels=accessibility).
 :::

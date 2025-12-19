@@ -570,7 +570,7 @@ Red X indicating expression has syntax errors.
 - **User Guide**: [Complete feature documentation](../user-guide/introduction)
 - **Cheat Sheets**: [Quick reference cards](./cheat-sheets/expressions)
 - **Backends**: [Understanding data sources](../backends/overview)
-- **Workflows**: [Real-world examples](../workflows/index)
+- **Workflows**: [Real-world examples](../workflows/)
 
 ---
 

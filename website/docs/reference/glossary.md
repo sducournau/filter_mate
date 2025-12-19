@@ -27,7 +27,7 @@ city = 'Paris'
 year >= 2020
 ```
 
-**See**: [Filtering Basics](../user-guide/filtering-basics.md)
+**See**: [Filtering Basics](../user-guide/filtering-basics)
 
 ---
 
@@ -43,7 +43,7 @@ The database engine or processing system FilterMate uses to execute spatial oper
 - **Spatialite**: Good balance, `<50k` features
 - **OGR**: Universal compatibility, slowest
 
-**See**: [Backend Overview](../backends/overview.md)
+**See**: [Backend Overview](../backends/overview)
 
 ---
 
@@ -64,7 +64,7 @@ Polygon buffer:   □ → ▢ (expanded polygon)
 - **Round (Geodesic)**: Accurate for large areas (accounts for Earth's curvature)
 - **Square**: Computational optimization (rarely used)
 
-**See**: [Buffer Operations](../user-guide/buffer-operations.md)
+**See**: [Buffer Operations](../user-guide/buffer-operations)
 
 ---
 
@@ -93,7 +93,7 @@ A mathematical framework that defines how coordinates relate to locations on Ear
 
 **FilterMate Behavior**: Automatically reprojects layers when needed (you'll see 🔄 indicator).
 
-**See**: [CRS Handling](../user-guide/geometric-filtering.md#crs-reprojection)
+**See**: [CRS Handling](../user-guide/geometric-filtering#crs-reprojection)
 
 ---
 
@@ -134,7 +134,7 @@ area / 10000  -- Convert m² to hectares
 upper(name) || ' (' || country || ')'
 ```
 
-**See**: [Expression Cheat Sheet](./cheat-sheets/expressions.md)
+**See**: [Expression Cheat Sheet](./cheat-sheets/expressions)
 
 ---
 
@@ -189,7 +189,7 @@ A filter based on spatial relationships between features in different layers.
 - **Predicate**: Within Distance
 - **Buffer**: 100 meters
 
-**See**: [Geometric Filtering](../user-guide/geometric-filtering.md)
+**See**: [Geometric Filtering](../user-guide/geometric-filtering)
 
 ---
 
@@ -251,7 +251,7 @@ FilterMate's built-in undo/redo system for filter operations.
 - Session-based (not saved with project)
 - Alternative: Save important filters as Favorites
 
-**See**: [Filter History](../user-guide/filter-history.md)
+**See**: [Filter History](../user-guide/filter-history)
 
 ---
 
@@ -300,7 +300,7 @@ Open source library for reading/writing vector geospatial data formats.
 - File geodatabases
 - GeoJSON files
 
-**See**: [OGR Backend](../backends/ogr.md)
+**See**: [OGR Backend](../backends/ogr)
 
 ---
 
@@ -331,7 +331,7 @@ PostgreSQL extension adding spatial database capabilities.
 
 **FilterMate**: Best backend for large datasets (`>50k` features).
 
-**See**: [PostgreSQL Backend](../backends/postgresql.md)
+**See**: [PostgreSQL Backend](../backends/postgresql)
 
 ---
 
@@ -356,7 +356,7 @@ Python library for connecting to PostgreSQL databases.
 
 **FilterMate Requirement**: Must be installed for PostgreSQL backend support.
 
-**Installation**: See [Common Mistakes - PostgreSQL Unavailable](../user-guide/common-mistakes.md#2-postgresql-backend-unavailable)
+**Installation**: See [Common Mistakes - PostgreSQL Unavailable](../user-guide/common-mistakes#2-postgresql-backend-unavailable)
 
 ---
 
@@ -422,7 +422,7 @@ A test for a specific geometric relationship between two features.
 | **Disjoint** | Don't touch or overlap | Isolated features |
 | **Overlaps** | Partial overlap (same dimension) | Overlapping zones |
 
-**Visual Guide**: See [Spatial Predicates Reference](./cheat-sheets/spatial-predicates.md)
+**Visual Guide**: See [Spatial Predicates Reference](./cheat-sheets/spatial-predicates)
 
 ---
 
@@ -437,7 +437,7 @@ SQLite extension adding spatial database capabilities.
 
 **FilterMate**: Middle-ground backend between PostgreSQL and OGR.
 
-**See**: [Spatialite Backend](../backends/spatialite.md)
+**See**: [Spatialite Backend](../backends/spatialite)
 
 ---
 
@@ -567,10 +567,10 @@ Red X indicating expression has syntax errors.
 
 ## Need More Detail?
 
-- **User Guide**: [Complete feature documentation](../user-guide/introduction.md)
-- **Cheat Sheets**: [Quick reference cards](./cheat-sheets/expressions.md)
-- **Backends**: [Understanding data sources](../backends/overview.md)
-- **Workflows**: [Real-world examples](../workflows/index.md)
+- **User Guide**: [Complete feature documentation](../user-guide/introduction)
+- **Cheat Sheets**: [Quick reference cards](./cheat-sheets/expressions)
+- **Backends**: [Understanding data sources](../backends/overview)
+- **Workflows**: [Real-world examples](../workflows/)
 
 ---
 

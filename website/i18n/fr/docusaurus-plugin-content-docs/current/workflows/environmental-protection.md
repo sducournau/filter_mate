@@ -5,154 +5,154 @@ sidebar_position: 3
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Environmental Analysis: Protected Zone Impact
+# Analyse Environnementale : Impact des Zones Protégées
 
-Find industrial sites within protected water buffer zones to assess environmental compliance and risks.
+Trouver les sites industriels dans les zones tampons d'eau protégées pour évaluer la conformité et les risques environnementaux.
 
-## Scenario Overview
+## Aperçu du Scénario
 
-**Goal**: Identify industrial facilities that fall within 1km buffer zones around protected water bodies to evaluate environmental impact.
+**Objectif** : Identifier les installations industrielles qui se trouvent dans des zones tampons de 1 km autour des plans d'eau protégés pour évaluer l'impact environnemental.
 
-**Real-World Application**:
-- Environmental agencies monitoring compliance
-- NGOs assessing industrial pollution risks
-- Policy makers creating buffer zone regulations
-- Urban planners managing industrial zoning
+**Application Réelle** :
+- Agences environnementales surveillant la conformité
+- ONG évaluant les risques de pollution industrielle
+- Décideurs politiques créant des réglementations sur les zones tampons
+- Urbanistes gérant le zonage industriel
 
-**Estimated Time**: 15 minutes
+**Temps Estimé** : 15 minutes
 
-**Difficulty**: ⭐⭐⭐ Advanced
+**Difficulté** : ⭐⭐⭐ Avancé
 
 ---
 
-## Prerequisites
+## Prérequis
 
-### Required Data
+### Données Requises
 
-1. **Industrial Sites Layer** (points or polygons)
-   - Industrial facility locations
-   - Must include facility type/classification
-   - Minimum 50+ sites for meaningful analysis
+1. **Couche Sites Industriels** (points ou polygones)
+   - Emplacements des installations industrielles
+   - Doit inclure le type/classification de l'installation
+   - Minimum 50+ sites pour une analyse significative
 
-2. **Water Bodies Layer** (polygons)
-   - Rivers, lakes, wetlands, reservoirs
-   - Protected status attribute (optional but useful)
-   - Covers your study area
+2. **Couche Plans d'Eau** (polygones)
+   - Rivières, lacs, zones humides, réservoirs
+   - Attribut de statut protégé (optionnel mais utile)
+   - Couvre votre zone d'étude
 
-3. **Protected Zones** (optional)
-   - Existing environmental protection zones
-   - Regulatory buffer boundaries
+3. **Zones Protégées** (optionnel)
+   - Zones de protection environnementale existantes
+   - Limites des tampons réglementaires
 
-### Sample Data Sources
+### Sources de Données Exemples
 
-**Option 1: OpenStreetMap**
+**Option 1 : OpenStreetMap**
 ```python
-# Use QGIS QuickOSM plugin
-# For water bodies:
-Key: "natural", Value: "water"
-Key: "waterway", Value: "river"
+# Utiliser le plugin QGIS QuickOSM
+# Pour les plans d'eau:
+Clé: "natural", Valeur: "water"
+Clé: "waterway", Valeur: "river"
 
-# For industrial sites:
-Key: "landuse", Value: "industrial"
-Key: "industrial", Value: "*"
+# Pour les sites industriels:
+Clé: "landuse", Valeur: "industrial"
+Clé: "industrial", Valeur: "*"
 ```
 
-**Option 2: Government Data**
-- Environmental Protection Agency (EPA) databases
-- National water quality databases
-- Industrial facility registries
-- Protected area boundaries (WDPA)
+**Option 2 : Données Gouvernementales**
+- Bases de données de l'Agence de Protection de l'Environnement (EPA)
+- Bases de données nationales de qualité de l'eau
+- Registres des installations industrielles
+- Limites des zones protégées (WDPA)
 
-### Backend Recommendation
+### Recommandation de Backend
 
-**Spatialite** - Best choice for this workflow:
-- Good performance for regional datasets (typically &lt;100k features)
-- Robust buffer operations
-- Good geometry repair capabilities
-- No server setup required
+**Spatialite** - Meilleur choix pour ce flux de travail :
+- Bonnes performances pour les jeux de données régionaux (typiquement <100k entités)
+- Opérations de tampon robustes
+- Bonnes capacités de réparation de géométrie
+- Aucune configuration de serveur requise
 
 ---
 
-## Step-by-Step Instructions
+## Instructions Étape par Étape
 
-### Step 1: Load and Inspect Data
+### Étape 1 : Charger et Inspecter les Données
 
-1. **Load both layers** into QGIS:
-   - `water_bodies.gpkg` or `rivers_lakes.shp`
-   - `industrial_sites.gpkg` or `factories.shp`
+1. **Charger les deux couches** dans QGIS :
+   - `plans_eau.gpkg` ou `rivieres_lacs.shp`
+   - `sites_industriels.gpkg` ou `usines.shp`
 
-2. **Check CRS compatibility**:
+2. **Vérifier la compatibilité du SCR** :
    ```
-   Right-click layer → Properties → Information
-   Verify both use same projected CRS (e.g., UTM, State Plane)
-   ```
-
-3. **Verify geometry validity**:
-   ```
-   Vector → Geometry Tools → Check Validity
-   Run on both layers
+   Clic droit sur la couche → Propriétés → Information
+   Vérifier que les deux utilisent le même SCR projeté (ex : UTM, Lambert)
    ```
 
-:::warning CRS Requirements
-Buffer operations require a **projected coordinate system** (meters/feet), not geographic (lat/lon). If your data is in EPSG:4326, reproject first:
+3. **Vérifier la validité de la géométrie** :
+   ```
+   Vecteur → Outils de Géométrie → Vérifier la Validité
+   Exécuter sur les deux couches
+   ```
+
+:::warning Exigences du SCR
+Les opérations de tampon nécessitent un **système de coordonnées projeté** (mètres/pieds), pas géographique (lat/lon). Si vos données sont en EPSG:4326, reprojetez d'abord :
 
 ```
-Vector → Data Management Tools → Reproject Layer
-Target CRS: Choose appropriate UTM zone or local projection
+Vecteur → Outils de Gestion de Données → Reprojeter une Couche
+SCR Cible: Choisir la zone UTM appropriée ou projection locale
 ```
 :::
 
-### Step 2: Create 1km Buffer Around Water Bodies
+### Étape 2 : Créer un Tampon de 1 km Autour des Plans d'Eau
 
-**Option A: Using FilterMate (Recommended)**
+**Option A : Utiliser FilterMate (Recommandé)**
 
-1. Open FilterMate panel
-2. Select **water_bodies** layer
-3. Enter filter expression:
+1. Ouvrir le panneau FilterMate
+2. Sélectionner la couche **plans_eau**
+3. Entrer l'expression de filtre :
    ```sql
-   -- Keep all water bodies, prepare for buffer
+   -- Garder tous les plans d'eau, préparer pour le tampon
    1 = 1
    ```
-4. Enable **Geometry Modification** → **Buffer**
-5. Set **Buffer Distance**: `1000` (meters)
-6. **Buffer Type**: `Positive (expand)`
-7. Click **Apply Filter**
-8. **Export Result** as `water_buffers_1km.gpkg`
+4. Activer **Modification de Géométrie** → **Tampon**
+5. Définir **Distance du Tampon** : `1000` (mètres)
+6. **Type de Tampon** : `Positif (expansion)`
+7. Cliquer sur **Appliquer le Filtre**
+8. **Exporter le Résultat** comme `tampons_eau_1km.gpkg`
 
-**Option B: Using QGIS Native Tools**
+**Option B : Utiliser les Outils Natifs QGIS**
 
 ```
-Vector → Geoprocessing Tools → Buffer
-Distance: 1000 meters
-Segments: 16 (smooth curves)
-Save as: water_buffers_1km.gpkg
+Vecteur → Outils de Géotraitement → Tampon
+Distance: 1000 mètres
+Segments: 16 (courbes lisses)
+Enregistrer sous: tampons_eau_1km.gpkg
 ```
 
-### Step 3: Filter Industrial Sites Within Buffer Zones
+### Étape 3 : Filtrer les Sites Industriels dans les Zones Tampons
 
-Now the main FilterMate operation:
+Maintenant l'opération FilterMate principale :
 
-1. **Select industrial_sites layer** in FilterMate
-2. **Choose Backend**: Spatialite (or PostgreSQL if available)
-3. Enter **spatial filter expression**:
+1. **Sélectionner la couche sites_industriels** dans FilterMate
+2. **Choisir le Backend** : Spatialite (ou PostgreSQL si disponible)
+3. Entrer l'**expression de filtre spatial** :
 
 <Tabs>
   <TabItem value="spatialite" label="Spatialite / OGR" default>
     ```sql
-    -- Industrial sites intersecting 1km water buffers
+    -- Sites industriels intersectant les tampons d'eau de 1km
     intersects(
       $geometry,
-      geometry(get_feature('water_buffers_1km', 'fid', fid))
+      geometry(get_feature('tampons_eau_1km', 'fid', fid))
     )
     ```
     
-    **Alternative using layer reference**:
+    **Alternative utilisant la référence de couche** :
     ```sql
-    -- More efficient if buffer layer is already loaded
+    -- Plus efficace si la couche tampon est déjà chargée
     intersects(
       $geometry,
       aggregate(
-        layer:='water_buffers_1km',
+        layer:='tampons_eau_1km',
         aggregate:='collect',
         expression:=$geometry
       )
@@ -160,312 +160,312 @@ Now the main FilterMate operation:
     ```
   </TabItem>
   
-  <TabItem value="postgresql" label="PostgreSQL (Advanced)">
+  <TabItem value="postgresql" label="PostgreSQL (Avancé)">
     ```sql
-    -- More efficient PostGIS approach with direct buffer
+    -- Approche PostGIS plus efficace avec tampon direct
     ST_DWithin(
       sites.geom,
-      water.geom,
-      1000  -- 1km buffer applied on-the-fly
+      eau.geom,
+      1000  -- Tampon de 1km appliqué à la volée
     )
-    WHERE water.protected_status = true
+    WHERE eau.statut_protege = true
     ```
     
-    **Full materialized view approach**:
+    **Approche complète avec vue matérialisée** :
     ```sql
-    -- Creates optimized temporary table
-    CREATE MATERIALIZED VIEW industrial_risk AS
+    -- Crée une table temporaire optimisée
+    CREATE MATERIALIZED VIEW risque_industriel AS
     SELECT 
       s.*,
-      w.name AS nearest_water_body,
-      ST_Distance(s.geom, w.geom) AS distance_meters
-    FROM industrial_sites s
-    JOIN water_bodies w ON ST_DWithin(s.geom, w.geom, 1000)
-    ORDER BY distance_meters;
+      e.nom AS plan_eau_proche,
+      ST_Distance(s.geom, e.geom) AS distance_metres
+    FROM sites_industriels s
+    JOIN plans_eau e ON ST_DWithin(s.geom, e.geom, 1000)
+    ORDER BY distance_metres;
     ```
   </TabItem>
 </Tabs>
 
-4. Click **Apply Filter**
-5. Review results in map canvas (features should be highlighted)
+4. Cliquer sur **Appliquer le Filtre**
+5. Examiner les résultats sur le canevas (les entités doivent être surlignées)
 
-### Step 4: Add Distance Calculations (Optional)
+### Étape 4 : Ajouter des Calculs de Distance (Optionnel)
 
-To see **how far** each industrial site is from protected zones:
+Pour voir **à quelle distance** chaque site industriel se trouve des zones protégées :
 
-1. Open **Field Calculator** (F6)
-2. Create new field:
+1. Ouvrir la **Calculatrice de Champs** (F6)
+2. Créer un nouveau champ :
    ```
-   Field name: distance_to_water
-   Field type: Decimal (double)
+   Nom du champ: distance_eau
+   Type de champ: Décimal (double)
    
    Expression:
    distance(
      $geometry,
      aggregate(
-       'water_buffers_1km',
+       'tampons_eau_1km',
        'collect',
        $geometry
      )
    )
    ```
-3. Features inside buffer will show `0` or small values
+3. Les entités à l'intérieur du tampon afficheront `0` ou de petites valeurs
 
-### Step 5: Categorize by Risk Level
+### Étape 5 : Catégoriser par Niveau de Risque
 
-Create visual categories based on proximity:
+Créer des catégories visuelles basées sur la proximité :
 
-1. **Right-click filtered layer** → Properties → Symbology
-2. Choose **Categorized**
-3. Use expression:
+1. **Clic droit sur la couche filtrée** → Propriétés → Symbologie
+2. Choisir **Catégorisé**
+3. Utiliser l'expression :
    ```python
    CASE
-     WHEN "distance_to_water" = 0 THEN 'High Risk (Inside Buffer)'
-     WHEN "distance_to_water" <= 500 THEN 'Medium Risk (0-500m)'
-     WHEN "distance_to_water" <= 1000 THEN 'Low Risk (500-1000m)'
-     ELSE 'No Risk (Outside Buffer)'
+     WHEN "distance_eau" = 0 THEN 'Risque Élevé (Dans le Tampon)'
+     WHEN "distance_eau" <= 500 THEN 'Risque Moyen (0-500m)'
+     WHEN "distance_eau" <= 1000 THEN 'Risque Faible (500-1000m)'
+     ELSE 'Pas de Risque (Hors Tampon)'
    END
    ```
-4. Apply color scheme (red → yellow → green)
+4. Appliquer un schéma de couleurs (rouge → jaune → vert)
 
-### Step 6: Export Results
+### Étape 6 : Exporter les Résultats
 
-1. In FilterMate, **Export Filtered Features**:
+1. Dans FilterMate, **Exporter les Entités Filtrées** :
    ```
    Format: GeoPackage
-   Filename: industrial_sites_environmental_risk.gpkg
-   Include attributes: ✓ All fields
-   CRS: Keep original or choose standard (e.g., WGS84 for sharing)
+   Nom de fichier: sites_industriels_risque_environnemental.gpkg
+   Inclure les attributs: ✓ Tous les champs
+   SCR: Garder l'original ou choisir standard (ex : WGS84 pour partage)
    ```
 
-2. **Generate report** (optional):
+2. **Générer un rapport** (optionnel) :
    ```python
-   # In Python Console (optional advanced step)
+   # Dans la Console Python (étape avancée optionnelle)
    layer = iface.activeLayer()
    total = layer.featureCount()
-   high_risk = sum(1 for f in layer.getFeatures() if f['distance_to_water'] == 0)
+   risque_eleve = sum(1 for f in layer.getFeatures() if f['distance_eau'] == 0)
    
-   print(f"Total industrial sites in buffer: {total}")
-   print(f"High risk (directly in water buffer): {high_risk}")
-   print(f"Percentage at risk: {(high_risk/total)*100:.1f}%")
+   print(f"Total sites industriels dans le tampon: {total}")
+   print(f"Risque élevé (directement dans tampon eau): {risque_eleve}")
+   print(f"Pourcentage à risque: {(risque_eleve/total)*100:.1f}%")
    ```
 
 ---
 
-## Understanding the Results
+## Comprendre les Résultats
 
-### What the Filter Shows
+### Ce Que Montre le Filtre
 
-✅ **Selected features**: Industrial sites within 1km of protected water bodies
+✅ **Entités sélectionnées** : Sites industriels à moins de 1 km des plans d'eau protégés
 
-❌ **Excluded features**: Industrial sites farther than 1km from any water body
+❌ **Entités exclues** : Sites industriels à plus de 1 km de tout plan d'eau
 
-### Interpreting the Analysis
+### Interpréter l'Analyse
 
-**High Risk Sites** (distance = 0):
-- Directly within regulated buffer zones
-- May violate environmental regulations
-- Require immediate compliance review
-- Potential for water contamination
+**Sites à Risque Élevé** (distance = 0) :
+- Directement dans les zones tampons réglementées
+- Peuvent violer les réglementations environnementales
+- Nécessitent un examen de conformité immédiat
+- Potentiel de contamination de l'eau
 
-**Medium Risk Sites** (0-500m):
-- Close to buffer boundaries
-- Should be monitored
-- May need additional safeguards
-- Future buffer expansions could affect them
+**Sites à Risque Moyen** (0-500m) :
+- Proches des limites du tampon
+- Doivent être surveillés
+- Peuvent nécessiter des protections supplémentaires
+- Les expansions futures du tampon pourraient les affecter
 
-**Low Risk Sites** (500-1000m):
-- Within analytical buffer but outside typical regulation
-- Useful for proactive planning
-- Lower immediate concern
+**Sites à Risque Faible** (500-1000m) :
+- Dans le tampon analytique mais hors réglementation typique
+- Utile pour la planification proactive
+- Préoccupation immédiate moindre
 
-### Quality Checks
+### Contrôles de Qualité
 
-1. **Visual inspection**: Zoom to several results and verify they're actually near water
-2. **Attribute check**: Ensure facility types match expectations
-3. **Distance validation**: Measure distance in QGIS to confirm buffer accuracy
-4. **Geometry issues**: Look for sites on buffer boundary (may indicate geometry problems)
+1. **Inspection visuelle** : Zoomer sur plusieurs résultats et vérifier qu'ils sont réellement près de l'eau
+2. **Vérification des attributs** : S'assurer que les types d'installations correspondent aux attentes
+3. **Validation de distance** : Mesurer la distance dans QGIS pour confirmer la précision du tampon
+4. **Problèmes de géométrie** : Rechercher des sites sur la limite du tampon (peut indiquer des problèmes de géométrie)
 
 ---
 
-## Best Practices
+## Meilleures Pratiques
 
-### Performance Optimization
+### Optimisation des Performances
 
-**For Large Datasets (>10,000 industrial sites)**:
+**Pour les Grands Jeux de Données (>10 000 sites industriels)** :
 
-1. **Simplify water body geometry** first:
+1. **Simplifier la géométrie des plans d'eau** d'abord :
    ```
-   Vector → Geometry Tools → Simplify
-   Tolerance: 10 meters (maintains accuracy)
-   ```
-
-2. **Use spatial index** (automatic in PostgreSQL, manual in Spatialite):
-   ```
-   Layer → Properties → Create Spatial Index
+   Vecteur → Outils de Géométrie → Simplifier
+   Tolérance: 10 mètres (maintient la précision)
    ```
 
-3. **Pre-filter water bodies** to protected areas only:
+2. **Utiliser un index spatial** (automatique dans PostgreSQL, manuel dans Spatialite) :
+   ```
+   Couche → Propriétés → Créer un Index Spatial
+   ```
+
+3. **Pré-filtrer les plans d'eau** uniquement aux zones protégées :
    ```sql
-   "protected_status" = 'yes' OR "designation" IS NOT NULL
+   "statut_protege" = 'oui' OR "designation" IS NOT NULL
    ```
 
-**Backend Selection**:
+**Sélection du Backend** :
 ```
-Features    | Recommended Backend
---------    | -------------------
-< 1,000     | OGR (simplest)
-1k - 50k    | Spatialite (good balance)
-> 50k       | PostgreSQL (fastest)
+Entités     | Backend Recommandé
+--------    | ------------------
+< 1 000     | OGR (plus simple)
+1k - 50k    | Spatialite (bon équilibre)
+> 50k       | PostgreSQL (plus rapide)
 ```
 
-### Accuracy Considerations
+### Considérations de Précision
 
-1. **Buffer distance units**: Always verify units match your CRS:
+1. **Unités de distance du tampon** : Toujours vérifier que les unités correspondent à votre SCR :
    ```
-   Meters: UTM, State Plane, Web Mercator
-   Feet: Some State Plane zones
-   Degrees: NEVER use for buffers (reproject first!)
-   ```
-
-2. **Geometry repair**: Water bodies often have invalid geometries:
-   ```
-   Vector → Geometry Tools → Fix Geometries
-   Run before buffer operation
+   Mètres: UTM, Lambert, Web Mercator
+   Pieds: Certaines zones State Plane
+   Degrés: NE JAMAIS utiliser pour les tampons (reprojeter d'abord !)
    ```
 
-3. **Topology**: Overlapping water bodies may create unexpected buffer shapes:
+2. **Réparation de géométrie** : Les plans d'eau ont souvent des géométries invalides :
    ```
-   Vector → Geoprocessing → Dissolve (union all water bodies)
-   Then create single unified buffer
+   Vecteur → Outils de Géométrie → Réparer les Géométries
+   Exécuter avant l'opération de tampon
    ```
 
-### Regulatory Compliance
+3. **Topologie** : Les plans d'eau qui se chevauchent peuvent créer des formes de tampon inattendues :
+   ```
+   Vecteur → Géotraitement → Dissoudre (unir tous les plans d'eau)
+   Puis créer un tampon unifié unique
+   ```
 
-- **Document methodology**: Save FilterMate expression history
-- **Version control**: Keep original data + filtered results + metadata
-- **Validation**: Cross-reference with official regulatory databases
-- **Updates**: Re-run analysis when industrial registry is updated
+### Conformité Réglementaire
+
+- **Documenter la méthodologie** : Sauvegarder l'historique des expressions FilterMate
+- **Contrôle de version** : Conserver données originales + résultats filtrés + métadonnées
+- **Validation** : Croiser avec les bases de données réglementaires officielles
+- **Mises à jour** : Ré-exécuter l'analyse lorsque le registre industriel est mis à jour
 
 ---
 
-## Common Issues
+## Problèmes Courants
 
-### Issue 1: "No features selected"
+### Problème 1 : "Aucune entité sélectionnée"
 
-**Cause**: CRS mismatch or buffer distance too small
+**Cause** : Incompatibilité de SCR ou distance de tampon trop petite
 
-**Solution**:
+**Solution** :
 ```
-1. Check both layers are in same projected CRS
-2. Verify buffer distance: 1000 in meters, not degrees
-3. Try larger buffer (e.g., 2000m) for testing
-4. Check water bodies actually exist in your study area
-```
-
-### Issue 2: "Geometry errors" during buffer
-
-**Cause**: Invalid water body geometries
-
-**Solution**:
-```
-Vector → Geometry Tools → Fix Geometries
-Then re-create buffers
+1. Vérifier que les deux couches sont dans le même SCR projeté
+2. Vérifier la distance du tampon: 1000 en mètres, pas en degrés
+3. Essayer un tampon plus grand (ex : 2000m) pour tester
+4. Vérifier que les plans d'eau existent réellement dans votre zone d'étude
 ```
 
-### Issue 3: Performance very slow (>2 minutes)
+### Problème 2 : "Erreurs de géométrie" lors du tampon
 
-**Cause**: Large datasets without optimization
+**Cause** : Géométries de plans d'eau invalides
 
-**Solutions**:
+**Solution** :
 ```
-1. Create spatial indexes on both layers
-2. Simplify water body geometry (10m tolerance)
-3. Switch to PostgreSQL backend
-4. Pre-filter to smaller area of interest
+Vecteur → Outils de Géométrie → Réparer les Géométries
+Puis recréer les tampons
 ```
 
-### Issue 4: Buffer creates strange shapes
+### Problème 3 : Performances très lentes (>2 minutes)
 
-**Cause**: Geographic CRS (lat/lon) instead of projected
+**Cause** : Grands jeux de données sans optimisation
 
-**Solution**:
+**Solutions** :
 ```
-Reproject BOTH layers to appropriate UTM zone:
-Vector → Data Management → Reproject Layer
-Find correct zone: https://epsg.io/
+1. Créer des index spatiaux sur les deux couches
+2. Simplifier la géométrie des plans d'eau (tolérance 10m)
+3. Passer au backend PostgreSQL
+4. Pré-filtrer sur une zone d'intérêt plus petite
+```
+
+### Problème 4 : Le tampon crée des formes étranges
+
+**Cause** : SCR géographique (lat/lon) au lieu de projeté
+
+**Solution** :
+```
+Reprojeter les DEUX couches dans la zone UTM appropriée :
+Vecteur → Gestion de Données → Reprojeter une Couche
+Trouver la zone correcte: https://epsg.io/
 ```
 
 ---
 
-## Next Steps
+## Prochaines Étapes
 
-### Related Workflows
+### Flux de Travail Associés
 
-- **[Emergency Services Coverage](./emergency-services)**: Similar buffer analysis techniques
-- **[Urban Planning Transit](./urban-planning-transit)**: Multi-layer spatial filtering
-- **[Real Estate Analysis](./real-estate-analysis)**: Combining spatial + attribute filters
+- **[Couverture des Services d'Urgence](./emergency-services)** : Techniques d'analyse de tampon similaires
+- **[Planification Urbaine Transport](./urban-planning-transit)** : Filtrage spatial multi-couches
+- **[Analyse Immobilière](./real-estate-analysis)** : Combinaison de filtres spatiaux + attributs
 
-### Advanced Techniques
+### Techniques Avancées
 
-**1. Multi-Ring Buffers** (graduated risk zones):
+**1. Tampons Multi-Anneaux** (zones de risque graduées) :
 ```
-Create 3 separate buffers: 500m, 1000m, 1500m
-Categorize facilities by which buffer they fall into
+Créer 3 tampons séparés: 500m, 1000m, 1500m
+Catégoriser les installations selon le tampon dans lequel elles tombent
 ```
 
-**2. Proximity to Nearest Water** (not just any water):
+**2. Proximité au Plan d'Eau le Plus Proche** (pas n'importe quel plan d'eau) :
 ```sql
--- Find distance to closest water body only
+-- Trouver la distance au plan d'eau le plus proche uniquement
 array_min(
   array_foreach(
-    overlay_nearest('water_bodies', $geometry),
+    overlay_nearest('plans_eau', $geometry),
     distance(@element, $geometry)
   )
 )
 ```
 
-**3. Temporal Analysis** (if you have facility age data):
+**3. Analyse Temporelle** (si vous avez des données d'âge des installations) :
 ```sql
--- Old facilities in sensitive areas (highest risk)
-"year_built" < 1990 
-AND distance_to_water < 500
+-- Anciennes installations dans zones sensibles (risque le plus élevé)
+"annee_construction" < 1990 
+AND distance_eau < 500
 ```
 
-**4. Cumulative Impact** (multiple facilities near same water body):
+**4. Impact Cumulatif** (plusieurs installations près du même plan d'eau) :
 ```sql
--- Count facilities affecting each water body
-WITH risk_counts AS (
-  SELECT water_id, COUNT(*) as num_facilities
-  FROM filtered_sites
-  GROUP BY water_id
+-- Compter les installations affectant chaque plan d'eau
+WITH comptes_risque AS (
+  SELECT id_eau, COUNT(*) as nombre_installations
+  FROM sites_filtres
+  GROUP BY id_eau
 )
--- Show water bodies with >5 nearby facilities
+-- Montrer les plans d'eau avec >5 installations à proximité
 ```
 
-### Further Learning
+### Pour Aller Plus Loin
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
-- 📖 [Buffer Operations Guide](../user-guide/buffer-operations)
-- 📖 [Performance Tuning](../advanced/performance-tuning)
-- 📖 [Troubleshooting](../advanced/troubleshooting)
+- 📖 [Référence des Prédicats Spatiaux](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Guide des Opérations de Tampon](../user-guide/buffer-operations)
+- 📖 [Optimisation des Performances](../advanced/performance-tuning)
+- 📖 [Dépannage](../advanced/troubleshooting)
 
 ---
 
-## Summary
+## Résumé
 
-✅ **You've learned**:
-- Creating buffer zones around water bodies
-- Spatial intersection filtering with industrial sites
-- Distance calculation and risk categorization
-- Geometry validation and repair
-- Backend-specific optimization techniques
+✅ **Vous avez appris** :
+- Créer des zones tampons autour des plans d'eau
+- Filtrage par intersection spatiale avec des sites industriels
+- Calcul de distance et catégorisation des risques
+- Validation et réparation de géométrie
+- Techniques d'optimisation spécifiques au backend
 
-✅ **Key takeaways**:
-- Always use projected CRS for buffer operations
-- Fix geometry errors before spatial analysis
-- Choose backend based on dataset size
-- Document methodology for regulatory compliance
-- Visual validation is essential
+✅ **Points clés** :
+- Toujours utiliser un SCR projeté pour les opérations de tampon
+- Réparer les erreurs de géométrie avant l'analyse spatiale
+- Choisir le backend en fonction de la taille du jeu de données
+- Documenter la méthodologie pour la conformité réglementaire
+- La validation visuelle est essentielle
 
-🎯 **Real-world impact**: This workflow helps environmental agencies identify compliance risks, supports evidence-based policy making, and protects water quality by highlighting facilities requiring monitoring or remediation.
+🎯 **Impact réel** : Ce flux de travail aide les agences environnementales à identifier les risques de conformité, soutient l'élaboration de politiques fondées sur des preuves et protège la qualité de l'eau en mettant en évidence les installations nécessitant une surveillance ou une remédiation.

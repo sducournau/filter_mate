@@ -173,10 +173,10 @@ Configure in `config.json` → `APP.DOCKWIDGET.FEEDBACK_LEVEL`
 
 ## Next Steps
 
-- **[First Filter Tutorial](./first-filter.md)** - Detailed step-by-step example
-- **[Filtering Basics](../user-guide/filtering-basics.md)** - Learn about expressions and predicates
-- **[Geometric Filtering](../user-guide/geometric-filtering.md)** - Advanced spatial operations
-- **[Backend Comparison](../backends/performance-benchmarks.md)** - Understand backend performance
+- **[First Filter Tutorial](./first-filter)** - Detailed step-by-step example
+- **[Filtering Basics](../user-guide/filtering-basics)** - Learn about expressions and predicates
+- **[Geometric Filtering](../user-guide/geometric-filtering)** - Advanced spatial operations
+- **[Backend Comparison](../backends/performance-benchmarks)** - Understand backend performance
 
 ## Troubleshooting
 
@@ -189,12 +189,12 @@ Check:
 
 ### Performance slow?
 
-- For large datasets, consider [installing PostgreSQL backend](../installation.md#optional-postgresql-backend-recommended-for-large-datasets)
-- Check [Performance Tuning](../advanced/performance-tuning.md) guide
+- For large datasets, consider [installing PostgreSQL backend](../installation#optional-postgresql-backend-recommended-for-large-datasets)
+- Check [Performance Tuning](../advanced/performance-tuning) guide
 
 ### Backend not detected?
 
 FilterMate will show which backend is being used. If PostgreSQL is not available:
 1. Check if psycopg2 is installed: `import psycopg2`
 2. Verify layer source is PostgreSQL/PostGIS
-3. See [Installation Troubleshooting](../installation.md#troubleshooting)
+3. See [Installation Troubleshooting](../installation#troubleshooting)

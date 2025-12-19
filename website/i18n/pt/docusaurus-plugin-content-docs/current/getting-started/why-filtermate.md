@@ -548,7 +548,7 @@ Use **FilterMate para 80% das tarefas de filtragem**, QGIS nativo para 20% espec
 
 ✅ **Conveniência importa**
 - Precisa de capacidade desfazer/refazer
-- Quer salvar favoritos de filtros
+- Histórico de filtros com rastreamento de sessão
 - Prefere interface integrada
 
 ---
@@ -598,7 +598,7 @@ Instale FilterMate. Use-o para filtragem diária. Volte para QGIS nativo para ta
 
 1. **Instalar FilterMate**: [Guia de Instalação](../installation)
 2. **Início Rápido**: [Tutorial de 5 minutos](../getting-started/quick-start)
-3. **Aprender Fluxos de Trabalho**: [Exemplos do mundo real](../workflows/index)
+3. **Aprender Fluxos de Trabalho**: [Exemplos do mundo real](../workflows/)
 4. **Otimizar Desempenho**: [Configuração de backends](../backends/choosing-backend)
 
 ---

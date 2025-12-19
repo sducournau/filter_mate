@@ -20,7 +20,7 @@ Cette section fournit une documentation détaillée pour chaque aspect de Filter
 
 ### Gestion des données
 - **[Exporter des entités](./export-features)** - Formats d'export, options et traitement par lots
-- **[Historique des filtres](./filter-history)** - Annuler/refaire, suivi de l'historique et favoris
+- **[Historique des filtres](./filter-history)** - Annuler/refaire et suivi de l'historique
 
 ## À qui s'adresse ce guide
 
@@ -54,7 +54,7 @@ Pour utiliser ce guide efficacement :
 
 ## Documentation connexe
 
-- **[Premiers pas](../getting-started/index)** - Tutoriels pour débutants
+- **[Premiers pas](../getting-started/)** - Tutoriels pour débutants
 - **[Backends](../backends/overview)** - Optimisation des performances
 - **[Avancé](../advanced/configuration)** - Configuration et réglages
 - **[Dépannage](../advanced/troubleshooting)** - Problèmes courants et solutions

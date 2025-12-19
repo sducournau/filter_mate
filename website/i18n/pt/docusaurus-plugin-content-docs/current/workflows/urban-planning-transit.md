@@ -5,194 +5,194 @@ sidebar_position: 2
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Urban Planning: Properties Near Transit
+# Planejamento Urbano: Propriedades Próximas ao Transporte
 
-Find all residential parcels within walking distance of subway stations for transit-oriented development analysis.
+Encontrar todas as parcelas residenciais a distância de caminhada de estações de metrô para análise de desenvolvimento orientado ao transporte.
 
-## Scenario Overview
+## Visão Geral do Cenário
 
-**Goal**: Identify properties within 500 meters of subway stations to assess transit-oriented development opportunities.
+**Objetivo**: Identificar propriedades dentro de 500 metros de estações de metrô para avaliar oportunidades de desenvolvimento orientado ao transporte.
 
-**Real-World Application**:
-- Urban planning departments evaluating development zones
-- Real estate developers finding transit-accessible properties
-- Policy makers assessing transit equity and coverage
-- Environmental planners reducing car dependency
+**Aplicação do Mundo Real**:
+- Departamentos de planejamento urbano avaliando zonas de desenvolvimento
+- Incorporadores imobiliários encontrando propriedades acessíveis por transporte
+- Formuladores de políticas avaliando equidade e cobertura de transporte
+- Planejadores ambientais reduzindo dependência de carros
 
-**Estimated Time**: 10 minutes
+**Tempo Estimado**: 10 minutos
 
-**Difficulty**: ⭐⭐ Intermediate
+**Dificuldade**: ⭐⭐ Intermediário
 
 ---
 
-## Prerequisites
+## Pré-requisitos
 
-### Required Data
+### Dados Necessários
 
-1. **Parcels Layer** (polygons)
-   - Residential property boundaries
-   - Must include land use or zoning attributes
-   - Recommended: 1,000+ features for realistic analysis
+1. **Camada de Parcelas** (polígonos)
+   - Limites de propriedades residenciais
+   - Deve incluir atributos de uso do solo ou zoneamento
+   - Recomendado: 1.000+ feições para análise realista
 
-2. **Transit Stations Layer** (points)
-   - Subway/metro station locations
-   - Includes station names
-   - Covers your study area
+2. **Camada de Estações de Transporte** (pontos)
+   - Localizações de estações de metrô/trem
+   - Inclui nomes de estações
+   - Cobre sua área de estudo
 
-### Sample Data Sources
+### Fontes de Dados de Exemplo
 
-**Option 1: OpenStreetMap (Free)**
+**Opção 1: OpenStreetMap (Gratuito)**
 ```bash
-# Use QGIS QuickOSM plugin
-1. Vector → QuickOSM → Quick Query
-2. Key: "railway", Value: "station"
-3. Select your city/region
-4. Download points
+# Usar plugin QuickOSM do QGIS
+1. Vetor → QuickOSM → Consulta Rápida
+2. Chave: "railway", Valor: "station"
+3. Selecionar sua cidade/região
+4. Baixar pontos
 ```
 
-**Option 2: Municipal Open Data**
-- Check your city's open data portal
-- Look for "parcels", "cadastre", or "property" datasets
-- Transit data usually under "transportation"
+**Opção 2: Dados Abertos Municipais**
+- Verifique o portal de dados abertos da sua cidade
+- Procure por conjuntos de dados "parcelas", "cadastro" ou "propriedade"
+- Dados de transporte geralmente sob "transporte"
 
-### System Requirements
+### Requisitos do Sistema
 
-- **Recommended Backend**: PostgreSQL (for 50k+ parcels)
-- **Alternative**: Spatialite (for `<50k` parcels)
-- **CRS**: Any (FilterMate handles reprojection automatically)
+- **Backend Recomendado**: PostgreSQL (para 50k+ parcelas)
+- **Alternativa**: Spatialite (para <50k parcelas)
+- **SRC**: Qualquer (FilterMate lida com reprojeção automaticamente)
 
 ---
 
-## Step-by-Step Instructions
+## Instruções Passo a Passo
 
-### Step 1: Load Your Data
+### Passo 1: Carregar Seus Dados
 
-1. Open QGIS and create a new project
-2. Load the **parcels** layer (drag & drop or Layer → Add Layer)
-3. Load the **transit_stations** layer
-4. Verify both layers display correctly on the map
+1. Abrir QGIS e criar um novo projeto
+2. Carregar a camada **parcelas** (arrastar e soltar ou Camada → Adicionar Camada)
+3. Carregar a camada **estacoes_transporte**
+4. Verificar se ambas as camadas são exibidas corretamente no mapa
 
-:::tip CRS Check
-Different CRS? No problem! FilterMate automatically reprojects layers during spatial operations. You'll see a 🔄 indicator when reprojection occurs.
+:::tip Verificação de SRC
+SRCs diferentes? Sem problema! FilterMate reprojeta automaticamente as camadas durante operações espaciais. Você verá um indicador 🔄 quando a reprojeção ocorrer.
 :::
 
 ---
 
-### Step 2: Open FilterMate
+### Passo 2: Abrir o FilterMate
 
-1. Click the **FilterMate** icon in the toolbar
-2. Or: **Vector** → **FilterMate**
-3. The panel docks on the right side
+1. Clicar no ícone **FilterMate** na barra de ferramentas
+2. Ou: **Vetor** → **FilterMate**
+3. O painel ancorado no lado direito
 
-**What you should see**:
-- Three tabs: FILTERING / EXPLORING / EXPORTING
-- Layer selector at the top
-- Empty expression builder
+**O que você deve ver**:
+- Três abas: FILTRAGEM / EXPLORAÇÃO / EXPORTAÇÃO
+- Seletor de camada no topo
+- Construtor de expressões vazio
 
 ---
 
-### Step 3: Configure the Filter
+### Passo 3: Configurar o Filtro
 
-#### 3.1 Select Target Layer
+#### 3.1 Selecionar Camada Alvo
 
-1. In the **Layer Selection** dropdown (top of panel)
-2. Check **parcels** layer
-3. Notice the backend indicator (PostgreSQL⚡ / Spatialite / OGR)
+1. No menu suspenso **Seleção de Camada** (topo do painel)
+2. Marcar a camada **parcelas**
+3. Observe o indicador de backend (PostgreSQL⚡ / Spatialite / OGR)
 
-**Layer Info Display**:
+**Exibição de Informações da Camada**:
 ```
-Provider: postgresql (PostgreSQL)
-Features: 125,347
-CRS: EPSG:2154 (Lambert 93)
-Primary Key: gid
+Provedor: postgresql (PostgreSQL)
+Feições: 125.347
+SRC: EPSG:31983 (SIRGAS 2000 / UTM zone 23S)
+Chave Primária: gid
 ```
 
-:::info Backend Performance
-If you see "OGR" for large parcel datasets, consider migrating to PostgreSQL for 10-50× faster performance. See [Backend Guide](../backends/choosing-backend).
+:::info Performance do Backend
+Se você vir "OGR" para grandes conjuntos de dados de parcelas, considere migrar para PostgreSQL para desempenho 10-50× mais rápido. Veja [Guia de Backends](../backends/choosing-backend).
 :::
 
 ---
 
-#### 3.2 Add Attribute Filter (Optional)
+#### 3.2 Adicionar Filtro de Atributo (Opcional)
 
-Filter to residential parcels only:
+Filtrar apenas parcelas residenciais:
 
-1. In the **Expression Builder** section
-2. Click the **Fields** dropdown to see available attributes
-3. Enter this expression:
+1. Na seção **Construtor de Expressões**
+2. Clicar no menu suspenso **Campos** para ver atributos disponíveis
+3. Inserir esta expressão:
 
 ```sql
-land_use = 'residential'
--- OR if using zoning codes:
-zoning LIKE 'R-%'
--- OR multiple residential types:
-land_use IN ('residential', 'mixed-use', 'multi-family')
+uso_solo = 'residencial'
+-- OU se usando códigos de zoneamento:
+zoneamento LIKE 'R-%'
+-- OU múltiplos tipos residenciais:
+uso_solo IN ('residencial', 'uso-misto', 'multi-familiar')
 ```
 
-4. Wait for the green checkmark (✓) - indicates valid syntax
+4. Aguardar a marca de seleção verde (✓) - indica sintaxe válida
 
-**Expression Explanation**:
-- `land_use = 'residential'` - Exact match on land use field
-- `LIKE 'R-%'` - Pattern matching for residential zoning codes (R-1, R-2, etc.)
-- `IN (...)` - Multiple allowed values
+**Explicação da Expressão**:
+- `uso_solo = 'residencial'` - Correspondência exata no campo de uso do solo
+- `LIKE 'R-%'` - Correspondência de padrão para códigos de zoneamento residencial (R-1, R-2, etc.)
+- `IN (...)` - Valores múltiplos permitidos
 
-:::tip No Residential Field?
-If your data doesn't have land use, skip this step. The spatial filter will work on all parcels.
+:::tip Sem Campo Residencial?
+Se seus dados não têm uso do solo, pule este passo. O filtro espacial funcionará em todas as parcelas.
 :::
 
 ---
 
-#### 3.3 Configure Geometric Filter
+#### 3.3 Configurar Filtro Geométrico
 
-Now add the spatial component - proximity to transit:
+Agora adicione o componente espacial - proximidade ao transporte:
 
-1. **Scroll down** to the **Geometric Filter** section
-2. Click to expand if collapsed
+1. **Rolar para baixo** até a seção **Filtro Geométrico**
+2. Clicar para expandir se recolhido
 
-**Reference Layer**:
-3. Select **transit_stations** from the dropdown
-4. The reference layer icon appears: 🚉
+**Camada de Referência**:
+3. Selecionar **estacoes_transporte** no menu suspenso
+4. O ícone da camada de referência aparece: 🚉
 
-**Spatial Predicate**:
-5. Select **"Intersects"** from predicate dropdown
-   - (We'll add buffer distance, so intersects = "touches buffer")
+**Predicado Espacial**:
+5. Selecionar **"Intersecta"** no menu suspenso de predicados
+   - (Adicionaremos distância de buffer, então intersecta = "toca o buffer")
 
-**Buffer Distance**:
-6. Enter `500` in the distance field
-7. Select **meters** as the unit
-8. Leave buffer type as **Round (Planar)** for urban areas
+**Distância do Buffer**:
+6. Inserir `500` no campo de distância
+7. Selecionar **metros** como unidade
+8. Deixar tipo de buffer como **Redondo (Planar)** para áreas urbanas
 
-**Your Configuration Should Look Like**:
+**Sua Configuração Deve Parecer**:
 ```
-Reference Layer: transit_stations
-Spatial Predicate: Intersects
-Buffer Distance: 500 meters
-Buffer Type: Round (Planar)
+Camada de Referência: estacoes_transporte
+Predicado Espacial: Intersecta
+Distância do Buffer: 500 metros
+Tipo de Buffer: Redondo (Planar)
 ```
 
-:::tip Geographic CRS Auto-Conversion
-If your layers use geographic coordinates (EPSG:4326), FilterMate automatically converts to EPSG:3857 for accurate metric buffers. You'll see: 🌍 indicator in logs.
+:::tip Conversão Automática de SRC Geográfico
+Se suas camadas usam coordenadas geográficas (EPSG:4326), FilterMate converte automaticamente para EPSG:3857 para buffers métricos precisos. Você verá: indicador 🌍 nos logs.
 :::
 
 ---
 
-### Step 4: Apply the Filter
+### Passo 4: Aplicar o Filtro
 
-1. Click the **Apply Filter** button (big button at bottom)
-2. FilterMate executes the spatial query
+1. Clicar no botão **Aplicar Filtro** (botão grande na parte inferior)
+2. FilterMate executa a consulta espacial
 
-**What Happens**:
+**O Que Acontece**:
 
 <Tabs>
-  <TabItem value="postgresql" label="PostgreSQL Backend" default>
+  <TabItem value="postgresql" label="Backend PostgreSQL" default>
     ```sql
-    -- Creates optimized materialized view
+    -- Cria vista materializada otimizada
     CREATE MATERIALIZED VIEW temp_filter AS
     SELECT p.*
-    FROM parcels p
-    WHERE p.land_use = 'residential'
+    FROM parcelas p
+    WHERE p.uso_solo = 'residencial'
       AND EXISTS (
-        SELECT 1 FROM transit_stations s
+        SELECT 1 FROM estacoes_transporte s
         WHERE ST_DWithin(
           p.geom::geography,
           s.geom::geography,
@@ -203,254 +203,254 @@ If your layers use geographic coordinates (EPSG:4326), FilterMate automatically 
     CREATE INDEX idx_temp_geom 
       ON temp_filter USING GIST(geom);
     ```
-    ⚡ **Performance**: 0.3-2 seconds for 100k+ parcels
+    ⚡ **Performance**: 0,3-2 segundos para 100k+ parcelas
   </TabItem>
   
-  <TabItem value="spatialite" label="Spatialite Backend">
+  <TabItem value="spatialite" label="Backend Spatialite">
     ```sql
-    -- Creates temporary table with spatial index
+    -- Cria tabela temporária com índice espacial
     CREATE TEMP TABLE temp_filter AS
     SELECT p.*
-    FROM parcels p
-    WHERE p.land_use = 'residential'
+    FROM parcelas p
+    WHERE p.uso_solo = 'residencial'
       AND EXISTS (
-        SELECT 1 FROM transit_stations s
+        SELECT 1 FROM estacoes_transporte s
         WHERE ST_Distance(p.geom, s.geom) <= 500
       );
     
     SELECT CreateSpatialIndex('temp_filter', 'geom');
     ```
-    ⏱️ **Performance**: 5-15 seconds for 50k parcels
+    ⏱️ **Performance**: 5-15 segundos para 50k parcelas
   </TabItem>
   
-  <TabItem value="ogr" label="OGR Backend">
-    Uses QGIS Processing framework with memory layers.
+  <TabItem value="ogr" label="Backend OGR">
+    Usa framework QGIS Processing com camadas de memória.
     
-    🐌 **Performance**: 30-120 seconds for large datasets
+    🐌 **Performance**: 30-120 segundos para grandes conjuntos de dados
     
-    **Recommendation**: Migrate to PostgreSQL for this workflow.
+    **Recomendação**: Migrar para PostgreSQL para este fluxo de trabalho.
   </TabItem>
 </Tabs>
 
 ---
 
-### Step 5: Review Results
+### Passo 5: Revisar Resultados
 
-**Map View**:
-- Filtered parcels are highlighted on the map
-- Non-matching parcels are hidden (or greyed out)
-- Count displayed in FilterMate panel: `Found: 3,247 features`
+**Vista do Mapa**:
+- Parcelas filtradas são destacadas no mapa
+- Parcelas não correspondentes são ocultadas (ou acinzentadas)
+- Contagem exibida no painel FilterMate: `Encontrado: 3.247 feições`
 
-**Verify Results**:
-1. Zoom to a transit station
-2. Select one filtered parcel
-3. Use **Measure Tool** to verify it's within 500m of station
+**Verificar Resultados**:
+1. Aproximar em uma estação de transporte
+2. Selecionar uma parcela filtrada
+3. Usar **Ferramenta de Medida** para verificar que está dentro de 500m da estação
 
-**Expected Results**:
-- Urban cores: High density of filtered parcels
-- Suburban areas: Sparse parcels near stations
-- Rural areas: Very few or no results
-
----
-
-### Step 6: Analyze & Export
-
-#### Option A: Quick Statistics
-
-1. Right-click filtered layer
-2. **Properties** → **Information**
-3. View feature count and extent
-
-#### Option B: Export for Reporting
-
-1. Switch to **EXPORTING** tab in FilterMate
-2. Select filtered parcels layer
-3. Choose output format:
-   - **GeoPackage (.gpkg)** - Best for QGIS
-   - **GeoJSON** - For web mapping
-   - **Shapefile** - For legacy systems
-   - **PostGIS** - Back to database
-
-4. **Optional**: Transform CRS (e.g., WGS84 for web)
-5. Click **Export**
-
-**Export Settings Example**:
-```
-Layer: parcels (filtered)
-Format: GeoPackage
-Output CRS: EPSG:4326 (WGS84)
-Filename: transit_accessible_parcels.gpkg
-```
+**Resultados Esperados**:
+- Centros urbanos: Alta densidade de parcelas filtradas
+- Áreas suburbanas: Parcelas esparsas perto de estações
+- Áreas rurais: Muito poucas ou nenhum resultado
 
 ---
 
-## Understanding the Results
+### Passo 6: Analisar e Exportar
 
-### Interpreting Feature Counts
+#### Opção A: Estatísticas Rápidas
 
-**Example Results**:
+1. Clique direito na camada filtrada
+2. **Propriedades** → **Informação**
+3. Ver contagem de feições e extensão
+
+#### Opção B: Exportar para Relatório
+
+1. Mudar para aba **EXPORTAÇÃO** no FilterMate
+2. Selecionar camada de parcelas filtradas
+3. Escolher formato de saída:
+   - **GeoPackage (.gpkg)** - Melhor para QGIS
+   - **GeoJSON** - Para mapeamento web
+   - **Shapefile** - Para sistemas legados
+   - **PostGIS** - De volta para banco de dados
+
+4. **Opcional**: Transformar SRC (ex: WGS84 para web)
+5. Clicar em **Exportar**
+
+**Exemplo de Configurações de Exportação**:
 ```
-Total parcels: 125,347
-Residential parcels: 87,420 (70%)
-Transit-accessible residential: 3,247 (3.7% of residential)
+Camada: parcelas (filtrado)
+Formato: GeoPackage
+SRC de Saída: EPSG:4326 (WGS84)
+Nome do arquivo: parcelas_acessiveis_transporte.gpkg
 ```
-
-**What This Means**:
-- Only 3.7% of residential parcels are transit-accessible
-- Opportunity for transit-oriented development
-- Most residents depend on cars (equity concern)
-
-### Spatial Patterns
-
-**Look for**:
-- **Clusters** around major transit hubs → High-density zones
-- **Gaps** between stations → Potential infill development
-- **Isolated parcels** → Transit deserts requiring service expansion
 
 ---
 
-## Best Practices
+## Entendendo os Resultados
 
-### Performance Optimization
+### Interpretar Contagens de Feições
 
-✅ **Use PostgreSQL** for parcel datasets >50k` features
-- 10-50× faster than OGR backend
-- Sub-second query times even on 500k+ parcels
+**Resultados de Exemplo**:
+```
+Total de parcelas: 125.347
+Parcelas residenciais: 87.420 (70%)
+Residencial acessível por transporte: 3.247 (3,7% do residencial)
+```
 
-✅ **Filter by attribute first** if possible
-- `land_use = 'residential'` reduces spatial query scope
-- 30-50% performance improvement
+**O Que Isso Significa**:
+- Apenas 3,7% das parcelas residenciais são acessíveis por transporte
+- Oportunidade para desenvolvimento orientado ao transporte
+- A maioria dos residentes depende de carros (preocupação de equidade)
 
-✅ **Buffer Distance Units**
-- Use **meters** for urban analysis (consistent worldwide)
-- Avoid **degrees** for distance-based queries (inaccurate)
+### Padrões Espaciais
 
-### Accuracy Considerations
-
-⚠️ **Buffer Type Selection**:
-- **Round (Planar)**: Fast, accurate for small areas (`<10km`)
-- **Round (Geodesic)**: More accurate for large regions
-- **Square**: Computational optimization (rarely needed)
-
-⚠️ **CRS Choice**:
-- Local projected CRS (e.g., State Plane, UTM) - Best accuracy
-- Web Mercator (EPSG:3857) - Good for worldwide analysis
-- WGS84 (EPSG:4326) - Auto-converted by FilterMate ✓
-
-### Data Quality
-
-🔍 **Check for**:
-- **Overlapping parcels** - Can inflate counts
-- **Missing geometries** - Use "Check Geometries" tool
-- **Outdated transit data** - Verify station operational status
+**Procurar**:
+- **Clusters** em torno de grandes hubs de transporte → Zonas de alta densidade
+- **Lacunas** entre estações → Desenvolvimento de preenchimento potencial
+- **Parcelas isoladas** → Desertos de transporte necessitando expansão de serviço
 
 ---
 
-## Common Issues & Solutions
+## Melhores Práticas
 
-### Issue 1: No Results Found
+### Otimização de Performance
 
-**Symptoms**: Filter returns 0 features, but you expect matches.
+✅ **Usar PostgreSQL** para conjuntos de dados de parcelas >50k feições
+- 10-50× mais rápido que backend OGR
+- Tempos de consulta sub-segundo mesmo em 500k+ parcelas
 
-**Possible Causes**:
-1. ❌ Buffer distance too small (try 1000m)
-2. ❌ Wrong attribute value (check `land_use` field values)
-3. ❌ Layers don't overlap geographically
-4. ❌ CRS mismatch (though FilterMate handles this)
+✅ **Filtrar por atributo primeiro** se possível
+- `uso_solo = 'residencial'` reduz escopo da consulta espacial
+- Melhoria de performance de 30-50%
 
-**Debug Steps**:
+✅ **Unidades de Distância do Buffer**
+- Usar **metros** para análise urbana (consistente mundialmente)
+- Evitar **graus** para consultas baseadas em distância (impreciso)
+
+### Considerações de Precisão
+
+⚠️ **Seleção do Tipo de Buffer**:
+- **Redondo (Planar)**: Rápido, preciso para áreas pequenas (<10km)
+- **Redondo (Geodésico)**: Mais preciso para grandes regiões
+- **Quadrado**: Otimização computacional (raramente necessário)
+
+⚠️ **Escolha do SRC**:
+- SRC projetado local (ex: SIRGAS, UTM) - Melhor precisão
+- Web Mercator (EPSG:3857) - Bom para análise mundial
+- WGS84 (EPSG:4326) - Auto-convertido pelo FilterMate ✓
+
+### Qualidade dos Dados
+
+🔍 **Verificar**:
+- **Parcelas sobrepostas** - Pode inflar contagens
+- **Geometrias ausentes** - Usar ferramenta "Verificar Geometrias"
+- **Dados de transporte desatualizados** - Verificar status operacional das estações
+
+---
+
+## Problemas Comuns e Soluções
+
+### Problema 1: Nenhum Resultado Encontrado
+
+**Sintomas**: Filtro retorna 0 feições, mas você espera correspondências.
+
+**Causas Possíveis**:
+1. ❌ Distância do buffer muito pequena (tentar 1000m)
+2. ❌ Valor de atributo errado (verificar valores do campo `uso_solo`)
+3. ❌ Camadas não se sobrepõem geograficamente
+4. ❌ Incompatibilidade de SRC (embora FilterMate lide com isso)
+
+**Passos de Depuração**:
 ```sql
--- Test 1: Remove attribute filter
--- Just run spatial query on all parcels
+-- Teste 1: Remover filtro de atributo
+-- Apenas executar consulta espacial em todas as parcelas
 
--- Test 2: Increase buffer distance
--- Try 1000 or 2000 meters
+-- Teste 2: Aumentar distância do buffer
+-- Tentar 1000 ou 2000 metros
 
--- Test 3: Reverse query
--- Filter stations within parcels (should always return results)
+-- Teste 3: Inverter consulta
+-- Filtrar estações dentro de parcelas (sempre deve retornar resultados)
 ```
 
 ---
 
-### Issue 2: Slow Performance (>30` seconds)
+### Problema 2: Performance Lenta (>30 segundos)
 
-**Cause**: Large dataset with OGR backend.
+**Causa**: Grande conjunto de dados com backend OGR.
 
-**Solutions**:
-1. ✅ Install PostgreSQL + PostGIS
-2. ✅ Load data into PostgreSQL database
-3. ✅ Use PostgreSQL layer in QGIS
-4. ✅ Re-run filter (expect 10-50× speedup)
+**Soluções**:
+1. ✅ Instalar PostgreSQL + PostGIS
+2. ✅ Carregar dados no banco PostgreSQL
+3. ✅ Usar camada PostgreSQL no QGIS
+4. ✅ Re-executar filtro (esperar aceleração de 10-50×)
 
-**Quick PostgreSQL Setup**:
+**Configuração Rápida PostgreSQL**:
 ```bash
-# Install psycopg2 for QGIS Python
+# Instalar psycopg2 para Python do QGIS
 pip install psycopg2-binary
 
-# Or in OSGeo4W Shell (Windows):
+# Ou no OSGeo4W Shell (Windows):
 py3_env
 pip install psycopg2-binary
 ```
 
 ---
 
-### Issue 3: Results Look Wrong
+### Problema 3: Resultados Parecem Errados
 
-**Symptoms**: Parcels far from stations are included.
+**Sintomas**: Parcelas longe de estações são incluídas.
 
-**Possible Causes**:
-1. ❌ Buffer distance in wrong units (degrees instead of meters)
-2. ❌ "Contains" predicate instead of "Intersects"
-3. ❌ Reference layer is wrong (roads instead of stations)
+**Causas Possíveis**:
+1. ❌ Distância do buffer em unidades erradas (graus em vez de metros)
+2. ❌ Predicado "Contém" em vez de "Intersecta"
+3. ❌ Camada de referência está errada (estradas em vez de estações)
 
-**Verification**:
-1. Use QGIS **Measure Tool**
-2. Measure distance from filtered parcel to nearest station
-3. Should be ≤ 500 meters
-
----
-
-## Next Steps
-
-### Related Workflows
-
-- **[Emergency Services Coverage](./emergency-services)** - Similar distance analysis
-- **[Environmental Protection Zones](./environmental-protection)** - Multi-criteria filtering
-- **[Real Estate Analysis](./real-estate-analysis)** - Combined attribute filtering
-
-### Advanced Techniques
-
-**Graduated Buffers**:
-Run multiple filters with different distances (250m, 500m, 1000m) to create walkability zones.
-
-**Combine with Demographics**:
-Join census data to estimate transit-accessible population.
-
-**Time-Based Analysis**:
-Use historical data to track transit-oriented development over time.
+**Verificação**:
+1. Usar **Ferramenta de Medida** do QGIS
+2. Medir distância da parcela filtrada à estação mais próxima
+3. Deve ser ≤ 500 metros
 
 ---
 
-## Summary
+## Próximos Passos
 
-**You've Learned**:
-- ✅ Combined attribute and geometric filtering
-- ✅ Buffer operations with distance parameters
-- ✅ Spatial predicate selection (Intersects)
-- ✅ Backend performance optimization
-- ✅ Result export and CRS transformation
+### Fluxos de Trabalho Relacionados
 
-**Key Takeaways**:
-- FilterMate handles CRS reprojection automatically
-- PostgreSQL backend provides best performance for large datasets
-- 500m is typical "walking distance" for urban planning
-- Always verify results with manual measurement sampling
+- **[Cobertura de Serviços de Emergência](./emergency-services)** - Análise de distância similar
+- **[Zonas de Proteção Ambiental](./environmental-protection)** - Filtragem multi-critérios
+- **[Análise Imobiliária](./real-estate-analysis)** - Filtragem de atributos combinados
 
-**Time Saved**:
-- Manual selection: ~2 hours
-- Processing Toolbox (multi-step): ~20 minutes
-- FilterMate workflow: ~10 minutes ⚡
+### Técnicas Avançadas
+
+**Buffers Graduados**:
+Executar múltiplos filtros com diferentes distâncias (250m, 500m, 1000m) para criar zonas de caminhabilidade.
+
+**Combinar com Demografia**:
+Unir dados de censo para estimar população acessível por transporte.
+
+**Análise Temporal**:
+Usar dados históricos para rastrear desenvolvimento orientado ao transporte ao longo do tempo.
 
 ---
 
-Need help? Check the [Troubleshooting Guide](../advanced/troubleshooting) or ask on [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).
+## Resumo
+
+**Você Aprendeu**:
+- ✅ Filtragem combinada de atributos e geométrica
+- ✅ Operações de buffer com parâmetros de distância
+- ✅ Seleção de predicado espacial (Intersecta)
+- ✅ Otimização de performance do backend
+- ✅ Exportação de resultados e transformação de SRC
+
+**Principais Conclusões**:
+- FilterMate lida com reprojeção de SRC automaticamente
+- Backend PostgreSQL fornece melhor performance para grandes conjuntos de dados
+- 500m é "distância de caminhada" típica para planejamento urbano
+- Sempre verificar resultados com amostragem de medição manual
+
+**Tempo Economizado**:
+- Seleção manual: ~2 horas
+- Caixa de Ferramentas de Processamento (multi-etapas): ~20 minutos
+- Fluxo de trabalho FilterMate: ~10 minutos ⚡
+
+---
+
+Precisa de ajuda? Confira o [Guia de Solução de Problemas](../advanced/troubleshooting) ou pergunte em [Discussões do GitHub](https://github.com/sducournau/filter_mate/discussions).

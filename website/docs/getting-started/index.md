@@ -8,7 +8,7 @@ Welcome to FilterMate! These tutorials will help you become productive quickly.
 
 ## Tutorials in This Section
 
-### [Quick Start](./quick-start.md)
+### [Quick Start](/docs/getting-started/quick-start)
 **Time: 5 minutes**
 
 Learn the essential workflow:
@@ -17,7 +17,7 @@ Learn the essential workflow:
 - Understanding backend selection
 - Exporting filtered results
 
-### [Your First Filter](./first-filter.md)
+### [Your First Filter](/docs/getting-started/first-filter)
 **Time: 10-15 minutes**
 
 Complete step-by-step tutorial:
@@ -31,7 +31,7 @@ Complete step-by-step tutorial:
 Make sure you have:
 
 - ✅ **QGIS 3.x** installed
-- ✅ **FilterMate plugin** installed ([Installation Guide](../installation.md))
+- ✅ **FilterMate plugin** installed ([Installation Guide](/docs/installation))
 - ✅ **Vector layer** loaded in your project
 
 ## Performance Tips
@@ -52,11 +52,11 @@ Prefer video learning? Watch our complete walkthrough:
 
 After completing these tutorials:
 
-1. **[Interface Overview](../user-guide/interface-overview.md)** - Explore all UI components
-2. **[Filtering Basics](../user-guide/filtering-basics.md)** - Master attribute filtering
-3. **[Geometric Filtering](../user-guide/geometric-filtering.md)** - Advanced spatial operations
-4. **[Backends Overview](../backends/overview.md)** - Understand performance optimization
+1. **[Interface Overview](/docs/user-guide/interface-overview)** - Explore all UI components
+2. **[Filtering Basics](/docs/user-guide/filtering-basics)** - Master attribute filtering
+3. **[Geometric Filtering](/docs/user-guide/geometric-filtering)** - Advanced spatial operations
+4. **[Backends Overview](/docs/backends/overview)** - Understand performance optimization
 
 :::tip Need Help?
-Check the [Troubleshooting Guide](../advanced/troubleshooting.md) or visit [GitHub Issues](https://github.com/sducournau/filter_mate/issues).
+Check the [Troubleshooting Guide](/docs/advanced/troubleshooting) or visit [GitHub Issues](https://github.com/sducournau/filter_mate/issues).
 :::

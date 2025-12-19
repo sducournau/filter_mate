@@ -710,8 +710,8 @@ Place icons in `icons/` folder.
 
 ## See Also
 
-- [Backend Configuration](../backends/choosing-backend.md) - Backend-specific settings
-- [Performance Tuning](./performance-tuning.md) - Optimize your setup
+- [Backend Configuration](../backends/choosing-backend) - Backend-specific settings
+- [Performance Tuning](./performance-tuning) - Optimize your setup
 
 ---
 

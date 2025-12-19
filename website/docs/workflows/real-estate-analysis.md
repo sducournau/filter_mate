@@ -539,9 +539,9 @@ Any        | > 500   | PostgreSQL + spatial index
 
 ### Related Workflows
 
-- **[Urban Planning Transit](./urban-planning-transit.md)**: Similar proximity analysis
-- **[Emergency Services](./emergency-services.md)**: Inverse distance queries
-- **[Transportation Planning](./transportation-planning.md)**: Export and CRS handling
+- **[Urban Planning Transit](./urban-planning-transit)**: Similar proximity analysis
+- **[Emergency Services](./emergency-services)**: Inverse distance queries
+- **[Transportation Planning](./transportation-planning)**: Export and CRS handling
 
 ### Advanced Techniques
 
@@ -589,9 +589,9 @@ AND "price_reduced" = 1
 
 ### Further Learning
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates.md)
-- 📖 [Filtering Basics](../user-guide/filtering-basics.md)
-- 📖 [Filter History & Favorites](../user-guide/filter-history.md)
+- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Filtering Basics](../user-guide/filtering-basics)
+- 📖 [Filter History & Favorites](../user-guide/filter-history)
 - 📖 [Field Calculator Deep Dive](https://docs.qgis.org/latest/en/docs/user_manual/working_with_vector/attribute_table.html#using-the-field-calculator)
 
 ---

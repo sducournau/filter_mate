@@ -837,8 +837,8 @@ Do you need to find conflicts?
 
 ## Further Learning
 
-- 📖 [Buffer Operations](../../user-guide/buffer-operations.md)
-- 📖 [Geometric Filtering](../../user-guide/geometric-filtering.md)
+- 📖 [Buffer Operations](../../user-guide/buffer-operations)
+- 📖 [Geometric Filtering](../../user-guide/geometric-filtering)
 - 📖 [PostGIS Documentation](https://postgis.net/docs/reference.html)
 - 📖 [OGC Simple Features Specification](https://www.ogc.org/standards/sfa)
 

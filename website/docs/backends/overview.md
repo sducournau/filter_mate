@@ -36,7 +36,7 @@ FilterMate intelligently selects the best backend based on your layer:
 ```mermaid
 graph TD
     A[Layer Loaded] --> AB{Manual Backend<br/>Selection?}
-    AB -->|Yes| AC[🔒 Use Forced Backend]
+    AB -->|Yes| AC[⚡ Use Forced Backend]
     AB -->|No| B{Provider Type?}
     B -->|postgres| C{psycopg2 Available?}
     B -->|spatialite| E[Spatialite Backend]
@@ -99,7 +99,7 @@ You can force a specific backend by clicking the backend indicator icon next to 
 
 **Performance**: Best-in-class for large datasets
 
-[Learn more →](./postgresql.md)
+[Learn more →](./postgresql)
 
 ---
 
@@ -120,7 +120,7 @@ You can force a specific backend by clicking the backend indicator icon next to 
 
 **Performance**: Good balance of speed and simplicity
 
-[Learn more →](./spatialite.md)
+[Learn more →](./spatialite)
 
 ---
 
@@ -141,7 +141,7 @@ You can force a specific backend by clicking the backend indicator icon next to 
 
 **Performance**: Good for small-medium datasets (`<10k`)
 
-[Learn more →](./ogr.md)
+[Learn more →](./ogr)
 
 ---
 
@@ -156,7 +156,7 @@ You can force a specific backend by clicking the backend indicator icon next to 
 1. **Locate the backend indicator** next to your layer name in FilterMate panel
 2. **Click the backend icon** (shows current backend: PG/SQLite/OGR)
 3. **Select desired backend** from dropdown menu
-4. **Forced backend is indicated** with 🔒 symbol
+4. **Forced backend is indicated** with ⚡ symbol
 
 ### Why Force a Backend?
 
@@ -170,7 +170,7 @@ You can force a specific backend by clicking the backend indicator icon next to 
 
 FilterMate uses this priority order:
 
-1. **🔒 FORCED** - User explicitly selected backend
+1. **⚡ FORCED** - User explicitly selected backend
 2. **⚠️ FALLBACK** - PostgreSQL unavailable, force OGR
 3. **🤖 AUTO** - Automatic detection based on provider type
 
@@ -187,7 +187,7 @@ FilterMate validates your forced backend selection:
 
 The backend indicator shows:
 - **Icon**: Current backend (PG/SQLite/OGR)
-- **🔒 Symbol**: Backend is forced by user
+- **⚡ Symbol**: Backend is forced by user
 - **Tooltip**: Full backend name and mode
 
 ### Via FilterMate Messages
@@ -195,7 +195,7 @@ The backend indicator shows:
 FilterMate displays info messages when loading layers:
 
 - **"Using PostgreSQL backend"** → PostgreSQL mode (best performance)
-- **"🔒 Using FORCED backend 'postgresql'"** → User forced PostgreSQL
+- **"⚡ Using FORCED backend 'postgresql'"** → User forced PostgreSQL
 - **"Using Spatialite backend"** → Spatialite mode
 - **"Using OGR backend"** → OGR mode (file-based)
 
@@ -295,18 +295,18 @@ FilterMate includes automatic optimizations for all backends:
 - **Spatialite with `>50k` features**: Migrate to PostgreSQL
 - **PostgreSQL without psycopg2**: Install psycopg2
 
-See [Choosing the Right Backend](./choosing-backend.md) for detailed migration guides.
+See [Choosing the Right Backend](./choosing-backend) for detailed migration guides.
 
 ## Next Steps
 
-- **[Choosing a Backend](./choosing-backend.md)** - Interactive decision tree to help you pick the best backend
-- **[Performance Benchmarks](./performance-benchmarks.md)** - Detailed benchmark results
-- **[PostgreSQL Setup](./postgresql.md)** - Configure PostgreSQL for maximum performance
-- **[Spatialite Details](./spatialite.md)** - Learn about Spatialite capabilities
-- **[OGR Limitations](./ogr.md)** - Understand OGR backend constraints
+- **[Choosing a Backend](./choosing-backend)** - Interactive decision tree to help you pick the best backend
+- **[Performance Benchmarks](./performance-benchmarks)** - Detailed benchmark results
+- **[PostgreSQL Setup](./postgresql)** - Configure PostgreSQL for maximum performance
+- **[Spatialite Details](./spatialite)** - Learn about Spatialite capabilities
+- **[OGR Limitations](./ogr)** - Understand OGR backend constraints
 
-- [PostgreSQL Backend Details](./postgresql.md)
-- [Spatialite Backend Details](./spatialite.md)
-- [OGR Backend Details](./ogr.md)
-- [Performance Comparison](./performance-benchmarks.md)
+- [PostgreSQL Backend Details](./postgresql)
+- [Spatialite Backend Details](./spatialite)
+- [OGR Backend Details](./ogr)
+- [Performance Comparison](./performance-benchmarks)
 - [Backend Selection Guide](./choosing-backend)

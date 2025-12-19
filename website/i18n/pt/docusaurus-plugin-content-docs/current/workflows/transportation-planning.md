@@ -5,134 +5,134 @@ sidebar_position: 6
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Transportation Planning: Road Data Export
+# Planejamento de Transporte: Exportação de Dados Viários
 
-Extract and export road segments within municipal boundaries with specific attributes for transportation planning analysis.
+Extrair e exportar segmentos viários dentro de limites municipais com atributos específicos para análise de planejamento de transporte.
 
-## Scenario Overview
+## Visão Geral do Cenário
 
-**Goal**: Export all major roads (highway, primary, secondary) within city limits with proper CRS transformation for CAD/engineering software.
+**Objetivo**: Exportar todas as vias principais (rodovia, primária, secundária) dentro dos limites da cidade com transformação apropriada de SRC para software CAD/engenharia.
 
-**Real-World Application**:
-- Transportation departments preparing data for contractors
-- Engineering firms analyzing road networks
-- GIS analysts creating data subsets for modeling
-- Urban planners evaluating infrastructure coverage
+**Aplicação do Mundo Real**:
+- Departamentos de transporte preparando dados para empreiteiros
+- Empresas de engenharia analisando redes viárias
+- Analistas SIG criando subconjuntos de dados para modelagem
+- Planejadores urbanos avaliando cobertura de infraestrutura
 
-**Estimated Time**: 10 minutes
+**Tempo Estimado**: 10 minutos
 
-**Difficulty**: ⭐ Beginner
+**Dificuldade**: ⭐ Iniciante
 
 ---
 
-## Prerequisites
+## Pré-requisitos
 
-### Required Data
+### Dados Necessários
 
-1. **Roads Network Layer** (lines)
-   - Road segments/centerlines
-   - Required attributes:
-     - `road_type` or `highway` classification
-     - `name` (street name)
-   - Optional: `surface`, `lanes`, `speed_limit`, `condition`
+1. **Camada de Rede Viária** (linhas)
+   - Segmentos viários/eixos
+   - Atributos necessários:
+     - `tipo_via` ou classificação `highway`
+     - `nome` (nome da rua)
+   - Opcional: `superficie`, `faixas`, `velocidade_max`, `estado`
 
-2. **Municipality Boundary** (polygon)
-   - City, county, or district boundary
-   - Single feature preferred (use Dissolve if multiple)
-   - Must match or overlap road network extent
+2. **Limite Municipal** (polígono)
+   - Limite de cidade, município ou distrito
+   - Feição única preferida (usar Dissolver se múltiplas)
+   - Deve corresponder ou sobrepor extensão da rede viária
 
-### Sample Data Sources
+### Fontes de Dados de Exemplo
 
-**Roads Data**:
+**Dados Viários**:
 ```python
 # OpenStreetMap via QuickOSM
-Key: "highway", Value: "*"
+Chave: "highway", Valor: "*"
 
-# Road types to include:
-- motorway
-- trunk  
-- primary
-- secondary
-- tertiary
+# Tipos de vias a incluir:
+- motorway (rodovia)
+- trunk (via expressa)  
+- primary (via principal)
+- secondary (via secundária)
+- tertiary (via terciária)
 ```
 
-**Boundaries**:
-- Municipal GIS portals (official boundaries)
-- Census TIGER/Line files (USA)
-- OpenStreetMap administrative boundaries
-- National mapping agencies (UK Ordnance Survey, etc.)
+**Limites**:
+- Portais SIG municipais (limites oficiais)
+- Arquivos Census TIGER/Line (EUA)
+- Limites administrativos OpenStreetMap
+- Agências cartográficas nacionais (IBGE, etc.)
 
-### Backend Recommendation
+### Recomendação de Backend
 
-**Any Backend** - This workflow focuses on export features:
-- **OGR**: Universal compatibility, works with all formats
-- **Spatialite**: If you need temporary processing
-- **PostgreSQL**: If exporting very large networks (>100k segments)
+**Qualquer Backend** - Este fluxo de trabalho foca em recursos de exportação:
+- **OGR**: Compatibilidade universal, funciona com todos os formatos
+- **Spatialite**: Se você precisa de processamento temporário
+- **PostgreSQL**: Se exportando redes muito grandes (>100k segmentos)
 
-All backends export identically - choose based on your setup.
+Todos os backends exportam identicamente - escolha baseado em sua configuração.
 
 ---
 
-## Step-by-Step Instructions
+## Instruções Passo a Passo
 
-### Step 1: Load and Verify Data
+### Passo 1: Carregar e Verificar Dados
 
-1. **Load layers** into QGIS:
-   - `roads_network.gpkg` (or OSM .shp, .geojson)
-   - `city_boundary.gpkg`
+1. **Carregar camadas** no QGIS:
+   - `rede_viaria.gpkg` (ou OSM .shp, .geojson)
+   - `limite_cidade.gpkg`
 
-2. **Check CRS**:
+2. **Verificar SRC**:
    ```
-   Both layers should ideally be in same CRS
-   Right-click → Properties → Information → CRS
+   Ambas as camadas devem idealmente estar no mesmo SRC
+   Clique direito → Propriedades → Informação → SRC
    
-   Note: Not critical for this workflow (FilterMate handles reprojection)
+   Nota: Não é crítico para este fluxo (FilterMate lida com reprojeção)
    ```
 
-3. **Inspect attributes**:
+3. **Inspecionar atributos**:
    ```
-   Open roads attribute table (F6)
-   Find road classification field: "highway", "road_type", "fclass", etc.
-   Note field name for next step
-   ```
-
-4. **Verify boundary**:
-   ```
-   Select city_boundary layer
-   Should show single feature covering your area of interest
-   If multiple polygons: Vector → Geoprocessing → Dissolve
+   Abrir tabela de atributos vias (F6)
+   Encontrar campo de classificação viária: "highway", "tipo_via", "fclass", etc.
+   Anotar nome do campo para próximo passo
    ```
 
-:::tip OSM Road Classifications
-OpenStreetMap `highway` values:
-- `motorway`: Freeway/interstate
-- `trunk`: Major roads between cities
-- `primary`: Main roads within cities
-- `secondary`: Connecting roads  
-- `tertiary`: Local important roads
-- `residential`: Neighborhood streets
+4. **Verificar limite**:
+   ```
+   Selecionar camada limite_cidade
+   Deve mostrar feição única cobrindo sua área de interesse
+   Se múltiplos polígonos: Vetor → Geoprocessamento → Dissolver
+   ```
+
+:::tip Classificações Viárias OSM
+Valores OpenStreetMap `highway`:
+- `motorway`: Rodovia
+- `trunk`: Vias expressas entre cidades
+- `primary`: Vias principais dentro das cidades
+- `secondary`: Vias de ligação  
+- `tertiary`: Vias locais importantes
+- `residential`: Ruas de bairro
 :::
 
-### Step 2: Filter Roads by Type and Location
+### Passo 2: Filtrar Vias por Tipo e Localização
 
-**Using FilterMate**:
+**Usando FilterMate**:
 
-1. Open FilterMate panel
-2. Select **roads_network** layer
-3. Choose **any backend** (OGR is fine)
-4. Enter filter expression:
+1. Abrir painel FilterMate
+2. Selecionar camada **rede_viaria**
+3. Escolher **qualquer backend** (OGR serve)
+4. Inserir expressão de filtro:
 
 <Tabs>
-  <TabItem value="osm" label="OpenStreetMap Data" default>
+  <TabItem value="osm" label="Dados OpenStreetMap" default>
     ```sql
-    -- Major roads only (exclude residential, service roads)
+    -- Vias principais apenas (excluir residencial, vias de serviço)
     "highway" IN ('motorway', 'trunk', 'primary', 'secondary')
     
-    -- Within city boundary
+    -- Dentro do limite da cidade
     AND intersects(
       $geometry,
       aggregate(
-        layer:='city_boundary',
+        layer:='limite_cidade',
         aggregate:='collect',
         expression:=$geometry
       )
@@ -140,145 +140,142 @@ OpenStreetMap `highway` values:
     ```
   </TabItem>
   
-  <TabItem value="generic" label="Generic Road Data">
+  <TabItem value="generic" label="Dados Viários Genéricos">
     ```sql
-    -- Adjust field name to match your data
-    "road_type" IN ('highway', 'arterial', 'collector')
+    -- Ajustar nome do campo conforme seus dados
+    "tipo_via" IN ('rodovia', 'arterial', 'coletora')
     
-    -- Within municipality
+    -- Dentro do município
     AND within(
       $geometry,
-      aggregate('city_boundary', 'collect', $geometry)
+      aggregate('limite_cidade', 'collect', $geometry)
     )
     ```
   </TabItem>
   
-  <TabItem value="advanced" label="Advanced Filtering">
+  <TabItem value="advanced" label="Filtragem Avançada">
     ```sql
-    -- Major roads + additional criteria
+    -- Vias principais + critérios adicionais
     "highway" IN ('motorway', 'trunk', 'primary', 'secondary')
-    AND intersects($geometry, aggregate('city_boundary', 'collect', $geometry))
+    AND intersects($geometry, aggregate('limite_cidade', 'collect', $geometry))
     
-    -- Optional: Add condition filters
-    AND ("surface" = 'paved' OR "surface" IS NULL)  -- Exclude unpaved
-    AND "lanes" >= 2  -- Multi-lane only
-    AND "access" != 'private'  -- Public roads only
+    -- Opcional: Adicionar filtros de condição
+    AND ("superficie" = 'paved' OR "superficie" IS NULL)  -- Excluir não pavimentado
+    AND "faixas" >= 2  -- Múltiplas faixas apenas
+    AND "acesso" != 'private'  -- Vias públicas apenas
     ```
   </TabItem>
 </Tabs>
 
-5. Click **Apply Filter**
-6. Review count: "Showing X of Y features"
-7. Visually inspect: Only major roads within boundary should be highlighted
+5. Clicar em **Aplicar Filtro**
+6. Revisar contagem: "Mostrando X de Y feições"
+7. Inspecionar visualmente: Apenas vias principais dentro do limite devem estar destacadas
 
-**Expected Result**: Road segments filtered to major types within city limits
+**Resultado Esperado**: Segmentos viários filtrados para tipos principais dentro dos limites da cidade
 
-### Step 3: Review and Refine Selection
+### Passo 3: Revisar e Refinar Seleção
 
-**Check coverage**:
+**Verificar cobertura**:
 
-1. Zoom to full extent of city_boundary
-2. Verify filtered roads cover entire municipality
-3. Look for gaps or missing segments
+1. Aproximar para extensão completa de limite_cidade
+2. Verificar que vias filtradas cobrem todo o município
+3. Procurar por lacunas ou segmentos faltando
 
-**Adjust if needed**:
+**Ajustar se necessário**:
 
 ```sql
--- If too many roads included, be more strict:
-"highway" IN ('motorway', 'trunk', 'primary')  -- Exclude secondary
+-- Se muitas vias incluídas, ser mais rigoroso:
+"highway" IN ('motorway', 'trunk', 'primary')  -- Excluir secondary
 
--- If missing important roads, expand:
+-- Se faltam vias importantes, expandir:
 "highway" IN ('motorway', 'trunk', 'primary', 'secondary', 'tertiary')
 
--- If using custom classification:
-"functional_class" IN (1, 2, 3)  -- Numeric codes
+-- Se usando classificação personalizada:
+"classe_funcional" IN (1, 2, 3)  -- Códigos numéricos
 ```
 
-**Edge cases** - Roads partially outside boundary:
+**Casos limite** - Vias parcialmente fora do limite:
 
 <Tabs>
-  <TabItem value="include" label="Include Partial Segments" default>
+  <TabItem value="include" label="Incluir Segmentos Parciais" default>
     ```sql
-    -- Use intersects (includes partially overlapping)
-    intersects($geometry, aggregate('city_boundary', 'collect', $geometry))
+    -- Usar intersects (inclui sobreposições parciais)
+    intersects($geometry, aggregate('limite_cidade', 'collect', $geometry))
     ```
   </TabItem>
   
-  <TabItem value="exclude" label="Only Completely Inside">
+  <TabItem value="exclude" label="Apenas Completamente Dentro">
     ```sql
-    -- Use within (only fully contained roads)
-    within($geometry, aggregate('city_boundary', 'collect', $geometry))
+    -- Usar within (apenas vias totalmente contidas)
+    within($geometry, aggregate('limite_cidade', 'collect', $geometry))
     ```
   </TabItem>
   
-  <TabItem value="clip" label="Clip to Boundary (Manual)">
-    After filtering, use QGIS Clip tool:
+  <TabItem value="clip" label="Recortar para Limite (Manual)">
+    Após filtragem, usar ferramenta Recortar do QGIS:
     ```
-    Vector → Geoprocessing → Clip
-    Input: filtered roads
-    Overlay: city_boundary
-    Result: Roads trimmed exactly to boundary
+    Vetor → Geoprocessamento → Recortar
+    Entrada: vias filtradas
+    Sobreposição: limite_cidade
+    Resultado: Vias cortadas exatamente no limite
     ```
   </TabItem>
 </Tabs>
 
-### Step 4: Select Attributes to Export
+### Passo 4: Selecionar Atributos para Exportar
 
-**Identify useful fields**:
+**Identificar campos úteis**:
 
-1. Open **Attribute Table** of filtered layer
-2. Note relevant columns:
+1. Abrir **Tabela de Atributos** da camada filtrada
+2. Anotar colunas relevantes:
    ```
-   Essential:
-   - road_id, osm_id (identifier)
-   - name (street name)
-   - highway / road_type (classification)
+   Essenciais:
+   - id_via, osm_id (identificador)
+   - nome (nome da rua)
+   - highway / tipo_via (classificação)
    
-   Useful:
-   - surface (paved, unpaved, etc.)
-   - lanes (number of lanes)
-   - maxspeed (speed limit)
-   - length_m (calculated or existing)
+   Úteis:
+   - superficie (pavimentado, não pavimentado, etc.)
+   - faixas (número de faixas)
+   - velocidade_max (limite de velocidade)
+   - comprimento_m (calculado ou existente)
    ```
 
-3. Optional: **Remove unnecessary columns** before export:
+3. Opcional: **Remover colunas desnecessárias** antes da exportação:
    ```
-   Layer → Properties → Fields
-   Toggle editing mode (pencil icon)
-   Delete unwanted fields (osm metadata, etc.)
-   Save edits
+   Camada → Propriedades → Campos
+   Ativar modo de edição (ícone lápis)
+   Excluir campos indesejados (metadados osm, etc.)
+   Salvar edições
    ```
 
-### Step 5: Add Calculated Fields (Optional)
+### Passo 5: Adicionar Campos Calculados (Opcional)
 
-**Add road length** in your preferred units:
+**Adicionar comprimento de via** em suas unidades preferidas:
 
-1. Open **Field Calculator** (Ctrl+I)
-2. Create new field:
+1. Abrir **Calculadora de Campo** (Ctrl+I)
+2. Criar novo campo:
    ```
-   Field name: length_m
-   Type: Decimal (double)
-   Precision: 2
+   Nome do campo: comprimento_m
+   Tipo: Decimal (double)
+   Precisão: 2
    
-   Expression:
+   Expressão:
    $length
    ```
 
-**Add length in different units**:
+**Adicionar comprimento em diferentes unidades**:
    ```
-   Field name: length_ft
-   Expression: $length * 3.28084  -- meters to feet
-   
-   Field name: length_km
-   Expression: $length / 1000  -- meters to kilometers
+   Nome do campo: comprimento_km
+   Expressão: $length / 1000  -- metros para quilômetros
    ```
 
-**Add functional classification** (if converting OSM data):
+**Adicionar classificação funcional** (se convertendo dados OSM):
    ```
-   Field name: functional_class
-   Type: Integer
+   Nome do campo: classe_funcional
+   Tipo: Inteiro
    
-   Expression:
+   Expressão:
    CASE
      WHEN "highway" IN ('motorway', 'trunk') THEN 1
      WHEN "highway" = 'primary' THEN 2
@@ -288,522 +285,373 @@ OpenStreetMap `highway` values:
    END
    ```
 
-### Step 6: Choose Target CRS for Export
+### Passo 6: Escolher SRC Alvo para Exportação
 
-**Common CRS choices**:
+**Escolhas comuns de SRC**:
 
 <Tabs>
   <TabItem value="wgs84" label="WGS84 (Universal)" default>
     ```
-    EPSG:4326 - WGS84 Geographic
+    EPSG:4326 - WGS84 Geográfico
     
-    Use for:
-    - Web mapping (Leaflet, Google Maps)
-    - GPS applications
-    - Maximum interoperability
+    Usar para:
+    - Mapeamento web (Leaflet, Google Maps)
+    - Aplicações GPS
+    - Interoperabilidade máxima
     
-    ⚠️ Not suitable for CAD (uses degrees, not meters)
+    ⚠️ Não adequado para CAD (usa graus, não metros)
     ```
   </TabItem>
   
-  <TabItem value="utm" label="UTM (Engineering)">
+  <TabItem value="utm" label="UTM (Engenharia)">
     ```
-    EPSG:326XX - UTM Zones
-    Examples:
-    - EPSG:32633 - UTM Zone 33N (Central Europe)
-    - EPSG:32617 - UTM Zone 17N (Eastern USA)
+    EPSG:326XX - Zonas UTM
+    Exemplos:
+    - EPSG:32633 - Zona UTM 33N (Europa Central)
+    - EPSG:32723 - Zona UTM 23S (Brasil Sul)
     
-    Use for:
-    - CAD software (AutoCAD, MicroStation)
-    - Engineering drawings
-    - Accurate distance measurements
+    Usar para:
+    - Software CAD (AutoCAD, MicroStation)
+    - Desenhos de engenharia
+    - Medições precisas de distância
     
-    ✓ Meters-based, preserves accuracy
+    ✓ Baseado em metros, preserva precisão
     ```
   </TabItem>
   
-  <TabItem value="state" label="State Plane (USA)">
+  <TabItem value="local" label="Grade Local">
     ```
-    State Plane Coordinate Systems
-    Examples:
-    - EPSG:2249 - Massachusetts State Plane (meters)
-    - EPSG:2278 - Texas State Plane Central (feet)
+    Sistemas Nacionais/Regionais
+    Exemplos:
+    - EPSG:31984 - SIRGAS 2000 / UTM zone 24S (Brasil)
+    - EPSG:2154 - Lambert 93 (França)
+    - EPSG:3857 - Web Mercator (mapas web)
     
-    Use for:
-    - Local government projects (USA)
-    - Compliance with state standards
-    - Integration with official datasets
-    ```
-  </TabItem>
-  
-  <TabItem value="local" label="Local Grid">
-    ```
-    National/Regional Systems
-    Examples:
-    - EPSG:27700 - British National Grid (UK)
-    - EPSG:2154 - Lambert 93 (France)
-    - EPSG:3857 - Web Mercator (web maps)
-    
-    Use for:
-    - National mapping agency compatibility
-    - Regional standards compliance
+    Usar para:
+    - Compatibilidade agência cartográfica nacional
+    - Conformidade com padrões regionais
     ```
   </TabItem>
 </Tabs>
 
-**Find your CRS**:
-- Search [epsg.io](https://epsg.io/) by location
-- Check project requirements/specifications
-- Ask receiving organization for preferred CRS
+**Encontrar seu SRC**:
+- Buscar em [epsg.io](https://epsg.io/) por localização
+- Verificar requisitos/especificações do projeto
+- Perguntar à organização receptora o SRC preferido
 
-### Step 7: Export Filtered Roads
+### Passo 7: Exportar Vias Filtradas
 
-**Using FilterMate Export** (Recommended):
+**Usando Exportação FilterMate** (Recomendado):
 
-1. In FilterMate panel, click **Export Filtered Features**
-2. Configure export settings:
+1. No painel FilterMate, clicar em **Exportar Feições Filtradas**
+2. Configurar ajustes de exportação:
 
    ```
-   Format: Choose based on recipient's needs
+   Formato: Escolher baseado nas necessidades do destinatário
    
-   For GIS:
-   ├── GeoPackage (.gpkg) - Best for QGIS/modern GIS
-   ├── Shapefile (.shp) - Universal GIS format
-   └── GeoJSON (.geojson) - Web mapping, lightweight
+   Para SIG:
+   ├── GeoPackage (.gpkg) - Melhor para QGIS/SIG modernos
+   ├── Shapefile (.shp) - Formato SIG universal
+   └── GeoJSON (.geojson) - Mapeamento web, leve
    
-   For CAD:
-   ├── DXF (.dxf) - AutoCAD, most compatible
-   └── DWG (.dwg) - AutoCAD (requires plugin)
+   Para CAD:
+   ├── DXF (.dxf) - AutoCAD, mais compatível
+   └── DWG (.dwg) - AutoCAD (requer plugin)
    
-   For Databases:
-   ├── PostGIS - Direct database export
-   └── Spatialite - Embedded database
+   Para Bancos de Dados:
+   ├── PostGIS - Exportação direta para banco
+   └── Spatialite - Banco de dados embutido
    
-   For Other:
-   ├── CSV with WKT geometry - Text-based
+   Para Outros:
+   ├── CSV com geometria WKT - Baseado em texto
    ├── KML - Google Earth
-   └── GPX - GPS devices
+   └── GPX - Dispositivos GPS
    ```
 
-3. **Set CRS** (Coordinate Reference System):
+3. **Definir SRC** (Sistema de Referência de Coordenadas):
    ```
-   Click CRS selector
-   Search for target CRS (e.g., "UTM 33N" or "EPSG:32633")
-   Select and confirm
+   Clicar no seletor de SRC
+   Buscar SRC alvo (ex: "SIRGAS" ou "EPSG:31984")
+   Selecionar e confirmar
    
-   ℹ️ FilterMate will reproject automatically
+   ℹ️ FilterMate reprojetará automaticamente
    ```
 
-4. **Configure options**:
+4. **Configurar opções**:
    ```
-   ✓ Export selected features only (already filtered)
-   ✓ Skip attribute fields: [choose unnecessary fields]
-   ✓ Add geometry column (for CSV exports)
-   ✓ Force multi-linestring type (if required)
+   ✓ Exportar apenas feições selecionadas (já filtradas)
+   ✓ Ignorar campos de atributo: [escolher campos desnecessários]
+   ✓ Adicionar coluna geometria (para exportações CSV)
+   ✓ Forçar tipo multi-linha (se necessário)
    ```
 
-5. **Name and save**:
+5. **Nomear e salvar**:
    ```
-   Filename: city_major_roads_utm33n_2024.gpkg
+   Nome do arquivo: cidade_vias_principais_sirgas_2024.gpkg
    
-   Naming convention tip:
-   [location]_[content]_[crs]_[date].[ext]
+   Convenção de nomenclatura dica:
+   [local]_[conteudo]_[src]_[data].[ext]
    ```
 
-6. Click **Export** → Wait for confirmation
+6. Clicar em **Exportar** → Aguardar confirmação
 
-### Step 8: Validate Export
+### Passo 8: Validar Exportação
 
-**Quality checks**:
+**Verificações de qualidade**:
 
-1. **Load exported file** back into QGIS:
+1. **Carregar arquivo exportado** de volta no QGIS:
    ```
-   Layer → Add Layer → Add Vector Layer
-   Browse to exported file
-   ```
-
-2. **Verify CRS**:
-   ```
-   Right-click layer → Properties → Information
-   Check CRS matches your target (e.g., EPSG:32633)
+   Camada → Adicionar Camada → Adicionar Camada Vetorial
+   Navegar até arquivo exportado
    ```
 
-3. **Check feature count**:
+2. **Verificar SRC**:
    ```
-   Should match filtered count from Step 2
-   Open attribute table (F6) to verify
-   ```
-
-4. **Inspect attributes**:
-   ```
-   All selected fields present and populated
-   No NULL values in critical fields
-   Text encoding correct (no garbled characters)
+   Clique direito na camada → Propriedades → Informação
+   Verificar se SRC corresponde ao seu alvo (ex: EPSG:31984)
    ```
 
-5. **Visual comparison**:
+3. **Verificar contagem de feições**:
    ```
-   Overlay exported layer with original
-   Verify geometries match exactly
-   Check no segments were lost or duplicated
+   Deve corresponder à contagem filtrada do Passo 2
+   Abrir tabela de atributos (F6) para verificar
    ```
 
-**Test with recipient's software** (if possible):
-- Open in AutoCAD/MicroStation (for DXF exports)
-- Load in ArcGIS/MapInfo (for Shapefile)
-- Import to database (for SQL exports)
+4. **Inspecionar atributos**:
+   ```
+   Todos os campos selecionados presentes e preenchidos
+   Sem valores NULL em campos críticos
+   Codificação de texto correta (sem caracteres corrompidos)
+   ```
+
+5. **Comparação visual**:
+   ```
+   Sobrepor camada exportada com original
+   Verificar se geometrias correspondem exatamente
+   Verificar se nenhum segmento foi perdido ou duplicado
+   ```
+
+**Testar com software do destinatário** (se possível):
+- Abrir no AutoCAD/MicroStation (para exportações DXF)
+- Carregar no ArcGIS/MapInfo (para Shapefile)
+- Importar para banco de dados (para exportações SQL)
 
 ---
 
-## Understanding the Results
+## Entendendo os Resultados
 
-### What You've Exported
+### O Que Você Exportou
 
-✅ **Included**:
-- Major roads (motorway, trunk, primary, secondary) only
-- Roads intersecting/within city boundary
-- Selected attributes relevant for analysis
-- Geometry reprojected to target CRS
+✅ **Incluído**:
+- Vias principais (motorway, trunk, primary, secondary) apenas
+- Vias intersectando/dentro do limite da cidade
+- Atributos selecionados relevantes para análise
+- Geometria reprojetada para SRC alvo
 
-❌ **Excluded**:
-- Minor roads (residential, service, paths)
-- Roads outside municipality
-- OSM metadata and technical fields
-- Original CRS (if reprojected)
+❌ **Excluído**:
+- Vias menores (residencial, serviço, caminhos)
+- Vias fora do município
+- Metadados OSM e campos técnicos
+- SRC original (se reprojetado)
 
-### File Size Expectations
+### Expectativas de Tamanho de Arquivo
 
-**Typical sizes** for medium city (500km² area):
+**Tamanhos típicos** para cidade média (área de 500km²):
 
 ```
-Format      | ~10k segments | Notes
-------------|---------------|----------------------------
-GeoPackage  | 2-5 MB        | Smallest, fastest
-Shapefile   | 3-8 MB        | Multiple files (.shp/.dbf/.shx)
-GeoJSON     | 5-15 MB       | Text-based, larger but readable
-DXF         | 4-10 MB       | CAD format
-CSV+WKT     | 10-30 MB      | Text geometry, very large
-```
-
-**If file unexpectedly large**:
-- Check for hidden attributes (OSM metadata)
-- Simplify line geometry (Simplify tool, 1-5m tolerance)
-- Verify filter actually applied (check feature count)
-
-### Common Export Issues
-
-**Issue 1: "CRS transformation failed"**
-
-**Solution**:
-```
-1. Verify source layer has valid CRS set
-2. Choose different target CRS (try WGS84 first)
-3. Reproject layer manually first:
-   Vector → Data Management → Reproject Layer
-4. Then export without CRS change
-```
-
-**Issue 2: "Some features were not exported"**
-
-**Solution**:
-```
-1. Check for invalid geometries:
-   Vector → Geometry Tools → Check Validity
-2. Fix invalid geometries:
-   Vector → Geometry Tools → Fix Geometries
-3. Re-apply filter and export fixed layer
-```
-
-**Issue 3: Shapefile truncates field names**
-
-**Limitation**: Shapefile format limits field names to 10 characters
-
-**Solution**:
-```
-Option A: Use GeoPackage instead (no limits)
-Option B: Rename fields before export:
-   - "maxspeed_mph" → "max_speed"
-   - "functional_classification" → "func_class"
+Formato     | ~10k segmentos | Notas
+------------|----------------|----------------------------
+GeoPackage  | 2-5 MB         | Menor, mais rápido
+Shapefile   | 3-8 MB         | Arquivos múltiplos (.shp/.dbf/.shx)
+GeoJSON     | 5-15 MB        | Baseado em texto, maior mas legível
+DXF         | 4-10 MB        | Formato CAD
+CSV+WKT     | 10-30 MB       | Geometria texto, muito grande
 ```
 
 ---
 
-## Best Practices
+## Melhores Práticas
 
-### Data Preparation
+### Preparação de Dados
 
-**Before export checklist**:
-
-```
-□ Filter applied and verified
-□ Attribute table reviewed
-□ Unnecessary fields removed
-□ Calculated fields added (length, etc.)
-□ Geometries validated
-□ CRS determined
-□ Export format confirmed with recipient
-```
-
-### Naming Conventions
-
-**File naming best practices**:
+**Lista de verificação antes da exportação**:
 
 ```
-Good:
-✓ boston_major_roads_utm19n_20240312.gpkg
-✓ denver_highways_stateplane_ft_v2.shp
-✓ london_transport_network_bng_2024.geojson
-
-Bad:
-✗ roads.shp (too generic)
-✗ export_final_FINAL_v3.gpkg (unclear versioning)
-✗ データ.gpkg (non-ASCII characters)
+□ Filtro aplicado e verificado
+□ Tabela de atributos revisada
+□ Campos desnecessários removidos
+□ Campos calculados adicionados (comprimento, etc.)
+□ Geometrias validadas
+□ SRC determinado
+□ Formato de exportação confirmado com destinatário
 ```
 
-**Folder structure**:
-```
-project_name/
-├── 01_source_data/
-│   ├── roads_raw_osm.gpkg
-│   └── boundary_official.shp
-├── 02_processed/
-│   └── roads_filtered.gpkg
-└── 03_deliverables/
-    ├── roads_utm33n.gpkg
-    ├── roads_utm33n.dxf
-    └── metadata.txt
-```
+### Convenções de Nomenclatura
 
-### Metadata Documentation
-
-**Always include metadata file**:
+**Boas práticas de nomenclatura de arquivo**:
 
 ```
-metadata.txt or README.txt contents:
+Bom:
+✓ saopaulo_vias_principais_sirgas_20240312.gpkg
+✓ riodejaneiro_rodovias_utm23s_v2.shp
+✓ brasilia_rede_transporte_wgs84_2024.geojson
 
-=== Road Network Export ===
-Date: 2024-03-12
-Analyst: Jane Smith
-Project: City Transportation Master Plan
-
-Source Data:
-- Roads: OpenStreetMap (downloaded 2024-03-01)
-- Boundary: City GIS Portal (official 2024 boundary)
-
-Processing:
-- Filter: Major roads only (motorway, trunk, primary, secondary)
-- Area: Within city limits
-- Tool: QGIS FilterMate plugin v2.8.0
-
-Export Specifications:
-- Format: GeoPackage
-- CRS: EPSG:32633 (UTM Zone 33N)
-- Feature Count: 8,432 segments
-- Total Length: 1,247.3 km
-
-Attributes:
-- osm_id: OpenStreetMap identifier
-- name: Street name
-- highway: Road classification
-- surface: Pavement type
-- lanes: Number of lanes
-- length_m: Segment length in meters
-
-Quality Notes:
-- Geometries validated and repaired
-- Roads partially outside boundary included (intersects)
-- Speed limits: 15% missing data (default to city standard)
-
-Contact: jane.smith@city.gov
+Ruim:
+✗ vias.shp (muito genérico)
+✗ export_final_FINAL_v3.gpkg (versionamento confuso)
+✗ dados.gpkg (nome pouco descritivo)
 ```
 
-### Performance Tips
+### Documentação de Metadados
 
-**For large networks** (>50k segments):
+**Sempre incluir arquivo de metadados**:
 
-1. **Create spatial index** first:
-   ```
-   Layer Properties → Create Spatial Index
-   Speeds up spatial filtering
-   ```
+```
+metadata.txt ou README.txt conteúdo:
 
-2. **Export in chunks** if hitting memory limits:
-   ```
-   Filter by district/zone, export separately, merge later
-   Processing → Vector General → Merge Vector Layers
-   ```
+=== Exportação Rede Viária ===
+Data: 2024-03-12
+Analista: João Silva
+Projeto: Plano Diretor Transporte Cidade
 
-3. **Use PostgreSQL backend** for fastest export:
-   ```
-   Direct database to file export (bypass QGIS memory)
-   ```
+Dados Fonte:
+- Vias: OpenStreetMap (baixado 2024-03-01)
+- Limite: Portal SIG Cidade (limite oficial 2024)
 
-4. **Simplify geometry** if millimeter precision not needed:
-   ```
-   Vector → Geometry → Simplify
-   Tolerance: 1-5 meters (invisible change, major size reduction)
-   ```
+Processamento:
+- Filtro: Vias principais apenas (motorway, trunk, primary, secondary)
+- Área: Dentro limites da cidade
+- Ferramenta: Plugin QGIS FilterMate v2.8.0
+
+Especificações Exportação:
+- Formato: GeoPackage
+- SRC: EPSG:31984 (SIRGAS 2000 / UTM zone 24S)
+- Contagem de Feições: 8.432 segmentos
+- Comprimento Total: 1.247,3 km
+
+Atributos:
+- osm_id: Identificador OpenStreetMap
+- nome: Nome da rua
+- highway: Classificação viária
+- superficie: Tipo de pavimento
+- faixas: Número de faixas
+- comprimento_m: Comprimento do segmento em metros
+
+Notas de Qualidade:
+- Geometrias validadas e reparadas
+- Vias parcialmente fora do limite incluídas (intersects)
+- Limites de velocidade: 15% de dados faltando (padrão da cidade)
+
+Contato: joao.silva@cidade.gov.br
+```
 
 ---
 
-## Common Issues
+## Problemas Comuns
 
-### Issue 1: Roads along boundary partially cut off
+### Problema 1: Vias ao longo do limite parcialmente cortadas
 
-**Cause**: Using `within()` instead of `intersects()`
+**Causa**: Uso de `within()` em vez de `intersects()`
 
-**Solution**:
+**Solução**:
 ```sql
--- Change from:
-within($geometry, aggregate('city_boundary', 'collect', $geometry))
+-- Mudar de:
+within($geometry, aggregate('limite_cidade', 'collect', $geometry))
 
--- To:
-intersects($geometry, aggregate('city_boundary', 'collect', $geometry))
+-- Para:
+intersects($geometry, aggregate('limite_cidade', 'collect', $geometry))
 
--- Or clip geometrically after export:
-Vector → Geoprocessing → Clip
+-- Ou recortar geometricamente após exportação:
+Vetor → Geoprocessamento → Recortar
 ```
 
-### Issue 2: Export fails with "write error"
+### Problema 2: Exportação falha com "erro de escrita"
 
-**Cause**: File permissions, path issues, or disk space
+**Causa**: Permissões de arquivo, problemas de caminho, ou espaço em disco
 
-**Solutions**:
+**Soluções**:
 ```
-1. Check disk space (need 2-3x final file size)
-2. Export to different location (e.g., Desktop instead of network drive)
-3. Close file if open in another program
-4. Use shorter file path (<100 characters)
-5. Remove special characters from filename
-```
-
-### Issue 3: CAD software won't open DXF
-
-**Cause**: QGIS DXF export may not match CAD version expectations
-
-**Solutions**:
-```
-Option A: Try different DXF export settings
-   Project → Import/Export → Export Project to DXF
-   - DXF format version: AutoCAD 2010
-   - Symbology mode: Feature symbology
-
-Option B: Use intermediate format
-   Export to Shapefile → Open in AutoCAD (has built-in SHP support)
-
-Option C: Use specialized plugin
-   Install "Another DXF Exporter" plugin
-   Better CAD compatibility than native export
+1. Verificar espaço em disco (precisa 2-3x tamanho final do arquivo)
+2. Exportar para local diferente (ex: Área de Trabalho em vez de unidade de rede)
+3. Fechar arquivo se estiver aberto em outro programa
+4. Usar caminho de arquivo mais curto (<100 caracteres)
+5. Remover caracteres especiais do nome do arquivo
 ```
 
-### Issue 4: Attribute encoding issues (special characters)
+### Problema 3: Software CAD não abre DXF
 
-**Cause**: Shapefile encoding limitations
+**Causa**: Exportação DXF do QGIS pode não corresponder às expectativas da versão CAD
 
-**Solutions**:
+**Soluções**:
 ```
-For GeoPackage: (Recommended, no encoding issues)
-   Format: GeoPackage
-   Encoding: UTF-8 (automatic)
+Opção A: Tentar configurações de exportação DXF diferentes
+   Projeto → Importar/Exportar → Exportar Projeto para DXF
+   - Versão formato DXF: AutoCAD 2010
+   - Modo simbologia: Simbologia de feição
 
-For Shapefile:
-   Format: ESRI Shapefile
-   Encoding: UTF-8 or ISO-8859-1
-   Layer Options → ENCODING=UTF-8
+Opção B: Usar formato intermediário
+   Exportar para Shapefile → Abrir no AutoCAD (suporte SHP integrado)
+
+Opção C: Usar plugin especializado
+   Instalar plugin "Another DXF Exporter"
+   Melhor compatibilidade CAD que exportação nativa
 ```
 
 ---
 
-## Next Steps
+## Próximos Passos
 
-### Related Workflows
+### Fluxos de Trabalho Relacionados
 
-- **[Real Estate Analysis](./real-estate-analysis)**: Attribute filtering techniques
-- **[Emergency Services](./emergency-services)**: Buffer-based selection
-- **[Urban Planning Transit](./urban-planning-transit)**: Multi-layer spatial filtering
+- **[Análise Imobiliária](./real-estate-analysis)**: Técnicas de filtragem por atributos
+- **[Serviços de Emergência](./emergency-services)**: Seleção baseada em buffers
+- **[Planejamento Urbano Transporte](./urban-planning-transit)**: Filtragem espacial multi-camadas
 
-### Advanced Techniques
+### Técnicas Avançadas
 
-**1. Network Topology Export**:
+**1. Exportação de Topologia de Rede**:
 ```
-Export roads with connectivity maintained for routing analysis
-Processing → Vector Analysis → Network Analysis → Service Areas
+Exportar vias com conectividade mantida para análise de roteamento
+Processamento → Análise Vetorial → Análise de Rede → Áreas de Serviço
 ```
 
-**2. Multi-CRS Batch Export**:
+**2. Exportação em Lote Multi-SRC**:
 ```python
-# Python console - export to multiple CRS simultaneously
-target_crs_list = [32633, 32634, 4326]  # EPSG codes
+# Console Python - exportar para múltiplos SRC simultaneamente
+lista_src_alvos = [31984, 4326, 32723]  # Códigos EPSG
 layer = iface.activeLayer()
 
-for epsg in target_crs_list:
-    output_file = f'roads_epsg{epsg}.gpkg'
-    # Use QgsVectorFileWriter for programmatic export
+for epsg in lista_src_alvos:
+    arquivo_saida = f'vias_epsg{epsg}.gpkg'
+    # Usar QgsVectorFileWriter para exportação programática
 ```
 
-**3. Scheduled Export Automation**:
+**3. Automação de Exportação Programada**:
 ```python
-# Create QGIS processing model
-# Schedule with cron (Linux) or Task Scheduler (Windows)
-# Auto-export updated road data weekly
+# Criar modelo de processamento QGIS
+# Agendar com cron (Linux) ou Agendador de Tarefas (Windows)
+# Auto-exportar dados viários atualizados semanalmente
 ```
-
-**4. Attribute Aggregation** (summarize by road type):
-```sql
--- Before export, create summary statistics
-GROUP BY "highway"
-COUNT(*), SUM($length), AVG("lanes")
-```
-
-**5. Multi-Format Batch Export**:
-```
-Export same filtered data to multiple formats simultaneously
-Processing → QGIS Model Designer → Batch export node
-Outputs: .gpkg, .shp, .geojson, .dxf
-```
-
-### Further Learning
-
-- 📖 [Export Features Guide](../user-guide/export-features)
-- 📖 [Buffer Operations](../user-guide/buffer-operations)
-- 📖 [Performance Tuning](../advanced/performance-tuning)
-- 📖 [QGIS Processing Documentation](https://docs.qgis.org/latest/en/docs/user_manual/processing/index.html)
 
 ---
 
-## Summary
+## Resumo
 
-✅ **You've learned**:
-- Filtering roads by classification and boundary
-- Selecting and preparing attributes for export
-- Choosing appropriate target CRS
-- Exporting to multiple formats (GeoPackage, Shapefile, DXF, etc.)
-- Validating export quality
-- Creating metadata documentation
+✅ **Você aprendeu**:
+- Filtrar vias por classificação e limite
+- Selecionar e preparar atributos para exportação
+- Escolher SRC alvo apropriado
+- Exportar para múltiplos formatos (GeoPackage, Shapefile, DXF, etc.)
+- Validar qualidade de exportação
+- Criar documentação de metadados
 
-✅ **Key techniques**:
-- Spatial predicates: `intersects()` vs `within()`
-- CRS transformation during export
-- Format selection based on use case
-- Field calculator for derived attributes
-- Batch processing for large datasets
+✅ **Técnicas chave**:
+- Predicados espaciais: `intersects()` vs `within()`
+- Transformação de SRC durante exportação
+- Seleção de formato conforme caso de uso
+- Calculadora de campo para atributos derivados
+- Processamento em lote para grandes conjuntos de dados
 
-🎯 **Real-world impact**: This workflow streamlines data preparation for transportation projects, ensures data interoperability between GIS and CAD systems, and maintains data quality through the analysis pipeline.
+🎯 **Impacto real**: Este fluxo de trabalho simplifica preparação de dados para projetos de transporte, garante interoperabilidade de dados entre sistemas SIG e CAD, e mantém qualidade dos dados ao longo do pipeline de análise.
 
-💡 **Pro tip**: Create a **QGIS Processing Model** for this workflow to automate filtering + export in one click. Save the model and reuse for different cities or time periods.
-
----
-
-## Appendix: Export Format Quick Reference
-
-| Format | Extension | Use Case | Max File Size | CRS Support | Attribute Limits |
-|--------|-----------|----------|---------------|-------------|------------------|
-| **GeoPackage** | .gpkg | Modern GIS, QGIS | 140 TB | ✓ Any | None |
-| **Shapefile** | .shp | Legacy GIS, universal | 2-4 GB | ✓ Any | 10-char field names, 254 chars text |
-| **GeoJSON** | .geojson | Web mapping, APIs | Unlimited (but slow if >100 MB) | ✓ Any (WGS84 recommended) | None |
-| **DXF** | .dxf | CAD (AutoCAD) | Unlimited | ✓ Limited | Limited attribute support |
-| **CSV+WKT** | .csv | Spreadsheets, databases | Unlimited (text) | Manual | None |
-| **KML** | .kml | Google Earth | Slow if >10 MB | WGS84 only | Limited styling |
-| **PostGIS** | SQL | Database | Unlimited | ✓ Any | None |
-
-**Recommendation**: Use **GeoPackage** unless you have specific compatibility requirements. It's the modern standard with no artificial limitations.
+💡 **Dica profissional**: Crie um **Modelo de Processamento QGIS** para este fluxo de trabalho para automatizar filtragem + exportação em um clique. Salve o modelo e reutilize para diferentes cidades ou períodos.

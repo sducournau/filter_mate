@@ -215,7 +215,7 @@ Vous avez appliqué avec succès votre premier filtre ! Vous êtes maintenant pr
 **Continuer l'Apprentissage :**
 - [Bases du Filtrage](../user-guide/filtering-basics) - Maîtrisez les expressions QGIS
 - [Filtrage Géométrique](../user-guide/geometric-filtering) - Relations spatiales
-- [Tous les Workflows](../workflows/index) - Scénarios du monde réel
+- [Tous les Workflows](../workflows/) - Scénarios du monde réel
 
 **Besoin d'Aide ?**
 - 📖 [Guide Utilisateur](../user-guide/introduction)

@@ -53,7 +53,7 @@ git checkout -b fix/your-bug-fix
 
 ### Development Setup
 
-See the [Development Setup](./development-setup.md) guide for detailed instructions on setting up your environment.
+See the [Development Setup](./development-setup) guide for detailed instructions on setting up your environment.
 
 ## Contribution Workflow
 
@@ -93,7 +93,7 @@ Before starting work:
 
 #### 2. Make Your Changes
 
-Follow the [Code Style Guide](./code-style.md):
+Follow the [Code Style Guide](./code-style):
 
 - Use PEP 8 conventions
 - Add docstrings to functions/classes
@@ -154,7 +154,7 @@ def test_my_new_function_negative_buffer():
         my_new_function(mock_layer, buffer_distance)
 ```
 
-See [Testing Guide](./testing.md) for more details.
+See [Testing Guide](./testing) for more details.
 
 #### 4. Run Tests Locally
 

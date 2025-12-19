@@ -376,7 +376,7 @@ layer = iface.activeLayer()
    - Bloque: Phase 2 (screenshots/GIFs)
 
 2. **Traduire nouveaux fichiers** (Phase 4)
-   - 3-minute-tutorial.md → FR/PT
+   - minute-tutorial.md → FR/PT
    - Sample-data README → FR/PT (optionnel)
    - Priorité: Basse
    - Effort: 4 heures

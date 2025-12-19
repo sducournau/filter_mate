@@ -89,15 +89,17 @@ class ParallelFilterExecutor:
         Args:
             max_workers: Maximum number of worker threads.
                         Defaults to min(4, CPU count).
+                        Values <= 0 are treated as auto-detect.
         """
         import os
         
-        if max_workers is None:
+        if max_workers is None or max_workers <= 0:
             # Use min of 4 or CPU count - 1 (leave one core for UI)
             cpu_count = os.cpu_count() or 2
             max_workers = min(self.DEFAULT_MAX_WORKERS, max(1, cpu_count - 1))
         
-        self._max_workers = max_workers
+        # Ensure max_workers is always at least 1
+        self._max_workers = max(1, max_workers)
         self._results: List[FilterResult] = []
         self._lock = threading.Lock()
         self._canceled = False
@@ -350,12 +352,15 @@ class ParallelConfig:
         Initialize ParallelConfig with optional custom values.
         
         Args:
-            max_workers: Maximum number of worker threads (None = auto-detect)
+            max_workers: Maximum number of worker threads (None or 0 = auto-detect)
             min_layers_for_parallel: Minimum layers to trigger parallel execution
             enabled: Enable/disable parallel execution
             layer_timeout: Timeout per layer in seconds
         """
-        self.max_workers = max_workers if max_workers is not None else self.MAX_WORKERS
+        # Treat 0 as auto-detect (None)
+        if max_workers is not None and max_workers <= 0:
+            max_workers = None
+        self.max_workers = max_workers
         self.min_layers_for_parallel = min_layers_for_parallel
         self.enabled = enabled
         self.layer_timeout = layer_timeout

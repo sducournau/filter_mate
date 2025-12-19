@@ -5,522 +5,522 @@ sidebar_position: 4
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Emergency Services: Coverage Analysis
+# Services d'Urgence : Analyse de Couverture
 
-Identify areas that lack adequate emergency service coverage to optimize facility placement and response planning.
+Identifier les zones manquant de couverture adéquate des services d'urgence pour optimiser l'emplacement des installations et la planification des réponses.
 
-## Scenario Overview
+## Aperçu du Scénario
 
-**Goal**: Find residential areas more than 5km from the nearest fire station to identify service coverage gaps.
+**Objectif** : Trouver les zones résidentielles à plus de 5 km de la caserne de pompiers la plus proche pour identifier les lacunes de couverture.
 
-**Real-World Application**:
-- Fire departments optimizing station placement
-- Emergency management planning response times
-- Urban planners evaluating service equity
-- Insurance companies assessing risk zones
+**Application Réelle** :
+- Services d'incendie optimisant l'emplacement des casernes
+- Gestion des urgences planifiant les temps de réponse
+- Urbanistes évaluant l'équité des services
+- Compagnies d'assurance évaluant les zones à risque
 
-**Estimated Time**: 12 minutes
+**Temps Estimé** : 12 minutes
 
-**Difficulty**: ⭐⭐ Intermediate
+**Difficulté** : ⭐⭐ Intermédiaire
 
 ---
 
-## Prerequisites
+## Prérequis
 
-### Required Data
+### Données Requises
 
-1. **Fire Stations Layer** (points)
-   - Emergency service facility locations
-   - Must include station names/IDs
-   - Covers your study area
+1. **Couche Casernes de Pompiers** (points)
+   - Emplacements des installations de services d'urgence
+   - Doit inclure les noms/ID des casernes
+   - Couvre votre zone d'étude
 
-2. **Population Areas Layer** (polygons)
-   - Census blocks, neighborhoods, or postal zones
-   - Population count attribute (optional but valuable)
-   - Residential land use areas
+2. **Couche Zones de Population** (polygones)
+   - Îlots de recensement, quartiers ou zones postales
+   - Attribut de comptage de population (optionnel mais utile)
+   - Zones d'occupation résidentielle
 
-3. **Optional: Road Network**
-   - For drive-time analysis (advanced)
-   - Network topology for routing
+3. **Optionnel : Réseau Routier**
+   - Pour l'analyse de temps de trajet (avancé)
+   - Topologie de réseau pour le routage
 
-### Sample Data Sources
+### Sources de Données Exemples
 
-**Option 1: OpenStreetMap**
+**Option 1 : OpenStreetMap**
 ```python
-# Use QGIS QuickOSM plugin
+# Utiliser le plugin QGIS QuickOSM
 
-# For fire stations:
-Key: "amenity", Value: "fire_station"
+# Pour les casernes de pompiers:
+Clé: "amenity", Valeur: "fire_station"
 
-# For residential areas:
-Key: "landuse", Value: "residential"
-Key: "place", Value: "neighbourhood"
+# Pour les zones résidentielles:
+Clé: "landuse", Valeur: "residential"
+Clé: "place", Valeur: "neighbourhood"
 ```
 
-**Option 2: Government Open Data**
-- Municipal emergency services databases
-- Census boundary files with population
+**Option 2 : Données Gouvernementales Ouvertes**
+- Bases de données municipales de services d'urgence
+- Fichiers de limites de recensement avec population
 - HIFLD (Homeland Infrastructure Foundation-Level Data)
-- Local GIS data portals
+- Portails locaux de données SIG
 
-### Backend Recommendation
+### Recommandation de Backend
 
-**OGR** - Best for this workflow:
-- Universal format compatibility (Shapefiles, GeoJSON, GeoPackage)
-- No complex setup required
-- Good for datasets &lt;10,000 features
-- Works with any QGIS installation
+**OGR** - Meilleur choix pour ce flux de travail :
+- Compatibilité universelle de formats (Shapefiles, GeoJSON, GeoPackage)
+- Aucune configuration complexe requise
+- Bon pour les jeux de données <10 000 entités
+- Fonctionne avec toute installation QGIS
 
 ---
 
-## Step-by-Step Instructions
+## Instructions Étape par Étape
 
-### Step 1: Load and Prepare Data
+### Étape 1 : Charger et Préparer les Données
 
-1. **Load layers** into QGIS:
-   - `fire_stations.gpkg` (or .shp, .geojson)
-   - `residential_areas.gpkg`
+1. **Charger les couches** dans QGIS :
+   - `casernes_pompiers.gpkg` (ou .shp, .geojson)
+   - `zones_residentielles.gpkg`
 
-2. **Verify CRS**:
+2. **Vérifier le SCR** :
    ```
-   Both layers must use same projected coordinate system
-   Right-click → Properties → Information → CRS
+   Les deux couches doivent utiliser le même système de coordonnées projeté
+   Clic droit → Propriétés → Information → SCR
    
-   Recommended: Local UTM zone or state/national grid
-   Example: EPSG:32633 (UTM Zone 33N)
+   Recommandé: Zone UTM locale ou grille nationale/régionale
+   Exemple: EPSG:32633 (UTM Zone 33N)
    ```
 
-3. **Inspect data**:
-   - Count fire stations: Should have at least 3-5 for meaningful analysis
-   - Check residential areas: Look for population or household count attributes
-   - Verify coverage: Fire stations should be distributed across study area
+3. **Inspecter les données** :
+   - Compter les casernes : Devrait en avoir au moins 3-5 pour une analyse significative
+   - Vérifier les zones résidentielles : Rechercher des attributs de population ou nombre de ménages
+   - Vérifier la couverture : Les casernes doivent être réparties sur la zone d'étude
 
-:::tip Finding Your UTM Zone
-Use [epsg.io](https://epsg.io/) and click on map to find appropriate UTM zone for your region.
+:::tip Trouver Votre Zone UTM
+Utilisez [epsg.io](https://epsg.io/) et cliquez sur la carte pour trouver la zone UTM appropriée pour votre région.
 :::
 
-### Step 2: Create 5km Service Areas Around Fire Stations
+### Étape 2 : Créer des Zones de Service de 5 km Autour des Casernes
 
-**Using FilterMate**:
+**Utiliser FilterMate** :
 
-1. Open FilterMate, select **fire_stations** layer
-2. Enter expression:
+1. Ouvrir FilterMate, sélectionner la couche **casernes_pompiers**
+2. Entrer l'expression :
    ```sql
-   -- Keep all fire stations
+   -- Garder toutes les casernes
    1 = 1
    ```
-3. Enable **Buffer** operation:
-   - Distance: `5000` meters
-   - Type: Positive (expand)
-   - Segments: 16 (for smooth circles)
-4. **Apply Filter**
-5. **Export** as `fire_coverage_5km.gpkg`
+3. Activer l'opération **Tampon** :
+   - Distance : `5000` mètres
+   - Type : Positif (expansion)
+   - Segments : 16 (pour des cercles lisses)
+4. **Appliquer le Filtre**
+5. **Exporter** comme `couverture_pompiers_5km.gpkg`
 
-**Result**: Circular 5km buffers around each fire station (service coverage zones)
+**Résultat** : Tampons circulaires de 5 km autour de chaque caserne (zones de couverture de service)
 
-### Step 3: Identify Under-Served Residential Areas (Inverse Query)
+### Étape 3 : Identifier les Zones Résidentielles Sous-Desservies (Requête Inverse)
 
-This is the key step - finding areas **NOT** within 5km of any fire station:
+C'est l'étape clé - trouver les zones **NON** dans les 5 km de toute caserne :
 
 <Tabs>
   <TabItem value="ogr" label="OGR / Spatialite" default>
-    **Method 1: Using FilterMate (Recommended)**
+    **Méthode 1 : Utiliser FilterMate (Recommandé)**
     
-    1. Select **residential_areas** layer
-    2. Choose **OGR** backend
-    3. Enter expression:
+    1. Sélectionner la couche **zones_residentielles**
+    2. Choisir le backend **OGR**
+    3. Entrer l'expression :
     ```sql
-    -- Residential areas NOT intersecting fire coverage
+    -- Zones résidentielles N'intersectant PAS la couverture pompiers
     NOT intersects(
       $geometry,
       aggregate(
-        layer:='fire_coverage_5km',
+        layer:='couverture_pompiers_5km',
         aggregate:='collect',
         expression:=$geometry
       )
     )
     ```
     
-    **Method 2: Using disjoint() predicate**
+    **Méthode 2 : Utiliser le prédicat disjoint()**
     ```sql
-    -- Areas completely outside all coverage zones
+    -- Zones complètement en dehors de toutes les zones de couverture
     disjoint(
       $geometry,
-      aggregate('fire_coverage_5km', 'collect', $geometry)
+      aggregate('couverture_pompiers_5km', 'collect', $geometry)
     )
     ```
   </TabItem>
   
-  <TabItem value="postgresql" label="PostgreSQL (Advanced)">
+  <TabItem value="postgresql" label="PostgreSQL (Avancé)">
     ```sql
-    -- Residential areas with NO nearby fire stations
+    -- Zones résidentielles sans caserne proche
     NOT EXISTS (
       SELECT 1
-      FROM fire_stations fs
+      FROM casernes_pompiers cp
       WHERE ST_DWithin(
-        residential_areas.geom,
-        fs.geom,
-        5000  -- 5km threshold
+        zones_residentielles.geom,
+        cp.geom,
+        5000  -- Seuil de 5km
       )
     )
     ```
     
-    **Or using spatial join**:
+    **Ou utilisant une jointure spatiale** :
     ```sql
-    SELECT r.*
-    FROM residential_areas r
-    LEFT JOIN fire_stations fs
-      ON ST_DWithin(r.geom, fs.geom, 5000)
-    WHERE fs.station_id IS NULL  -- No matching station found
+    SELECT zr.*
+    FROM zones_residentielles zr
+    LEFT JOIN casernes_pompiers cp
+      ON ST_DWithin(zr.geom, cp.geom, 5000)
+    WHERE cp.id_caserne IS NULL  -- Aucune caserne correspondante trouvée
     ```
   </TabItem>
 </Tabs>
 
-4. Click **Apply Filter**
-5. Review map - red/highlighted areas show coverage gaps
+4. Cliquer sur **Appliquer le Filtre**
+5. Examiner la carte - les zones rouges/surlignées montrent les lacunes de couverture
 
-### Step 4: Calculate Exact Distance to Nearest Station
+### Étape 4 : Calculer la Distance Exacte à la Caserne la Plus Proche
 
-Add a field showing how far each under-served area is from nearest fire station:
+Ajouter un champ montrant à quelle distance chaque zone sous-desservie se trouve de la caserne la plus proche :
 
-1. Open **Attribute Table** (F6) of filtered layer
-2. **Open Field Calculator**
-3. Create new field:
+1. Ouvrir la **Table d'Attributs** (F6) de la couche filtrée
+2. **Ouvrir la Calculatrice de Champs**
+3. Créer un nouveau champ :
    ```
-   Field name: distance_to_nearest_station
-   Type: Decimal (double)
-   Precision: 2
+   Nom du champ: distance_caserne_proche
+   Type: Décimal (double)
+   Précision: 2
    
    Expression:
    array_min(
      array_foreach(
-       overlay_nearest('fire_stations', $geometry, limit:=5),
+       overlay_nearest('casernes_pompiers', $geometry, limit:=5),
        distance(geometry(@element), $geometry)
      )
-   ) / 1000  -- Convert meters to kilometers
+   ) / 1000  -- Convertir mètres en kilomètres
    ```
 
-**Result**: Each residential area now shows distance to closest fire station
+**Résultat** : Chaque zone résidentielle montre maintenant la distance à la caserne la plus proche
 
-### Step 5: Prioritize by Population at Risk
+### Étape 5 : Prioriser par Population à Risque
 
-If your residential layer has population data:
+Si votre couche résidentielle a des données de population :
 
-1. **Calculate total population** in under-served areas:
+1. **Calculer la population totale** dans les zones sous-desservies :
    ```sql
-   -- In expression filter or field calculator
+   -- Dans le filtre d'expression ou la calculatrice de champs
    "population" > 0
    ```
 
-2. **Sort by priority**:
+2. **Trier par priorité** :
    ```
-   Attribute Table → Click column header "population"
-   → Sort descending
+   Table d'Attributs → Cliquer sur l'en-tête de colonne "population"
+   → Trier en ordre décroissant
    ```
 
-3. **Create priority categories**:
+3. **Créer des catégories de priorité** :
    ```sql
    CASE
-     WHEN "distance_to_nearest_station" > 10 THEN 'Critical (>10km)'
-     WHEN "distance_to_nearest_station" > 7 THEN 'High Priority (7-10km)'
-     WHEN "distance_to_nearest_station" > 5 THEN 'Medium Priority (5-7km)'
+     WHEN "distance_caserne_proche" > 10 THEN 'Critique (>10km)'
+     WHEN "distance_caserne_proche" > 7 THEN 'Priorité Haute (7-10km)'
+     WHEN "distance_caserne_proche" > 5 THEN 'Priorité Moyenne (5-7km)'
      ELSE 'Acceptable (<5km)'
    END
    ```
 
-### Step 6: Visualize Coverage Gaps
+### Étape 6 : Visualiser les Lacunes de Couverture
 
-**Symbology Setup**:
+**Configuration de la Symbologie** :
 
-1. Right-click **residential_areas** → Symbology
-2. Choose **Graduated**
-3. Value: `distance_to_nearest_station`
-4. Method: Natural Breaks (Jenks)
-5. Classes: 5
-6. Color ramp: Red (far) → Yellow → Green (close)
-7. Apply
+1. Clic droit sur **zones_residentielles** → Symbologie
+2. Choisir **Gradué**
+3. Valeur : `distance_caserne_proche`
+4. Méthode : Ruptures Naturelles (Jenks)
+5. Classes : 5
+6. Rampe de couleurs : Rouge (loin) → Jaune → Vert (proche)
+7. Appliquer
 
-**Add Labels** (optional):
+**Ajouter des Étiquettes** (optionnel) :
 ```
-Label with: concat("name", ' - ', round("distance_to_nearest_station", 1), ' km')
-Size: Based on "population" (larger = more people affected)
+Étiqueter avec: concat("nom", ' - ', round("distance_caserne_proche", 1), ' km')
+Taille: Basée sur "population" (plus grand = plus de personnes affectées)
 ```
 
-### Step 7: Export Results and Generate Report
+### Étape 7 : Exporter les Résultats et Générer un Rapport
 
-1. **Export under-served areas**:
+1. **Exporter les zones sous-desservies** :
    ```
-   FilterMate → Export Filtered Features
+   FilterMate → Exporter les Entités Filtrées
    Format: GeoPackage
-   Filename: residential_areas_underserved.gpkg
-   CRS: WGS84 (for sharing) or keep project CRS
+   Nom de fichier: zones_residentielles_sous_desservies.gpkg
+   SCR: WGS84 (pour partage) ou garder SCR du projet
    ```
 
-2. **Generate summary statistics**:
+2. **Générer des statistiques récapitulatives** :
    ```
-   Vector → Analysis Tools → Basic Statistics
-   Input: residential_areas_underserved
-   Field: population
+   Vecteur → Outils d'Analyse → Statistiques de Base
+   Entrée: zones_residentielles_sous_desservies
+   Champ: population
    ```
 
-3. **Create summary report** (Python Console - optional):
+3. **Créer un rapport récapitulatif** (Console Python - optionnel) :
    ```python
    layer = iface.activeLayer()
    features = list(layer.getFeatures())
    
-   total_areas = len(features)
+   total_zones = len(features)
    total_population = sum(f['population'] for f in features if f['population'])
-   avg_distance = sum(f['distance_to_nearest_station'] for f in features) / total_areas
-   max_distance = max(f['distance_to_nearest_station'] for f in features)
+   distance_moy = sum(f['distance_caserne_proche'] for f in features) / total_zones
+   distance_max = max(f['distance_caserne_proche'] for f in features)
    
-   print(f"=== Emergency Services Coverage Gap Analysis ===")
-   print(f"Under-served residential areas: {total_areas}")
-   print(f"Population affected: {total_population:,}")
-   print(f"Average distance to nearest station: {avg_distance:.1f} km")
-   print(f"Maximum distance: {max_distance:.1f} km")
+   print(f"=== Analyse des Lacunes de Couverture Services d'Urgence ===")
+   print(f"Zones résidentielles sous-desservies: {total_zones}")
+   print(f"Population affectée: {total_population:,}")
+   print(f"Distance moyenne à la caserne la plus proche: {distance_moy:.1f} km")
+   print(f"Distance maximale: {distance_max:.1f} km")
    ```
 
 ---
 
-## Understanding the Results
+## Comprendre les Résultats
 
-### What the Filter Shows
+### Ce Que Montre le Filtre
 
-✅ **Selected areas**: Residential zones >5km from ANY fire station
+✅ **Zones sélectionnées** : Zones résidentielles >5 km de TOUTE caserne de pompiers
 
-❌ **Excluded areas**: Residential zones within 5km service radius
+❌ **Zones exclues** : Zones résidentielles dans le rayon de service de 5 km
 
-### Interpreting Coverage Gaps
+### Interpréter les Lacunes de Couverture
 
-**Critical Gaps (>10km)**:
-- Response time likely exceeds national standards (e.g., NFPA 1710: 8 minutes)
-- High priority for new station placement
-- Consider temporary or volunteer stations
-- May need mutual aid agreements with neighboring jurisdictions
+**Lacunes Critiques (>10km)** :
+- Le temps de réponse dépasse probablement les normes nationales (ex : NFPA 1710 : 8 minutes)
+- Priorité élevée pour l'emplacement d'une nouvelle caserne
+- Envisager des casernes temporaires ou de volontaires
+- Peut nécessiter des accords d'entraide avec juridictions voisines
 
-**High Priority (7-10km)**:
-- Response time borderline acceptable
-- Should be addressed in next planning cycle
-- Consider mobile/seasonal stations
-- Evaluate road network quality (may be longer drive time)
+**Priorité Haute (7-10km)** :
+- Temps de réponse limite acceptable
+- Devrait être traité dans le prochain cycle de planification
+- Envisager casernes mobiles/saisonnières
+- Évaluer la qualité du réseau routier (temps de trajet peut être plus long)
 
-**Medium Priority (5-7km)**:
-- Technically under-served by strict standards
-- Low urgency if population density is low
-- Monitor for future growth
-- May be acceptable for rural areas
+**Priorité Moyenne (5-7km)** :
+- Techniquement sous-desservi selon normes strictes
+- Faible urgence si densité de population est faible
+- Surveiller pour croissance future
+- Peut être acceptable pour zones rurales
 
-### Validation Checks
+### Contrôles de Validation
 
-1. **Visual spot check**: Use QGIS Measure tool to verify distances
-2. **Edge cases**: Areas just outside 5km may round differently
-3. **Population accuracy**: Verify sum matches known census totals
-4. **Geometry validity**: Check for slivers or invalid polygons
+1. **Vérification visuelle ponctuelle** : Utiliser l'outil de Mesure QGIS pour vérifier les distances
+2. **Cas limites** : Les zones juste en dehors de 5 km peuvent s'arrondir différemment
+3. **Précision de population** : Vérifier que la somme correspond aux totaux de recensement connus
+4. **Validité de géométrie** : Rechercher des éclats ou polygones invalides
 
 ---
 
-## Best Practices
+## Meilleures Pratiques
 
-### Coverage Standards
+### Normes de Couverture
 
-**NFPA 1710 (USA) Recommendations**:
-- Urban areas: 1.5 mile (2.4 km) travel distance
-- Rural areas: Up to 5 miles (8 km) acceptable
-- Response time goal: 8 minutes from call to arrival
+**Recommandations NFPA 1710 (USA)** :
+- Zones urbaines : 1.5 mile (2,4 km) distance de trajet
+- Zones rurales : Jusqu'à 5 miles (8 km) acceptable
+- Objectif de temps de réponse : 8 minutes de l'appel à l'arrivée
 
-**Adjust threshold** based on your region:
+**Ajuster le seuil** selon votre région :
 ```
-Urban areas:    2-3 km
-Suburban areas: 5 km (as in this tutorial)
-Rural areas:    8-10 km
+Zones urbaines:    2-3 km
+Zones suburbaines: 5 km (comme dans ce tutoriel)
+Zones rurales:     8-10 km
 ```
 
-### Performance Optimization
+### Optimisation des Performances
 
-**For large datasets**:
+**Pour les grands jeux de données** :
 
-1. **Simplify residential area geometry**:
+1. **Simplifier la géométrie des zones résidentielles** :
    ```
-   Vector → Geometry → Simplify
-   Tolerance: 50 meters (maintains coverage accuracy)
+   Vecteur → Géométrie → Simplifier
+   Tolérance: 50 mètres (maintient la précision de couverture)
    ```
 
-2. **Pre-filter to populated areas only**:
+2. **Pré-filtrer uniquement aux zones peuplées** :
    ```sql
-   "population" > 0 OR "landuse" = 'residential'
+   "population" > 0 OR "occupation" = 'residential'
    ```
 
-3. **Use spatial index** (OGR creates automatically for GeoPackage)
+3. **Utiliser un index spatial** (OGR crée automatiquement pour GeoPackage)
 
-4. **Backend selection guide**:
+4. **Guide de sélection du backend** :
    ```
-   < 1,000 areas:    OGR (sufficient)
+   < 1 000 zones:    OGR (suffisant)
    1k - 50k:         Spatialite
    > 50k:            PostgreSQL
    ```
 
-### Real-World Adjustments
+### Ajustements Réels
 
-**Consider road network reality**:
-- Straight-line 5km may be 8km by road
-- Mountains/rivers may block direct access
-- Use network analysis for drive-time instead (advanced)
+**Considérer la réalité du réseau routier** :
+- 5 km en ligne droite peut être 8 km par route
+- Montagnes/rivières peuvent bloquer l'accès direct
+- Utiliser l'analyse de réseau pour le temps de trajet (avancé)
 
-**Network Analysis Alternative** (QGIS built-in):
+**Alternative d'Analyse de Réseau** (intégré QGIS) :
 ```
-Processing → Network Analysis → Service Area (from layer)
-Input: fire_stations
-Travel cost: 5000 meters OR 10 minutes
-Creates drive-time polygons instead of circles
+Traitement → Analyse de Réseau → Zone de Service (depuis une couche)
+Entrée: casernes_pompiers
+Coût de trajet: 5000 mètres OU 10 minutes
+Crée des polygones de temps de trajet au lieu de cercles
 ```
 
-### Data Quality Considerations
+### Considérations de Qualité des Données
 
-1. **Fire station accuracy**:
-   - Verify stations are operational (not decommissioned)
-   - Check if volunteer stations should have smaller radius
-   - Consider specialized stations (airport, industrial)
+1. **Précision des casernes** :
+   - Vérifier que les casernes sont opérationnelles (pas désaffectées)
+   - Vérifier si les casernes de volontaires devraient avoir un rayon plus petit
+   - Considérer les casernes spécialisées (aéroport, industriel)
 
-2. **Residential area quality**:
-   - Remove parks, industrial zones misclassified as residential
-   - Update with recent census data
-   - Account for new developments
+2. **Qualité des zones résidentielles** :
+   - Retirer parcs, zones industrielles mal classées comme résidentielles
+   - Mettre à jour avec données de recensement récentes
+   - Tenir compte des nouveaux développements
 
-3. **CRS importance**:
-   - Distance calculations require projected CRS
-   - Geographic (lat/lon) will give incorrect results
-   - Always reproject if needed before analysis
+3. **Importance du SCR** :
+   - Les calculs de distance nécessitent un SCR projeté
+   - Géographique (lat/lon) donnera des résultats incorrects
+   - Toujours reprojeter si nécessaire avant l'analyse
 
 ---
 
-## Common Issues
+## Problèmes Courants
 
-### Issue 1: All residential areas selected (or none selected)
+### Problème 1 : Toutes les zones résidentielles sélectionnées (ou aucune)
 
-**Cause**: CRS mismatch or buffer not created properly
+**Cause** : Incompatibilité de SCR ou tampon non créé correctement
 
-**Solution**:
+**Solution** :
 ```
-1. Check fire_coverage_5km layer exists and has features
-2. Verify both layers in same CRS
-3. Re-create buffers with correct distance unit (meters)
-4. Check buffer layer name matches expression exactly
+1. Vérifier que la couche couverture_pompiers_5km existe et a des entités
+2. Vérifier que les deux couches sont dans le même SCR
+3. Re-créer les tampons avec l'unité de distance correcte (mètres)
+4. Vérifier que le nom de la couche tampon correspond exactement à l'expression
 ```
 
-### Issue 2: Distance calculation returns NULL or errors
+### Problème 2 : Le calcul de distance retourne NULL ou erreurs
 
-**Cause**: overlay_nearest() not finding fire stations layer
+**Cause** : overlay_nearest() ne trouve pas la couche casernes_pompiers
 
-**Solution**:
+**Solution** :
 ```
-1. Ensure fire_stations layer is loaded in project
-2. Check layer name matches exactly (case-sensitive)
-3. Alternative: Use aggregate() with minimum distance:
+1. S'assurer que la couche casernes_pompiers est chargée dans le projet
+2. Vérifier que le nom de la couche correspond exactement (sensible à la casse)
+3. Alternative: Utiliser aggregate() avec distance minimale:
 
 distance(
   $geometry,
-  aggregate('fire_stations', 'collect', $geometry)
+  aggregate('casernes_pompiers', 'collect', $geometry)
 )
 ```
 
-### Issue 3: Results show unexpected patterns
+### Problème 3 : Les résultats montrent des motifs inattendus
 
-**Cause**: Data quality issues or projection problems
+**Cause** : Problèmes de qualité de données ou de projection
 
-**Troubleshooting**:
+**Dépannage** :
 ```
-1. Zoom to specific result and measure distance manually
-2. Check for overlapping residential polygons
-3. Verify fire_stations actually cover the area
-4. Look for invalid geometries:
-   Vector → Geometry Tools → Check Validity
+1. Zoomer sur un résultat spécifique et mesurer la distance manuellement
+2. Vérifier les polygones résidentiels qui se chevauchent
+3. Vérifier que casernes_pompiers couvrent réellement la zone
+4. Rechercher des géométries invalides:
+   Vecteur → Outils de Géométrie → Vérifier la Validité
 ```
 
-### Issue 4: Performance very slow
+### Problème 4 : Performances très lentes
 
-**Cause**: Large geometries or complex residential areas
+**Cause** : Grandes géométries ou zones résidentielles complexes
 
-**Solutions**:
+**Solutions** :
 ```
-1. Simplify residential geometry (50-100m tolerance)
-2. Create spatial index on both layers
-3. Process by administrative districts separately
-4. Use PostgreSQL backend for >10k features
+1. Simplifier la géométrie résidentielle (tolérance 50-100m)
+2. Créer un index spatial sur les deux couches
+3. Traiter par districts administratifs séparément
+4. Utiliser le backend PostgreSQL pour >10k entités
 ```
 
 ---
 
-## Next Steps
+## Prochaines Étapes
 
-### Related Workflows
+### Flux de Travail Associés
 
-- **[Urban Planning Transit](./urban-planning-transit)**: Similar buffer analysis pattern
-- **[Environmental Protection](./environmental-protection)**: Inverse spatial queries
-- **[Real Estate Analysis](./real-estate-analysis)**: Multi-criteria filtering
+- **[Planification Urbaine Transport](./urban-planning-transit)** : Motif d'analyse de tampon similaire
+- **[Protection Environnementale](./environmental-protection)** : Requêtes spatiales inverses
+- **[Analyse Immobilière](./real-estate-analysis)** : Filtrage multi-critères
 
-### Advanced Techniques
+### Techniques Avancées
 
-**1. Multi-Station Coverage** (areas served by ≥2 stations):
+**1. Couverture Multi-Casernes** (zones desservies par ≥2 casernes) :
 ```sql
--- Count overlapping coverage zones
+-- Compter les zones de couverture qui se chevauchent
 array_length(
-  overlay_intersects('fire_coverage_5km', $geometry)
+  overlay_intersects('couverture_pompiers_5km', $geometry)
 ) >= 2
 ```
 
-**2. Priority Scoring** (distance + population):
+**2. Score de Priorité** (distance + population) :
 ```sql
--- Higher score = higher priority for new station
-("distance_to_nearest_station" - 5) * "population" / 1000
+-- Score plus élevé = priorité plus élevée pour nouvelle caserne
+("distance_caserne_proche" - 5) * "population" / 1000
 ```
 
-**3. Optimal New Station Location**:
+**3. Emplacement Optimal Nouvelle Caserne** :
 ```
-1. Export under-served areas with population
-2. Find centroid weighted by population:
-   Processing → Vector Geometry → Centroids
-3. Manual analysis: Place new station at highest-priority centroid
+1. Exporter zones sous-desservies avec population
+2. Trouver centroïde pondéré par population:
+   Traitement → Géométrie Vectorielle → Centroïdes
+3. Analyse manuelle: Placer nouvelle caserne au centroïde de priorité la plus élevée
 ```
 
-**4. Response Time Modeling** (advanced):
+**4. Modélisation du Temps de Réponse** (avancé) :
 ```python
-# Requires road network and routing
-# Uses QGIS Network Analysis tools
-# Models actual drive time vs. straight-line distance
-# Accounts for road speed limits and turn restrictions
+# Nécessite réseau routier et routage
+# Utilise outils d'Analyse de Réseau QGIS
+# Modélise temps de trajet réel vs. distance en ligne droite
+# Tient compte limites de vitesse et restrictions de virage
 ```
 
-**5. Temporal Analysis** (future growth):
+**5. Analyse Temporelle** (croissance future) :
 ```sql
--- If you have population projection data
+-- Si vous avez des données de projection de population
 ("population_2030" - "population_2024") / "population_2024" > 0.2
--- Areas expecting >20% growth
+-- Zones attendant >20% de croissance
 ```
 
-### Further Learning
+### Pour Aller Plus Loin
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
-- 📖 [Buffer Operations](../user-guide/buffer-operations)
-- 📖 [Network Analysis in QGIS](https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/qgis/networkanalysis.html)
-- 📖 [Performance Tuning](../advanced/performance-tuning)
+- 📖 [Référence des Prédicats Spatiaux](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Opérations de Tampon](../user-guide/buffer-operations)
+- 📖 [Analyse de Réseau dans QGIS](https://docs.qgis.org/latest/fr/docs/user_manual/processing_algs/qgis/networkanalysis.html)
+- 📖 [Ajustement des Performances](../advanced/performance-tuning)
 
 ---
 
-## Summary
+## Résumé
 
-✅ **You've learned**:
-- Creating service area buffers around facilities
-- Inverse spatial filtering (NOT intersects)
-- Distance calculations to nearest feature
-- Population-weighted priority analysis
-- Exporting results for planning reports
+✅ **Vous avez appris** :
+- Créer des tampons de zone de service autour des installations
+- Filtrage spatial inverse (NOT intersects)
+- Calculs de distance à l'entité la plus proche
+- Analyse de priorité pondérée par la population
+- Export de résultats pour rapports de planification
 
-✅ **Key techniques**:
-- `NOT intersects()` for coverage gap analysis
-- `overlay_nearest()` for distance calculations
-- `aggregate()` with spatial predicates
-- Priority scoring with attribute + spatial data
+✅ **Techniques clés** :
+- `NOT intersects()` pour analyse de lacunes de couverture
+- `overlay_nearest()` pour calculs de distance
+- `aggregate()` avec prédicats spatiaux
+- Score de priorité avec données d'attribut + spatiales
 
-🎯 **Real-world impact**: This workflow helps emergency management agencies identify service gaps, optimize resource allocation, improve response times, and ensure equitable emergency service coverage across communities.
+🎯 **Impact réel** : Ce flux de travail aide les agences de gestion des urgences à identifier les lacunes de service, optimiser l'allocation des ressources, améliorer les temps de réponse et assurer une couverture équitable des services d'urgence dans les communautés.
 
-💡 **Pro tip**: Run this analysis annually with updated census data to track coverage changes as populations shift and adjust station placement accordingly.
+💡 **Astuce pro** : Exécutez cette analyse annuellement avec les données de recensement mises à jour pour suivre les changements de couverture à mesure que les populations évoluent et ajustez l'emplacement des casernes en conséquence.

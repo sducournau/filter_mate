@@ -624,10 +624,10 @@ else:
 
 ## See Also
 
-- [Backend Selection](../backends/choosing-backend.md) - Choose optimal backend
-- [PostgreSQL Backend](../backends/postgresql.md) - PostgreSQL optimization
-- [Spatialite Backend](../backends/spatialite.md) - Spatialite tuning
-- [Performance Comparison](../backends/performance-benchmarks.md) - Benchmark data
+- [Backend Selection](../backends/choosing-backend) - Choose optimal backend
+- [PostgreSQL Backend](../backends/postgresql) - PostgreSQL optimization
+- [Spatialite Backend](../backends/spatialite) - Spatialite tuning
+- [Performance Comparison](../backends/performance-benchmarks) - Benchmark data
 
 ## Resources
 

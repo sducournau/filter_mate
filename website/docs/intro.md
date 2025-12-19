@@ -66,7 +66,7 @@ slug: /
 3. **Filter**: Select a layer, write an expression, click Apply
 4. **Export**: Choose format and export your filtered data
 
-👉 **[Complete Installation Guide](./installation.md)**
+👉 **[Complete Installation Guide](/docs/installation)**
 
 ---
 
@@ -82,7 +82,7 @@ New to FilterMate? Start with a quick task to see it in action immediately:
 
 Filter expression: `"population" > 100000`
 
-[▶️ Start Tutorial](./getting-started/3-minute-tutorial.md)
+[▶️ Start Tutorial](/docs/getting-started/minute-tutorial)
 
 ---
 
@@ -92,7 +92,7 @@ Filter expression: `"population" > 100000`
 
 Use spatial predicates with 200m buffer
 
-[▶️ Start Tutorial](./getting-started/first-filter.md)
+[▶️ Start Tutorial](/docs/getting-started/first-filter)
 
 ---
 
@@ -102,7 +102,7 @@ Use spatial predicates with 200m buffer
 
 Choose format and CRS, click Export
 
-[▶️ Start Tutorial](./user-guide/export-features.md)
+[▶️ Start Tutorial](/docs/user-guide/export-features)
 
 </div>
 
@@ -121,7 +121,7 @@ Explore what you can achieve with FilterMate:
 
 Combine buffer operations with attribute filtering for transit-oriented development analysis.
 
-[View Workflow →](./workflows/urban-planning-transit.md)
+[View Workflow →](/docs/workflows/urban-planning-transit)
 
 ---
 
@@ -130,7 +130,7 @@ Combine buffer operations with attribute filtering for transit-oriented developm
 
 Multi-criteria filtering for investment opportunities and market analysis.
 
-[View Workflow →](./workflows/real-estate-analysis.md)
+[View Workflow →](/docs/workflows/real-estate-analysis)
 
 ---
 
@@ -139,7 +139,7 @@ Multi-criteria filtering for investment opportunities and market analysis.
 
 Geometric filtering to assess regulatory compliance and environmental impact.
 
-[View Workflow →](./workflows/environmental-protection.md)
+[View Workflow →](/docs/workflows/environmental-protection)
 
 ---
 
@@ -148,7 +148,7 @@ Geometric filtering to assess regulatory compliance and environmental impact.
 
 Distance calculations to identify underserved areas.
 
-[View Workflow →](./workflows/emergency-services.md)
+[View Workflow →](/docs/workflows/emergency-services)
 
 ## Key Features
 
@@ -163,7 +163,7 @@ Distance calculations to identify underserved areas.
 - **Spatialite**: Good for medium datasets (`<50k` features)
 - **OGR**: Universal compatibility (Shapefiles, GeoPackage, etc.)
 
-**FilterMate automatically chooses the best backend** for your data source - no configuration needed! Learn more in the [Backend Selection Guide](./backends/choosing-backend.md).
+**FilterMate automatically chooses the best backend** for your data source - no configuration needed! Learn more in the [Backend Selection Guide](/docs/backends/choosing-backend).
 
 ### Export Capabilities
 - Multiple formats: GPKG, SHP, GeoJSON, KML, CSV, PostGIS
@@ -183,26 +183,26 @@ Before using FilterMate:
 
 New to FilterMate? Follow this path:
 
-1. **[Installation](./installation.md)** - Install the plugin and optional dependencies
-2. **[Quick Start](./getting-started/quick-start.md)** - 5-minute tutorial
-3. **[Your First Filter](./getting-started/first-filter.md)** - Complete step-by-step example
-4. **[Interface Overview](./user-guide/interface-overview.md)** - Understand the UI
-5. **[Filtering Basics](./user-guide/filtering-basics.md)** - Master filtering techniques
+1. **[Installation](/docs/installation)** - Install the plugin and optional dependencies
+2. **[Quick Start](/docs/getting-started/quick-start)** - 5-minute tutorial
+3. **[Your First Filter](/docs/getting-started/first-filter)** - Complete step-by-step example
+4. **[Interface Overview](/docs/user-guide/interface-overview)** - Understand the UI
+5. **[Filtering Basics](/docs/user-guide/filtering-basics)** - Master filtering techniques
 
 ## Getting Help
 
-- 📖 **Documentation**: Browse the [User Guide](./user-guide/introduction.md)
+- 📖 **Documentation**: Browse the [User Guide](/docs/user-guide/introduction)
 - 🐛 **Issues**: Report bugs on [GitHub Issues](https://github.com/sducournau/filter_mate/issues)
 - 💬 **Discussions**: Join [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions)
 - 🎥 **Video**: Watch our [YouTube tutorial](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
 
 ## Documentation Sections
 
-- **[Getting Started](./getting-started/index.md)** - Tutorials and quick start guides
-- **[User Guide](./user-guide/introduction.md)** - Complete feature documentation
-- **[Backends](./backends/overview.md)** - Understanding data source backends
-- **[Advanced](./advanced/configuration.md)** - Configuration and performance tuning
-- **[Developer Guide](./developer-guide/architecture.md)** - Contributing and development
+- **[Getting Started](/docs/getting-started/)** - Tutorials and quick start guides
+- **[User Guide](/docs/user-guide/introduction)** - Complete feature documentation
+- **[Backends](/docs/backends/overview)** - Understanding data source backends
+- **[Advanced](/docs/advanced/configuration)** - Configuration and performance tuning
+- **[Developer Guide](/docs/developer-guide/architecture)** - Contributing and development
 
 ### v2.2.0 & Earlier
 - ✅ **Complete Multi-Backend** - PostgreSQL, Spatialite, and OGR implementations
@@ -225,8 +225,8 @@ New to FilterMate? Follow this path:
 
 ## Quick Links
 
-- [Installation Guide](./installation.md)
-- [Quick Start Tutorial](./getting-started/quick-start.md)
+- [Installation Guide](/docs/installation)
+- [Quick Start Tutorial](/docs/getting-started/quick-start)
 - [GitHub Repository](https://github.com/sducournau/filter_mate)
 - [QGIS Plugin Repository](https://plugins.qgis.org/plugins/filter_mate)
 
@@ -238,4 +238,4 @@ Watch FilterMate in action:
 
 ## Get Started
 
-Ready to start? Head over to the [Installation Guide](./installation.md) to set up FilterMate in your QGIS environment.
+Ready to start? Head over to the [Installation Guide](/docs/installation) to set up FilterMate in your QGIS environment.

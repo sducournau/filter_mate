@@ -146,7 +146,17 @@ graph TB
 #### 6. Utility Layer
 **Responsibility:** Shared functionality and helpers
 
-- **Files:** `modules/appUtils.py`, `modules/config_helpers.py`, etc.
+**Source Files:**
+- Database utilities: [`modules/appUtils.py`](https://github.com/sducournau/filter_mate/blob/main/modules/appUtils.py)
+- Configuration helpers: [`modules/config_helpers.py`](https://github.com/sducournau/filter_mate/blob/main/modules/config_helpers.py)
+- Filter favorites: [`modules/filter_favorites.py`](https://github.com/sducournau/filter_mate/blob/main/modules/filter_favorites.py)
+  - Classes: `FilterFavorite`, `FavoritesManager`
+  - UI: `favorites_indicator_label` in `filter_mate_dockwidget.py` (line 1365)
+- Filter history: [`modules/filter_history.py`](https://github.com/sducournau/filter_mate/blob/main/modules/filter_history.py)
+  - Class: `FilterHistory` (line 55)
+- State manager: [`modules/state_manager.py`](https://github.com/sducournau/filter_mate/blob/main/modules/state_manager.py)
+- Signal utilities: [`modules/signal_utils.py`](https://github.com/sducournau/filter_mate/blob/main/modules/signal_utils.py)
+
 - **Key Functions:**
   - Database connections
   - Configuration management
@@ -221,8 +231,15 @@ class BackendFactory:
 
 **UI Location**: Backend indicator (icon next to layer name in dockwidget)
 - Click backend icon to force PostgreSQL/Spatialite/OGR
-- **🔒 symbol** indicates forced backend
+- **⚡ symbol** indicates forced backend (lightning bolt)
 - **Auto symbol** indicates automatic detection
+
+**Source Files**:
+- UI Component: [`filter_mate_dockwidget.py`](https://github.com/sducournau/filter_mate/blob/main/filter_mate_dockwidget.py) (lines 1397-1441)
+- Click Handler: `_on_backend_indicator_clicked()` (line 1441)
+- Display Update: `_update_backend_indicator()` (line 7992)
+- Backend Detection: `_detect_current_backend()`
+- Helper Methods: `_get_available_backends_for_layer()`, `_force_backend_for_all_layers()`, `auto_select_optimal_backends()`
 
 **Priority System**:
 
@@ -573,6 +590,13 @@ PROJECT_LAYERS = {
 
 ### Filter History Manager
 
+**Source Files:**
+- Main Class: [`modules/filter_history.py`](https://github.com/sducournau/filter_mate/blob/main/modules/filter_history.py)
+- Class: `FilterHistory` (line 55)
+- Manager: `HistoryManager` in [`filter_mate_app.py`](https://github.com/sducournau/filter_mate/blob/main/filter_mate_app.py) (line 243)
+- UI Buttons: `pushButton_action_undo_filter`, `pushButton_action_redo_filter`
+- Update Handler: `update_undo_redo_buttons()` (line 2017)
+
 **File:** `modules/filter_history.py`
 
 ```python
@@ -780,7 +804,7 @@ def manage_task(self, task_type, params):
 
 ## Testing Architecture
 
-See [Testing Guide](./testing.md) for comprehensive testing documentation.
+See [Testing Guide](./testing) for comprehensive testing documentation.
 
 **Test Structure:**
 ```
@@ -806,6 +830,6 @@ tests/
 
 ## Further Reading
 
-- [Backend Development Guide](./backend-development.md)
-- [Code Style Guide](./code-style.md)
-- [Contributing Guide](./contributing.md)
+- [Backend Development Guide](./backend-development)
+- [Code Style Guide](./code-style)
+- [Contributing Guide](./contributing)

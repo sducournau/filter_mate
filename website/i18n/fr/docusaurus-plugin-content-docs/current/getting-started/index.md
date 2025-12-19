@@ -8,7 +8,7 @@ Bienvenue sur FilterMate ! Ces tutoriels vous aideront à devenir productif rapi
 
 ## Tutoriels de cette section
 
-### [Démarrage rapide](./quick-start)
+### [Démarrage rapide](/docs/getting-started/quick-start)
 **Durée : 5 minutes**
 
 Apprenez le flux de travail essentiel :
@@ -17,7 +17,7 @@ Apprenez le flux de travail essentiel :
 - Comprendre la sélection du backend
 - Exporter les résultats filtrés
 
-### [Votre premier filtre](./first-filter)
+### [Votre premier filtre](/docs/getting-started/first-filter)
 **Durée : 10-15 minutes**
 
 Tutoriel complet étape par étape :
@@ -31,7 +31,7 @@ Tutoriel complet étape par étape :
 Assurez-vous d'avoir :
 
 - ✅ **QGIS 3.x** installé
-- ✅ **Plugin FilterMate** installé ([Guide d'installation](../installation))
+- ✅ **Plugin FilterMate** installé ([Guide d'installation](/docs/installation))
 - ✅ **Couche vectorielle** chargée dans votre projet
 
 ## Conseils de performance
@@ -52,10 +52,10 @@ Vous préférez la vidéo ? Regardez notre présentation complète :
 
 Après avoir terminé ces tutoriels :
 
-1. **[Aperçu de l'interface](../user-guide/interface-overview)** - Explorez tous les composants de l'interface
-2. **[Bases du filtrage](../user-guide/filtering-basics)** - Maîtrisez le filtrage d'attributs
-3. **[Filtrage géométrique](../user-guide/geometric-filtering)** - Opérations spatiales avancées
-4. **[Aperçu des backends](../backends/overview)** - Comprendre l'optimisation des performances
+1. **[Aperçu de l'interface](/docs/user-guide/interface-overview)** - Explorez tous les composants de l'interface
+2. **[Bases du filtrage](/docs/user-guide/filtering-basics)** - Maîtrisez le filtrage d'attributs
+3. **[Filtrage géométrique](/docs/user-guide/geometric-filtering)** - Opérations spatiales avancées
+4. **[Aperçu des backends](/docs/backends/overview)** - Comprendre l'optimisation des performances
 
 :::tip Besoin d'aide ?
 Visitez [GitHub Issues](https://github.com/sducournau/filter_mate/issues) pour signaler des problèmes.

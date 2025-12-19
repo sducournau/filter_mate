@@ -20,7 +20,7 @@ Esta seção fornece documentação detalhada para cada aspecto do FilterMate:
 
 ### Gestão de dados
 - **[Exportar feições](./export-features)** - Formatos de exportação, opções e processamento em lote
-- **[Histórico de filtros](./filter-history)** - Desfazer/refazer, rastreamento de histórico e favoritos
+- **[Histórico de filtros](./filter-history)** - Desfazer/refazer e rastreamento de histórico
 
 ## Para quem é este guia
 
@@ -54,7 +54,7 @@ Para usar este guia efetivamente:
 
 ## Documentação relacionada
 
-- **[Primeiros passos](../getting-started/index)** - Tutoriais para iniciantes
+- **[Primeiros passos](../getting-started/)** - Tutoriais para iniciantes
 - **[Backends](../backends/overview)** - Otimização de desempenho
 - **[Avançado](../advanced/configuration)** - Configuração e ajustes
 - **[Solução de problemas](../advanced/troubleshooting)** - Problemas comuns e soluções

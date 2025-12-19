@@ -454,9 +454,9 @@ distance(
 
 ### Related Workflows
 
-- **[Urban Planning Transit](./urban-planning-transit.md)**: Similar buffer analysis pattern
-- **[Environmental Protection](./environmental-protection.md)**: Inverse spatial queries
-- **[Real Estate Analysis](./real-estate-analysis.md)**: Multi-criteria filtering
+- **[Urban Planning Transit](./urban-planning-transit)**: Similar buffer analysis pattern
+- **[Environmental Protection](./environmental-protection)**: Inverse spatial queries
+- **[Real Estate Analysis](./real-estate-analysis)**: Multi-criteria filtering
 
 ### Advanced Techniques
 
@@ -499,10 +499,10 @@ array_length(
 
 ### Further Learning
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates.md)
-- 📖 [Buffer Operations](../user-guide/buffer-operations.md)
+- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Buffer Operations](../user-guide/buffer-operations)
 - 📖 [Network Analysis in QGIS](https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/qgis/networkanalysis.html)
-- 📖 [Performance Tuning](../advanced/performance-tuning.md)
+- 📖 [Performance Tuning](../advanced/performance-tuning)
 
 ---
 

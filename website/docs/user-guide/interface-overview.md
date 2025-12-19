@@ -66,7 +66,7 @@ FilterMate organizes features into 3 main tabs:
 - Select geometries within/near other features
 - Create temporary subsets for analysis
 
-**See:** [Filtering Basics](./filtering-basics.md), [Geometric Filtering](./geometric-filtering.md), [Buffer Operations](./buffer-operations.md)
+**See:** [Filtering Basics](./filtering-basics), [Geometric Filtering](./geometric-filtering), [Buffer Operations](./buffer-operations)
 
 ---
 
@@ -180,7 +180,7 @@ FilterMate organizes features into 3 main tabs:
 - Convert between formats
 - Prepare data for web mapping
 
-**See:** [Export Features](./export-features.md)
+**See:** [Export Features](./export-features)
 
 ---
 
@@ -194,7 +194,7 @@ FilterMate organizes features into 3 main tabs:
 - **Advanced Options:** Plugin settings
 - **Feedback Level:** Control message verbosity (Minimal/Normal/Verbose)
 
-**See:** [Configuration](../advanced/configuration.md)
+**See:** [Configuration](../advanced/configuration)
 
 ---
 
@@ -202,14 +202,14 @@ FilterMate organizes features into 3 main tabs:
 
 Always visible regardless of active tab:
 
-| Button | Icon | Action | Shortcut |
-|--------|------|--------|----------|
-| **FILTER** | <img src="/filter_mate/icons/filter.png" alt="Filter" width="32"/> | Apply configured filters | F5 |
-| **UNDO** | <img src="/filter_mate/icons/undo.png" alt="Undo" width="32"/> | Revert last filter | Ctrl+Z |
-| **REDO** | <img src="/filter_mate/icons/redo.png" alt="Redo" width="32"/> | Reapply undone filter | Ctrl+Y |
-| **RESET** | <img src="/filter_mate/icons/reset.png" alt="Reset" width="32"/> | Clear all filters | Ctrl+Shift+C |
-| **EXPORT** | <img src="/filter_mate/icons/export.png" alt="Export" width="32"/> | Quick export | Ctrl+E |
-| **ABOUT** | <img src="/filter_mate/icons/icon.png" alt="Icon" width="32"/> | Plugin information | - |
+| Button | Icon | Action |
+|--------|------|--------|
+| **FILTER** | <img src="/filter_mate/icons/filter.png" alt="Filter" width="32"/> | Apply configured filters |
+| **UNDO** | <img src="/filter_mate/icons/undo.png" alt="Undo" width="32"/> | Revert last filter |
+| **REDO** | <img src="/filter_mate/icons/redo.png" alt="Redo" width="32"/> | Reapply undone filter |
+| **RESET** | <img src="/filter_mate/icons/reset.png" alt="Reset" width="32"/> | Clear all filters |
+| **EXPORT** | <img src="/filter_mate/icons/export.png" alt="Export" width="32"/> | Quick export |
+| **ABOUT** | <img src="/filter_mate/icons/icon.png" alt="Icon" width="32"/> | Plugin information |
 
 ### Intelligent Undo/Redo (v2.3.0)
 
@@ -223,7 +223,7 @@ The Undo/Redo buttons automatically adapt based on your current configuration:
 - **Enabled** (clickable): History available
 - **Disabled** (grayed out): No history in that direction
 
-**See:** [Filter History & Undo/Redo](./filter-history.md) for detailed documentation.
+**See:** [Filter History & Undo/Redo](./filter-history) for detailed documentation.
 
 ---
 
@@ -239,22 +239,18 @@ Backend detected automatically based on layer type.
 
 ---
 
-## Quick Keyboard Shortcuts
+## Keyboard Shortcut
 
-- **Ctrl+F:** Focus expression builder
-- **F5:** Execute filter
-- **Ctrl+Z / Ctrl+Y:** Undo / Redo
-- **Tab:** Navigate between fields
-- **Ctrl+Tab:** Switch between tabs
+- **F5:** Force reload all layers (when FilterMate panel has focus)
 
 ---
 
 ## Learn More
 
-- **Getting Started:** [Quick Start Guide](../getting-started/quick-start.md)
-- **Detailed Usage:** [Filtering Basics](./filtering-basics.md), [Geometric Filtering](./geometric-filtering.md)
-- **Export Options:** [Export Features](./export-features.md)
-- **Advanced:** [Configuration](../advanced/configuration.md), [Performance Tuning](../advanced/performance-tuning.md)
+- **Getting Started:** [Quick Start Guide](../getting-started/quick-start)
+- **Detailed Usage:** [Filtering Basics](./filtering-basics), [Geometric Filtering](./geometric-filtering)
+- **Export Options:** [Export Features](./export-features)
+- **Advanced:** [Configuration](../advanced/configuration), [Performance Tuning](../advanced/performance-tuning)
 
 ## Interface Layout
 
@@ -335,16 +331,16 @@ graph TB
 
 For detailed guides on each feature:
 
-- **[Filtering Basics](./filtering-basics.md)** - Complete guide to attribute filtering and QGIS expressions
-- **[Geometric Filtering](./geometric-filtering.md)** - Spatial predicates, buffer operations, and geometric workflows
-- **[Buffer Operations](./buffer-operations.md)** - Buffer configuration, types, and distance settings
-- **[Export Features](./export-features.md)** - Export formats, CRS transformation, and batch operations
-- **[Filter History](./filter-history.md)** - History management, undo/redo, and favorites
+- **[Filtering Basics](./filtering-basics)** - Complete guide to attribute filtering and QGIS expressions
+- **[Geometric Filtering](./geometric-filtering)** - Spatial predicates, buffer operations, and geometric workflows
+- **[Buffer Operations](./buffer-operations)** - Buffer configuration, types, and distance settings
+- **[Export Features](./export-features)** - Export formats, CRS transformation, and batch operations
+- **[Filter History](./filter-history)** - History management and undo/redo system
 
 For getting started:
 
-- **[Quick Start Guide](../getting-started/quick-start.md)** - 5-minute introduction
-- **[Your First Filter](../getting-started/first-filter.md)** - Step-by-step tutorial
+- **[Quick Start Guide](../getting-started/quick-start)** - 5-minute introduction
+- **[Your First Filter](../getting-started/first-filter)** - Step-by-step tutorial
 
 ---
 
@@ -369,7 +365,7 @@ For getting started:
 
 ## Interface Customization
 
-You can customize the appearance of FilterMate icons and themes in the **CONFIGURATION** tab. See [Configuration Guide](../advanced/configuration.md) for details on:
+You can customize the appearance of FilterMate icons and themes in the **CONFIGURATION** tab. See [Configuration Guide](../advanced/configuration) for details on:
 
 - Switching between light/dark/auto themes
 - Adjusting icon sizes (if supported by theme)

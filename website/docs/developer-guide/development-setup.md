@@ -220,7 +220,7 @@ black --check modules/ tests/
 
 ## Further Reading
 
-- [Architecture Overview](./architecture.md)
-- [Code Style Guide](./code-style.md)
-- [Contributing Guide](./contributing.md)
-- [Testing Guide](./testing.md)
+- [Architecture Overview](./architecture)
+- [Code Style Guide](./code-style)
+- [Contributing Guide](./contributing)
+- [Testing Guide](./testing)

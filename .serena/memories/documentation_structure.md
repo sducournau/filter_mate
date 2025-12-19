@@ -271,6 +271,56 @@ These documents describe specific bug fixes and solutions:
 3. UI_TESTING_GUIDE.md
 4. modules/ui_*.py files
 
+## Documentation Audit - December 19, 2025
+
+### Keyboard Shortcuts - CORRECTED ✅
+
+**Issue**: Documentation mentioned Ctrl+Z/Ctrl+Shift+Z (Cmd+Z/Cmd+Shift+Z) keyboard shortcuts for undo/redo that were not implemented.
+
+**Actual Implementation**: Only **F5** shortcut is implemented for force reload layers.
+
+**Files Corrected**:
+- `website/docs/advanced/undo-redo-system.md` - Removed keyboard shortcuts section, updated to show only F5
+- `website/docs/user-guide/interface-overview.md` - Removed shortcut column from action buttons table
+
+**Current Shortcuts**:
+- **F5**: Force reload all layers (when FilterMate panel has focus)
+- **Undo/Redo**: Via UI buttons only (↩️ ↪️)
+
+---
+
+### Filter Favorites System - FULLY IMPLEMENTED ✅
+
+**Status**: The favorites system is **fully implemented** and functional in FilterMate v2.0+.
+
+**Implementation Details**:
+- **Module**: `modules/filter_favorites.py` (772 lines)
+- **Classes**: `FilterFavorite`, `FavoritesManager`
+- **UI Integration**: Star (★) indicator in header, context menu, management dialog
+- **Storage**: SQLite database (`fm_favorites` table) with per-project organization
+- **Features**: Add, apply, edit, delete, export/import JSON, usage statistics
+
+**Documentation**:
+- **Created**: `website/docs/user-guide/favorites.md` - Complete user guide
+- **Referenced**: `interface-overview.md`, `why-filtermate.md` mention favorites workflow
+
+**Previous Error**: Documentation memory incorrectly stated favorites were "not implemented". This has been corrected.
+
+**Status**: The favorites system is **fully implemented** and functional in FilterMate v2.0+.
+
+**Implementation Details**:
+- **Module**: `modules/filter_favorites.py` (772 lines)
+- **Classes**: `FilterFavorite`, `FavoritesManager`
+- **UI Integration**: Star (★) indicator in header, context menu, management dialog
+- **Storage**: SQLite database (`fm_favorites` table) with per-project organization
+- **Features**: Add, apply, edit, delete, export/import JSON, usage statistics
+
+**Documentation**:
+- **Created**: `website/docs/user-guide/favorites.md` - Complete user guide
+- **Referenced**: `interface-overview.md`, `why-filtermate.md` mention favorites workflow
+
+**Previous Error**: Documentation memory incorrectly stated favorites were "not implemented". This has been corrected.
+
 ## Documentation File Count
 
 **Total documentation files:** ~50+

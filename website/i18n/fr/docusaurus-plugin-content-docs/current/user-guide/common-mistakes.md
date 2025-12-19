@@ -636,18 +636,22 @@ EPSG:2154 - Lambert 93 (France)
 
 ---
 
-### Contournement : Utilisez les Favoris
+### Contournement : Utilisez les Variables de Projet QGIS
 
-**Sauvegardez les filtres importants** :
-1. Appliquez votre filtre
-2. Cliquez sur le bouton **"Ajouter aux Favoris"** (icône ⭐)
-3. Donnez-lui un nom descriptif
-4. Les favoris SONT sauvegardés dans le fichier de projet
+**Sauvegardez les expressions de filtre importantes** :
+1. Allez dans **Projet → Propriétés → Variables**
+2. Créez une nouvelle variable (ex : `mon_expression_filtre`)
+3. Collez votre expression de filtre comme valeur
+4. Utilisez-la dans FilterMate en référençant `@mon_expression_filtre`
 
-**Rappelez les filtres favoris** :
-1. Cliquez sur le menu déroulant **"Favoris"**
-2. Sélectionnez le filtre sauvegardé
-3. Cliquez sur **"Appliquer"**
+**Alternative : Notes de couche** :
+1. Clic droit sur la couche → **Propriétés → Métadonnées**
+2. Ajoutez vos expressions de filtre dans le champ **Résumé**
+3. Copiez/collez quand nécessaire
+
+:::tip Fonctionnalité Prévue
+**Filtres Favoris** (sauvegarder/rappeler les filtres fréquemment utilisés) est prévu pour une version future.
+:::
 
 ---
 

@@ -636,18 +636,22 @@ EPSG:2154 - Lambert 93 (França)
 
 ---
 
-### Contorno: Use Favoritos
+### Contorno: Use Variáveis de Projeto QGIS
 
-**Salve filtros importantes**:
-1. Aplique seu filtro
-2. Clique no botão **"Adicionar aos Favoritos"** (ícone ⭐)
-3. Dê um nome descritivo
-4. Os favoritos SÃO salvos no arquivo de projeto
+**Salve expressões de filtro importantes**:
+1. Vá para **Projeto → Propriedades → Variáveis**
+2. Crie uma nova variável (ex: `minha_expressao_filtro`)
+3. Cole sua expressão de filtro como valor
+4. Use no FilterMate referenciando `@minha_expressao_filtro`
 
-**Recupere filtros favoritos**:
-1. Clique no dropdown **"Favoritos"**
-2. Selecione o filtro salvo
-3. Clique em **"Aplicar"**
+**Alternativa: Notas da Camada**:
+1. Clique direito na camada → **Propriedades → Metadados**
+2. Adicione suas expressões de filtro no campo **Resumo**
+3. Copie/cole quando necessário
+
+:::tip Recurso Planejado
+**Filtros Favoritos** (salvar/recuperar filtros usados frequentemente) está planejado para uma versão futura.
+:::
 
 ---
 

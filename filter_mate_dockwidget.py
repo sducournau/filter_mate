@@ -1337,10 +1337,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _setup_backend_indicator(self):
         """
-        Create and configure header bar with plugin title and backend indicator.
+        Create and configure header bar with plugin title, favorites indicator, and backend indicator.
         
         Sets up a header bar at the top of the plugin with:
-        - Plugin title "FilterMate" aligned left with icon
+        - Favorites indicator badge (★ count) aligned right (before backend)
         - Backend indicator badge (PostgreSQL/Spatialite/OGR) aligned right
         """
         # Create header frame container
@@ -1350,18 +1350,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.frame_header.setMaximumHeight(22)
         self.frame_header.setMinimumHeight(18)
         
-        # Header layout - compact (no title, only backend indicator)
+        # Header layout - compact (favorites + backend indicators)
         header_layout = QtWidgets.QHBoxLayout(self.frame_header)
         header_layout.setContentsMargins(10, 1, 10, 1)
         header_layout.setSpacing(8)
         
-        # Expanding spacer before backend indicator (pushes indicator to right)
+        # Expanding spacer before indicators (pushes indicators to right)
         header_layout.addSpacerItem(QtWidgets.QSpacerItem(40, 10, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
         
         # Keep title label reference for compatibility but don't add to layout
         self.plugin_title_label = None
         
-        # Backend indicator label (right) - badge style - NOW CLICKABLE
+        # === FAVORITES INDICATOR (left of backend indicator) ===
+        self.favorites_indicator_label = QtWidgets.QLabel(self.frame_header)
+        self.favorites_indicator_label.setObjectName("label_favorites_indicator")
+        self.favorites_indicator_label.setText("★")
+        
+        # Modern badge style - gold/amber color for favorites
+        self.favorites_indicator_label.setStyleSheet("""
+            QLabel#label_favorites_indicator {
+                color: white;
+                font-size: 9pt;
+                font-weight: 600;
+                padding: 3px 10px;
+                border-radius: 12px;
+                border: none;
+                background-color: #f39c12;
+            }
+            QLabel#label_favorites_indicator:hover {
+                background-color: #d68910;
+                cursor: pointer;
+            }
+        """)
+        self.favorites_indicator_label.setAlignment(Qt.AlignCenter)
+        self.favorites_indicator_label.setMinimumWidth(35)
+        self.favorites_indicator_label.setMaximumHeight(20)
+        
+        # Make clickable for favorites menu
+        self.favorites_indicator_label.setCursor(Qt.PointingHandCursor)
+        self.favorites_indicator_label.setToolTip("★ Favorites\nClick to manage filter favorites")
+        self.favorites_indicator_label.mousePressEvent = self._on_favorite_indicator_clicked
+        
+        header_layout.addWidget(self.favorites_indicator_label)
+        
+        # === BACKEND INDICATOR (right) ===
         self.backend_indicator_label = QtWidgets.QLabel(self.frame_header)
         self.backend_indicator_label.setObjectName("label_backend_indicator")
         
@@ -1404,7 +1436,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Insert header frame at the top of verticalLayout_8 (main container)
         if hasattr(self, 'verticalLayout_8'):
             self.verticalLayout_8.insertWidget(0, self.frame_header)
-            logger.debug("Header bar inserted at top with plugin title and backend indicator")
+            logger.debug("Header bar inserted at top with favorites and backend indicators")
     
     def _on_backend_indicator_clicked(self, event):
         """
@@ -1532,6 +1564,863 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                               actual_backend=None)
                 show_info("FilterMate", f"Backend set to Auto for layer '{current_layer.name()}'")
     
+
+    # ========================================
+    # FAVORITES INDICATOR METHODS
+    # ========================================
+    
+    def _on_favorite_indicator_clicked(self, event):
+        """
+        Handle click on favorites indicator to show favorites menu.
+        Allows user to:
+        - Add current filter as favorite
+        - Apply a saved favorite
+        - Manage favorites (edit, delete)
+        """
+        from qgis.PyQt.QtWidgets import QMenu, QInputDialog, QMessageBox
+        from qgis.PyQt.QtGui import QCursor
+        from qgis.core import QgsExpressionContextUtils
+        
+        # Get favorites manager from app (will be initialized there)
+        favorites_manager = getattr(self, '_favorites_manager', None)
+        if favorites_manager is None:
+            # Create temporary manager if not yet initialized
+            from .modules.filter_favorites import FavoritesManager
+            self._favorites_manager = FavoritesManager()
+            
+            # Try to get database path and project UUID from project variables
+            if self.PROJECT:
+                scope = QgsExpressionContextUtils.projectScope(self.PROJECT)
+                project_uuid = scope.variable('filterMate_db_project_uuid')
+                if project_uuid:
+                    # Construct db path from config
+                    from .config.config import ENV_VARS
+                    import os
+                    db_path = os.path.normpath(ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite')
+                    if os.path.exists(db_path):
+                        self._favorites_manager.set_database(db_path, str(project_uuid))
+            
+            self._favorites_manager.load_from_project()
+            favorites_manager = self._favorites_manager
+        
+        # Create context menu
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 1px solid #cccccc;
+                padding: 5px;
+            }
+            QMenu::item {
+                padding: 5px 20px;
+            }
+            QMenu::item:selected {
+                background-color: #f39c12;
+                color: white;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #cccccc;
+                margin: 3px 10px;
+            }
+        """)
+        
+        # === ADD TO FAVORITES ===
+        add_action = menu.addAction("⭐ Add Current Filter to Favorites")
+        add_action.setData('__ADD_FAVORITE__')
+        
+        # Check if there's an expression to save
+        current_expression = self._get_current_filter_expression()
+        if not current_expression:
+            add_action.setEnabled(False)
+            add_action.setText("⭐ Add Current Filter (no filter active)")
+        
+        menu.addSeparator()
+        
+        # === FAVORITES LIST ===
+        favorites = favorites_manager.get_all_favorites()
+        
+        if favorites:
+            # Add header
+            header = menu.addAction(f"📋 Saved Favorites ({len(favorites)})")
+            header.setEnabled(False)
+            
+            # Show recent/most used first (up to 10)
+            recent_favs = favorites_manager.get_recent_favorites(limit=10)
+            for fav in recent_favs:
+                # Build display text with layers count
+                layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
+                fav_text = f"  ★ {fav.get_display_name(25)}"
+                if layers_count > 1:
+                    fav_text += f" [{layers_count}]"
+                if fav.use_count > 0:
+                    fav_text += f" ({fav.use_count}×)"
+                action = menu.addAction(fav_text)
+                action.setData(('apply', fav.id))
+                # Build tooltip with layer details
+                tooltip = fav.get_preview(80)
+                if fav.remote_layers:
+                    tooltip += f"\n\nLayers ({layers_count}):\n• {fav.layer_name or 'Source'}"
+                    for remote_name in list(fav.remote_layers.keys())[:5]:
+                        tooltip += f"\n• {remote_name}"
+                    if len(fav.remote_layers) > 5:
+                        tooltip += f"\n... and {len(fav.remote_layers) - 5} more"
+                action.setToolTip(tooltip)
+            
+            # Show "More..." if there are more favorites
+            if len(favorites) > 10:
+                more_action = menu.addAction(f"  ... {len(favorites) - 10} more favorites")
+                more_action.setData('__SHOW_ALL__')
+        else:
+            no_favs = menu.addAction("(No favorites saved)")
+            no_favs.setEnabled(False)
+        
+        menu.addSeparator()
+        
+        # === MANAGEMENT OPTIONS ===
+        manage_action = menu.addAction("⚙️ Manage Favorites...")
+        manage_action.setData('__MANAGE__')
+        
+        export_action = menu.addAction("📤 Export Favorites...")
+        export_action.setData('__EXPORT__')
+        
+        import_action = menu.addAction("📥 Import Favorites...")
+        import_action.setData('__IMPORT__')
+        
+        # Show menu and handle selection
+        selected_action = menu.exec_(QCursor.pos())
+        
+        if selected_action:
+            action_data = selected_action.data()
+            
+            if action_data == '__ADD_FAVORITE__':
+                self._add_current_to_favorites()
+            elif action_data == '__MANAGE__':
+                self._show_favorites_manager_dialog()
+            elif action_data == '__EXPORT__':
+                self._export_favorites()
+            elif action_data == '__IMPORT__':
+                self._import_favorites()
+            elif action_data == '__SHOW_ALL__':
+                self._show_favorites_manager_dialog()
+            elif isinstance(action_data, tuple) and action_data[0] == 'apply':
+                self._apply_favorite(action_data[1])
+    
+    def _get_current_filter_expression(self) -> str:
+        """
+        Get the current filter expression.
+        
+        Tries multiple sources in order:
+        1. Expression widget (if exists and has content)
+        2. Current layer's subsetString (the actual applied filter)
+        3. Source layer from combobox's subsetString
+        
+        Returns:
+            str: The current filter expression, or empty string if none
+        """
+        try:
+            # Source 1: Try to get expression from the expression widget
+            if hasattr(self, 'mQgsFieldExpressionWidget_filtering_active_expression'):
+                widget = self.mQgsFieldExpressionWidget_filtering_active_expression
+                if hasattr(widget, 'expression'):
+                    expr = widget.expression()
+                    if expr and expr.strip():
+                        return expr
+                elif hasattr(widget, 'currentText'):
+                    expr = widget.currentText()
+                    if expr and expr.strip():
+                        return expr
+            
+            # Source 2: Try to get subsetString from current layer
+            if hasattr(self, 'current_layer') and self.current_layer:
+                subset = self.current_layer.subsetString()
+                if subset and subset.strip():
+                    return subset
+            
+            # Source 3: Try to get from the filtering source layer combobox
+            if hasattr(self, 'comboBox_filtering_current_layer'):
+                layer = self.comboBox_filtering_current_layer.currentLayer()
+                if layer:
+                    subset = layer.subsetString()
+                    if subset and subset.strip():
+                        return subset
+            
+            return ""
+        except Exception as e:
+            logger.debug(f"Could not get current expression: {e}")
+            return ""
+    
+    def _add_current_to_favorites(self):
+        """Add current filter configuration to favorites, including all filtered remote layers."""
+        from qgis.PyQt.QtWidgets import QInputDialog, QLineEdit, QDialog, QVBoxLayout, QFormLayout, QDialogButtonBox, QTextEdit
+        from qgis.core import QgsProject
+        from datetime import datetime
+        from .modules.filter_favorites import FilterFavorite
+        
+        expression = self._get_current_filter_expression()
+        if not expression:
+            show_warning("FilterMate", "No active filter to save as favorite")
+            return
+        
+        # Collect all filtered layers (remote layers with active filters)
+        remote_layers_data = {}
+        project = QgsProject.instance()
+        source_layer_id = None
+        source_layer_name = None
+        
+        if hasattr(self, 'current_layer') and self.current_layer:
+            source_layer_id = self.current_layer.id()
+            source_layer_name = self.current_layer.name()
+        
+        # Iterate through all vector layers to find those with filters
+        for layer_id, layer in project.mapLayers().items():
+            # Skip non-vector layers
+            if not hasattr(layer, 'subsetString'):
+                continue
+            # Skip the source layer (already captured in main expression)
+            if layer_id == source_layer_id:
+                continue
+            # Check if layer has an active filter
+            subset = layer.subsetString()
+            if subset and subset.strip():
+                remote_layers_data[layer.name()] = {
+                    'expression': subset,
+                    'feature_count': layer.featureCount(),
+                    'layer_id': layer_id,
+                    'provider': layer.providerType()
+                }
+        
+        # Build default name and auto-description
+        layers_count = 1 + len(remote_layers_data)
+        default_name = ""
+        if layers_count > 1:
+            default_name = f"Filter ({layers_count} layers)"
+        
+        # Generate auto-description
+        auto_description = self._generate_favorite_description(
+            source_layer_name, expression, remote_layers_data
+        )
+        
+        # Create custom dialog for name + description
+        dialog = QDialog(self)
+        dialog.setWindowTitle("FilterMate - Add to Favorites")
+        dialog.setMinimumSize(380, 200)
+        dialog.resize(420, 260)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        
+        form_layout = QFormLayout()
+        
+        # Name input
+        name_edit = QLineEdit()
+        name_edit.setText(default_name)
+        name_edit.setPlaceholderText("Enter a name for this filter")
+        form_layout.addRow(f"Name ({layers_count} layer{'s' if layers_count > 1 else ''}):", name_edit)
+        
+        # Description input (auto-generated but editable)
+        desc_edit = QTextEdit()
+        desc_edit.setMaximumHeight(120)
+        desc_edit.setText(auto_description)
+        desc_edit.setPlaceholderText("Description (auto-generated, you can modify it)")
+        form_layout.addRow("Description:", desc_edit)
+        
+        layout.addLayout(form_layout)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            name = name_edit.text().strip()
+            description = desc_edit.toPlainText().strip()
+            
+            if name:
+                # Get current layer info
+                layer_name = None
+                layer_provider = None
+                if hasattr(self, 'current_layer') and self.current_layer:
+                    layer_name = self.current_layer.name()
+                    layer_provider = self.current_layer.providerType()
+                
+                # Create favorite with remote layers and description
+                fav = FilterFavorite(
+                    name=name,
+                    expression=expression,
+                    layer_name=layer_name,
+                    layer_provider=layer_provider,
+                    remote_layers=remote_layers_data if remote_layers_data else None,
+                    description=description
+                )
+                
+                # Add to manager
+                self._favorites_manager.add_favorite(fav)
+                self._favorites_manager.save_to_project()
+                
+                # Update indicator
+                self._update_favorite_indicator()
+                
+                msg = f"Filter saved as '{name}'"
+                if remote_layers_data:
+                    msg += f" ({len(remote_layers_data) + 1} layers)"
+                show_success("FilterMate", msg)
+    
+    def _generate_favorite_description(self, source_layer_name: str, expression: str, 
+                                        remote_layers: dict) -> str:
+        """
+        Generate an automatic description for a favorite.
+        
+        Args:
+            source_layer_name: Name of the source layer
+            expression: Filter expression
+            remote_layers: Dict of remote layers data
+            
+        Returns:
+            str: Auto-generated description
+        """
+        from datetime import datetime
+        
+        lines = []
+        
+        # Add date
+        lines.append(f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        lines.append("")
+        
+        # Source layer info
+        if source_layer_name:
+            lines.append(f"Source: {source_layer_name}")
+            # Extract key info from expression (first condition or truncated)
+            expr_preview = expression[:100] + "..." if len(expression) > 100 else expression
+            lines.append(f"Filter: {expr_preview}")
+        
+        # Remote layers summary
+        if remote_layers:
+            lines.append("")
+            lines.append(f"Remote layers ({len(remote_layers)}):")
+            for layer_name, data in list(remote_layers.items())[:5]:
+                feature_count = data.get('feature_count', '?')
+                lines.append(f"  • {layer_name} ({feature_count} features)")
+            if len(remote_layers) > 5:
+                lines.append(f"  ... and {len(remote_layers) - 5} more")
+        
+        return "\n".join(lines)
+    
+    def _apply_favorite(self, favorite_id: str):
+        """Apply a saved favorite filter to all layers (source + remote)."""
+        from qgis.core import QgsProject
+        
+        fav = self._favorites_manager.get_favorite(favorite_id)
+        if not fav:
+            show_warning("FilterMate", "Favorite not found")
+            return
+        
+        project = QgsProject.instance()
+        applied_count = 0
+        errors = []
+        
+        # Try to find and apply filter to source layer by name
+        source_layer = None
+        if fav.layer_name:
+            matching_layers = project.mapLayersByName(fav.layer_name)
+            if matching_layers:
+                source_layer = matching_layers[0]
+        
+        # Apply filter to source layer
+        if source_layer and fav.expression:
+            try:
+                source_layer.setSubsetString(fav.expression)
+                applied_count += 1
+                logger.info(f"Applied filter to source layer: {source_layer.name()}")
+            except Exception as e:
+                errors.append(f"{fav.layer_name}: {str(e)}")
+                logger.error(f"Failed to apply filter to {fav.layer_name}: {e}")
+        elif fav.expression:
+            # If source layer not found, try to apply to current layer
+            if hasattr(self, 'current_layer') and self.current_layer:
+                try:
+                    self.current_layer.setSubsetString(fav.expression)
+                    applied_count += 1
+                    logger.info(f"Applied filter to current layer: {self.current_layer.name()}")
+                except Exception as e:
+                    errors.append(f"Current layer: {str(e)}")
+        
+        # Apply filters to remote layers
+        if fav.remote_layers:
+            for layer_name, layer_data in fav.remote_layers.items():
+                expression = layer_data.get('expression', '')
+                if not expression:
+                    continue
+                
+                # Find layer by name
+                matching_layers = project.mapLayersByName(layer_name)
+                if matching_layers:
+                    layer = matching_layers[0]
+                    try:
+                        layer.setSubsetString(expression)
+                        applied_count += 1
+                        logger.info(f"Applied filter to remote layer: {layer_name}")
+                    except Exception as e:
+                        errors.append(f"{layer_name}: {str(e)}")
+                        logger.error(f"Failed to apply filter to {layer_name}: {e}")
+                else:
+                    logger.warning(f"Layer not found in project: {layer_name}")
+        
+        # Refresh map canvas
+        try:
+            from qgis.utils import iface
+            iface.mapCanvas().refresh()
+        except:
+            pass
+        
+        # Update usage stats
+        self._favorites_manager.mark_favorite_used(favorite_id)
+        self._favorites_manager.save_to_project()
+        
+        # Update indicator
+        self._update_favorite_indicator()
+        
+        # Show result
+        if errors:
+            show_warning("FilterMate", f"Applied filter to {applied_count} layers. Errors: {len(errors)}")
+        else:
+            total_layers = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else applied_count
+            if applied_count > 1:
+                show_success("FilterMate", f"Applied '{fav.name}' to {applied_count} layers")
+            else:
+                show_success("FilterMate", f"Applied filter: {fav.name}")
+    
+    def _show_favorites_manager_dialog(self):
+        """Show the favorites management dialog with list, edit, and delete capabilities."""
+        from qgis.PyQt.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+            QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QMenu,
+            QGroupBox, QFormLayout, QDialogButtonBox, QSplitter, QTreeWidget,
+            QTreeWidgetItem, QHeaderView, QTabWidget, QWidget, QScrollArea
+        )
+        from qgis.PyQt.QtCore import Qt
+        from qgis.PyQt.QtGui import QFont, QColor
+        
+        if not self._favorites_manager or self._favorites_manager.count == 0:
+            QMessageBox.information(
+                self,
+                "Favorites Manager",
+                "No favorites saved yet.\n\nClick the ★ indicator and select 'Add current filter to favorites' to save your first favorite."
+            )
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("FilterMate - Favorites Manager")
+        dialog.setMinimumSize(500, 350)
+        dialog.resize(580, 420)
+        dialog.setModal(True)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        
+        # Header
+        header_label = QLabel(f"<b>Saved Favorites ({self._favorites_manager.count})</b>")
+        header_label.setStyleSheet("font-size: 11pt; margin-bottom: 5px;")
+        layout.addWidget(header_label)
+        
+        # Main content with splitter
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # Left panel: List of favorites
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+        
+        list_widget = QListWidget()
+        list_widget.setMinimumWidth(180)
+        list_widget.setMaximumWidth(250)
+        list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        
+        # Populate list
+        favorites = self._favorites_manager.get_all_favorites()
+        for fav in favorites:
+            layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
+            item_text = f"★ {fav.name}"
+            if layers_count > 1:
+                item_text += f" [{layers_count}]"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.UserRole, fav.id)
+            tooltip = f"Layer: {fav.layer_name}\nUsed: {fav.use_count} times"
+            if fav.description:
+                tooltip += f"\n\n{fav.description}"
+            item.setToolTip(tooltip)
+            list_widget.addItem(item)
+        
+        left_layout.addWidget(list_widget)
+        splitter.addWidget(left_panel)
+        
+        # Right panel: Details with tabs
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+        
+        # Tab widget for details
+        tab_widget = QTabWidget()
+        
+        # === TAB 1: General Info ===
+        general_tab = QWidget()
+        general_layout = QFormLayout(general_tab)
+        general_layout.setContentsMargins(8, 8, 8, 8)
+        general_layout.setSpacing(6)
+        general_layout.setRowWrapPolicy(QFormLayout.DontWrapRows)
+        
+        name_edit = QLineEdit()
+        name_edit.setPlaceholderText("Favorite name")
+        general_layout.addRow("Name:", name_edit)
+        
+        description_edit = QTextEdit()
+        description_edit.setMaximumHeight(60)
+        description_edit.setPlaceholderText("Description (auto-generated, editable)")
+        general_layout.addRow("Description:", description_edit)
+        
+        layer_label = QLabel("-")
+        layer_label.setStyleSheet("color: #555;")
+        layer_label.setWordWrap(True)
+        general_layout.addRow("Source Layer:", layer_label)
+        
+        provider_label = QLabel("-")
+        provider_label.setStyleSheet("color: #777;")
+        general_layout.addRow("Provider:", provider_label)
+        
+        # Stats row
+        stats_layout = QHBoxLayout()
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        use_count_label = QLabel("-")
+        created_label = QLabel("-")
+        created_label.setStyleSheet("color: #777; font-size: 9pt;")
+        stats_layout.addWidget(QLabel("Used:"))
+        stats_layout.addWidget(use_count_label)
+        stats_layout.addStretch()
+        stats_layout.addWidget(QLabel("Created:"))
+        stats_layout.addWidget(created_label)
+        general_layout.addRow(stats_layout)
+        
+        tab_widget.addTab(general_tab, "📋 General")
+        
+        # === TAB 2: Source Expression ===
+        expr_tab = QWidget()
+        expr_layout = QVBoxLayout(expr_tab)
+        expr_layout.setContentsMargins(8, 8, 8, 8)
+        expr_layout.setSpacing(4)
+        
+        source_expr_label = QLabel("<b>Source Layer Expression:</b>")
+        expr_layout.addWidget(source_expr_label)
+        
+        expression_edit = QTextEdit()
+        expression_edit.setPlaceholderText("Filter expression for source layer")
+        expression_edit.setStyleSheet("font-family: monospace; font-size: 10pt;")
+        expr_layout.addWidget(expression_edit)
+        
+        tab_widget.addTab(expr_tab, "🔍 Expression")
+        
+        # === TAB 3: Remote Layers ===
+        remote_tab = QWidget()
+        remote_layout = QVBoxLayout(remote_tab)
+        remote_layout.setContentsMargins(8, 8, 8, 8)
+        remote_layout.setSpacing(4)
+        
+        remote_header = QLabel("<b>Filtered Remote Layers:</b>")
+        remote_layout.addWidget(remote_header)
+        
+        remote_tree = QTreeWidget()
+        remote_tree.setHeaderLabels(["Layer", "Features", "Expression"])
+        remote_tree.setColumnCount(3)
+        remote_tree.header().setStretchLastSection(True)
+        remote_tree.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        remote_tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        remote_tree.setAlternatingRowColors(True)
+        remote_layout.addWidget(remote_tree)
+        
+        no_remote_label = QLabel("<i>No remote layers in this favorite</i>")
+        no_remote_label.setStyleSheet("color: #888; padding: 10px;")
+        no_remote_label.setAlignment(Qt.AlignCenter)
+        remote_layout.addWidget(no_remote_label)
+        
+        tab_widget.addTab(remote_tab, "🗂️ Remote Layers")
+        
+        right_layout.addWidget(tab_widget)
+        splitter.addWidget(right_panel)
+        
+        # Set splitter proportions (30% list, 70% details)
+        splitter.setSizes([200, 450])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        layout.addWidget(splitter, 1)  # Stretch factor for splitter
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 8, 0, 0)
+        
+        apply_btn = QPushButton("▶ Apply")
+        apply_btn.setEnabled(False)
+        apply_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 6px 12px;")
+        
+        save_btn = QPushButton("💾 Save Changes")
+        save_btn.setEnabled(False)
+        save_btn.setStyleSheet("padding: 6px 12px;")
+        
+        delete_btn = QPushButton("🗑️ Delete")
+        delete_btn.setEnabled(False)
+        delete_btn.setStyleSheet("background-color: #e74c3c; color: white; padding: 6px 12px;")
+        
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet("padding: 6px 12px;")
+        
+        button_layout.addWidget(apply_btn)
+        button_layout.addWidget(save_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(delete_btn)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+        
+        # Store current favorite id
+        current_fav_id = [None]
+        
+        def on_selection_changed():
+            item = list_widget.currentItem()
+            if item:
+                fav_id = item.data(Qt.UserRole)
+                fav = self._favorites_manager.get_favorite(fav_id)
+                if fav:
+                    current_fav_id[0] = fav_id
+                    name_edit.setText(fav.name)
+                    description_edit.setText(fav.description or "")
+                    layer_label.setText(fav.layer_name or "-")
+                    provider_label.setText(fav.layer_provider or "-")
+                    expression_edit.setText(fav.expression)
+                    use_count_label.setText(f"{fav.use_count} times")
+                    created_label.setText(fav.created_at[:16] if fav.created_at else "-")
+                    
+                    # Populate remote layers tree
+                    remote_tree.clear()
+                    if fav.remote_layers and len(fav.remote_layers) > 0:
+                        no_remote_label.hide()
+                        remote_tree.show()
+                        for layer_name, layer_data in fav.remote_layers.items():
+                            expr = layer_data.get('expression', '')
+                            feature_count = layer_data.get('feature_count', '?')
+                            item = QTreeWidgetItem([
+                                layer_name,
+                                str(feature_count),
+                                expr[:80] + "..." if len(expr) > 80 else expr
+                            ])
+                            item.setToolTip(2, expr)  # Full expression in tooltip
+                            remote_tree.addTopLevelItem(item)
+                        # Update tab label with count
+                        tab_widget.setTabText(2, f"🗂️ Remote Layers ({len(fav.remote_layers)})")
+                    else:
+                        remote_tree.hide()
+                        no_remote_label.show()
+                        tab_widget.setTabText(2, "🗂️ Remote Layers")
+                    
+                    apply_btn.setEnabled(True)
+                    save_btn.setEnabled(True)
+                    delete_btn.setEnabled(True)
+        
+        def on_apply():
+            if current_fav_id[0]:
+                self._apply_favorite(current_fav_id[0])
+                dialog.accept()
+        
+        def on_save():
+            if current_fav_id[0]:
+                new_name = name_edit.text().strip()
+                new_expr = expression_edit.toPlainText().strip()
+                new_desc = description_edit.toPlainText().strip()
+                if new_name:
+                    self._favorites_manager.update_favorite(
+                        current_fav_id[0],
+                        name=new_name,
+                        expression=new_expr,
+                        description=new_desc
+                    )
+                    self._favorites_manager.save_to_project()
+                    # Update list item
+                    item = list_widget.currentItem()
+                    if item:
+                        fav = self._favorites_manager.get_favorite(current_fav_id[0])
+                        layers_count = fav.get_layers_count() if fav and hasattr(fav, 'get_layers_count') else 1
+                        item_text = f"★ {new_name}"
+                        if layers_count > 1:
+                            item_text += f" [{layers_count}]"
+                        item.setText(item_text)
+                    show_success("FilterMate", "Favorite updated")
+        
+        def on_delete():
+            if current_fav_id[0]:
+                fav = self._favorites_manager.get_favorite(current_fav_id[0])
+                if fav:
+                    reply = QMessageBox.question(
+                        dialog,
+                        "Delete Favorite",
+                        f"Delete favorite '{fav.name}'?",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if reply == QMessageBox.Yes:
+                        self._favorites_manager.remove_favorite(current_fav_id[0])
+                        list_widget.takeItem(list_widget.currentRow())
+                        header_label.setText(f"<b>Saved Favorites ({self._favorites_manager.count})</b>")
+                        
+                        # Clear all fields in all tabs
+                        # Tab 1: General
+                        name_edit.clear()
+                        description_edit.clear()
+                        layer_label.setText("-")
+                        provider_label.setText("-")
+                        use_count_label.setText("-")
+                        created_label.setText("-")
+                        
+                        # Tab 2: Expression
+                        expression_edit.clear()
+                        
+                        # Tab 3: Remote Layers
+                        remote_tree.clear()
+                        no_remote_label.show()
+                        remote_tree.hide()
+                        tab_widget.setTabText(2, "🗂️ Remote Layers")
+                        
+                        current_fav_id[0] = None
+                        apply_btn.setEnabled(False)
+                        save_btn.setEnabled(False)
+                        delete_btn.setEnabled(False)
+                        self._update_favorite_indicator()
+                        
+                        # Save changes to persist deletion
+                        self._favorites_manager.save_to_project()
+                        
+                        # Auto-select next available item after deletion
+                        if list_widget.count() > 0:
+                            list_widget.setCurrentRow(0)
+                            # Force trigger selection change (signal may not fire if row 0 was already selected)
+                            on_selection_changed()
+        
+        list_widget.currentItemChanged.connect(on_selection_changed)
+        apply_btn.clicked.connect(on_apply)
+        save_btn.clicked.connect(on_save)
+        delete_btn.clicked.connect(on_delete)
+        close_btn.clicked.connect(dialog.reject)
+        
+        # Select first item
+        if list_widget.count() > 0:
+            list_widget.setCurrentRow(0)
+        
+        dialog.exec_()
+    
+    def _export_favorites(self):
+        """Export favorites to a JSON file."""
+        from qgis.PyQt.QtWidgets import QFileDialog
+        
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Favorites",
+            "filtermate_favorites.json",
+            "JSON Files (*.json)"
+        )
+        
+        if filepath:
+            if self._favorites_manager.export_to_file(filepath):
+                show_success("FilterMate", f"Exported {self._favorites_manager.count} favorites")
+            else:
+                show_warning("FilterMate", "Failed to export favorites")
+    
+    def _import_favorites(self):
+        """Import favorites from a JSON file."""
+        from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
+        
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Favorites",
+            "",
+            "JSON Files (*.json)"
+        )
+        
+        if filepath:
+            # Ask merge or replace
+            result = QMessageBox.question(
+                self,
+                "Import Favorites",
+                "Merge with existing favorites?\n\n"
+                "Yes = Add to existing\n"
+                "No = Replace all existing",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            
+            if result == QMessageBox.Cancel:
+                return
+            
+            merge = (result == QMessageBox.Yes)
+            count = self._favorites_manager.import_from_file(filepath, merge=merge)
+            
+            if count > 0:
+                self._favorites_manager.save_to_project()
+                self._update_favorite_indicator()
+                show_success("FilterMate", f"Imported {count} favorites")
+            else:
+                show_warning("FilterMate", "No favorites imported")
+    
+    def _update_favorite_indicator(self):
+        """Update the favorites indicator badge with current count."""
+        if not hasattr(self, 'favorites_indicator_label') or not self.favorites_indicator_label:
+            return
+        
+        # Get favorites manager
+        favorites_manager = getattr(self, '_favorites_manager', None)
+        if favorites_manager is None:
+            count = 0
+        else:
+            count = favorites_manager.count
+        
+        # Update text
+        if count > 0:
+            self.favorites_indicator_label.setText(f"★ {count}")
+            tooltip = f"★ {count} Favorites saved\nClick to apply or manage"
+            # Brighter color when there are favorites
+            style = """
+                QLabel#label_favorites_indicator {
+                    color: white;
+                    font-size: 9pt;
+                    font-weight: 600;
+                    padding: 3px 10px;
+                    border-radius: 12px;
+                    border: none;
+                    background-color: #f39c12;
+                }
+                QLabel#label_favorites_indicator:hover {
+                    background-color: #d68910;
+                }
+            """
+        else:
+            self.favorites_indicator_label.setText("★")
+            tooltip = "★ No favorites saved\nClick to add current filter"
+            # Muted color when empty
+            style = """
+                QLabel#label_favorites_indicator {
+                    color: #95a5a6;
+                    font-size: 9pt;
+                    font-weight: 600;
+                    padding: 3px 10px;
+                    border-radius: 12px;
+                    border: none;
+                    background-color: #ecf0f1;
+                }
+                QLabel#label_favorites_indicator:hover {
+                    background-color: #d5dbdb;
+                }
+            """
+        
+        self.favorites_indicator_label.setStyleSheet(style)
+        self.favorites_indicator_label.setToolTip(tooltip)
+        self.favorites_indicator_label.adjustSize()
+
     def _get_available_backends_for_layer(self, layer):
         """
         Get list of available backends for the given layer.

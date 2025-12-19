@@ -45,7 +45,7 @@ Documentation is technically accurate and comprehensive but lacks visual engagem
 | Task | File | Effort | Status |
 |------|------|--------|--------|
 | **1.1** Add Quick Tasks section | `intro.md` | 30 min | ⏳ In Progress |
-| **1.2** Create 3-minute tutorial | `getting-started/3-minute-tutorial.md` | 1h | ⏳ In Progress |
+| **1.2** Create 3-minute tutorial | `getting-started/minute-tutorial.md` | 1h | ⏳ In Progress |
 | **1.3** Sample dataset README | `sample-data/README.md` | 1h | 📋 Planned |
 | **1.4** Enrich glossary | `reference/glossary.md` | 1h | 📋 Planned |
 | **1.5** Backend decision chart | `backends/overview.md` | 30 min | 📋 Planned |
@@ -119,7 +119,7 @@ Choose a quick task to get started immediately:
 ### 🔍 Task 1: Filter by Attribute (2 min)
 **Goal**: Show only large cities
 - Expression: `"population" > 100000`
-- [Start Tutorial →](getting-started/3-minute-tutorial.md)
+- [Start Tutorial →](getting-started/minute-tutorial.md)
 
 ### 📐 Task 2: Geometric Filter (3 min)
 **Goal**: Find buildings near roads
@@ -135,7 +135,7 @@ Choose a quick task to get started immediately:
 
 ### 1.2 3-Minute Tutorial Structure
 
-**File**: `website/docs/getting-started/3-minute-tutorial.md`
+**File**: `website/docs/getting-started/minute-tutorial.md`
 
 **Template**:
 ```markdown
@@ -577,7 +577,7 @@ Predicate: Crosses
    - Follow any tutorial
 
 ### Tutorials Using This Data
-- [3-Minute Quick Start](../../docs/getting-started/3-minute-tutorial.md)
+- [3-Minute Quick Start](../../docs/getting-started/minute-tutorial.md)
 - [Your First Filter](../../docs/getting-started/first-filter.md)
 - [Urban Planning Workflow](../../docs/workflows/urban-planning-transit.md)
 
@@ -666,7 +666,7 @@ Predicate: Crosses
 ### Immediate Actions (Today)
 1. ✅ Create this plan document
 2. ⏳ Enhance `intro.md` with Quick Tasks
-3. ⏳ Create `3-minute-tutorial.md` draft
+3. ⏳ Create `minute-tutorial.md` draft
 4. ⏳ Start spatial predicates cheat sheet
 
 ### This Week

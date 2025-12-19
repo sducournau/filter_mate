@@ -509,11 +509,11 @@ uri.setDataSource("public", "my_layer", "geometry")
 
 ## See Also
 
-- [Backends Overview](./overview.md) - Multi-backend architecture
-- [Backend Selection](./choosing-backend.md) - Automatic selection logic
-- [PostgreSQL Backend](./postgresql.md) - For larger datasets
-- [Performance Comparison](./performance-benchmarks.md) - Detailed benchmarks
-- [Troubleshooting](../advanced/troubleshooting.md) - Common issues
+- [Backends Overview](./overview) - Multi-backend architecture
+- [Backend Selection](./choosing-backend) - Automatic selection logic
+- [PostgreSQL Backend](./postgresql) - For larger datasets
+- [Performance Comparison](./performance-benchmarks) - Detailed benchmarks
+- [Troubleshooting](../advanced/troubleshooting) - Common issues
 
 ## Technical Details
 

@@ -429,7 +429,7 @@ Crosses: Linear intersection only
 ```
 
 **Solution**:
-See [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates.md) for visual guide.
+See [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates) for visual guide.
 
 ---
 
@@ -636,18 +636,22 @@ EPSG:2154 - Lambert 93 (France)
 
 ---
 
-### Workaround: Use Favorites
+### Workaround: Use QGIS Project Variables
 
-**Save important filters**:
-1. Apply your filter
-2. Click **"Add to Favorites"** button (⭐ icon)
-3. Give it a descriptive name
-4. Favorites ARE saved to project file
+**Save important filter expressions**:
+1. Go to **Project → Properties → Variables**
+2. Create a new variable (e.g., `my_filter_expression`)
+3. Paste your filter expression as the value
+4. Use it in FilterMate by referencing `@my_filter_expression`
 
-**Recall favorite filters**:
-1. Click **"Favorites"** dropdown
-2. Select saved filter
-3. Click **"Apply"**
+**Alternative: Layer Notes**:
+1. Right-click layer → **Properties → Metadata**
+2. Add your filter expressions to the **Abstract** field
+3. Copy/paste when needed
+
+:::tip Planned Feature
+**Filter Favorites** (save/recall frequently used filters) is planned for a future release.
+:::
 
 ---
 
@@ -771,4 +775,4 @@ Before filtering, verify:
 
 ---
 
-**Still stuck?** Check the [Troubleshooting Guide](../advanced/troubleshooting.md) or ask on [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).
+**Still stuck?** Check the [Troubleshooting Guide](../advanced/troubleshooting) or ask on [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).

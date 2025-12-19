@@ -395,11 +395,11 @@ Real-world performance on typical hardware (Core i7, 16GB RAM, SSD):
 
 ## See Also
 
-- [Backends Overview](./overview.md) - Multi-backend architecture
-- [Backend Selection](./choosing-backend.md) - Automatic selection logic
-- [Performance Comparison](./performance-benchmarks.md) - Detailed benchmarks
-- [Spatialite Backend](./spatialite.md) - Alternative for smaller datasets
-- [Troubleshooting](../advanced/troubleshooting.md) - Common issues
+- [Backends Overview](./overview) - Multi-backend architecture
+- [Backend Selection](./choosing-backend) - Automatic selection logic
+- [Performance Comparison](./performance-benchmarks) - Detailed benchmarks
+- [Spatialite Backend](./spatialite) - Alternative for smaller datasets
+- [Troubleshooting](../advanced/troubleshooting) - Common issues
 
 ## Technical Details
 

@@ -11,8 +11,8 @@ Learn how to filter vector data using QGIS expressions and attribute conditions 
 The **FILTERING tab** is your central hub for configuring all types of filters on vector layers. It provides three main filtering capabilities:
 
 1. **Attribute Filtering** - Filter features based on their attribute values using QGIS expressions
-2. **Geometric Filtering** - Filter based on spatial relationships (covered in [Geometric Filtering](./geometric-filtering.md))
-3. **Buffer Operations** - Add proximity zones for spatial analysis (covered in [Buffer Operations](./buffer-operations.md))
+2. **Geometric Filtering** - Filter based on spatial relationships (covered in [Geometric Filtering](./geometric-filtering))
+3. **Buffer Operations** - Add proximity zones for spatial analysis (covered in [Buffer Operations](./buffer-operations))
 
 This page focuses on **attribute filtering** using QGIS expressions.
 
@@ -584,17 +584,17 @@ service_frequency < 4 AND population_nearby > 5000
 
 ## Related Topics
 
-- [Geometric Filtering](./geometric-filtering.md) - Spatial predicates and reference layers in FILTERING tab
-- [Buffer Operations](./buffer-operations.md) - Add proximity zones in FILTERING tab
-- [Interface Overview](./interface-overview.md) - Complete FILTERING tab component guide
-- [Filter History](./filter-history.md) - Manage and reuse saved filters
+- [Geometric Filtering](./geometric-filtering) - Spatial predicates and reference layers in FILTERING tab
+- [Buffer Operations](./buffer-operations) - Add proximity zones in FILTERING tab
+- [Interface Overview](./interface-overview) - Complete FILTERING tab component guide
+- [Filter History](./filter-history) - Undo/redo and history tracking
 
 ## Next Steps
 
 Now that you understand attribute filtering in the FILTERING tab, learn about:
 
-1. **[Geometric Filtering](./geometric-filtering.md)** - Add spatial predicates to find features based on location
-2. **[Buffer Operations](./buffer-operations.md)** - Create proximity zones for spatial analysis
-3. **[Export Features](./export-features.md)** - Save your filtered results to various formats
+1. **[Geometric Filtering](./geometric-filtering)** - Add spatial predicates to find features based on location
+2. **[Buffer Operations](./buffer-operations)** - Create proximity zones for spatial analysis
+3. **[Export Features](./export-features)** - Save your filtered results to various formats
 
-**Complete Workflow**: See [Quick Start Guide](../getting-started/quick-start.md) for a step-by-step filtering example.
+**Complete Workflow**: See [Quick Start Guide](../getting-started/quick-start) for a step-by-step filtering example.

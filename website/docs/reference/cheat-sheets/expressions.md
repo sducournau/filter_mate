@@ -608,8 +608,8 @@ AND permits IS NULL
 
 ## See Also
 
-- [Spatial Predicates Reference](./spatial-predicates.md)
-- [Filtering Basics](../../user-guide/filtering-basics.md)
+- [Spatial Predicates Reference](./spatial-predicates)
+- [Filtering Basics](../../user-guide/filtering-basics)
 - [QGIS Expression Documentation](https://docs.qgis.org/latest/en/docs/user_manual/expressions/index.html)
 
 ---

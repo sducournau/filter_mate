@@ -579,9 +579,9 @@ Configuration is validated against `config_schema.json`:
 
 ## See Also
 
-- [Architecture Overview](../developer-guide/architecture.md) - Configuration system architecture
-- [Code Style Guide](../developer-guide/code-style.md) - Configuration conventions
-- [Testing Guide](../developer-guide/testing.md) - Configuration testing
+- [Architecture Overview](../developer-guide/architecture) - Configuration system architecture
+- [Code Style Guide](../developer-guide/code-style) - Configuration conventions
+- [Testing Guide](../developer-guide/testing) - Configuration testing
 
 ## Version History
 

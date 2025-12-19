@@ -186,10 +186,10 @@ To save the filtered buildings:
 
 Now that you've created your first filter, explore more:
 
-- **[Filtering Basics](../user-guide/filtering-basics.md)** - Learn QGIS expressions
-- **[Geometric Filtering](../user-guide/geometric-filtering.md)** - Advanced spatial predicates
-- **[Buffer Operations](../user-guide/buffer-operations.md)** - Different buffer types
-- **[Export Features](../user-guide/export-features.md)** - Advanced export options
+- **[Filtering Basics](../user-guide/filtering-basics)** - Learn QGIS expressions
+- **[Geometric Filtering](../user-guide/geometric-filtering)** - Advanced spatial predicates
+- **[Buffer Operations](../user-guide/buffer-operations)** - Different buffer types
+- **[Export Features](../user-guide/export-features)** - Advanced export options
 
 ## Common Issues
 
@@ -204,7 +204,7 @@ Check:
 
 For large datasets:
 - Install PostgreSQL backend for 10-50× speedup
-- See [Performance Tuning](../advanced/performance-tuning.md)
+- See [Performance Tuning](../advanced/performance-tuning)
 
 ### Wrong CRS?
 

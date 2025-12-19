@@ -84,7 +84,7 @@ FilterMate automatically selects the optimal backend based on your data source:
 | Spatialite | Spatialite | None (built-in) |
 | Shapefile, GeoPackage, etc. | OGR | None (built-in) |
 
-Learn more about backends in the [Backends Overview](./backends/overview.md).
+Learn more about backends in the [Backends Overview](./backends/overview).
 
 ## Troubleshooting {#troubleshooting}
 
@@ -107,6 +107,6 @@ except ImportError:
 
 ## Next Steps
 
-- [Quick Start Tutorial](./getting-started/quick-start.md) - Learn the basics
-- [First Filter](./getting-started/first-filter.md) - Create your first filter
-- [Performance Benchmarks](./backends/performance-benchmarks.md) - Understand backend performance
+- [Quick Start Tutorial](./getting-started/quick-start) - Learn the basics
+- [First Filter](./getting-started/first-filter) - Create your first filter
+- [Performance Benchmarks](./backends/performance-benchmarks) - Understand backend performance

@@ -72,15 +72,15 @@ Impact: **High** - Immediate user engagement boost
 - Multiple entry points based on user interest
 
 **Metrics Expected**:
-- 40% increase in 3-minute-tutorial.md clicks
+- 40% increase in minute-tutorial.md clicks
 - 25% increase in workflow section visits
 - Reduced bounce rate from intro page
 
 ---
 
-### 3. 3-minute-tutorial.md Complete Beginner Guide (NEW)
+### 3. minute-tutorial.md Complete Beginner Guide (NEW)
 
-**File**: `/website/docs/getting-started/3-minute-tutorial.md`  
+**File**: `/website/docs/getting-started/minute-tutorial.md`  
 **Status**: ✅ Complete (215 lines)  
 **Effort**: 1.5 hours  
 **Sidebar Position**: 1.5 (between quick-start and first-filter)
@@ -104,7 +104,7 @@ Impact: **High** - Immediate user engagement boost
 
 4. **Pro Tips** (3 practical tips)
    - Undo with Ctrl+Z
-   - Save expressions as favorites
+   - Use filter history for quick recall
    - Combine multiple criteria
 
 5. **What's Next** learning paths
@@ -237,7 +237,7 @@ For each layer:
 |-------------|--------|-------|--------|--------|
 | Improvement Plan | ✅ New | 540 | 1h | Roadmap for all phases |
 | intro.md | ✅ Enhanced | +80 | 30min | Entry points for all users |
-| 3-minute-tutorial | ✅ New | 215 | 1.5h | **First success in 3 min** |
+| minute-tutorial | ✅ New | 215 | 1.5h | **First success in 3 min** |
 | Sample Data README | ✅ New | 340+ | 2h | 4 complete scenarios |
 | Spatial Predicates | ✅ Verified | 862 | 0 | Already complete |
 | Backend Charts | ✅ Verified | 786 | 0 | Already complete |
@@ -251,7 +251,7 @@ For each layer:
 
 | Metric | Before | Phase 1 Target | Evidence |
 |--------|--------|----------------|----------|
-| **Time to First Success** | 15 min | **5 min** | 3-minute-tutorial.md provides guaranteed 3-min win |
+| **Time to First Success** | 15 min | **5 min** | minute-tutorial.md provides guaranteed 3-min win |
 | **Tutorial Completion Rate** | 30% | **60%** | Sample data + beginner tutorial remove barriers |
 | **New User Engagement** | 40% | **70%** | Multiple entry points on intro.md |
 | **Support Questions** | Baseline | **-50%** | Proactive troubleshooting in tutorials |
@@ -350,7 +350,7 @@ For each layer:
 - Portuguese (PT): 15 files (37.5%)
 
 **New Files to Translate**:
-- 3-minute-tutorial.md → FR/PT
+- minute-tutorial.md → FR/PT
 - Sample data README.md → FR/PT (optional, English sufficient)
 
 **Timeline**: Phase 4 (Translation sprint)
@@ -400,7 +400,7 @@ For each layer:
 **Breakdown**:
 - Improvement plan: 1h (planned 1h)
 - intro.md enhancements: 30min (planned 30min)
-- 3-minute-tutorial: 1.5h (planned 1h) - slight overrun
+- minute-tutorial: 1.5h (planned 1h) - slight overrun
 - Sample data README: 2h (planned 2h)
 - Verification: 0h (planned 30min) - underrun
 

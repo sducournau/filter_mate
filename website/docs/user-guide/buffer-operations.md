@@ -671,10 +671,10 @@ FILTERING Tab Configuration:
 
 ## Related Topics
 
-- [Geometric Filtering](./geometric-filtering.md) - Spatial predicates used with buffers
-- [Filtering Basics](./filtering-basics.md) - Combine buffers with attribute filters
-- [Interface Overview](./interface-overview.md) - Complete FILTERING tab guide
-- [Export Features](./export-features.md) - Save buffered results
+- [Geometric Filtering](./geometric-filtering) - Spatial predicates used with buffers
+- [Filtering Basics](./filtering-basics) - Combine buffers with attribute filters
+- [Interface Overview](./interface-overview) - Complete FILTERING tab guide
+- [Export Features](./export-features) - Save buffered results
 
 :::info FILTERING Tab Integration
 Buffers are part of the **geometric filtering** configuration in the FILTERING tab. They work seamlessly with:
@@ -686,7 +686,7 @@ Buffers are part of the **geometric filtering** configuration in the FILTERING t
 
 ## Next Steps
 
-- **[Export Features](./export-features.md)** - Save your filtered results with buffers applied
-- **[Filter History](./filter-history.md)** - Reuse buffer configurations from history
+- **[Export Features](./export-features)** - Save your filtered results with buffers applied
+- **[Filter History](./filter-history)** - Reuse buffer configurations from history
 
-**Complete Guide**: See [First Filter](../getting-started/first-filter.md) for a comprehensive workflow combining attribute filters, geometric predicates, and buffers.
+**Complete Guide**: See [First Filter](../getting-started/first-filter) for a comprehensive workflow combining attribute filters, geometric predicates, and buffers.

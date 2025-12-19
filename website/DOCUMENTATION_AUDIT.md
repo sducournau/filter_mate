@@ -1,9 +1,30 @@
 # FilterMate Documentation Audit Report
 
-**Date**: December 18, 2025  
+**Date**: December 19, 2025  
 **Version Actuelle du Plugin**: 2.3.7  
 **Version Documentée dans le Changelog Web**: 2.3.7 ✅  
 **Phase d'Amélioration**: Phase 1 COMPLÉTÉE ✅ | Phase 2 En Préparation
+
+---
+
+## 🔧 Corrections Décembre 19, 2025
+
+### Système de Favoris - NON IMPLÉMENTÉ
+
+**Problème identifié**: La documentation décrivait un système de favoris ("Add to Favorites", "Favorites dropdown") qui n'est pas implémenté dans le code.
+
+**Fichiers corrigés**:
+- ✅ `docs/getting-started/why-filtermate.md` - Remplacé par "Filter history with session tracking"
+- ✅ `docs/user-guide/common-mistakes.md` - Section "Workaround: Use Favorites" remplacée par "Use QGIS Project Variables" + note "Planned Feature"
+- ✅ `docs/user-guide/interface-overview.md` - Retiré mention favorites
+- ✅ `docs/user-guide/introduction.md` - Retiré mention favorites
+- ✅ `docs/user-guide/filtering-basics.md` - Retiré mention "saved filters"
+- ✅ `docs/workflows/index.md` - Retiré mention filter favorites
+- ✅ Traductions FR (5 fichiers)
+- ✅ Traductions PT (5 fichiers)
+- ✅ `PHASE_1_COMPLETION_SUMMARY.md` - Corrigé Pro Tips
+
+**Action**: Les références aux favoris ont été retirées ou remplacées par des alternatives réelles (Project Variables, Layer Notes) avec note que la fonctionnalité est planifiée pour une version future.
 
 ---
 
@@ -16,7 +37,7 @@
 ### Nouveaux Fichiers Créés
 - ✅ `DOCUMENTATION_IMPROVEMENT_PLAN.md` (540 lignes) - Roadmap 4 phases
 - ✅ `PHASE_1_COMPLETION_SUMMARY.md` (330+ lignes) - Rapport complet Phase 1
-- ✅ `docs/getting-started/3-minute-tutorial.md` (215 lignes) - Guide débutant absolu
+- ✅ `docs/getting-started/minute-tutorial.md` (215 lignes) - Guide débutant absolu
 - ✅ `sample-data/README.md` (340+ lignes) - Dataset Paris 10e complet
 
 ### Fichiers Améliorés

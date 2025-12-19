@@ -5,522 +5,522 @@ sidebar_position: 4
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Emergency Services: Coverage Analysis
+# Serviços de Emergência: Análise de Cobertura
 
-Identify areas that lack adequate emergency service coverage to optimize facility placement and response planning.
+Identificar áreas que carecem de cobertura adequada de serviços de emergência para otimizar o posicionamento de instalações e planejamento de resposta.
 
-## Scenario Overview
+## Visão Geral do Cenário
 
-**Goal**: Find residential areas more than 5km from the nearest fire station to identify service coverage gaps.
+**Objetivo**: Encontrar áreas residenciais a mais de 5km da estação de bombeiros mais próxima para identificar lacunas de cobertura.
 
-**Real-World Application**:
-- Fire departments optimizing station placement
-- Emergency management planning response times
-- Urban planners evaluating service equity
-- Insurance companies assessing risk zones
+**Aplicação do Mundo Real**:
+- Departamentos de bombeiros otimizando posicionamento de estações
+- Gestão de emergências planejando tempos de resposta
+- Planejadores urbanos avaliando equidade de serviços
+- Companhias de seguros avaliando zonas de risco
 
-**Estimated Time**: 12 minutes
+**Tempo Estimado**: 12 minutos
 
-**Difficulty**: ⭐⭐ Intermediate
+**Dificuldade**: ⭐⭐ Intermediário
 
 ---
 
-## Prerequisites
+## Pré-requisitos
 
-### Required Data
+### Dados Necessários
 
-1. **Fire Stations Layer** (points)
-   - Emergency service facility locations
-   - Must include station names/IDs
-   - Covers your study area
+1. **Camada de Estações de Bombeiros** (pontos)
+   - Localizações de instalações de serviços de emergência
+   - Deve incluir nomes/IDs das estações
+   - Cobre sua área de estudo
 
-2. **Population Areas Layer** (polygons)
-   - Census blocks, neighborhoods, or postal zones
-   - Population count attribute (optional but valuable)
-   - Residential land use areas
+2. **Camada de Áreas Populacionais** (polígonos)
+   - Setores censitários, bairros ou zonas postais
+   - Atributo de contagem populacional (opcional mas valioso)
+   - Áreas de uso residencial
 
-3. **Optional: Road Network**
-   - For drive-time analysis (advanced)
-   - Network topology for routing
+3. **Opcional: Rede Viária**
+   - Para análise de tempo de viagem (avançado)
+   - Topologia de rede para roteamento
 
-### Sample Data Sources
+### Fontes de Dados de Exemplo
 
-**Option 1: OpenStreetMap**
+**Opção 1: OpenStreetMap**
 ```python
-# Use QGIS QuickOSM plugin
+# Usar plugin QuickOSM do QGIS
 
-# For fire stations:
-Key: "amenity", Value: "fire_station"
+# Para estações de bombeiros:
+Chave: "amenity", Valor: "fire_station"
 
-# For residential areas:
-Key: "landuse", Value: "residential"
-Key: "place", Value: "neighbourhood"
+# Para áreas residenciais:
+Chave: "landuse", Valor: "residential"
+Chave: "place", Valor: "neighbourhood"
 ```
 
-**Option 2: Government Open Data**
-- Municipal emergency services databases
-- Census boundary files with population
+**Opção 2: Dados Abertos Governamentais**
+- Bancos de dados municipais de serviços de emergência
+- Arquivos de limites censitários com população
 - HIFLD (Homeland Infrastructure Foundation-Level Data)
-- Local GIS data portals
+- Portais locais de dados SIG
 
-### Backend Recommendation
+### Recomendação de Backend
 
-**OGR** - Best for this workflow:
-- Universal format compatibility (Shapefiles, GeoJSON, GeoPackage)
-- No complex setup required
-- Good for datasets &lt;10,000 features
-- Works with any QGIS installation
+**OGR** - Melhor escolha para este fluxo de trabalho:
+- Compatibilidade universal de formatos (Shapefiles, GeoJSON, GeoPackage)
+- Nenhuma configuração complexa necessária
+- Bom para conjuntos de dados <10.000 feições
+- Funciona com qualquer instalação do QGIS
 
 ---
 
-## Step-by-Step Instructions
+## Instruções Passo a Passo
 
-### Step 1: Load and Prepare Data
+### Passo 1: Carregar e Preparar Dados
 
-1. **Load layers** into QGIS:
-   - `fire_stations.gpkg` (or .shp, .geojson)
-   - `residential_areas.gpkg`
+1. **Carregar camadas** no QGIS:
+   - `estacoes_bombeiros.gpkg` (ou .shp, .geojson)
+   - `areas_residenciais.gpkg`
 
-2. **Verify CRS**:
+2. **Verificar SRC**:
    ```
-   Both layers must use same projected coordinate system
-   Right-click → Properties → Information → CRS
+   Ambas as camadas devem usar o mesmo sistema de coordenadas projetado
+   Clique direito → Propriedades → Informação → SRC
    
-   Recommended: Local UTM zone or state/national grid
-   Example: EPSG:32633 (UTM Zone 33N)
+   Recomendado: Zona UTM local ou grade estadual/nacional
+   Exemplo: EPSG:32633 (Zona UTM 33N)
    ```
 
-3. **Inspect data**:
-   - Count fire stations: Should have at least 3-5 for meaningful analysis
-   - Check residential areas: Look for population or household count attributes
-   - Verify coverage: Fire stations should be distributed across study area
+3. **Inspecionar dados**:
+   - Contar estações de bombeiros: Deve ter pelo menos 3-5 para análise significativa
+   - Verificar áreas residenciais: Procurar atributos de população ou número de domicílios
+   - Verificar cobertura: Estações devem estar distribuídas pela área de estudo
 
-:::tip Finding Your UTM Zone
-Use [epsg.io](https://epsg.io/) and click on map to find appropriate UTM zone for your region.
+:::tip Encontrando Sua Zona UTM
+Use [epsg.io](https://epsg.io/) e clique no mapa para encontrar a zona UTM apropriada para sua região.
 :::
 
-### Step 2: Create 5km Service Areas Around Fire Stations
+### Passo 2: Criar Áreas de Serviço de 5km ao Redor das Estações
 
-**Using FilterMate**:
+**Usando FilterMate**:
 
-1. Open FilterMate, select **fire_stations** layer
-2. Enter expression:
+1. Abrir FilterMate, selecionar camada **estacoes_bombeiros**
+2. Inserir expressão:
    ```sql
-   -- Keep all fire stations
+   -- Manter todas as estações
    1 = 1
    ```
-3. Enable **Buffer** operation:
-   - Distance: `5000` meters
-   - Type: Positive (expand)
-   - Segments: 16 (for smooth circles)
-4. **Apply Filter**
-5. **Export** as `fire_coverage_5km.gpkg`
+3. Habilitar operação **Buffer**:
+   - Distância: `5000` metros
+   - Tipo: Positivo (expandir)
+   - Segmentos: 16 (para círculos suaves)
+4. **Aplicar Filtro**
+5. **Exportar** como `cobertura_bombeiros_5km.gpkg`
 
-**Result**: Circular 5km buffers around each fire station (service coverage zones)
+**Resultado**: Buffers circulares de 5km ao redor de cada estação (zonas de cobertura de serviço)
 
-### Step 3: Identify Under-Served Residential Areas (Inverse Query)
+### Passo 3: Identificar Áreas Residenciais Sub-atendidas (Consulta Inversa)
 
-This is the key step - finding areas **NOT** within 5km of any fire station:
+Este é o passo chave - encontrar áreas **NÃO** dentro de 5km de qualquer estação:
 
 <Tabs>
   <TabItem value="ogr" label="OGR / Spatialite" default>
-    **Method 1: Using FilterMate (Recommended)**
+    **Método 1: Usando FilterMate (Recomendado)**
     
-    1. Select **residential_areas** layer
-    2. Choose **OGR** backend
-    3. Enter expression:
+    1. Selecionar camada **areas_residenciais**
+    2. Escolher backend **OGR**
+    3. Inserir expressão:
     ```sql
-    -- Residential areas NOT intersecting fire coverage
+    -- Áreas residenciais NÃO intersectando cobertura de bombeiros
     NOT intersects(
       $geometry,
       aggregate(
-        layer:='fire_coverage_5km',
+        layer:='cobertura_bombeiros_5km',
         aggregate:='collect',
         expression:=$geometry
       )
     )
     ```
     
-    **Method 2: Using disjoint() predicate**
+    **Método 2: Usando predicado disjoint()**
     ```sql
-    -- Areas completely outside all coverage zones
+    -- Áreas completamente fora de todas as zonas de cobertura
     disjoint(
       $geometry,
-      aggregate('fire_coverage_5km', 'collect', $geometry)
+      aggregate('cobertura_bombeiros_5km', 'collect', $geometry)
     )
     ```
   </TabItem>
   
-  <TabItem value="postgresql" label="PostgreSQL (Advanced)">
+  <TabItem value="postgresql" label="PostgreSQL (Avançado)">
     ```sql
-    -- Residential areas with NO nearby fire stations
+    -- Áreas residenciais sem estação próxima
     NOT EXISTS (
       SELECT 1
-      FROM fire_stations fs
+      FROM estacoes_bombeiros eb
       WHERE ST_DWithin(
-        residential_areas.geom,
-        fs.geom,
-        5000  -- 5km threshold
+        areas_residenciais.geom,
+        eb.geom,
+        5000  -- Limiar de 5km
       )
     )
     ```
     
-    **Or using spatial join**:
+    **Ou usando junção espacial**:
     ```sql
-    SELECT r.*
-    FROM residential_areas r
-    LEFT JOIN fire_stations fs
-      ON ST_DWithin(r.geom, fs.geom, 5000)
-    WHERE fs.station_id IS NULL  -- No matching station found
+    SELECT ar.*
+    FROM areas_residenciais ar
+    LEFT JOIN estacoes_bombeiros eb
+      ON ST_DWithin(ar.geom, eb.geom, 5000)
+    WHERE eb.id_estacao IS NULL  -- Nenhuma estação correspondente encontrada
     ```
   </TabItem>
 </Tabs>
 
-4. Click **Apply Filter**
-5. Review map - red/highlighted areas show coverage gaps
+4. Clicar em **Aplicar Filtro**
+5. Revisar mapa - áreas vermelhas/destacadas mostram lacunas de cobertura
 
-### Step 4: Calculate Exact Distance to Nearest Station
+### Passo 4: Calcular Distância Exata à Estação Mais Próxima
 
-Add a field showing how far each under-served area is from nearest fire station:
+Adicionar campo mostrando quão longe cada área sub-atendida está da estação mais próxima:
 
-1. Open **Attribute Table** (F6) of filtered layer
-2. **Open Field Calculator**
-3. Create new field:
+1. Abrir **Tabela de Atributos** (F6) da camada filtrada
+2. **Abrir Calculadora de Campo**
+3. Criar novo campo:
    ```
-   Field name: distance_to_nearest_station
-   Type: Decimal (double)
-   Precision: 2
+   Nome do campo: distancia_estacao_proxima
+   Tipo de campo: Decimal (double)
+   Precisão: 2
    
-   Expression:
+   Expressão:
    array_min(
      array_foreach(
-       overlay_nearest('fire_stations', $geometry, limit:=5),
+       overlay_nearest('estacoes_bombeiros', $geometry, limit:=5),
        distance(geometry(@element), $geometry)
      )
-   ) / 1000  -- Convert meters to kilometers
+   ) / 1000  -- Converter metros para quilômetros
    ```
 
-**Result**: Each residential area now shows distance to closest fire station
+**Resultado**: Cada área residencial agora mostra distância à estação mais próxima
 
-### Step 5: Prioritize by Population at Risk
+### Passo 5: Priorizar por População em Risco
 
-If your residential layer has population data:
+Se sua camada residencial tem dados de população:
 
-1. **Calculate total population** in under-served areas:
+1. **Calcular população total** em áreas sub-atendidas:
    ```sql
-   -- In expression filter or field calculator
-   "population" > 0
+   -- No filtro de expressão ou calculadora de campo
+   "populacao" > 0
    ```
 
-2. **Sort by priority**:
+2. **Ordenar por prioridade**:
    ```
-   Attribute Table → Click column header "population"
-   → Sort descending
+   Tabela de Atributos → Clicar no cabeçalho da coluna "populacao"
+   → Ordenar decrescente
    ```
 
-3. **Create priority categories**:
+3. **Criar categorias de prioridade**:
    ```sql
    CASE
-     WHEN "distance_to_nearest_station" > 10 THEN 'Critical (>10km)'
-     WHEN "distance_to_nearest_station" > 7 THEN 'High Priority (7-10km)'
-     WHEN "distance_to_nearest_station" > 5 THEN 'Medium Priority (5-7km)'
-     ELSE 'Acceptable (<5km)'
+     WHEN "distancia_estacao_proxima" > 10 THEN 'Crítico (>10km)'
+     WHEN "distancia_estacao_proxima" > 7 THEN 'Alta Prioridade (7-10km)'
+     WHEN "distancia_estacao_proxima" > 5 THEN 'Prioridade Média (5-7km)'
+     ELSE 'Aceitável (<5km)'
    END
    ```
 
-### Step 6: Visualize Coverage Gaps
+### Passo 6: Visualizar Lacunas de Cobertura
 
-**Symbology Setup**:
+**Configuração de Simbologia**:
 
-1. Right-click **residential_areas** → Symbology
-2. Choose **Graduated**
-3. Value: `distance_to_nearest_station`
-4. Method: Natural Breaks (Jenks)
+1. Clique direito em **areas_residenciais** → Simbologia
+2. Escolher **Graduado**
+3. Valor: `distancia_estacao_proxima`
+4. Método: Quebras Naturais (Jenks)
 5. Classes: 5
-6. Color ramp: Red (far) → Yellow → Green (close)
-7. Apply
+6. Rampa de cores: Vermelho (longe) → Amarelo → Verde (perto)
+7. Aplicar
 
-**Add Labels** (optional):
+**Adicionar Rótulos** (opcional):
 ```
-Label with: concat("name", ' - ', round("distance_to_nearest_station", 1), ' km')
-Size: Based on "population" (larger = more people affected)
+Rotular com: concat("nome", ' - ', round("distancia_estacao_proxima", 1), ' km')
+Tamanho: Baseado em "populacao" (maior = mais pessoas afetadas)
 ```
 
-### Step 7: Export Results and Generate Report
+### Passo 7: Exportar Resultados e Gerar Relatório
 
-1. **Export under-served areas**:
+1. **Exportar áreas sub-atendidas**:
    ```
-   FilterMate → Export Filtered Features
-   Format: GeoPackage
-   Filename: residential_areas_underserved.gpkg
-   CRS: WGS84 (for sharing) or keep project CRS
-   ```
-
-2. **Generate summary statistics**:
-   ```
-   Vector → Analysis Tools → Basic Statistics
-   Input: residential_areas_underserved
-   Field: population
+   FilterMate → Exportar Feições Filtradas
+   Formato: GeoPackage
+   Nome do arquivo: areas_residenciais_sub_atendidas.gpkg
+   SRC: WGS84 (para compartilhar) ou manter SRC do projeto
    ```
 
-3. **Create summary report** (Python Console - optional):
+2. **Gerar estatísticas resumidas**:
+   ```
+   Vetor → Ferramentas de Análise → Estatísticas Básicas
+   Entrada: areas_residenciais_sub_atendidas
+   Campo: populacao
+   ```
+
+3. **Criar relatório resumido** (Console Python - opcional):
    ```python
    layer = iface.activeLayer()
    features = list(layer.getFeatures())
    
    total_areas = len(features)
-   total_population = sum(f['population'] for f in features if f['population'])
-   avg_distance = sum(f['distance_to_nearest_station'] for f in features) / total_areas
-   max_distance = max(f['distance_to_nearest_station'] for f in features)
+   total_populacao = sum(f['populacao'] for f in features if f['populacao'])
+   distancia_media = sum(f['distancia_estacao_proxima'] for f in features) / total_areas
+   distancia_max = max(f['distancia_estacao_proxima'] for f in features)
    
-   print(f"=== Emergency Services Coverage Gap Analysis ===")
-   print(f"Under-served residential areas: {total_areas}")
-   print(f"Population affected: {total_population:,}")
-   print(f"Average distance to nearest station: {avg_distance:.1f} km")
-   print(f"Maximum distance: {max_distance:.1f} km")
+   print(f"=== Análise de Lacunas de Cobertura Serviços de Emergência ===")
+   print(f"Áreas residenciais sub-atendidas: {total_areas}")
+   print(f"População afetada: {total_populacao:,}")
+   print(f"Distância média à estação mais próxima: {distancia_media:.1f} km")
+   print(f"Distância máxima: {distancia_max:.1f} km")
    ```
 
 ---
 
-## Understanding the Results
+## Entendendo os Resultados
 
-### What the Filter Shows
+### O Que o Filtro Mostra
 
-✅ **Selected areas**: Residential zones >5km from ANY fire station
+✅ **Áreas selecionadas**: Zonas residenciais >5km de QUALQUER estação de bombeiros
 
-❌ **Excluded areas**: Residential zones within 5km service radius
+❌ **Áreas excluídas**: Zonas residenciais dentro do raio de serviço de 5km
 
-### Interpreting Coverage Gaps
+### Interpretando Lacunas de Cobertura
 
-**Critical Gaps (>10km)**:
-- Response time likely exceeds national standards (e.g., NFPA 1710: 8 minutes)
-- High priority for new station placement
-- Consider temporary or volunteer stations
-- May need mutual aid agreements with neighboring jurisdictions
+**Lacunas Críticas (>10km)**:
+- Tempo de resposta provavelmente excede padrões nacionais (ex: NFPA 1710: 8 minutos)
+- Alta prioridade para posicionamento de nova estação
+- Considerar estações temporárias ou voluntárias
+- Pode precisar de acordos de auxílio mútuo com jurisdições vizinhas
 
-**High Priority (7-10km)**:
-- Response time borderline acceptable
-- Should be addressed in next planning cycle
-- Consider mobile/seasonal stations
-- Evaluate road network quality (may be longer drive time)
+**Alta Prioridade (7-10km)**:
+- Tempo de resposta limite aceitável
+- Deve ser abordado no próximo ciclo de planejamento
+- Considerar estações móveis/sazonais
+- Avaliar qualidade da rede viária (pode ser tempo de viagem mais longo)
 
-**Medium Priority (5-7km)**:
-- Technically under-served by strict standards
-- Low urgency if population density is low
-- Monitor for future growth
-- May be acceptable for rural areas
+**Prioridade Média (5-7km)**:
+- Tecnicamente sub-atendido por padrões estritos
+- Baixa urgência se densidade populacional é baixa
+- Monitorar para crescimento futuro
+- Pode ser aceitável para áreas rurais
 
-### Validation Checks
+### Verificações de Validação
 
-1. **Visual spot check**: Use QGIS Measure tool to verify distances
-2. **Edge cases**: Areas just outside 5km may round differently
-3. **Population accuracy**: Verify sum matches known census totals
-4. **Geometry validity**: Check for slivers or invalid polygons
+1. **Verificação visual pontual**: Usar ferramenta de Medição do QGIS para verificar distâncias
+2. **Casos limite**: Áreas logo fora de 5km podem arredondar diferentemente
+3. **Precisão populacional**: Verificar se soma corresponde aos totais censitários conhecidos
+4. **Validade de geometria**: Procurar por fragmentos ou polígonos inválidos
 
 ---
 
-## Best Practices
+## Melhores Práticas
 
-### Coverage Standards
+### Padrões de Cobertura
 
-**NFPA 1710 (USA) Recommendations**:
-- Urban areas: 1.5 mile (2.4 km) travel distance
-- Rural areas: Up to 5 miles (8 km) acceptable
-- Response time goal: 8 minutes from call to arrival
+**Recomendações NFPA 1710 (EUA)**:
+- Áreas urbanas: 1.5 milha (2,4 km) distância de viagem
+- Áreas rurais: Até 5 milhas (8 km) aceitável
+- Meta de tempo de resposta: 8 minutos da chamada à chegada
 
-**Adjust threshold** based on your region:
+**Ajustar limiar** baseado em sua região:
 ```
-Urban areas:    2-3 km
-Suburban areas: 5 km (as in this tutorial)
-Rural areas:    8-10 km
+Áreas urbanas:    2-3 km
+Áreas suburbanas: 5 km (como neste tutorial)
+Áreas rurais:     8-10 km
 ```
 
-### Performance Optimization
+### Otimização de Performance
 
-**For large datasets**:
+**Para grandes conjuntos de dados**:
 
-1. **Simplify residential area geometry**:
+1. **Simplificar geometria das áreas residenciais**:
    ```
-   Vector → Geometry → Simplify
-   Tolerance: 50 meters (maintains coverage accuracy)
+   Vetor → Geometria → Simplificar
+   Tolerância: 50 metros (mantém precisão de cobertura)
    ```
 
-2. **Pre-filter to populated areas only**:
+2. **Pré-filtrar apenas para áreas povoadas**:
    ```sql
-   "population" > 0 OR "landuse" = 'residential'
+   "populacao" > 0 OR "uso_solo" = 'residential'
    ```
 
-3. **Use spatial index** (OGR creates automatically for GeoPackage)
+3. **Usar índice espacial** (OGR cria automaticamente para GeoPackage)
 
-4. **Backend selection guide**:
+4. **Guia de seleção de backend**:
    ```
-   < 1,000 areas:    OGR (sufficient)
+   < 1.000 áreas:    OGR (suficiente)
    1k - 50k:         Spatialite
    > 50k:            PostgreSQL
    ```
 
-### Real-World Adjustments
+### Ajustes do Mundo Real
 
-**Consider road network reality**:
-- Straight-line 5km may be 8km by road
-- Mountains/rivers may block direct access
-- Use network analysis for drive-time instead (advanced)
+**Considerar realidade da rede viária**:
+- 5km em linha reta pode ser 8km por estrada
+- Montanhas/rios podem bloquear acesso direto
+- Usar análise de rede para tempo de viagem (avançado)
 
-**Network Analysis Alternative** (QGIS built-in):
+**Alternativa de Análise de Rede** (integrado QGIS):
 ```
-Processing → Network Analysis → Service Area (from layer)
-Input: fire_stations
-Travel cost: 5000 meters OR 10 minutes
-Creates drive-time polygons instead of circles
+Processamento → Análise de Rede → Área de Serviço (de camada)
+Entrada: estacoes_bombeiros
+Custo de viagem: 5000 metros OU 10 minutos
+Cria polígonos de tempo de viagem em vez de círculos
 ```
 
-### Data Quality Considerations
+### Considerações de Qualidade de Dados
 
-1. **Fire station accuracy**:
-   - Verify stations are operational (not decommissioned)
-   - Check if volunteer stations should have smaller radius
-   - Consider specialized stations (airport, industrial)
+1. **Precisão das estações**:
+   - Verificar se estações estão operacionais (não desativadas)
+   - Verificar se estações voluntárias devem ter raio menor
+   - Considerar estações especializadas (aeroporto, industrial)
 
-2. **Residential area quality**:
-   - Remove parks, industrial zones misclassified as residential
-   - Update with recent census data
-   - Account for new developments
+2. **Qualidade das áreas residenciais**:
+   - Remover parques, zonas industriais classificadas erroneamente como residenciais
+   - Atualizar com dados censitários recentes
+   - Contabilizar novos desenvolvimentos
 
-3. **CRS importance**:
-   - Distance calculations require projected CRS
-   - Geographic (lat/lon) will give incorrect results
-   - Always reproject if needed before analysis
+3. **Importância do SRC**:
+   - Cálculos de distância requerem SRC projetado
+   - Geográfico (lat/lon) dará resultados incorretos
+   - Sempre reprojetar se necessário antes da análise
 
 ---
 
-## Common Issues
+## Problemas Comuns
 
-### Issue 1: All residential areas selected (or none selected)
+### Problema 1: Todas as áreas residenciais selecionadas (ou nenhuma)
 
-**Cause**: CRS mismatch or buffer not created properly
+**Causa**: Incompatibilidade de SRC ou buffer não criado corretamente
 
-**Solution**:
+**Solução**:
 ```
-1. Check fire_coverage_5km layer exists and has features
-2. Verify both layers in same CRS
-3. Re-create buffers with correct distance unit (meters)
-4. Check buffer layer name matches expression exactly
+1. Verificar se camada cobertura_bombeiros_5km existe e tem feições
+2. Verificar se ambas as camadas estão no mesmo SRC
+3. Recriar buffers com unidade de distância correta (metros)
+4. Verificar se nome da camada de buffer corresponde exatamente à expressão
 ```
 
-### Issue 2: Distance calculation returns NULL or errors
+### Problema 2: Cálculo de distância retorna NULL ou erros
 
-**Cause**: overlay_nearest() not finding fire stations layer
+**Causa**: overlay_nearest() não está encontrando camada estacoes_bombeiros
 
-**Solution**:
+**Solução**:
 ```
-1. Ensure fire_stations layer is loaded in project
-2. Check layer name matches exactly (case-sensitive)
-3. Alternative: Use aggregate() with minimum distance:
+1. Garantir que camada estacoes_bombeiros está carregada no projeto
+2. Verificar se nome da camada corresponde exatamente (sensível a maiúsculas)
+3. Alternativa: Usar aggregate() com distância mínima:
 
 distance(
   $geometry,
-  aggregate('fire_stations', 'collect', $geometry)
+  aggregate('estacoes_bombeiros', 'collect', $geometry)
 )
 ```
 
-### Issue 3: Results show unexpected patterns
+### Problema 3: Resultados mostram padrões inesperados
 
-**Cause**: Data quality issues or projection problems
+**Causa**: Problemas de qualidade de dados ou projeção
 
-**Troubleshooting**:
+**Solução de Problemas**:
 ```
-1. Zoom to specific result and measure distance manually
-2. Check for overlapping residential polygons
-3. Verify fire_stations actually cover the area
-4. Look for invalid geometries:
-   Vector → Geometry Tools → Check Validity
+1. Aproximar em resultado específico e medir distância manualmente
+2. Verificar polígonos residenciais sobrepostos
+3. Verificar se estacoes_bombeiros realmente cobrem a área
+4. Procurar geometrias inválidas:
+   Vetor → Ferramentas de Geometria → Verificar Validade
 ```
 
-### Issue 4: Performance very slow
+### Problema 4: Performance muito lenta
 
-**Cause**: Large geometries or complex residential areas
+**Causa**: Geometrias grandes ou áreas residenciais complexas
 
-**Solutions**:
+**Soluções**:
 ```
-1. Simplify residential geometry (50-100m tolerance)
-2. Create spatial index on both layers
-3. Process by administrative districts separately
-4. Use PostgreSQL backend for >10k features
+1. Simplificar geometria residencial (tolerância 50-100m)
+2. Criar índice espacial em ambas as camadas
+3. Processar por distritos administrativos separadamente
+4. Usar backend PostgreSQL para >10k feições
 ```
 
 ---
 
-## Next Steps
+## Próximos Passos
 
-### Related Workflows
+### Fluxos de Trabalho Relacionados
 
-- **[Urban Planning Transit](./urban-planning-transit)**: Similar buffer analysis pattern
-- **[Environmental Protection](./environmental-protection)**: Inverse spatial queries
-- **[Real Estate Analysis](./real-estate-analysis)**: Multi-criteria filtering
+- **[Planejamento Urbano Transporte](./urban-planning-transit)**: Padrão de análise de buffer similar
+- **[Proteção Ambiental](./environmental-protection)**: Consultas espaciais inversas
+- **[Análise Imobiliária](./real-estate-analysis)**: Filtragem multi-critérios
 
-### Advanced Techniques
+### Técnicas Avançadas
 
-**1. Multi-Station Coverage** (areas served by ≥2 stations):
+**1. Cobertura Multi-Estações** (áreas atendidas por ≥2 estações):
 ```sql
--- Count overlapping coverage zones
+-- Contar zonas de cobertura sobrepostas
 array_length(
-  overlay_intersects('fire_coverage_5km', $geometry)
+  overlay_intersects('cobertura_bombeiros_5km', $geometry)
 ) >= 2
 ```
 
-**2. Priority Scoring** (distance + population):
+**2. Pontuação de Prioridade** (distância + população):
 ```sql
--- Higher score = higher priority for new station
-("distance_to_nearest_station" - 5) * "population" / 1000
+-- Pontuação maior = maior prioridade para nova estação
+("distancia_estacao_proxima" - 5) * "populacao" / 1000
 ```
 
-**3. Optimal New Station Location**:
+**3. Localização Ótima de Nova Estação**:
 ```
-1. Export under-served areas with population
-2. Find centroid weighted by population:
-   Processing → Vector Geometry → Centroids
-3. Manual analysis: Place new station at highest-priority centroid
+1. Exportar áreas sub-atendidas com população
+2. Encontrar centroide ponderado por população:
+   Processamento → Geometria de Vetor → Centroides
+3. Análise manual: Posicionar nova estação no centroide de maior prioridade
 ```
 
-**4. Response Time Modeling** (advanced):
+**4. Modelagem de Tempo de Resposta** (avançado):
 ```python
-# Requires road network and routing
-# Uses QGIS Network Analysis tools
-# Models actual drive time vs. straight-line distance
-# Accounts for road speed limits and turn restrictions
+# Requer rede viária e roteamento
+# Usa ferramentas de Análise de Rede do QGIS
+# Modela tempo de viagem real vs. distância em linha reta
+# Considera limites de velocidade e restrições de curva
 ```
 
-**5. Temporal Analysis** (future growth):
+**5. Análise Temporal** (crescimento futuro):
 ```sql
--- If you have population projection data
-("population_2030" - "population_2024") / "population_2024" > 0.2
--- Areas expecting >20% growth
+-- Se você tem dados de projeção populacional
+("populacao_2030" - "populacao_2024") / "populacao_2024" > 0.2
+-- Áreas esperando >20% de crescimento
 ```
 
-### Further Learning
+### Aprendizado Adicional
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
-- 📖 [Buffer Operations](../user-guide/buffer-operations)
-- 📖 [Network Analysis in QGIS](https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/qgis/networkanalysis.html)
-- 📖 [Performance Tuning](../advanced/performance-tuning)
+- 📖 [Referência de Predicados Espaciais](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Operações de Buffer](../user-guide/buffer-operations)
+- 📖 [Análise de Rede no QGIS](https://docs.qgis.org/latest/pt_BR/docs/user_manual/processing_algs/qgis/networkanalysis.html)
+- 📖 [Ajuste de Performance](../advanced/performance-tuning)
 
 ---
 
-## Summary
+## Resumo
 
-✅ **You've learned**:
-- Creating service area buffers around facilities
-- Inverse spatial filtering (NOT intersects)
-- Distance calculations to nearest feature
-- Population-weighted priority analysis
-- Exporting results for planning reports
+✅ **Você aprendeu**:
+- Criar buffers de área de serviço ao redor de instalações
+- Filtragem espacial inversa (NOT intersects)
+- Cálculos de distância à feição mais próxima
+- Análise de prioridade ponderada por população
+- Exportação de resultados para relatórios de planejamento
 
-✅ **Key techniques**:
-- `NOT intersects()` for coverage gap analysis
-- `overlay_nearest()` for distance calculations
-- `aggregate()` with spatial predicates
-- Priority scoring with attribute + spatial data
+✅ **Técnicas chave**:
+- `NOT intersects()` para análise de lacunas de cobertura
+- `overlay_nearest()` para cálculos de distância
+- `aggregate()` com predicados espaciais
+- Pontuação de prioridade com dados de atributo + espaciais
 
-🎯 **Real-world impact**: This workflow helps emergency management agencies identify service gaps, optimize resource allocation, improve response times, and ensure equitable emergency service coverage across communities.
+🎯 **Impacto real**: Este fluxo de trabalho ajuda agências de gestão de emergências a identificar lacunas de serviço, otimizar alocação de recursos, melhorar tempos de resposta e garantir cobertura equitativa de serviços de emergência nas comunidades.
 
-💡 **Pro tip**: Run this analysis annually with updated census data to track coverage changes as populations shift and adjust station placement accordingly.
+💡 **Dica profissional**: Execute esta análise anualmente com dados censitários atualizados para rastrear mudanças de cobertura conforme as populações mudam e ajuste o posicionamento de estações de acordo.

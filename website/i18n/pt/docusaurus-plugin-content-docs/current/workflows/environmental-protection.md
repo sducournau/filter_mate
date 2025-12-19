@@ -5,154 +5,154 @@ sidebar_position: 3
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Environmental Analysis: Protected Zone Impact
+# Análise Ambiental: Impacto de Zona Protegida
 
-Find industrial sites within protected water buffer zones to assess environmental compliance and risks.
+Encontrar instalações industriais dentro de zonas de buffer de água protegidas para avaliar conformidade e riscos ambientais.
 
-## Scenario Overview
+## Visão Geral do Cenário
 
-**Goal**: Identify industrial facilities that fall within 1km buffer zones around protected water bodies to evaluate environmental impact.
+**Objetivo**: Identificar instalações industriais que se enquadram em zonas de buffer de 1km ao redor de corpos d'água protegidos para avaliar impacto ambiental.
 
-**Real-World Application**:
-- Environmental agencies monitoring compliance
-- NGOs assessing industrial pollution risks
-- Policy makers creating buffer zone regulations
-- Urban planners managing industrial zoning
+**Aplicação do Mundo Real**:
+- Agências ambientais monitorando conformidade
+- ONGs avaliando riscos de poluição industrial
+- Formuladores de políticas criando regulamentações de zona de buffer
+- Planejadores urbanos gerenciando zoneamento industrial
 
-**Estimated Time**: 15 minutes
+**Tempo Estimado**: 15 minutos
 
-**Difficulty**: ⭐⭐⭐ Advanced
+**Dificuldade**: ⭐⭐⭐ Avançado
 
 ---
 
-## Prerequisites
+## Pré-requisitos
 
-### Required Data
+### Dados Necessários
 
-1. **Industrial Sites Layer** (points or polygons)
-   - Industrial facility locations
-   - Must include facility type/classification
-   - Minimum 50+ sites for meaningful analysis
+1. **Camada de Locais Industriais** (pontos ou polígonos)
+   - Localizações de instalações industriais
+   - Deve incluir tipo/classificação da instalação
+   - Mínimo 50+ locais para análise significativa
 
-2. **Water Bodies Layer** (polygons)
-   - Rivers, lakes, wetlands, reservoirs
-   - Protected status attribute (optional but useful)
-   - Covers your study area
+2. **Camada de Corpos d'Água** (polígonos)
+   - Rios, lagos, pântanos, reservatórios
+   - Atributo de status protegido (opcional mas útil)
+   - Cobre sua área de estudo
 
-3. **Protected Zones** (optional)
-   - Existing environmental protection zones
-   - Regulatory buffer boundaries
+3. **Zonas Protegidas** (opcional)
+   - Zonas de proteção ambiental existentes
+   - Limites de buffer regulatórios
 
-### Sample Data Sources
+### Fontes de Dados de Exemplo
 
-**Option 1: OpenStreetMap**
+**Opção 1: OpenStreetMap**
 ```python
-# Use QGIS QuickOSM plugin
-# For water bodies:
-Key: "natural", Value: "water"
-Key: "waterway", Value: "river"
+# Usar plugin QuickOSM do QGIS
+# Para corpos d'água:
+Chave: "natural", Valor: "water"
+Chave: "waterway", Valor: "river"
 
-# For industrial sites:
-Key: "landuse", Value: "industrial"
-Key: "industrial", Value: "*"
+# Para locais industriais:
+Chave: "landuse", Valor: "industrial"
+Chave: "industrial", Valor: "*"
 ```
 
-**Option 2: Government Data**
-- Environmental Protection Agency (EPA) databases
-- National water quality databases
-- Industrial facility registries
-- Protected area boundaries (WDPA)
+**Opção 2: Dados Governamentais**
+- Bancos de dados da Agência de Proteção Ambiental (EPA)
+- Bancos de dados nacionais de qualidade da água
+- Registros de instalações industriais
+- Limites de áreas protegidas (WDPA)
 
-### Backend Recommendation
+### Recomendação de Backend
 
-**Spatialite** - Best choice for this workflow:
-- Good performance for regional datasets (typically &lt;100k features)
-- Robust buffer operations
-- Good geometry repair capabilities
-- No server setup required
+**Spatialite** - Melhor escolha para este fluxo de trabalho:
+- Bom desempenho para conjuntos de dados regionais (tipicamente <100k feições)
+- Operações de buffer robustas
+- Boas capacidades de reparo de geometria
+- Nenhuma configuração de servidor necessária
 
 ---
 
-## Step-by-Step Instructions
+## Instruções Passo a Passo
 
-### Step 1: Load and Inspect Data
+### Passo 1: Carregar e Inspecionar Dados
 
-1. **Load both layers** into QGIS:
-   - `water_bodies.gpkg` or `rivers_lakes.shp`
-   - `industrial_sites.gpkg` or `factories.shp`
+1. **Carregar ambas as camadas** no QGIS:
+   - `corpos_agua.gpkg` ou `rios_lagos.shp`
+   - `locais_industriais.gpkg` ou `fabricas.shp`
 
-2. **Check CRS compatibility**:
+2. **Verificar compatibilidade de SRC**:
    ```
-   Right-click layer → Properties → Information
-   Verify both use same projected CRS (e.g., UTM, State Plane)
-   ```
-
-3. **Verify geometry validity**:
-   ```
-   Vector → Geometry Tools → Check Validity
-   Run on both layers
+   Clique direito na camada → Propriedades → Informação
+   Verificar se ambas usam o mesmo SRC projetado (ex: UTM, SIRGAS)
    ```
 
-:::warning CRS Requirements
-Buffer operations require a **projected coordinate system** (meters/feet), not geographic (lat/lon). If your data is in EPSG:4326, reproject first:
+3. **Verificar validade da geometria**:
+   ```
+   Vetor → Ferramentas de Geometria → Verificar Validade
+   Executar em ambas as camadas
+   ```
+
+:::warning Requisitos de SRC
+Operações de buffer requerem um **sistema de coordenadas projetado** (metros/pés), não geográfico (lat/lon). Se seus dados estão em EPSG:4326, reprojete primeiro:
 
 ```
-Vector → Data Management Tools → Reproject Layer
-Target CRS: Choose appropriate UTM zone or local projection
+Vetor → Ferramentas de Gerenciamento de Dados → Reprojetar Camada
+SRC Alvo: Escolher zona UTM apropriada ou projeção local
 ```
 :::
 
-### Step 2: Create 1km Buffer Around Water Bodies
+### Passo 2: Criar Buffer de 1km ao Redor dos Corpos d'Água
 
-**Option A: Using FilterMate (Recommended)**
+**Opção A: Usar FilterMate (Recomendado)**
 
-1. Open FilterMate panel
-2. Select **water_bodies** layer
-3. Enter filter expression:
+1. Abrir painel FilterMate
+2. Selecionar camada **corpos_agua**
+3. Inserir expressão de filtro:
    ```sql
-   -- Keep all water bodies, prepare for buffer
+   -- Manter todos os corpos d'água, preparar para buffer
    1 = 1
    ```
-4. Enable **Geometry Modification** → **Buffer**
-5. Set **Buffer Distance**: `1000` (meters)
-6. **Buffer Type**: `Positive (expand)`
-7. Click **Apply Filter**
-8. **Export Result** as `water_buffers_1km.gpkg`
+4. Habilitar **Modificação de Geometria** → **Buffer**
+5. Definir **Distância do Buffer**: `1000` (metros)
+6. **Tipo de Buffer**: `Positivo (expandir)`
+7. Clicar em **Aplicar Filtro**
+8. **Exportar Resultado** como `buffers_agua_1km.gpkg`
 
-**Option B: Using QGIS Native Tools**
+**Opção B: Usar Ferramentas Nativas do QGIS**
 
 ```
-Vector → Geoprocessing Tools → Buffer
-Distance: 1000 meters
-Segments: 16 (smooth curves)
-Save as: water_buffers_1km.gpkg
+Vetor → Ferramentas de Geoprocessamento → Buffer
+Distância: 1000 metros
+Segmentos: 16 (curvas suaves)
+Salvar como: buffers_agua_1km.gpkg
 ```
 
-### Step 3: Filter Industrial Sites Within Buffer Zones
+### Passo 3: Filtrar Locais Industriais Dentro das Zonas de Buffer
 
-Now the main FilterMate operation:
+Agora a operação principal do FilterMate:
 
-1. **Select industrial_sites layer** in FilterMate
-2. **Choose Backend**: Spatialite (or PostgreSQL if available)
-3. Enter **spatial filter expression**:
+1. **Selecionar camada locais_industriais** no FilterMate
+2. **Escolher Backend**: Spatialite (ou PostgreSQL se disponível)
+3. Inserir **expressão de filtro espacial**:
 
 <Tabs>
   <TabItem value="spatialite" label="Spatialite / OGR" default>
     ```sql
-    -- Industrial sites intersecting 1km water buffers
+    -- Locais industriais intersectando buffers de água 1km
     intersects(
       $geometry,
-      geometry(get_feature('water_buffers_1km', 'fid', fid))
+      geometry(get_feature('buffers_agua_1km', 'fid', fid))
     )
     ```
     
-    **Alternative using layer reference**:
+    **Alternativa usando referência de camada**:
     ```sql
-    -- More efficient if buffer layer is already loaded
+    -- Mais eficiente se a camada de buffer já está carregada
     intersects(
       $geometry,
       aggregate(
-        layer:='water_buffers_1km',
+        layer:='buffers_agua_1km',
         aggregate:='collect',
         expression:=$geometry
       )
@@ -160,312 +160,312 @@ Now the main FilterMate operation:
     ```
   </TabItem>
   
-  <TabItem value="postgresql" label="PostgreSQL (Advanced)">
+  <TabItem value="postgresql" label="PostgreSQL (Avançado)">
     ```sql
-    -- More efficient PostGIS approach with direct buffer
+    -- Abordagem PostGIS mais eficiente com buffer direto
     ST_DWithin(
-      sites.geom,
-      water.geom,
-      1000  -- 1km buffer applied on-the-fly
+      locais.geom,
+      agua.geom,
+      1000  -- Buffer de 1km aplicado instantaneamente
     )
-    WHERE water.protected_status = true
+    WHERE agua.status_protegido = true
     ```
     
-    **Full materialized view approach**:
+    **Abordagem completa com visão materializada**:
     ```sql
-    -- Creates optimized temporary table
-    CREATE MATERIALIZED VIEW industrial_risk AS
+    -- Cria tabela temporária otimizada
+    CREATE MATERIALIZED VIEW risco_industrial AS
     SELECT 
-      s.*,
-      w.name AS nearest_water_body,
-      ST_Distance(s.geom, w.geom) AS distance_meters
-    FROM industrial_sites s
-    JOIN water_bodies w ON ST_DWithin(s.geom, w.geom, 1000)
-    ORDER BY distance_meters;
+      l.*,
+      a.nome AS corpo_agua_proximo,
+      ST_Distance(l.geom, a.geom) AS distancia_metros
+    FROM locais_industriais l
+    JOIN corpos_agua a ON ST_DWithin(l.geom, a.geom, 1000)
+    ORDER BY distancia_metros;
     ```
   </TabItem>
 </Tabs>
 
-4. Click **Apply Filter**
-5. Review results in map canvas (features should be highlighted)
+4. Clicar em **Aplicar Filtro**
+5. Revisar resultados na tela do mapa (feições devem estar destacadas)
 
-### Step 4: Add Distance Calculations (Optional)
+### Passo 4: Adicionar Cálculos de Distância (Opcional)
 
-To see **how far** each industrial site is from protected zones:
+Para ver **quão longe** cada local industrial está das zonas protegidas:
 
-1. Open **Field Calculator** (F6)
-2. Create new field:
+1. Abrir **Calculadora de Campo** (F6)
+2. Criar novo campo:
    ```
-   Field name: distance_to_water
-   Field type: Decimal (double)
+   Nome do campo: distancia_agua
+   Tipo de campo: Decimal (double)
    
-   Expression:
+   Expressão:
    distance(
      $geometry,
      aggregate(
-       'water_buffers_1km',
+       'buffers_agua_1km',
        'collect',
        $geometry
      )
    )
    ```
-3. Features inside buffer will show `0` or small values
+3. Feições dentro do buffer mostrarão `0` ou valores pequenos
 
-### Step 5: Categorize by Risk Level
+### Passo 5: Categorizar por Nível de Risco
 
-Create visual categories based on proximity:
+Criar categorias visuais baseadas em proximidade:
 
-1. **Right-click filtered layer** → Properties → Symbology
-2. Choose **Categorized**
-3. Use expression:
+1. **Clique direito na camada filtrada** → Propriedades → Simbologia
+2. Escolher **Categorizado**
+3. Usar expressão:
    ```python
    CASE
-     WHEN "distance_to_water" = 0 THEN 'High Risk (Inside Buffer)'
-     WHEN "distance_to_water" <= 500 THEN 'Medium Risk (0-500m)'
-     WHEN "distance_to_water" <= 1000 THEN 'Low Risk (500-1000m)'
-     ELSE 'No Risk (Outside Buffer)'
+     WHEN "distancia_agua" = 0 THEN 'Alto Risco (Dentro do Buffer)'
+     WHEN "distancia_agua" <= 500 THEN 'Risco Médio (0-500m)'
+     WHEN "distancia_agua" <= 1000 THEN 'Baixo Risco (500-1000m)'
+     ELSE 'Sem Risco (Fora do Buffer)'
    END
    ```
-4. Apply color scheme (red → yellow → green)
+4. Aplicar esquema de cores (vermelho → amarelo → verde)
 
-### Step 6: Export Results
+### Passo 6: Exportar Resultados
 
-1. In FilterMate, **Export Filtered Features**:
+1. No FilterMate, **Exportar Feições Filtradas**:
    ```
-   Format: GeoPackage
-   Filename: industrial_sites_environmental_risk.gpkg
-   Include attributes: ✓ All fields
-   CRS: Keep original or choose standard (e.g., WGS84 for sharing)
+   Formato: GeoPackage
+   Nome do arquivo: locais_industriais_risco_ambiental.gpkg
+   Incluir atributos: ✓ Todos os campos
+   SRC: Manter original ou escolher padrão (ex: WGS84 para compartilhar)
    ```
 
-2. **Generate report** (optional):
+2. **Gerar relatório** (opcional):
    ```python
-   # In Python Console (optional advanced step)
+   # No Console Python (passo avançado opcional)
    layer = iface.activeLayer()
    total = layer.featureCount()
-   high_risk = sum(1 for f in layer.getFeatures() if f['distance_to_water'] == 0)
+   alto_risco = sum(1 for f in layer.getFeatures() if f['distancia_agua'] == 0)
    
-   print(f"Total industrial sites in buffer: {total}")
-   print(f"High risk (directly in water buffer): {high_risk}")
-   print(f"Percentage at risk: {(high_risk/total)*100:.1f}%")
+   print(f"Total locais industriais no buffer: {total}")
+   print(f"Alto risco (diretamente no buffer de água): {alto_risco}")
+   print(f"Porcentagem em risco: {(alto_risco/total)*100:.1f}%")
    ```
 
 ---
 
-## Understanding the Results
+## Entendendo os Resultados
 
-### What the Filter Shows
+### O Que o Filtro Mostra
 
-✅ **Selected features**: Industrial sites within 1km of protected water bodies
+✅ **Feições selecionadas**: Locais industriais dentro de 1km de corpos d'água protegidos
 
-❌ **Excluded features**: Industrial sites farther than 1km from any water body
+❌ **Feições excluídas**: Locais industriais a mais de 1km de qualquer corpo d'água
 
-### Interpreting the Analysis
+### Interpretando a Análise
 
-**High Risk Sites** (distance = 0):
-- Directly within regulated buffer zones
-- May violate environmental regulations
-- Require immediate compliance review
-- Potential for water contamination
+**Locais de Alto Risco** (distância = 0):
+- Diretamente dentro de zonas de buffer regulamentadas
+- Podem violar regulamentações ambientais
+- Requerem revisão de conformidade imediata
+- Potencial para contaminação da água
 
-**Medium Risk Sites** (0-500m):
-- Close to buffer boundaries
-- Should be monitored
-- May need additional safeguards
-- Future buffer expansions could affect them
+**Locais de Risco Médio** (0-500m):
+- Próximos aos limites do buffer
+- Devem ser monitorados
+- Podem precisar de salvaguardas adicionais
+- Expansões futuras do buffer poderiam afetá-los
 
-**Low Risk Sites** (500-1000m):
-- Within analytical buffer but outside typical regulation
-- Useful for proactive planning
-- Lower immediate concern
+**Locais de Baixo Risco** (500-1000m):
+- Dentro do buffer analítico mas fora da regulamentação típica
+- Útil para planejamento proativo
+- Preocupação imediata menor
 
-### Quality Checks
+### Verificações de Qualidade
 
-1. **Visual inspection**: Zoom to several results and verify they're actually near water
-2. **Attribute check**: Ensure facility types match expectations
-3. **Distance validation**: Measure distance in QGIS to confirm buffer accuracy
-4. **Geometry issues**: Look for sites on buffer boundary (may indicate geometry problems)
+1. **Inspeção visual**: Aproximar em vários resultados e verificar que estão realmente perto da água
+2. **Verificação de atributos**: Garantir que tipos de instalações correspondem às expectativas
+3. **Validação de distância**: Medir distância no QGIS para confirmar precisão do buffer
+4. **Problemas de geometria**: Procurar locais na borda do buffer (pode indicar problemas de geometria)
 
 ---
 
-## Best Practices
+## Melhores Práticas
 
-### Performance Optimization
+### Otimização de Performance
 
-**For Large Datasets (>10,000 industrial sites)**:
+**Para Grandes Conjuntos de Dados (>10.000 locais industriais)**:
 
-1. **Simplify water body geometry** first:
+1. **Simplificar geometria dos corpos d'água** primeiro:
    ```
-   Vector → Geometry Tools → Simplify
-   Tolerance: 10 meters (maintains accuracy)
-   ```
-
-2. **Use spatial index** (automatic in PostgreSQL, manual in Spatialite):
-   ```
-   Layer → Properties → Create Spatial Index
+   Vetor → Ferramentas de Geometria → Simplificar
+   Tolerância: 10 metros (mantém precisão)
    ```
 
-3. **Pre-filter water bodies** to protected areas only:
+2. **Usar índice espacial** (automático no PostgreSQL, manual no Spatialite):
+   ```
+   Camada → Propriedades → Criar Índice Espacial
+   ```
+
+3. **Pré-filtrar corpos d'água** apenas para áreas protegidas:
    ```sql
-   "protected_status" = 'yes' OR "designation" IS NOT NULL
+   "status_protegido" = 'sim' OR "designacao" IS NOT NULL
    ```
 
-**Backend Selection**:
+**Seleção de Backend**:
 ```
-Features    | Recommended Backend
+Feições     | Backend Recomendado
 --------    | -------------------
-< 1,000     | OGR (simplest)
-1k - 50k    | Spatialite (good balance)
-> 50k       | PostgreSQL (fastest)
+< 1.000     | OGR (mais simples)
+1k - 50k    | Spatialite (bom equilíbrio)
+> 50k       | PostgreSQL (mais rápido)
 ```
 
-### Accuracy Considerations
+### Considerações de Precisão
 
-1. **Buffer distance units**: Always verify units match your CRS:
+1. **Unidades de distância do buffer**: Sempre verificar que unidades correspondem ao seu SRC:
    ```
-   Meters: UTM, State Plane, Web Mercator
-   Feet: Some State Plane zones
-   Degrees: NEVER use for buffers (reproject first!)
-   ```
-
-2. **Geometry repair**: Water bodies often have invalid geometries:
-   ```
-   Vector → Geometry Tools → Fix Geometries
-   Run before buffer operation
+   Metros: UTM, SIRGAS, Web Mercator
+   Pés: Algumas zonas State Plane
+   Graus: NUNCA usar para buffers (reprojetar primeiro!)
    ```
 
-3. **Topology**: Overlapping water bodies may create unexpected buffer shapes:
+2. **Reparo de geometria**: Corpos d'água frequentemente têm geometrias inválidas:
    ```
-   Vector → Geoprocessing → Dissolve (union all water bodies)
-   Then create single unified buffer
+   Vetor → Ferramentas de Geometria → Corrigir Geometrias
+   Executar antes da operação de buffer
    ```
 
-### Regulatory Compliance
+3. **Topologia**: Corpos d'água sobrepostos podem criar formas de buffer inesperadas:
+   ```
+   Vetor → Geoprocessamento → Dissolver (unir todos os corpos d'água)
+   Então criar buffer unificado único
+   ```
 
-- **Document methodology**: Save FilterMate expression history
-- **Version control**: Keep original data + filtered results + metadata
-- **Validation**: Cross-reference with official regulatory databases
-- **Updates**: Re-run analysis when industrial registry is updated
+### Conformidade Regulatória
+
+- **Documentar metodologia**: Salvar histórico de expressões FilterMate
+- **Controle de versão**: Manter dados originais + resultados filtrados + metadados
+- **Validação**: Fazer referência cruzada com bancos de dados regulatórios oficiais
+- **Atualizações**: Re-executar análise quando registro industrial for atualizado
 
 ---
 
-## Common Issues
+## Problemas Comuns
 
-### Issue 1: "No features selected"
+### Problema 1: "Nenhuma feição selecionada"
 
-**Cause**: CRS mismatch or buffer distance too small
+**Causa**: Incompatibilidade de SRC ou distância de buffer muito pequena
 
-**Solution**:
+**Solução**:
 ```
-1. Check both layers are in same projected CRS
-2. Verify buffer distance: 1000 in meters, not degrees
-3. Try larger buffer (e.g., 2000m) for testing
-4. Check water bodies actually exist in your study area
-```
-
-### Issue 2: "Geometry errors" during buffer
-
-**Cause**: Invalid water body geometries
-
-**Solution**:
-```
-Vector → Geometry Tools → Fix Geometries
-Then re-create buffers
+1. Verificar se ambas as camadas estão no mesmo SRC projetado
+2. Verificar distância do buffer: 1000 em metros, não graus
+3. Tentar buffer maior (ex: 2000m) para testar
+4. Verificar se corpos d'água realmente existem em sua área de estudo
 ```
 
-### Issue 3: Performance very slow (>2 minutes)
+### Problema 2: "Erros de geometria" durante buffer
 
-**Cause**: Large datasets without optimization
+**Causa**: Geometrias de corpos d'água inválidas
 
-**Solutions**:
+**Solução**:
 ```
-1. Create spatial indexes on both layers
-2. Simplify water body geometry (10m tolerance)
-3. Switch to PostgreSQL backend
-4. Pre-filter to smaller area of interest
+Vetor → Ferramentas de Geometria → Corrigir Geometrias
+Então recriar buffers
 ```
 
-### Issue 4: Buffer creates strange shapes
+### Problema 3: Performance muito lenta (>2 minutos)
 
-**Cause**: Geographic CRS (lat/lon) instead of projected
+**Causa**: Grandes conjuntos de dados sem otimização
 
-**Solution**:
+**Soluções**:
 ```
-Reproject BOTH layers to appropriate UTM zone:
-Vector → Data Management → Reproject Layer
-Find correct zone: https://epsg.io/
+1. Criar índices espaciais em ambas as camadas
+2. Simplificar geometria dos corpos d'água (tolerância 10m)
+3. Mudar para backend PostgreSQL
+4. Pré-filtrar para área de interesse menor
+```
+
+### Problema 4: Buffer cria formas estranhas
+
+**Causa**: SRC geográfico (lat/lon) em vez de projetado
+
+**Solução**:
+```
+Reprojetar AMBAS as camadas para zona UTM apropriada:
+Vetor → Gerenciamento de Dados → Reprojetar Camada
+Encontrar zona correta: https://epsg.io/
 ```
 
 ---
 
-## Next Steps
+## Próximos Passos
 
-### Related Workflows
+### Fluxos de Trabalho Relacionados
 
-- **[Emergency Services Coverage](./emergency-services)**: Similar buffer analysis techniques
-- **[Urban Planning Transit](./urban-planning-transit)**: Multi-layer spatial filtering
-- **[Real Estate Analysis](./real-estate-analysis)**: Combining spatial + attribute filters
+- **[Cobertura de Serviços de Emergência](./emergency-services)**: Técnicas similares de análise de buffer
+- **[Planejamento Urbano Transporte](./urban-planning-transit)**: Filtragem espacial multi-camadas
+- **[Análise Imobiliária](./real-estate-analysis)**: Combinação de filtros espaciais + atributos
 
-### Advanced Techniques
+### Técnicas Avançadas
 
-**1. Multi-Ring Buffers** (graduated risk zones):
+**1. Buffers Multi-Anel** (zonas de risco graduadas):
 ```
-Create 3 separate buffers: 500m, 1000m, 1500m
-Categorize facilities by which buffer they fall into
+Criar 3 buffers separados: 500m, 1000m, 1500m
+Categorizar instalações por qual buffer elas se enquadram
 ```
 
-**2. Proximity to Nearest Water** (not just any water):
+**2. Proximidade à Água Mais Próxima** (não apenas qualquer água):
 ```sql
--- Find distance to closest water body only
+-- Encontrar distância apenas ao corpo d'água mais próximo
 array_min(
   array_foreach(
-    overlay_nearest('water_bodies', $geometry),
+    overlay_nearest('corpos_agua', $geometry),
     distance(@element, $geometry)
   )
 )
 ```
 
-**3. Temporal Analysis** (if you have facility age data):
+**3. Análise Temporal** (se você tem dados de idade da instalação):
 ```sql
--- Old facilities in sensitive areas (highest risk)
-"year_built" < 1990 
-AND distance_to_water < 500
+-- Instalações antigas em áreas sensíveis (risco mais alto)
+"ano_construcao" < 1990 
+AND distancia_agua < 500
 ```
 
-**4. Cumulative Impact** (multiple facilities near same water body):
+**4. Impacto Acumulativo** (múltiplas instalações perto do mesmo corpo d'água):
 ```sql
--- Count facilities affecting each water body
-WITH risk_counts AS (
-  SELECT water_id, COUNT(*) as num_facilities
-  FROM filtered_sites
-  GROUP BY water_id
+-- Contar instalações afetando cada corpo d'água
+WITH contagens_risco AS (
+  SELECT id_agua, COUNT(*) as num_instalacoes
+  FROM locais_filtrados
+  GROUP BY id_agua
 )
--- Show water bodies with >5 nearby facilities
+-- Mostrar corpos d'água com >5 instalações próximas
 ```
 
-### Further Learning
+### Aprendizado Adicional
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
-- 📖 [Buffer Operations Guide](../user-guide/buffer-operations)
-- 📖 [Performance Tuning](../advanced/performance-tuning)
-- 📖 [Troubleshooting](../advanced/troubleshooting)
+- �� [Referência de Predicados Espaciais](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Guia de Operações de Buffer](../user-guide/buffer-operations)
+- 📖 [Ajuste de Performance](../advanced/performance-tuning)
+- 📖 [Solução de Problemas](../advanced/troubleshooting)
 
 ---
 
-## Summary
+## Resumo
 
-✅ **You've learned**:
-- Creating buffer zones around water bodies
-- Spatial intersection filtering with industrial sites
-- Distance calculation and risk categorization
-- Geometry validation and repair
-- Backend-specific optimization techniques
+✅ **Você aprendeu**:
+- Criar zonas de buffer ao redor de corpos d'água
+- Filtragem por interseção espacial com locais industriais
+- Cálculo de distância e categorização de riscos
+- Validação e reparo de geometria
+- Técnicas de otimização específicas do backend
 
-✅ **Key takeaways**:
-- Always use projected CRS for buffer operations
-- Fix geometry errors before spatial analysis
-- Choose backend based on dataset size
-- Document methodology for regulatory compliance
-- Visual validation is essential
+✅ **Principais conclusões**:
+- Sempre usar SRC projetado para operações de buffer
+- Corrigir erros de geometria antes de análise espacial
+- Escolher backend baseado no tamanho do conjunto de dados
+- Documentar metodologia para conformidade regulatória
+- Validação visual é essencial
 
-🎯 **Real-world impact**: This workflow helps environmental agencies identify compliance risks, supports evidence-based policy making, and protects water quality by highlighting facilities requiring monitoring or remediation.
+🎯 **Impacto real**: Este fluxo de trabalho ajuda agências ambientais a identificar riscos de conformidade, apoia formulação de políticas baseadas em evidências e protege qualidade da água ao destacar instalações que requerem monitoramento ou remediação.

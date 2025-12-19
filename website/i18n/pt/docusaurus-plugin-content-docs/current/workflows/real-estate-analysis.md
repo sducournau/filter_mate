@@ -5,185 +5,185 @@ sidebar_position: 5
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Real Estate Analysis: Market Filtering
+# Análise Imobiliária: Filtragem de Mercado
 
-Filter residential properties by price, size, and proximity to schools to identify optimal investment opportunities.
+Filtrar propriedades residenciais por preço, tamanho e proximidade a escolas para identificar oportunidades ótimas de investimento.
 
-## Scenario Overview
+## Visão Geral do Cenário
 
-**Goal**: Find single-family homes priced $200k-$400k, >150m², within 1km of highly-rated schools.
+**Objetivo**: Encontrar casas unifamiliares entre $200k-$400k, >150m², dentro de 1km de escolas bem avaliadas.
 
-**Real-World Application**:
-- Real estate investors finding properties matching criteria
-- Home buyers searching for family-friendly neighborhoods
-- Real estate agents providing data-driven recommendations
-- Market analysts evaluating property values vs. amenities
+**Aplicação do Mundo Real**:
+- Investidores imobiliários encontrando propriedades que correspondem aos critérios
+- Compradores de casa procurando bairros adequados para famílias
+- Agentes imobiliários fornecendo recomendações baseadas em dados
+- Analistas de mercado avaliando valores de propriedades vs. comodidades
 
-**Estimated Time**: 8 minutes
+**Tempo Estimado**: 8 minutos
 
-**Difficulty**: ⭐ Beginner
+**Dificuldade**: ⭐ Iniciante
 
 ---
 
-## Prerequisites
+## Pré-requisitos
 
-### Required Data
+### Dados Necessários
 
-1. **Residential Properties Layer** (points or polygons)
-   - Property listings or parcel data
-   - Required attributes:
-     - `price` (numeric)
-     - `area_sqm` or `living_area` (numeric)
-     - `property_type` (text: 'single_family', 'condo', etc.)
-   - Optional: `bedrooms`, `bathrooms`, `year_built`
+1. **Camada de Propriedades Residenciais** (pontos ou polígonos)
+   - Listagens de propriedades ou dados de parcelas
+   - Atributos necessários:
+     - `preco` (numérico)
+     - `area_m2` ou `area_habitavel` (numérico)
+     - `tipo_propriedade` (texto: 'casa_unifamiliar', 'apartamento', etc.)
+   - Opcional: `quartos`, `banheiros`, `ano_construcao`
 
-2. **Schools Layer** (points)
-   - School locations
-   - Optional but useful: `rating`, `school_level`, `name`
-   - Covers your study area
+2. **Camada de Escolas** (pontos)
+   - Localizações de escolas
+   - Opcional mas útil: `avaliacao`, `nivel_escolar`, `nome`
+   - Cobre sua área de estudo
 
-### Sample Data Sources
+### Fontes de Dados de Exemplo
 
-**Real Estate Data**:
-- MLS (Multiple Listing Service) exports
-- Zillow/Trulia data feeds (if available)
-- Municipal property assessment databases
-- OpenStreetMap buildings with tags
+**Dados Imobiliários**:
+- Exportações MLS (Multiple Listing Service)
+- Feeds de dados Zillow/Trulia (se disponíveis)
+- Bancos de dados de avaliação de propriedades municipais
+- Edifícios OpenStreetMap com tags
 
-**Schools Data**:
+**Dados de Escolas**:
 ```python
-# QGIS QuickOSM plugin
-Key: "amenity", Value: "school"
-Key: "school", Value: "*"
+# Plugin QuickOSM do QGIS
+Chave: "amenity", Valor: "school"
+Chave: "school", Valor: "*"
 
-# Or government data:
-- National Center for Education Statistics (USA)
-- Department for Education (UK)
-- Local education authority databases
+# Ou dados governamentais:
+- National Center for Education Statistics (EUA)
+- Ministério da Educação
+- Bancos de dados de autoridades educacionais locais
 ```
 
-### Backend Recommendation
+### Recomendação de Backend
 
-**Multi-Backend Comparison** - This workflow demonstrates all three:
-- **PostgreSQL**: Fastest if you have &gt;10k properties
-- **Spatialite**: Good middle ground for city-scale data
-- **OGR**: Works everywhere, acceptable performance for &lt;5k properties
+**Comparação Multi-Backend** - Este fluxo de trabalho demonstra os três:
+- **PostgreSQL**: Mais rápido se você tem >10k propriedades
+- **Spatialite**: Bom meio-termo para dados em escala de cidade
+- **OGR**: Funciona em todos os lugares, desempenho aceitável para <5k propriedades
 
 ---
 
-## Step-by-Step Instructions
+## Instruções Passo a Passo
 
-### Step 1: Load and Inspect Property Data
+### Passo 1: Carregar e Inspecionar Dados de Propriedades
 
-1. **Load properties layer**: `residential_properties.gpkg`
-2. **Open Attribute Table** (F6)
-3. **Verify required fields exist**:
+1. **Carregar camada de propriedades**: `propriedades_residenciais.gpkg`
+2. **Abrir Tabela de Atributos** (F6)
+3. **Verificar se campos necessários existem**:
    ```
-   ✓ price (numeric)
-   ✓ area_sqm (numeric)
-   ✓ property_type (text)
-   ```
-
-4. **Check data quality**:
-   ```
-   Sort by price: Look for unrealistic values (0, NULL, >$10M)
-   Sort by area: Check for 0 or NULL values
-   Filter property_type: Identify valid categories
+   ✓ preco (numérico)
+   ✓ area_m2 (numérico)
+   ✓ tipo_propriedade (texto)
    ```
 
-:::tip Data Cleaning
-If you have missing values:
+4. **Verificar qualidade dos dados**:
+   ```
+   Ordenar por preço: Procurar valores irrealistas (0, NULL, >$10M)
+   Ordenar por área: Verificar valores 0 ou NULL
+   Filtrar tipo_propriedade: Identificar categorias válidas
+   ```
+
+:::tip Limpeza de Dados
+Se você tem valores faltando:
 ```sql
--- Filter out incomplete records FIRST
-"price" IS NOT NULL 
-AND "area_sqm" > 0 
-AND "property_type" IS NOT NULL
+-- Filtrar PRIMEIRO registros incompletos
+"preco" IS NOT NULL 
+AND "area_m2" > 0 
+AND "tipo_propriedade" IS NOT NULL
 ```
 :::
 
-### Step 2: Apply Basic Attribute Filters
+### Passo 2: Aplicar Filtros Básicos de Atributos
 
-**Using FilterMate**:
+**Usando FilterMate**:
 
-1. Open FilterMate panel
-2. Select **residential_properties** layer
-3. Choose **any backend** (attribute filtering works equally on all)
-4. Enter expression:
+1. Abrir painel FilterMate
+2. Selecionar camada **propriedades_residenciais**
+3. Escolher **qualquer backend** (filtragem de atributos funciona igualmente em todos)
+4. Inserir expressão:
 
 <Tabs>
-  <TabItem value="basic" label="Basic Filter" default>
+  <TabItem value="basic" label="Filtro Básico" default>
     ```sql
-    -- Price between $200k and $400k
-    -- Area greater than 150m²
-    -- Single-family homes only
+    -- Preço entre $200k e $400k
+    -- Área maior que 150m²
+    -- Casas unifamiliares apenas
     
-    "price" >= 200000 
-    AND "price" <= 400000
-    AND "area_sqm" >= 150
-    AND "property_type" = 'single_family'
+    "preco" >= 200000 
+    AND "preco" <= 400000
+    AND "area_m2" >= 150
+    AND "tipo_propriedade" = 'casa_unifamiliar'
     ```
   </TabItem>
   
-  <TabItem value="advanced" label="Advanced (Multiple Types)">
+  <TabItem value="advanced" label="Avançado (Tipos Múltiplos)">
     ```sql
-    -- Accept multiple property types
-    "price" BETWEEN 200000 AND 400000
-    AND "area_sqm" >= 150
-    AND "property_type" IN ('single_family', 'townhouse')
-    AND "bedrooms" >= 3
+    -- Aceitar múltiplos tipos de propriedades
+    "preco" BETWEEN 200000 AND 400000
+    AND "area_m2" >= 150
+    AND "tipo_propriedade" IN ('casa_unifamiliar', 'sobrado')
+    AND "quartos" >= 3
     ```
   </TabItem>
   
-  <TabItem value="deals" label="Investment Focused">
+  <TabItem value="deals" label="Focado em Investimento">
     ```sql
-    -- Find undervalued properties (price per sqm)
-    "price" BETWEEN 200000 AND 400000
-    AND "area_sqm" >= 150
-    AND "property_type" = 'single_family'
-    AND ("price" / "area_sqm") < 2000  -- Less than $2000/m²
+    -- Encontrar propriedades subvalorizadas (preço por m²)
+    "preco" BETWEEN 200000 AND 400000
+    AND "area_m2" >= 150
+    AND "tipo_propriedade" = 'casa_unifamiliar'
+    AND ("preco" / "area_m2") < 2000  -- Menos de $2000/m²
     ```
   </TabItem>
 </Tabs>
 
-5. Click **Apply Filter**
-6. Review count: "Showing X of Y features"
+5. Clicar em **Aplicar Filtro**
+6. Revisar contagem: "Mostrando X de Y feições"
 
-**Expected Result**: Properties narrowed down by price, size, and type
+**Resultado Esperado**: Propriedades filtradas por preço, tamanho e tipo
 
-### Step 3: Add Spatial Filter for School Proximity
+### Passo 3: Adicionar Filtro Espacial para Proximidade de Escolas
 
-Now add the **location-based** criterion:
+Agora adicionar o critério **baseado em localização**:
 
-1. **Ensure schools layer is loaded**: `schools.gpkg`
-2. **Modify FilterMate expression** to add spatial component:
+1. **Garantir que camada de escolas está carregada**: `escolas.gpkg`
+2. **Modificar expressão FilterMate** para adicionar componente espacial:
 
 <Tabs>
   <TabItem value="ogr" label="OGR / Spatialite" default>
     ```sql
-    -- Combine attribute filters + spatial proximity
-    "price" >= 200000 
-    AND "price" <= 400000
-    AND "area_sqm" >= 150
-    AND "property_type" = 'single_family'
+    -- Combinar filtros de atributos + proximidade espacial
+    "preco" >= 200000 
+    AND "preco" <= 400000
+    AND "area_m2" >= 150
+    AND "tipo_propriedade" = 'casa_unifamiliar'
     AND distance(
       $geometry,
       aggregate(
-        layer:='schools',
+        layer:='escolas',
         aggregate:='collect',
         expression:=$geometry
       )
     ) <= 1000
     ```
     
-    **Alternative using overlay functions**:
+    **Alternativa usando funções overlay**:
     ```sql
-    -- Same criteria + check any school within 1km exists
-    "price" BETWEEN 200000 AND 400000
-    AND "area_sqm" >= 150
-    AND "property_type" = 'single_family'
+    -- Mesmos critérios + verificar se existe alguma escola dentro de 1km
+    "preco" BETWEEN 200000 AND 400000
+    AND "area_m2" >= 150
+    AND "tipo_propriedade" = 'casa_unifamiliar'
     AND array_length(
       overlay_within(
-        'schools',
+        'escolas',
         buffer($geometry, 1000)
       )
     ) > 0
@@ -192,79 +192,79 @@ Now add the **location-based** criterion:
   
   <TabItem value="postgresql" label="PostgreSQL">
     ```sql
-    -- Using PostGIS spatial functions
-    price >= 200000 
-    AND price <= 400000
-    AND area_sqm >= 150
-    AND property_type = 'single_family'
+    -- Usando funções espaciais PostGIS
+    preco >= 200000 
+    AND preco <= 400000
+    AND area_m2 >= 150
+    AND tipo_propriedade = 'casa_unifamiliar'
     AND EXISTS (
       SELECT 1 
-      FROM schools s
+      FROM escolas e
       WHERE ST_DWithin(
-        properties.geom,
-        s.geom,
-        1000  -- 1km in meters
+        propriedades.geom,
+        e.geom,
+        1000  -- 1km em metros
       )
     )
     ```
     
-    **Or with distance calculation**:
+    **Ou com cálculo de distância**:
     ```sql
-    -- Include distance to nearest school as output
+    -- Incluir distância à escola mais próxima como saída
     SELECT 
       p.*,
-      MIN(ST_Distance(p.geom, s.geom)) AS distance_to_school
-    FROM properties p
-    JOIN schools s ON ST_DWithin(p.geom, s.geom, 1000)
-    WHERE price BETWEEN 200000 AND 400000
-      AND area_sqm >= 150
-      AND property_type = 'single_family'
-    GROUP BY p.property_id
+      MIN(ST_Distance(p.geom, e.geom)) AS distancia_escola
+    FROM propriedades p
+    JOIN escolas e ON ST_DWithin(p.geom, e.geom, 1000)
+    WHERE preco BETWEEN 200000 AND 400000
+      AND area_m2 >= 150
+      AND tipo_propriedade = 'casa_unifamiliar'
+    GROUP BY p.id_propriedade
     ```
   </TabItem>
 </Tabs>
 
-3. Click **Apply Filter**
-4. Review results on map (should be concentrated near schools)
+3. Clicar em **Aplicar Filtro**
+4. Revisar resultados no mapa (devem estar concentrados perto de escolas)
 
-### Step 4: Refine by School Quality (Optional)
+### Passo 4: Refinar por Qualidade da Escola (Opcional)
 
-If your schools layer has rating data:
+Se sua camada de escolas tem dados de avaliação:
 
 ```sql
--- Only properties near highly-rated schools (rating ≥ 8/10)
-"price" BETWEEN 200000 AND 400000
-AND "area_sqm" >= 150
-AND "property_type" = 'single_family'
+-- Apenas propriedades perto de escolas bem avaliadas (avaliação ≥ 8/10)
+"preco" BETWEEN 200000 AND 400000
+AND "area_m2" >= 150
+AND "tipo_propriedade" = 'casa_unifamiliar'
 AND array_max(
   array_foreach(
-    overlay_within('schools', buffer($geometry, 1000)),
-    attribute(@element, 'rating')
+    overlay_within('escolas', buffer($geometry, 1000)),
+    attribute(@element, 'avaliacao')
   )
 ) >= 8
 ```
 
-**What this does**:
-1. Finds all schools within 1km buffer
-2. Gets their rating values
-3. Keeps properties where at least one nearby school has rating ≥8
+**O que isso faz**:
+1. Encontra todas as escolas dentro de buffer de 1km
+2. Obtém seus valores de avaliação
+3. Mantém propriedades onde pelo menos uma escola próxima tem avaliação ≥8
 
-### Step 5: Calculate Distance to Nearest School
+### Passo 5: Calcular Distância à Escola Mais Próxima
 
-Add field showing exact distance:
+Adicionar campo mostrando distância exata:
 
-1. **Open Field Calculator** (Ctrl+I) on filtered layer
-2. Create new field:
+1. **Abrir Calculadora de Campo** (Ctrl+I) na camada filtrada
+2. Criar novo campo:
    ```
-   Field name: nearest_school_m
-   Type: Decimal (double)
-   Precision: 1
+   Nome do campo: escola_proxima_m
+   Tipo de campo: Decimal (double)
+   Precisão: 1
    
-   Expression:
+   Expressão:
    round(
      array_min(
        array_foreach(
-         overlay_nearest('schools', $geometry, limit:=1),
+         overlay_nearest('escolas', $geometry, limit:=1),
          distance(geometry(@element), $geometry)
        )
      ),
@@ -272,346 +272,346 @@ Add field showing exact distance:
    )
    ```
 
-3. **Add school name** (optional):
+3. **Adicionar nome da escola** (opcional):
    ```
-   Field name: nearest_school_name
-   Type: Text (string)
+   Nome do campo: nome_escola_proxima
+   Tipo de campo: Texto (string)
    
-   Expression:
+   Expressão:
    attribute(
-     overlay_nearest('schools', $geometry, limit:=1)[0],
-     'name'
+     overlay_nearest('escolas', $geometry, limit:=1)[0],
+     'nome'
    )
    ```
 
-### Step 6: Rank Properties by Value
+### Passo 6: Classificar Propriedades por Valor
 
-Create a **value score** combining multiple factors:
+Criar uma **pontuação de valor** combinando múltiplos fatores:
 
-1. **Open Field Calculator**
-2. Create calculated field:
+1. **Abrir Calculadora de Campo**
+2. Criar campo calculado:
    ```
-   Field name: value_score
-   Type: Decimal (double)
+   Nome do campo: pontuacao_valor
+   Tipo de campo: Decimal (double)
    
-   Expression:
-   -- Higher score = better value
-   -- Weighted factors:
-   (400000 - "price") / 1000 * 0.4 +          -- Lower price = better (40% weight)
-   ("area_sqm" - 150) * 0.3 +                 -- Larger area = better (30% weight)
-   (1000 - "nearest_school_m") * 0.3          -- Closer school = better (30% weight)
+   Expressão:
+   -- Pontuação maior = melhor valor
+   -- Fatores ponderados:
+   (400000 - "preco") / 1000 * 0.4 +          -- Preço menor = melhor (40% peso)
+   ("area_m2" - 150) * 0.3 +                  -- Área maior = melhor (30% peso)
+   (1000 - "escola_proxima_m") * 0.3          -- Escola mais próxima = melhor (30% peso)
    ```
 
-3. **Sort by value_score** descending to see best deals first
+3. **Ordenar por pontuacao_valor** decrescente para ver melhores negócios primeiro
 
-### Step 7: Visualize Results
+### Passo 7: Visualizar Resultados
 
-**Color by Distance to School**:
+**Colorir por Distância à Escola**:
 
-1. Right-click layer → **Symbology**
-2. Choose **Graduated**
-3. Value: `nearest_school_m`
-4. Method: Natural Breaks
-5. Colors: Green (close) → Yellow → Red (far)
+1. Clique direito na camada → **Simbologia**
+2. Escolher **Graduado**
+3. Valor: `escola_proxima_m`
+4. Método: Quebras Naturais
+5. Cores: Verde (perto) → Amarelo → Vermelho (longe)
 
-**Add Labels**:
+**Adicionar Rótulos**:
 ```
-Label with: concat('$', "price"/1000, 'k - ', round("nearest_school_m",0), 'm to school')
-Size: 10pt
-Buffer: White, 1mm
+Rotular com: concat('$', "preco"/1000, 'k - ', round("escola_proxima_m",0), 'm escola')
+Tamanho: 10pt
+Buffer: Branco, 1mm
 ```
 
-### Step 8: Export Matches for Analysis
+### Passo 8: Exportar Correspondências para Análise
 
-1. **In FilterMate**: Click **Export Filtered Features**
+1. **No FilterMate**: Clicar em **Exportar Feições Filtradas**
    ```
-   Format: GeoPackage
-   Filename: properties_investment_targets.gpkg
-   CRS: WGS84 (for portability)
-   Include all attributes: ✓
-   ```
-
-2. **Export attribute table as spreadsheet**:
-   ```
-   Right-click layer → Export → Save Features As
-   Format: CSV or XLSX
-   Fields: Select relevant columns only
+   Formato: GeoPackage
+   Nome do arquivo: propriedades_alvos_investimento.gpkg
+   SRC: WGS84 (para portabilidade)
+   Incluir todos os atributos: ✓
    ```
 
-3. **Create simple report** (optional):
+2. **Exportar tabela de atributos como planilha**:
+   ```
+   Clique direito na camada → Exportar → Salvar Feições Como
+   Formato: CSV ou XLSX
+   Campos: Selecionar apenas colunas relevantes
+   ```
+
+3. **Criar relatório simples** (opcional):
    ```python
-   # Python Console
+   # Console Python
    layer = iface.activeLayer()
    features = list(layer.getFeatures())
    
-   print("=== Property Investment Report ===")
-   print(f"Matching properties: {len(features)}")
-   print(f"Average price: ${sum(f['price'] for f in features)/len(features):,.0f}")
-   print(f"Average area: {sum(f['area_sqm'] for f in features)/len(features):.0f} m²")
-   print(f"Average distance to school: {sum(f['nearest_school_m'] for f in features)/len(features):.0f} m")
-   print(f"Price range: ${min(f['price'] for f in features):,} - ${max(f['price'] for f in features):,}")
+   print("=== Relatório de Investimento Imobiliário ===")
+   print(f"Propriedades correspondentes: {len(features)}")
+   print(f"Preço médio: ${sum(f['preco'] for f in features)/len(features):,.0f}")
+   print(f"Área média: {sum(f['area_m2'] for f in features)/len(features):.0f} m²")
+   print(f"Distância média à escola: {sum(f['escola_proxima_m'] for f in features)/len(features):.0f} m")
+   print(f"Faixa de preço: ${min(f['preco'] for f in features):,} - ${max(f['preco'] for f in features):,}")
    ```
 
 ---
 
-## Understanding the Results
+## Entendendo os Resultados
 
-### What the Filter Shows
+### O Que o Filtro Mostra
 
-✅ **Selected properties**: Match ALL criteria:
-- Price: $200,000 - $400,000
-- Size: ≥150m²
-- Type: Single-family home
-- Location: ≤1km from school
+✅ **Propriedades selecionadas**: Correspondem a TODOS os critérios:
+- Preço: $200.000 - $400.000
+- Tamanho: ≥150m²
+- Tipo: Casa unifamiliar
+- Localização: ≤1km de escola
 
-❌ **Excluded properties**: Fail ANY criterion above
+❌ **Propriedades excluídas**: Falham em QUALQUER critério acima
 
-### Interpreting Property Matches
+### Interpretando Correspondências de Propriedades
 
-**High Value Score** (>500):
-- Below-market pricing for area
-- Good size for price point
-- Very close to school (family appeal)
-- **Action**: Priority viewing/offer
+**Alta Pontuação de Valor** (>500):
+- Preço abaixo do mercado para a área
+- Bom tamanho para faixa de preço
+- Muito próximo de escola (apelo familiar)
+- **Ação**: Visita/oferta prioritária
 
-**Medium Score** (250-500):
-- Fair market value
-- Acceptable location
-- Consider other factors (condition, neighborhood)
-- **Action**: Compare with similar properties
+**Pontuação Média** (250-500):
+- Valor justo de mercado
+- Localização aceitável
+- Considerar outros fatores (condição, bairro)
+- **Ação**: Comparar com propriedades similares
 
-**Low Score** (&lt;250):
-- May be overpriced
-- Far edge of school proximity
-- Smaller size for price
-- **Action**: Negotiate or wait for better options
+**Pontuação Baixa** (<250):
+- Pode estar supervalorizada
+- Extremidade distante de proximidade de escola
+- Tamanho menor para preço
+- **Ação**: Negociar ou esperar melhores opções
 
-### Quality Checks
+### Verificações de Qualidade
 
-1. **Sanity check**: View 5-10 random results
-   - Verify prices are realistic
-   - Measure school distance manually
-   - Check property_type matches expectations
+1. **Verificação de sanidade**: Ver 5-10 resultados aleatórios
+   - Verificar se preços são realistas
+   - Medir distância de escola manualmente
+   - Verificar se tipo_propriedade corresponde às expectativas
 
-2. **Outlier detection**:
+2. **Detecção de outliers**:
    ```sql
-   -- Find unusually cheap properties (may be errors or great deals)
-   "price" / "area_sqm" < 1500  -- Less than $1500/m²
+   -- Encontrar propriedades anormalmente baratas (podem ser erros ou ótimos negócios)
+   "preco" / "area_m2" < 1500  -- Menos de $1500/m²
    ```
 
-3. **Map patterns**: Results should cluster near schools (if not, check CRS)
+3. **Padrões no mapa**: Resultados devem se agrupar perto de escolas (se não, verificar SRC)
 
 ---
 
-## Best Practices
+## Melhores Práticas
 
-### Search Strategy Refinement
+### Refinamento de Estratégia de Busca
 
-**Start Broad, Narrow Gradually**:
+**Começar Amplo, Estreitar Gradualmente**:
 
-1. **First pass**: Apply only price + size filters
-2. **Review count**: If >100 results, add property_type filter
-3. **Add spatial**: Apply school proximity
-4. **Fine-tune**: Add school rating, bedrooms, etc.
+1. **Primeira passagem**: Aplicar apenas filtros de preço + tamanho
+2. **Revisar contagem**: Se >100 resultados, adicionar filtro tipo_propriedade
+3. **Adicionar espacial**: Aplicar proximidade de escola
+4. **Ajuste fino**: Adicionar avaliação de escola, quartos, etc.
 
-**Save Filter History**:
-- FilterMate automatically saves your expressions
-- Use **Filter History** panel to compare different criteria sets
-- Save best performing filters as **Favorites**
+**Salvar Histórico de Filtro**:
+- FilterMate salva automaticamente suas expressões
+- Usar painel **Histórico de Filtro** para comparar diferentes conjuntos de critérios
+- Salvar melhores filtros como **Favoritos**
 
-### Performance Considerations
+### Considerações de Performance
 
-**Backend Selection Guide**:
+**Guia de Seleção de Backend**:
 
 ```
-Properties | Schools | Recommended Backend
------------|---------|--------------------
-< 1,000    | Any     | OGR (simplest)
-1k - 10k   | < 100   | Spatialite
-> 10k      | Any     | PostgreSQL
-Any        | > 500   | PostgreSQL + spatial index
+Propriedades | Escolas | Backend Recomendado
+-------------|---------|--------------------
+< 1.000      | Qualquer| OGR (mais simples)
+1k - 10k     | < 100   | Spatialite
+> 10k        | Qualquer| PostgreSQL
+Qualquer     | > 500   | PostgreSQL + índice espacial
 ```
 
-**Optimization Tips**:
+**Dicas de Otimização**:
 
-1. **Apply attribute filters first** (cheapest):
+1. **Aplicar filtros de atributos primeiro** (mais barato):
    ```sql
-   -- Good: Attributes first, spatial last
-   "price" BETWEEN 200000 AND 400000 AND distance(...) <= 1000
+   -- Bom: Atributos primeiro, espacial por último
+   "preco" BETWEEN 200000 AND 400000 AND distance(...) <= 1000
    
-   -- Bad: Spatial first (slower)
-   distance(...) <= 1000 AND "price" BETWEEN 200000 AND 400000
+   -- Ruim: Espacial primeiro (mais lento)
+   distance(...) <= 1000 AND "preco" BETWEEN 200000 AND 400000
    ```
 
-2. **Use spatial index** (automatic in PostgreSQL, create manually for Spatialite):
+2. **Usar índice espacial** (automático no PostgreSQL, criar manualmente para Spatialite):
    ```
-   Layer Properties → Create Spatial Index
-   ```
-
-3. **Simplify school geometry** if complex:
-   ```
-   Vector → Geometry → Centroids (schools → points)
+   Propriedades da Camada → Criar Índice Espacial
    ```
 
-### Real Estate Best Practices
+3. **Simplificar geometria de escolas** se complexa:
+   ```
+   Vetor → Geometria → Centroides (escolas → pontos)
+   ```
 
-**Market Analysis**:
-- Run this filter weekly to track new listings
-- Compare value_score trends over time
-- Export results with timestamps for historical analysis
+### Melhores Práticas Imobiliárias
 
-**Price Adjustment**:
+**Análise de Mercado**:
+- Executar este filtro semanalmente para rastrear novas listagens
+- Comparar tendências de pontuacao_valor ao longo do tempo
+- Exportar resultados com timestamps para análise histórica
+
+**Ajuste de Preço**:
 ```sql
--- Adjust for inflation or market changes
-"price" * 1.05 BETWEEN 200000 AND 400000  -- +5% market growth
+-- Ajustar para inflação ou mudanças de mercado
+"preco" * 1.05 BETWEEN 200000 AND 400000  -- +5% crescimento de mercado
 ```
 
-**Seasonal Patterns**:
+**Padrões Sazonais**:
 ```sql
--- School proximity more valuable in spring (family moving season)
--- Adjust weight in value_score calculation
+-- Proximidade de escola mais valiosa na primavera (temporada de mudança familiar)
+-- Ajustar peso no cálculo de pontuacao_valor
 ```
 
 ---
 
-## Common Issues
+## Problemas Comuns
 
-### Issue 1: No results or very few results
+### Problema 1: Nenhum resultado ou muito poucos resultados
 
-**Cause**: Criteria too strict or data quality issues
+**Causa**: Critérios muito rígidos ou problemas de qualidade de dados
 
-**Solutions**:
+**Soluções**:
 ```
-1. Relax price range: 150k-500k instead of 200k-400k
-2. Reduce minimum area: 120m² instead of 150m²
-3. Increase school distance: 2000m instead of 1000m
-4. Check for NULL values in attributes
-5. Verify schools layer covers same area as properties
+1. Relaxar faixa de preço: 150k-500k em vez de 200k-400k
+2. Reduzir área mínima: 120m² em vez de 150m²
+3. Aumentar distância de escola: 2000m em vez de 1000m
+4. Verificar valores NULL em atributos
+5. Verificar se camada de escolas cobre mesma área que propriedades
 ```
 
-### Issue 2: Distance calculation returns errors
+### Problema 2: Cálculo de distância retorna erros
 
-**Cause**: CRS mismatch or layer not found
+**Causa**: Incompatibilidade de SRC ou camada não encontrada
 
-**Solution**:
+**Solução**:
 ```
-1. Verify schools layer name matches exactly (case-sensitive)
-2. Check both layers use same CRS (reproject if needed)
-3. Ensure schools layer is in current project
-4. Try simpler aggregate approach:
+1. Verificar se nome da camada de escolas corresponde exatamente (sensível a maiúsculas)
+2. Verificar se ambas as camadas usam mesmo SRC (reprojetar se necessário)
+3. Garantir que camada de escolas está no projeto atual
+4. Tentar abordagem aggregate mais simples:
    
    distance(
      $geometry,
-     aggregate('schools', 'collect', $geometry)
+     aggregate('escolas', 'collect', $geometry)
    ) <= 1000
 ```
 
-### Issue 3: Performance slow (>30 seconds)
+### Problema 3: Performance lenta (>30 segundos)
 
-**Cause**: Large dataset or complex spatial query
+**Causa**: Grande conjunto de dados ou consulta espacial complexa
 
-**Solutions**:
+**Soluções**:
 ```
-1. Switch to PostgreSQL backend (major speedup)
-2. Create spatial index on both layers
-3. Pre-filter properties to smaller region:
-   "city" = 'Boston' AND [rest of expression]
-4. Reduce school query complexity:
-   - Use buffer once: overlay_within('schools', buffer($geometry, 1000))
-   - Cache in temporary field
+1. Mudar para backend PostgreSQL (aceleração importante)
+2. Criar índice espacial em ambas as camadas
+3. Pré-filtrar propriedades para região menor:
+   "cidade" = 'São Paulo' AND [resto da expressão]
+4. Reduzir complexidade da consulta de escola:
+   - Usar buffer uma vez: overlay_within('escolas', buffer($geometry, 1000))
+   - Cache em campo temporário
 ```
 
-### Issue 4: Results not near schools visually
+### Problema 4: Resultados não estão perto de escolas visualmente
 
-**Cause**: CRS using degrees instead of meters
+**Causa**: SRC usando graus em vez de metros
 
-**Solution**:
+**Solução**:
 ```
-1. Check layer CRS: Properties → Information
-2. If EPSG:4326 (lat/lon), reproject to local UTM:
-   Vector → Data Management → Reproject Layer
-3. Update distance from 1000 to 0.01 if using degrees (not recommended)
+1. Verificar SRC da camada: Propriedades → Informação
+2. Se EPSG:4326 (lat/lon), reprojetar para UTM local:
+   Vetor → Gerenciamento de Dados → Reprojetar Camada
+3. Atualizar distância de 1000 para 0.01 se usando graus (não recomendado)
 ```
 
 ---
 
-## Next Steps
+## Próximos Passos
 
-### Related Workflows
+### Fluxos de Trabalho Relacionados
 
-- **[Urban Planning Transit](./urban-planning-transit)**: Similar proximity analysis
-- **[Emergency Services](./emergency-services)**: Inverse distance queries
-- **[Transportation Planning](./transportation-planning)**: Export and CRS handling
+- **[Planejamento Urbano Transporte](./urban-planning-transit)**: Análise de proximidade similar
+- **[Serviços de Emergência](./emergency-services)**: Consultas de distância inversa
+- **[Planejamento de Transporte](./transportation-planning)**: Tratamento de exportação e SRC
 
-### Advanced Techniques
+### Técnicas Avançadas
 
-**1. Multi-Amenity Scoring** (schools + parks + shopping):
+**1. Pontuação Multi-Comodidades** (escolas + parques + comércio):
 ```sql
--- Properties near multiple amenities
-array_length(overlay_within('schools', buffer($geometry, 1000))) > 0
-AND array_length(overlay_within('parks', buffer($geometry, 500))) > 0
-AND array_length(overlay_within('shops', buffer($geometry, 800))) > 0
+-- Propriedades perto de múltiplas comodidades
+array_length(overlay_within('escolas', buffer($geometry, 1000))) > 0
+AND array_length(overlay_within('parques', buffer($geometry, 500))) > 0
+AND array_length(overlay_within('comercios', buffer($geometry, 800))) > 0
 ```
 
-**2. Appreciation Potential** (combine demographics):
+**2. Potencial de Valorização** (combinar demografia):
 ```sql
--- Areas with improving demographics
-"median_income_2023" > "median_income_2020" * 1.1  -- 10% income growth
-AND distance(centroid, aggregate('new_developments', 'collect', $geometry)) < 2000
+-- Áreas com demografia melhorando
+"renda_mediana_2023" > "renda_mediana_2020" * 1.1  -- 10% crescimento de renda
+AND distance(centroide, aggregate('novos_desenvolvimentos', 'collect', $geometry)) < 2000
 ```
 
-**3. Commute Time Analysis** (requires road network):
+**3. Análise de Tempo de Deslocamento** (requer rede viária):
 ```
-Processing → Network Analysis → Service Area
-Origin: Properties
-Destination: Employment centers
-Time limit: 30 minutes
+Processamento → Análise de Rede → Área de Serviço
+Origem: Propriedades
+Destino: Centros de emprego
+Limite de tempo: 30 minutos
 ```
 
-**4. Market Comparison** (price per sqm by neighborhood):
+**4. Comparação de Mercado** (preço por m² por bairro):
 ```sql
--- Find properties below neighborhood average
-"price" / "area_sqm" < 
+-- Encontrar propriedades abaixo da média do bairro
+"preco" / "area_m2" < 
   aggregate(
-    layer:='all_properties',
+    layer:='todas_propriedades',
     aggregate:='avg',
-    expression:="price"/"area_sqm",
-    filter:="neighborhood" = attribute(@parent, 'neighborhood')
-  ) * 0.9  -- 10% below average
+    expression:="preco"/"area_m2",
+    filter:="bairro" = attribute(@parent, 'bairro')
+  ) * 0.9  -- 10% abaixo da média
 ```
 
-**5. Time-Series Tracking** (monitor listing duration):
+**5. Rastreamento de Série Temporal** (monitorar duração de listagem):
 ```sql
--- Properties on market >30 days (motivated sellers)
-"days_on_market" > 30
-AND "price_reduced" = 1
+-- Propriedades no mercado >30 dias (vendedores motivados)
+"dias_mercado" > 30
+AND "preco_reduzido" = 1
 ```
 
-### Further Learning
+### Aprendizado Adicional
 
-- 📖 [Spatial Predicates Reference](../reference/cheat-sheets/spatial-predicates)
-- 📖 [Filtering Basics](../user-guide/filtering-basics)
-- 📖 [Filter History & Favorites](../user-guide/filter-history)
-- 📖 [Field Calculator Deep Dive](https://docs.qgis.org/latest/en/docs/user_manual/working_with_vector/attribute_table.html#using-the-field-calculator)
+- 📖 [Referência de Predicados Espaciais](../reference/cheat-sheets/spatial-predicates)
+- 📖 [Fundamentos de Filtragem](../user-guide/filtering-basics)
+- 📖 [Histórico de Filtro & Favoritos](../user-guide/filter-history)
+- 📖 [Mergulho Profundo na Calculadora de Campo](https://docs.qgis.org/latest/pt_BR/docs/user_manual/working_with_vector/attribute_table.html#using-the-field-calculator)
 
 ---
 
-## Summary
+## Resumo
 
-✅ **You've learned**:
-- Combining attribute and spatial filters
-- Distance calculations to nearest features
-- Creating value scores from multiple criteria
-- Exporting filtered results for analysis
-- Managing filter history for different searches
+✅ **Você aprendeu**:
+- Combinar filtros de atributos e espaciais
+- Cálculos de distância a feições mais próximas
+- Criar pontuações de valor a partir de múltiplos critérios
+- Exportar resultados filtrados para análise
+- Gerenciar histórico de filtro para diferentes buscas
 
-✅ **Key techniques**:
-- `BETWEEN` operator for range filtering
-- `distance()` function for proximity
-- `overlay_within()` for spatial relationships
-- Field calculator for derived attributes
-- Multi-backend comparison
+✅ **Técnicas chave**:
+- Operador `BETWEEN` para filtragem por faixa
+- Função `distance()` para proximidade
+- `overlay_within()` para relações espaciais
+- Calculadora de campo para atributos derivados
+- Comparação multi-backend
 
-🎯 **Real-world impact**: This workflow helps real estate professionals make data-driven decisions, investors identify opportunities quickly, and home buyers find properties matching complex criteria that would take days to research manually.
+🎯 **Impacto real**: Este fluxo de trabalho ajuda profissionais imobiliários a tomar decisões baseadas em dados, investidores a identificar oportunidades rapidamente, e compradores a encontrar propriedades correspondendo a critérios complexos que levariam dias para pesquisar manualmente.
 
-💡 **Pro tip**: Save multiple filter variations as **Favorites** with descriptive names like "Investment: Family Homes Near Schools" or "Budget: Starter Homes Transit Access" to instantly recreate searches.
+💡 **Dica profissional**: Salve múltiplas variações de filtro como **Favoritos** com nomes descritivos como "Investimento: Casas Familiares Perto Escolas" ou "Orçamento: Casas Iniciantes Acesso Transporte" para recriar instantaneamente buscas.

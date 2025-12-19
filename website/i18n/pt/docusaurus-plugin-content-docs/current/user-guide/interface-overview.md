@@ -323,7 +323,7 @@ Para guias detalhados sobre cada recurso:
 - **[Filtragem geométrica](./geometric-filtering)** - Predicados espaciais, operações de buffer e fluxos de trabalho geométricos
 - **[Operações de buffer](./buffer-operations)** - Configuração de buffer, tipos e configurações de distância
 - **[Exportar feições](./export-features)** - Formatos de exportação, transformação SRC e operações em lote
-- **[Histórico de filtros](./filter-history)** - Gerenciamento de histórico, desfazer/refazer e favoritos
+- **[Histórico de filtros](./filter-history)** - Gerenciamento de histórico e sistema desfazer/refazer
 
 Para começar:
 

@@ -25,7 +25,7 @@
 |---------|--------|-------------|--------|
 | **DOCUMENTATION_IMPROVEMENT_PLAN.md** | 540 | Roadmap 4 phases (29h total) | 🎯 Roadmap stratégique |
 | **intro.md** (enrichi) | +80 | Quick Tasks + Popular Use Cases | 🚀 Engagement +75% |
-| **3-minute-tutorial.md** | 215 | Guide débutant absolu | ⚡ Time to Success -67% |
+| **minute-tutorial.md** | 215 | Guide débutant absolu | ⚡ Time to Success -67% |
 | **sample-data/README.md** | 532 | Dataset Paris 10e complet | 📚 Tutorial completion +100% |
 | **PHASE_1_COMPLETION_SUMMARY.md** | 250 | Rapport Phase 1 détaillé | 📊 Tracking KPIs |
 | **DOCUMENTATION_AUDIT.md** (mis à jour) | - | Synchronisation v2.3.7 | ✅ Versions alignées |
@@ -43,7 +43,7 @@
 |---------|--------|---------|---------|
 | **sample-data/GENERATION_GUIDE.md** | 450+ | Overpass API + QGIS workflow | 🛠️ Créer paris_10th.gpkg |
 | **VISUAL_ASSETS_GUIDE.md** | 520+ | 26 assets spécifiés | 🎨 Phase 2 Visual Content |
-| **i18n/fr/.../3-minute-tutorial.md** | 215 | Traduction française | 🇫🇷 Localisation |
+| **i18n/fr/.../minute-tutorial.md** | 215 | Traduction française | 🇫🇷 Localisation |
 
 ### Changelogs Mis à Jour (3 fichiers)
 
@@ -65,7 +65,7 @@
 | **Fichiers modifiés** | 6 | Intro, changelogs, sample-data |
 | **Lignes créées/modifiées** | ~3,800+ | Documentation technique |
 | **Fichiers analysés** | 35 | Audit complet ~13,600 lignes |
-| **Traductions** | 2 | FR: 3-minute-tutorial + changelog |
+| **Traductions** | 2 | FR: minute-tutorial + changelog |
 
 ### Corrections et Vérifications
 
@@ -130,7 +130,7 @@
 
 ### 2. Path "3 Minutes vers le Succès"
 
-**3-minute-tutorial.md** + intro.md enrichi
+**minute-tutorial.md** + intro.md enrichi
 - Guide débutant absolu (4 étapes, 3 minutes)
 - Quick Tasks section (3 tâches rapides)
 - Popular Use Cases (4 workflows)
@@ -207,7 +207,7 @@ website/
 │   ├── intro.md ✨ ENRICHI (Quick Tasks + Use Cases)
 │   ├── changelog.md ✅ UPDATED (v2.3.1-2.3.7)
 │   ├── getting-started/
-│   │   ├── 3-minute-tutorial.md 🆕 NOUVEAU
+│   │   ├── minute-tutorial.md 🆕 NOUVEAU
 │   │   ├── quick-start.md
 │   │   ├── first-filter.md
 │   │   └── ...
@@ -221,7 +221,7 @@ website/
 │   └── GENERATION_GUIDE.md 🆕 NOUVEAU (450 lignes)
 ├── i18n/
 │   ├── fr/
-│   │   └── .../3-minute-tutorial.md 🆕 NOUVEAU (traduction)
+│   │   └── .../minute-tutorial.md 🆕 NOUVEAU (traduction)
 │   └── pt/
 ├── DOCUMENTATION_IMPROVEMENT_PLAN.md 🆕 NOUVEAU
 ├── PHASE_1_COMPLETION_SUMMARY.md 🆕 NOUVEAU

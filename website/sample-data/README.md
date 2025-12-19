@@ -333,7 +333,7 @@ array_length(string_to_array("lines", ','), 1) >= 3
 
 ### Beginner Path (1-2 hours)
 
-1. ✅ [3-Minute Tutorial](../docs/getting-started/3-minute-tutorial.md)  
+1. ✅ [3-Minute Tutorial](../docs/getting-started/minute-tutorial.md)  
    Start here if completely new to FilterMate
 
 2. ✅ [First Attribute Filter](../docs/getting-started/first-filter.md)  

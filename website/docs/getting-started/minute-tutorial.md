@@ -126,25 +126,25 @@ The original data is **unchanged** - FilterMate creates a temporary filtered vie
 
 **Geometric Filtering** (10 min)  
 Find features based on location and spatial relationships  
-[▶️ Your First Geometric Filter](./first-filter.md)
+[▶️ Your First Geometric Filter](./first-filter)
 
 **Export Your Results** (5 min)  
 Save filtered features to GeoPackage, Shapefile, or PostGIS  
-[▶️ Export Guide](../user-guide/export-features.md)
+[▶️ Export Guide](../user-guide/export-features)
 
 **Undo/Redo** (3 min)  
 Navigate your filter history with intelligent undo/redo  
-[▶️ Filter History](../user-guide/filter-history.md)
+[▶️ Filter History](../user-guide/filter-history)
 
 ### Explore Real-World Workflows
 
 **Urban Planning** (10 min)  
 Find properties near transit stations  
-[▶️ Transit-Oriented Development](../workflows/urban-planning-transit.md)
+[▶️ Transit-Oriented Development](../workflows/urban-planning-transit)
 
 **Real Estate** (8 min)  
 Multi-criteria property filtering  
-[▶️ Market Analysis](../workflows/real-estate-analysis.md)
+[▶️ Market Analysis](../workflows/real-estate-analysis)
 
 ---
 
@@ -213,11 +213,11 @@ You can combine FilterMate filters with QGIS's manual selection tool:
 You've successfully applied your first filter! You're now ready to explore FilterMate's more advanced features.
 
 **Continue Learning:**
-- [Filtering Basics](../user-guide/filtering-basics.md) - Master QGIS expressions
-- [Geometric Filtering](../user-guide/geometric-filtering.md) - Spatial relationships
-- [All Workflows](../workflows/index.md) - Real-world scenarios
+- [Filtering Basics](../user-guide/filtering-basics) - Master QGIS expressions
+- [Geometric Filtering](../user-guide/geometric-filtering) - Spatial relationships
+- [All Workflows](../workflows/) - Real-world scenarios
 
 **Need Help?**
-- 📖 [User Guide](../user-guide/introduction.md)
+- 📖 [User Guide](../user-guide/introduction)
 - 🐛 [Report Issues](https://github.com/sducournau/filter_mate/issues)
 - 💬 [Ask Questions](https://github.com/sducournau/filter_mate/discussions)

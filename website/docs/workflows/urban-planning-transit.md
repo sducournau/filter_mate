@@ -108,7 +108,7 @@ Primary Key: gid
 ```
 
 :::info Backend Performance
-If you see "OGR" for large parcel datasets, consider migrating to PostgreSQL for 10-50× faster performance. See [Backend Guide](../backends/choosing-backend.md).
+If you see "OGR" for large parcel datasets, consider migrating to PostgreSQL for 10-50× faster performance. See [Backend Guide](../backends/choosing-backend).
 :::
 
 ---
@@ -414,9 +414,9 @@ pip install psycopg2-binary
 
 ### Related Workflows
 
-- **[Emergency Services Coverage](./emergency-services.md)** - Similar distance analysis
-- **[Environmental Protection Zones](./environmental-protection.md)** - Multi-criteria filtering
-- **[Real Estate Analysis](./real-estate-analysis.md)** - Combined attribute filtering
+- **[Emergency Services Coverage](./emergency-services)** - Similar distance analysis
+- **[Environmental Protection Zones](./environmental-protection)** - Multi-criteria filtering
+- **[Real Estate Analysis](./real-estate-analysis)** - Combined attribute filtering
 
 ### Advanced Techniques
 
@@ -453,4 +453,4 @@ Use historical data to track transit-oriented development over time.
 
 ---
 
-Need help? Check the [Troubleshooting Guide](../advanced/troubleshooting.md) or ask on [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).
+Need help? Check the [Troubleshooting Guide](../advanced/troubleshooting) or ask on [GitHub Discussions](https://github.com/sducournau/filter_mate/discussions).

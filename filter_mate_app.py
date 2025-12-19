@@ -55,6 +55,7 @@ from .modules.feedback_utils import (
     show_performance_warning, show_error_with_context
 )
 from .modules.filter_history import HistoryManager
+from .modules.filter_favorites import FavoritesManager
 from .modules.ui_config import UIConfig, DisplayProfile
 from .resources import *  # Qt resources must be imported with wildcard
 import uuid
@@ -242,6 +243,11 @@ class FilterMateApp:
         # Initialize filter history manager for undo/redo functionality
         self.history_manager = HistoryManager(max_size=100)
         logger.info("FilterMate: HistoryManager initialized for undo/redo functionality")
+        
+        # Initialize filter favorites manager for saving/loading favorites
+        self.favorites_manager = FavoritesManager(max_favorites=50)
+        self.favorites_manager.load_from_project()
+        logger.info(f"FilterMate: FavoritesManager initialized ({self.favorites_manager.count} favorites loaded)")
         
         # Log PostgreSQL availability status
         if POSTGRESQL_AVAILABLE:
@@ -642,6 +648,11 @@ class FilterMateApp:
             logger.info("FilterMate App.run(): Creating FilterMateDockWidget")
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
             logger.info("FilterMate App.run(): FilterMateDockWidget created")
+            
+            # Pass favorites manager to dockwidget for indicator updates
+            self.dockwidget._favorites_manager = self.favorites_manager
+            self.dockwidget._update_favorite_indicator()
+            logger.debug("FavoritesManager attached to DockWidget")
             
             # Connect to widgetsInitialized signal for synchronization
             self.dockwidget.widgetsInitialized.connect(self._on_widgets_initialized)
@@ -2914,6 +2925,12 @@ class FilterMateApp:
                         conn.close()
                     except (OSError, AttributeError, sqlite3.Error) as e:
                         logger.debug(f"Error closing database connection: {e}")
+            
+            # Configure FavoritesManager to use SQLite database
+            if hasattr(self, 'favorites_manager') and self.db_file_path and self.project_uuid:
+                self.favorites_manager.set_database(self.db_file_path, str(self.project_uuid))
+                self.favorites_manager.load_from_project()
+                logger.info(f"FavoritesManager configured with SQLite database ({self.favorites_manager.count} favorites loaded)")
 
     def add_project_datasource(self, layer):
         """
@@ -2987,6 +3004,11 @@ class FilterMateApp:
 
             with open(ENV_VARS["CONFIG_JSON_PATH"], 'w') as outfile:
                 outfile.write(json.dumps(self.CONFIG_DATA, indent=4))
+            
+            # Save favorites to project
+            if hasattr(self, 'favorites_manager'):
+                self.favorites_manager.save_to_project()
+                logger.debug(f"Saved {self.favorites_manager.count} favorites to project")
 
 
     def layer_management_engine_task_completed(self, result_project_layers, task_name):

@@ -608,10 +608,10 @@ When contributing to FilterMate:
 
 ## See Also
 
-- [Contributing Guide](./contributing.md) - Contribution workflow
-- [Code Style](./code-style.md) - Coding standards
-- [Architecture](./architecture.md) - System design
-- [Backend Development](./backend-development.md) - Backend implementation
+- [Contributing Guide](./contributing) - Contribution workflow
+- [Code Style](./code-style) - Coding standards
+- [Architecture](./architecture) - System design
+- [Backend Development](./backend-development) - Backend implementation
 
 ## Resources
 

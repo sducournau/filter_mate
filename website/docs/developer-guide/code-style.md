@@ -349,7 +349,7 @@ Before submitting:
 
 ## Further Reading
 
-- [Architecture Overview](./architecture.md)
-- [Development Setup](./development-setup.md)
-- [Contributing Guide](./contributing.md)
-- [Testing Guide](./testing.md)
+- [Architecture Overview](./architecture)
+- [Development Setup](./development-setup)
+- [Contributing Guide](./contributing)
+- [Testing Guide](./testing)

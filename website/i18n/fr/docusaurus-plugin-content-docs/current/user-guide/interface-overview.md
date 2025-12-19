@@ -323,7 +323,7 @@ Pour des guides détaillés sur chaque fonctionnalité :
 - **[Filtrage géométrique](./geometric-filtering)** - Prédicats spatiaux, opérations de tampon et flux de travail géométriques
 - **[Opérations de tampon](./buffer-operations)** - Configuration des tampons, types et paramètres de distance
 - **[Exporter des entités](./export-features)** - Formats d'export, transformation SCR et opérations par lots
-- **[Historique des filtres](./filter-history)** - Gestion de l'historique, annuler/refaire et favoris
+- **[Historique des filtres](./filter-history)** - Gestion de l'historique et système annuler/refaire
 
 Pour débuter :
 

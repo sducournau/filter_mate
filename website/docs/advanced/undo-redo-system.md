@@ -14,7 +14,6 @@ The undo/redo system tracks all filtering operations and provides:
 - **Intelligent Context Detection**: Automatically detects source-only vs. multi-layer operations
 - **Per-Layer History**: Maintains separate history for each layer
 - **Smart Button Management**: Automatically enables/disables based on available history
-- **Keyboard Shortcuts**: Standard Ctrl+Z / Ctrl+Y (Cmd+Z / Cmd+Y on macOS)
 
 ## Key Concepts
 
@@ -50,8 +49,8 @@ FilterMate tracks two types of operations:
 ### Basic Undo/Redo
 
 1. **Apply a filter** using FilterMate
-2. **Click Undo button** (or press Ctrl+Z) to revert
-3. **Click Redo button** (or press Ctrl+Shift+Z) to reapply
+2. **Click the Undo button** (↩️) in the action bar to revert
+3. **Click the Redo button** (↪️) in the action bar to reapply
 
 :::tip Button States
 - **Enabled** ✅: History available
@@ -90,11 +89,10 @@ population > 10000
 
 ### Undo/Redo Buttons
 
-Located in the FilterMate toolbar:
+Located in the FilterMate action bar:
 
 ```
 [🔄 Reload] [↶ Undo] [↷ Redo] [Filter] [Export]
-              ↑ Ctrl+Z   ↑ Ctrl+Shift+Z
 ```
 
 **Button Tooltips** show:
@@ -102,15 +100,14 @@ Located in the FilterMate toolbar:
 - Last operation description
 - Affected layers
 
-### Keyboard Shortcuts
+### Keyboard Shortcut
 
-| Action | Windows/Linux | macOS |
-|--------|--------------|-------|
-| **Undo** | `Ctrl+Z` | `Cmd+Z` |
-| **Redo** | `Ctrl+Shift+Z` | `Cmd+Shift+Z` |
+| Action | Shortcut |
+|--------|----------|
+| **Reload Layers** | `F5` |
 
-:::note
-Keyboard shortcuts are only active when FilterMate panel has focus.
+:::tip
+Press **F5** when FilterMate panel has focus to force reload all layers. Useful when project changes don't properly refresh the layer list.
 :::
 
 ## Technical Details
@@ -290,9 +287,9 @@ View logs in QGIS Python Console (Ctrl+Alt+P):
 
 ## See Also
 
-- [Filter History](../user-guide/filter-history.md) - User guide for filter history
-- [Architecture Overview](../developer-guide/architecture.md) - Technical architecture
-- [Configuration Guide](../advanced/configuration.md) - Configuration settings
+- [Filter History](../user-guide/filter-history) - User guide for filter history
+- [Architecture Overview](../developer-guide/architecture) - Technical architecture
+- [Configuration Guide](../advanced/configuration) - Configuration settings
 
 ## Version History
 
