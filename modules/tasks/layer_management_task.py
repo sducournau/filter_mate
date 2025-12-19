@@ -196,11 +196,25 @@ class LayersManagementEngineTask(QgsTask):
             self.CONFIG_DATA = self.task_parameters["task"]["config_data"]
             self.db_file_path = self.task_parameters["task"]["db_file_path"]
             self.project_uuid = self.task_parameters["task"]["project_uuid"]
+            
+            logger.info(f"LayersManagementEngineTask.run() started: action={self.task_action}, db_path={self.db_file_path}")
 
             if self.task_action == 'add_layers':
                 self.layers = self.task_parameters["task"]["layers"]
                 self.project_layers = self.task_parameters["task"]["project_layers"]
                 self.reset_all = self.task_parameters["task"]["reset_all_layers_variables_flag"]
+                
+                logger.info(f"add_layers task: processing {len(self.layers)} layers, current project_layers count: {len(self.project_layers)}")
+                
+                # Verify database is accessible before processing
+                try:
+                    conn = self._safe_spatialite_connect()
+                    conn.close()
+                    logger.debug("Database accessibility check: OK")
+                except Exception as db_err:
+                    logger.error(f"Database accessibility check FAILED: {db_err}", exc_info=True)
+                    raise
+                
                 result = self.manage_project_layers()
                 if self.isCanceled() or result is False:
                     return False

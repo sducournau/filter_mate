@@ -1,4 +1,5 @@
 from qgis.PyQt.QtCore import Qt, QTimer
+import weakref
 from qgis.PyQt.QtWidgets import QApplication, QPushButton, QProgressBar
 from qgis.core import (
     Qgis,
@@ -64,6 +65,36 @@ import uuid
 logger = logging.getLogger('FilterMate')
 
 
+def safe_show_message(level, title, message):
+    """
+    Safely show a message in QGIS interface, catching RuntimeError if interface is destroyed.
+    
+    This prevents access violations when showing messages after plugin unload or QGIS shutdown.
+    
+    Args:
+        level (str): Message level - 'success', 'info', 'warning', or 'critical'
+        title (str): Message title
+        message (str): Message content
+    
+    Returns:
+        bool: True if message was shown, False if interface unavailable
+    """
+    try:
+        message_bar = iface.messageBar()
+        if level == 'success':
+            message_bar.pushSuccess(title, message)
+        elif level == 'info':
+            message_bar.pushInfo(title, message)
+        elif level == 'warning':
+            message_bar.pushWarning(title, message)
+        elif level == 'critical':
+            message_bar.pushCritical(title, message)
+        return True
+    except (RuntimeError, AttributeError) as e:
+        logger.warning(f"Cannot show {level} message '{title}': interface may be destroyed ({e})")
+        return False
+
+
 # Import the code for the DockWidget
 from .filter_mate_dockwidget import FilterMateDockWidget
 
@@ -103,12 +134,35 @@ class FilterMateApp:
         Return only layers that are valid vector layers with available sources.
         """
         try:
-            return [
-                l for l in (layers or [])
-                if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)
-            ]
+            input_count = len(layers or [])
+            usable = []
+            filtered_reasons = []
+            
+            for l in (layers or []):
+                if not isinstance(l, QgsVectorLayer):
+                    filtered_reasons.append(f"{l.name() if hasattr(l, 'name') else 'unknown'}: not a vector layer")
+                    continue
+                if not l.isValid():
+                    filtered_reasons.append(f"{l.name()}: invalid layer")
+                    continue
+                if not is_layer_source_available(l):
+                    filtered_reasons.append(f"{l.name()}: source not available")
+                    continue
+                usable.append(l)
+            
+            if filtered_reasons and input_count != len(usable):
+                logger.info(f"_filter_usable_layers: {input_count} input layers -> {len(usable)} usable layers. Filtered: {len(filtered_reasons)}")
+                if len(filtered_reasons) <= 5:
+                    for reason in filtered_reasons:
+                        logger.debug(f"  Filtered: {reason}")
+                else:
+                    for reason in filtered_reasons[:5]:
+                        logger.debug(f"  Filtered: {reason}")
+                    logger.debug(f"  ... and {len(filtered_reasons) - 5} more")
+            
+            return usable
         except Exception as e:
-            logger.debug(f"_filter_usable_layers error: {e}")
+            logger.error(f"_filter_usable_layers error: {e}", exc_info=True)
             return []
 
     def _on_layers_added(self, layers):
@@ -123,8 +177,13 @@ class FilterMateApp:
         debounce_ms = STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS']
         if current_time - self._last_layer_change_timestamp < debounce_ms:
             logger.debug(f"Debouncing layersAdded signal (elapsed: {current_time - self._last_layer_change_timestamp:.0f}ms < {debounce_ms}ms)")
-            # Queue for later processing
-            QTimer.singleShot(debounce_ms, lambda l=layers: self._on_layers_added(l))
+            # Queue for later processing - use weakref to prevent access violations
+            weak_self = weakref.ref(self)
+            def safe_callback():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self._on_layers_added(layers)
+            QTimer.singleShot(debounce_ms, safe_callback)
             return
         self._last_layer_change_timestamp = current_time
         
@@ -536,12 +595,22 @@ class FilterMateApp:
             # Set loading flag so the UI refresh is triggered after add_layers completes
             self._set_loading_flag(True)
             
-            QTimer.singleShot(delay, lambda layers=current_layers: self.manage_task('add_layers', layers))
+            # Use weakref to prevent access violations on plugin unload
+            weak_self = weakref.ref(self)
+            def safe_add_layers():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self.manage_task('add_layers', current_layers)
+            QTimer.singleShot(delay, safe_add_layers)
             
             # CRITICAL: Force UI refresh after layers are loaded
             # Schedule refresh with enough time for add_layers to complete
             refresh_delay = delay + 2000  # add_layers + 2s safety margin
-            QTimer.singleShot(refresh_delay, self._force_ui_refresh_after_reload)
+            def safe_ui_refresh():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self._force_ui_refresh_after_reload()
+            QTimer.singleShot(refresh_delay, safe_ui_refresh)
             
             # Show success message
             iface.messageBar().pushInfo(
@@ -621,6 +690,27 @@ class FilterMateApp:
             logger.info("FilterMate App.run(): Starting init_filterMate_db()")
             self.init_filterMate_db()
             logger.info("FilterMate App.run(): init_filterMate_db() complete")
+            
+            # HEALTH CHECK: Verify database is accessible
+            try:
+                db_conn = self.get_spatialite_connection()
+                if db_conn is None:
+                    logger.error("Database health check failed: Cannot connect to Spatialite database")
+                    iface.messageBar().pushCritical(
+                        "FilterMate - Erreur base de données",
+                        "Impossible d'accéder à la base de données FilterMate. Vérifiez les permissions du répertoire du projet."
+                    )
+                    return
+                else:
+                    logger.info("Database health check: OK")
+                    db_conn.close()
+            except Exception as db_err:
+                logger.error(f"Database health check failed with exception: {db_err}", exc_info=True)
+                iface.messageBar().pushCritical(
+                    "FilterMate - Erreur base de données",
+                    f"Erreur lors de la vérification de la base de données: {str(db_err)}"
+                )
+                return
             
             # Initialize UI profile based on screen resolution
             try:
@@ -708,31 +798,58 @@ class FilterMateApp:
                     
                     check_and_add()
                 
-                QTimer.singleShot(600, lambda: wait_for_widget_initialization(init_layers))
+                # Use weakref to prevent access violations
+                weak_self = weakref.ref(self)
+                def safe_wait_init():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        wait_for_widget_initialization(init_layers)
+                QTimer.singleShot(600, safe_wait_init)
                 
-                # SAFETY: Force UI update after 3 seconds if task hasn't completed
+                # SAFETY: Force UI update after 5 seconds if task hasn't completed
                 # This ensures UI is never left in disabled/grey state on startup
+                # TIMEOUT INCREASED: 3s -> 5s to allow more time for large projects
                 def ensure_ui_enabled():
+                    # CRITICAL: Check if self still exists (plugin not unloaded)
+                    try:
+                        if not hasattr(self, 'dockwidget'):
+                            logger.warning("Safety timer: self.dockwidget attribute missing, plugin may be unloaded")
+                            return
+                    except RuntimeError:
+                        logger.warning("Safety timer: self object destroyed, plugin unloaded")
+                        return
+                    
                     if not self.dockwidget:
+                        logger.warning("Safety timer: Dockwidget is None, cannot check UI state")
                         return
                     
                     # Check if layers were successfully loaded
                     if len(self.PROJECT_LAYERS) > 0:
-                        logger.info("Safety timer: Task completed, forcing UI refresh")
+                        logger.info(f"Safety timer: Task completed successfully with {len(self.PROJECT_LAYERS)} layers, forcing UI refresh")
                         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
                     else:
                         # Task may have failed or not completed - try to reload layers
-                        logger.warning("Safety timer: PROJECT_LAYERS still empty after 3s, attempting recovery")
-                        current_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
+                        all_layers = list(self.PROJECT.mapLayers().values())
+                        logger.warning(f"Safety timer: PROJECT_LAYERS still empty after 3s, attempting recovery (total layers in project: {len(all_layers)})")
+                        current_layers = self._filter_usable_layers(all_layers)
+                        
+                        logger.info(f"Recovery diagnostic: total_layers={len(all_layers)}, usable_layers={len(current_layers)}, pending_tasks={self._pending_add_layers_tasks}")
+                        
                         if len(current_layers) > 0:
-                            logger.info(f"Recovery: Found {len(current_layers)} layers, retrying add_layers")
-                            # Use QTimer to defer to avoid recursion issues
-                            QTimer.singleShot(100, lambda layers=current_layers: self.manage_task('add_layers', layers))
-                            # Set another safety timer
-                            QTimer.singleShot(3000, ensure_ui_enabled_final)
+                            logger.info(f"Recovery: Found {len(current_layers)} usable layers, retrying add_layers")
+                            # Use QTimer to defer to avoid recursion issues - use weakref for safety
+                            weak_self = weakref.ref(self)
+                            def safe_retry_add():
+                                strong_self = weak_self()
+                                if strong_self is not None:
+                                    strong_self.manage_task('add_layers', current_layers)
+                            QTimer.singleShot(100, safe_retry_add)
+                            # Set another safety timer (TIMEOUT: increased 3s -> 5s for large projects)
+                            QTimer.singleShot(5000, ensure_ui_enabled_final)
                         else:
                             # No layers found - update indicator to show waiting state
-                            logger.info("Recovery: No usable layers found, plugin waiting for layers")
+                            logger.warning(f"Recovery: No usable layers found from {len(all_layers)} total layers, plugin waiting for layers")
+                            logger.debug(f"Layer types in project: {[type(l).__name__ for l in all_layers][:5]}...")  # Show first 5
                             if self.dockwidget and hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                                 self.dockwidget.backend_indicator_label.setText("...")
                                 self.dockwidget.backend_indicator_label.setStyleSheet("""
@@ -746,9 +863,26 @@ class FilterMateApp:
                                         background-color: #ecf0f1;
                                     }
                                 """)
+                                # Show info message that plugin is loading
+                                try:
+                                    iface.messageBar().pushInfo(
+                                        "FilterMate",
+                                        "Chargement des couches en cours... Veuillez patienter."
+                                    )
+                                except RuntimeError:
+                                    logger.warning("Cannot show message: iface may be destroyed")
                 
                 def ensure_ui_enabled_final():
                     """Final safety check after recovery attempt."""
+                    # CRITICAL: Check if self still exists
+                    try:
+                        if not hasattr(self, 'dockwidget'):
+                            logger.warning("Final safety timer: plugin may be unloaded")
+                            return
+                    except RuntimeError:
+                        logger.warning("Final safety timer: self object destroyed")
+                        return
+                    
                     if not self.dockwidget:
                         return
                     if len(self.PROJECT_LAYERS) > 0:
@@ -756,12 +890,47 @@ class FilterMateApp:
                         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
                     else:
                         logger.error("Final safety timer: Failed to load layers after recovery attempt")
+                        
+                        # DIAGNOSTIC: Gather detailed information about the failure
+                        current_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
+                        all_layers = list(self.PROJECT.mapLayers().values())
+                        
+                        diagnostic_msg = (
+                            f"Échec du chargement des couches.\n\n"
+                            f"Diagnostic:\n"
+                            f"- Couches totales dans le projet: {len(all_layers)}\n"
+                            f"- Couches utilisables détectées: {len(current_layers)}\n"
+                            f"- Tâches en attente (add_layers): {self._pending_add_layers_tasks}\n\n"
+                            f"Solution: Utilisez F5 pour forcer le rechargement des couches."
+                        )
+                        
+                        logger.error(f"Layer loading failure diagnostic: total={len(all_layers)}, usable={len(current_layers)}, pending_tasks={self._pending_add_layers_tasks}")
+                        
+                        # Check for database issues
+                        try:
+                            conn = self.get_spatialite_connection()
+                            if conn is None:
+                                diagnostic_msg += "\n\n⚠️ La base de données FilterMate n'est pas accessible."
+                                logger.error("Database connection failed in final safety check")
+                            else:
+                                conn.close()
+                        except Exception as db_err:
+                            diagnostic_msg += f"\n\n⚠️ Erreur base de données: {str(db_err)}"
+                            logger.error(f"Database error in final safety check: {db_err}")
+                        
                         iface.messageBar().pushWarning(
                             "FilterMate",
-                            "Échec du chargement des couches. Essayez de recharger le plugin."
+                            diagnostic_msg
                         )
                 
-                QTimer.singleShot(3000, ensure_ui_enabled)
+                # TIMEOUT INCREASED: 3s -> 5s to allow more time for loading large projects
+                # Use weakref to prevent access violations on plugin unload
+                weak_self = weakref.ref(self)
+                def safe_ensure_ui():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        ensure_ui_enabled()
+                QTimer.singleShot(5000, safe_ensure_ui)
             else:
                 # No layers in project - inform user that plugin is waiting for layers
                 logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
@@ -800,7 +969,14 @@ class FilterMateApp:
                 if new_layers:
                     logger.info(f"FilterMate: Found {len(new_layers)} new layers to add")
                     # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-                    QTimer.singleShot(300, lambda layers=self._filter_usable_layers(new_layers): self.manage_task('add_layers', layers))
+                    # Use weakref to prevent access violations
+                    usable = self._filter_usable_layers(new_layers)
+                    weak_self = weakref.ref(self)
+                    def safe_add_new_layers():
+                        strong_self = weak_self()
+                        if strong_self is not None:
+                            strong_self.manage_task('add_layers', usable)
+                    QTimer.singleShot(300, safe_add_new_layers)
                 else:
                     # No new layers, but update UI if it's empty
                     if len(self.PROJECT_LAYERS) == 0 and len(current_project_layers) > 0:
@@ -1026,6 +1202,11 @@ class FilterMateApp:
             self.PROJECT_LAYERS = {}
             
             self.init_filterMate_db()
+            
+            # Load favorites from the new project
+            if hasattr(self, 'favorites_manager'):
+                self.favorites_manager.load_from_project()
+                logger.info(f"FilterMate: Favorites loaded for {task_name} ({self.favorites_manager.count} favorites)")
             
             # CRITICAL FIX v2.3.7: When switching projects, the layersAdded signal has ALREADY
             # been emitted by QGIS BEFORE we reach this point (it's emitted with projectRead).
@@ -2537,7 +2718,12 @@ class FilterMateApp:
         else:
             logger.debug(f"💾 Saving {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
             for prop in layer_properties[:3]:  # Log first 3 properties
-                logger.debug(f"  - {prop[0]}.{prop[1]} = {str(prop[2])[:50]}..." if len(str(prop[2])) > 50 else f"  - {prop[0]}.{prop[1]} = {prop[2]}")
+                # Handle both tuple formats: (key_group, key) or (key_group, key, value, type)
+                if len(prop) >= 3:
+                    value_str = str(prop[2])[:50] + "..." if len(str(prop[2])) > 50 else str(prop[2])
+                    logger.debug(f"  - {prop[0]}.{prop[1]} = {value_str}")
+                else:
+                    logger.debug(f"  - {prop[0]}.{prop[1]}")
 
         if layer.id() not in self.PROJECT_LAYERS.keys():
             logger.warning(f"Layer {layer.name()} not in PROJECT_LAYERS, cannot save properties")

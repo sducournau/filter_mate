@@ -342,10 +342,28 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_warning(f"⚠️ Unbalanced parentheses in adapted filter: {open_count} open vs {close_count} close")
             self.log_warning(f"  → Original: '{filter_expr[:100]}'...")
             self.log_warning(f"  → Adapted: '{adapted[:100]}'...")
-            # Try to fix by removing trailing unmatched parentheses
-            while adapted.endswith(')') and adapted.count(')') > adapted.count('('):
-                adapted = adapted[:-1].strip()
-                self.log_info(f"  → Removed trailing ')': '{adapted[:100]}'...")
+            
+            # CRITICAL FIX: Remove trailing unmatched parentheses more aggressively
+            # This handles cases where multiple closing parens are orphaned
+            while adapted.count(')') > adapted.count('('):
+                # Find and remove the last closing paren
+                last_close_idx = adapted.rfind(')')
+                if last_close_idx != -1:
+                    adapted = adapted[:last_close_idx] + adapted[last_close_idx+1:]
+                    adapted = adapted.strip()
+                    self.log_info(f"  → Removed trailing ')': '{adapted[:100]}'...")
+                else:
+                    break
+            
+            # Also remove leading unmatched opening parentheses if any
+            while adapted.count('(') > adapted.count(')'):
+                first_open_idx = adapted.find('(')
+                if first_open_idx != -1:
+                    adapted = adapted[:first_open_idx] + adapted[first_open_idx+1:]
+                    adapted = adapted.strip()
+                    self.log_info(f"  → Removed leading '(': '{adapted[:100]}'...")
+                else:
+                    break
         
         return adapted
 
@@ -619,7 +637,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         is_spatial_filter = any(pred in source_filter_upper for pred in [
                             'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
                             'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                            '__SOURCE'
+                            '__SOURCE', 'EXISTS(', 'EXISTS ('
                         ])
                         
                         if is_spatial_filter:

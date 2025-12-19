@@ -6,19 +6,21 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.7
+version=2.3.8
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.7 - Project Change Stability Enhancement
+about=FilterMate v2.3.8 - Automatic Dark Mode Support
 
- NEW in v2.3.7:
- - 🛡️ Enhanced project change handling with forced cleanup
- - 🔄 New `cleared` signal handler for proper cleanup on project close
- - ⏱️ Updated timing constants for better PostgreSQL stability
- - ⌨️ F5 shortcut to force reload layers when project change fails
- - 🐛 Fixed project change not reloading layers (root cause identified)
- - 🐛 Fixed signal timing issue (layersAdded before projectRead completion)
+ NEW in v2.3.8:
+ - 🎨 Automatic dark mode detection - detects QGIS theme in real-time
+ - 🌓 Icon inversion for dark mode - PNG icons now visible in dark themes
+ - 🎯 New modules/icon_utils.py module for theme-aware icon management
+ - ✨ JsonView theme synchronization - config editor updates with main theme
+ - 🛠️ Enhanced theme change notification with logging
+ - ⭐ Filter Favorites - Save, organize, and reuse complex filters
+ - 💾 SQLite persistence - favorites saved across sessions
+ - 📤 Export/Import favorites via JSON files
  
  Previous (v2.3.6):
  - 🛡️ Centralized timing constants (STABILITY_CONSTANTS dict)

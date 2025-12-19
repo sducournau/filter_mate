@@ -7,29 +7,50 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.7 - Project Change Stability Enhancement
+## 🎉 What's New in v2.3.8 - Automatic Dark Mode Support & Filter Favorites
 
-### Enhanced Project Change Handling
-- 🛡️ **Complete Rewrite of `_handle_project_change()`** - Forces cleanup of previous project state
-- 🗑️ **Full State Reset** - Clears `PROJECT_LAYERS`, add_layers queue, and all state flags
-- 🔗 **Dockwidget Sync** - Resets layer references to prevent stale data access
+### Automatic Dark Mode Detection
+- 🎨 **Real-time Theme Detection** - Plugin now detects QGIS theme changes automatically
+- 📡 **QGISThemeWatcher Class** - Monitors `QApplication.paletteChanged` signal
+- 🌓 **Theme Synchronization** - Auto-switches UI theme when user changes QGIS theme settings
+- 🌙 **Night Mapping Support** - Works with Night Mapping and other dark themes
 
-### New `cleared` Signal Handler
-- 📢 **`_handle_project_cleared()` Method** - Proper cleanup on project close/clear
-- 🔌 **Connected to `QgsProject.instance().cleared`** - Handles new project and project close events
-- 🛡️ **State Reset** - Ensures plugin state is properly reset when project changes
+### Icon Inversion for Dark Mode
+- 🖼️ **Automatic Icon Adaptation** - PNG icons now visible in dark themes
+- ♻️ **IconThemeManager Class** - Theme-aware icon management with caching
+- 🔄 **Color Inversion** - Automatic inversion using `QImage.invertPixels()`
+- 🎭 **Icon Variants** - Support for `_black`/`_white` icon variants
 
-### F5 Shortcut: Force Reload Layers
-- ⌨️ **Press F5** in dockwidget to force complete layer reload
-- 🔄 **Manual Recovery** when automatic project change detection fails
-- 📊 **Status Indicator** shows reload in progress ("⟳")
+### Filter Favorites System
+- ⭐ **Save Complex Filters** - Save and reuse filter configurations with descriptive names
+- 💾 **SQLite Persistence** - Favorites stored in database, organized by project UUID
+- 📊 **Usage Tracking** - Track application count and last used date
+- 🎯 **Multi-Layer Support** - Save configurations affecting multiple layers simultaneously
+- 📤 **Export/Import** - Share favorites via JSON files between projects
+- 🏷️ **Tags & Search** - Organize favorites with tags and search by name
+- ⭐ **Favorites Indicator** - Header widget showing favorite count with quick access menu
+- 📝 **Rich Metadata** - Store descriptions, notes, and filter context
 
-### Bug Fixes
-- 🐛 **Fixed Project Change Not Reloading Layers** - Root cause identified and fixed
-- 🐛 **Fixed Signal Timing Issue** - QGIS emits `layersAdded` BEFORE `projectRead` handler completes
-- 🔧 **Now manually triggers `add_layers`** after cleanup instead of waiting for missed signal
+### New Modules
+- 📦 **modules/icon_utils.py** - Comprehensive icon theming utilities
+  - `IconThemeManager` - Singleton for managing themed icons
+  - Helper functions: `invert_pixmap()`, `get_icon_for_theme()`, `apply_icon_to_button()`
+- 📦 **modules/filter_favorites.py** - Filter favorites management
+  - `FilterFavorite` - Dataclass for saved filter configurations
+  - `FavoritesManager` - SQLite-backed favorites collection (max 50 per project)
+
+### UI/UX Improvements
+- ⚙️ **Config Editor Theme Sync** - JsonView updates with main theme
+- 🔔 **Theme Change Notifications** - Brief info messages and debug logging
+- 🧹 **Resource Cleanup** - Proper cleanup of theme watchers on plugin close
 
 ## Previous Updates
+
+### v2.3.7 - Project Change Stability Enhancement (December 19, 2025)
+- 🛡️ **Enhanced Project Change Handling** - Complete rewrite of project change logic
+- 🔄 **New `cleared` Signal Handler** - Proper cleanup on project close
+- ⌨️ **F5 Shortcut** - Force reload layers when project change fails
+- 🐛 **Bug Fixes** - Fixed project change not reloading layers and signal timing issues
 
 ### v2.3.6 - Project & Layer Loading Stability (December 18, 2025)
 - 🛡️ **Centralized Timing Constants** - `STABILITY_CONSTANTS` dict

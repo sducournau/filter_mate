@@ -3746,7 +3746,7 @@ class FilterEngineTask(QgsTask):
             is_invalid_filter = any(pattern in source_filter_upper for pattern in [
                 'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
                 'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                '__SOURCE', 'EXISTS ('
+                '__SOURCE', 'EXISTS (', 'EXISTS('
             ])
             
             if is_invalid_filter:

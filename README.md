@@ -1,9 +1,22 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-**Version 2.3.7** | December 18, 2025
+**Version 2.3.8** | December 19, 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.3.7 - Project Change Stability Enhancement
+### 🎉 What's New in v2.3.8 - Automatic Dark Mode Support & Filter Favorites
+
+- 🎨 **Automatic Dark Mode Detection** - Real-time QGIS theme detection and UI synchronization
+- 🌓 **Icon Inversion for Dark Mode** - PNG icons automatically adapted for dark themes
+- ⭐ **Filter Favorites System** - Save, organize, and reuse complex filter configurations
+  - 💾 SQLite persistence across sessions
+  - 📊 Usage tracking and statistics
+  - 📤 Export/Import via JSON files
+  - 🎯 Multi-layer filter support
+  - 🏷️ Tags and search capabilities
+- 🎯 **New Icon Utilities Module** - Theme-aware icon management with caching
+- ✨ **JsonView Theme Sync** - Config editor updates with main theme
+
+### Previous: v2.3.7 - Project Change Stability Enhancement
 
 - 🛡️ **Enhanced Project Change Handling** - Complete rewrite of `_handle_project_change()`
   - Forces cleanup of previous project state before reinitializing
@@ -84,6 +97,11 @@
 - 📤 **Smart export** with customizable options
 - 🌍 **Automatic CRS reprojection** on the fly
 - 📝 **Filter history** - Easy undo/redo for all operations
+- ⭐ **Filter Favorites** - Save, organize, and reuse complex filter configurations
+  - 💾 SQLite persistence across sessions
+  - 📊 Usage tracking and statistics
+  - 📤 Export/Import via JSON
+  - 🎯 Multi-layer support
 - 🚀 **Performance warnings** - Intelligent recommendations for large datasets
 - 🎨 **Adaptive UI** - Dynamic dimensions based on screen resolution
 - 🌓 **Theme support** - Automatic synchronization with QGIS theme

@@ -16,12 +16,27 @@ All notable changes to FilterMate will be documented in this file.
   - Support for `_black`/`_white` icon variants
   - Icon caching for optimal performance
 
+- **Filter Favorites System** - Save and reuse complex filter configurations
+  - ⭐ **FavoritesManager** class for managing saved filters
+  - 💾 **SQLite Persistence** - Favorites stored in database, organized by project UUID
+  - 📊 **Usage Tracking** - Track application count and last used date
+  - 🎯 **Multi-Layer Support** - Save configurations affecting multiple layers
+  - 📤 **Export/Import** - Share favorites via JSON files
+  - 🏷️ **Tags & Search** - Organize with tags and find favorites quickly
+  - ⭐ **Favorites Indicator** - Header widget showing favorite count with quick access menu
+
 - **New `modules/icon_utils.py` Module**
   - `IconThemeManager`: Singleton for managing themed icons
   - `invert_pixmap()`: Inverts dark icons to white
   - `get_icon_for_theme()`: Returns appropriate icon for current theme
   - `apply_icon_to_button()`: Applies themed icons to QPushButton/QToolButton
   - `get_themed_icon()`: High-level utility function for easy icon theming
+
+- **New `modules/filter_favorites.py` Module**
+  - `FilterFavorite`: Dataclass representing a saved filter configuration
+  - `FavoritesManager`: Manages collection of favorites with SQLite storage
+  - Auto-migration from legacy project variables
+  - Max 50 favorites per project (oldest removed when limit exceeded)
 
 ### 🎨 UI/UX Improvements
 - **JsonView Theme Synchronization** - Config editor updates with main theme
