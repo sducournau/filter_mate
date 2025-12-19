@@ -606,12 +606,6 @@ AND permits IS NULL
 
 ---
 
-## Quick Reference Card
-
-**Download printable PDF** (coming soon)
-
----
-
 ## See Also
 
 - [Spatial Predicates Reference](./spatial-predicates.md)

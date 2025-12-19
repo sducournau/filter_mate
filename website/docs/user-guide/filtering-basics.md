@@ -332,8 +332,6 @@ graph TD
 
 **Step 2 - Select Source Layer**
 
-<img src="/filter_mate/img/workflow-attribute-02.png" alt="workflow-attribute-02" width="300"/>
-
 - Check the "COMMUNE" layer in the layer selector
 - Verify layer information is displayed (feature count, CRS)
 

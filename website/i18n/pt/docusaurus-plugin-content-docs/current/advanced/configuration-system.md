@@ -589,4 +589,3 @@ Configuration is validated against `config_schema.json`:
 - **v2.2.2** - Added UI tree editor and live reload
 - **v2.3.0** - Added automatic backup system
 - **v2.3.7** - Improved validation and migration
-- **v2.4.0** (planned) - Configuration profiles and import/export

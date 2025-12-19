@@ -298,4 +298,3 @@ View logs in QGIS Python Console (Ctrl+Alt+P):
 
 - **v2.3.0** - Initial undo/redo system with intelligent context detection
 - **v2.3.7** - Improved button state management and tooltips
-- **v2.4.0** (planned) - Configurable history size and persistence options

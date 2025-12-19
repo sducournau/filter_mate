@@ -55,14 +55,14 @@ graph TD
 
 **How It Works:**
 
-1. **Checks for manual backend selection** (v2.4+) - User can force specific backend
+1. **Checks for manual backend selection** (v2.3.5+) - User can force specific backend
 2. **Detects layer provider type** (PostgreSQL, Spatialite, or OGR)
 3. **Checks PostgreSQL availability** (is psycopg2 installed?)
 4. **Selects optimal backend** with performance warnings when needed
 5. **Falls back gracefully** if the best option is unavailable
 
-:::tip Manual Backend Selection (v2.4+)
-**New!** You can now force a specific backend by clicking the backend indicator icon next to each layer name. This is useful for:
+:::tip Manual Backend Selection (v2.3.5+)
+You can force a specific backend by clicking the backend indicator icon next to each layer name. This is useful for:
 - Testing different backends
 - Using Spatialite on small PostgreSQL layers
 - Forcing OGR when you want file-based operations
@@ -145,10 +145,10 @@ graph TD
 
 ---
 
-## Manual Backend Selection (v2.4+)
+## Manual Backend Selection (v2.3.5+)
 
-:::info New Feature
-**FilterMate v2.4+** allows you to manually force a specific backend for any layer, overriding automatic detection.
+:::info Feature
+**FilterMate v2.3.5+** allows you to manually force a specific backend for any layer, overriding automatic detection.
 :::
 
 ### How to Force a Backend

@@ -385,7 +385,7 @@ cd filter_mate/config/
 cp config.default.json config.json
 ```
 
-**Via UI** (planned v2.4):
+**Via UI**:
 - Configuration tab → Right-click → "Reset to Defaults"
 
 ## Configuration Migration
@@ -396,7 +396,7 @@ FilterMate automatically migrates old configuration formats:
 
 **Migration Path**:
 ```
-v2.0.x → v2.1.x → v2.2.x → v2.3.x → v2.4.x (latest)
+v2.0.x → v2.1.x → v2.2.x → v2.3.x (latest)
 ```
 
 **Migration Process**:
@@ -589,4 +589,3 @@ Configuration is validated against `config_schema.json`:
 - **v2.2.2** - Added UI tree editor and live reload
 - **v2.3.0** - Added automatic backup system
 - **v2.3.7** - Improved validation and migration
-- **v2.4.0** (planned) - Configuration profiles and import/export

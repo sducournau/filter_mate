@@ -99,7 +99,7 @@ graph TB
   - Result processing and callback handling
   - Database initialization
   - **Global undo/redo with intelligent context detection** (v2.3.0+)
-  - **Forced backend management** (v2.4+)
+  - **Forced backend management** (v2.3.5+)
   - **Filter history management** with per-layer tracking
 
 #### 3. UI Management Layer
@@ -112,7 +112,7 @@ graph TB
   - Layer property management
   - Signal/slot connections
   - UI state synchronization
-  - **Backend indicator and forced backend selection** (v2.4+)
+  - **Backend indicator and forced backend selection** (v2.3.5+)
   - **Configuration JSON tree editor** (v2.2+)
   - **Undo/redo button management**
 
@@ -215,9 +215,9 @@ class BackendFactory:
             return OGRBackend(layer)
 ```
 
-### Forced Backend System (v2.4+)
+### Forced Backend System (v2.3.5+)
 
-**New Feature**: Users can manually force a specific backend for any layer, overriding automatic detection.
+**Feature**: Users can manually force a specific backend for any layer, overriding automatic detection.
 
 **UI Location**: Backend indicator (icon next to layer name in dockwidget)
 - Click backend icon to force PostgreSQL/Spatialite/OGR
