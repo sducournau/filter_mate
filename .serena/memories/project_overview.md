@@ -320,7 +320,24 @@ pytest --cov=modules --cov-report=html
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.3.7
+- **Current Plugin Version**: 2.3.8
+
+## BMAD Documentation
+
+FilterMate uses BMAD methodology with documents in `.bmad-core/`:
+
+| Document | Content |
+|----------|---------|
+| `project.bmad.md` | Project vision and goals |
+| `prd.md` | 40+ requirements (functional & non-functional) |
+| `architecture.md` | Technical architecture with diagrams |
+| `epics.md` | 6 epics, 23 user stories |
+| `roadmap.md` | 8 completed phases, future plans |
+| `quality.md` | Code standards, testing guidelines |
+| `personas.md` | 5 user personas |
+| `tech-stack.md` | Complete technology stack |
+
+See `.serena/memories/bmad_integration.md` for Serena-BMAD mapping.
 
 ## Serena Integration
 

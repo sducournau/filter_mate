@@ -1,5 +1,32 @@
 # Serena Integration Rules for GitHub Copilot Chat
 
+## Project Status
+
+**FilterMate v2.3.8** - Production QGIS Plugin
+- ✅ All core phases complete (1-7)
+- 🔄 Current: Test coverage improvement (70% → 80%)
+- 📚 BMAD docs: `.bmad-core/`
+- 🔧 Serena memories: `.serena/memories/` (19 files)
+
+## Documentation System
+
+### BMAD Documents (Project Methodology)
+| Document | Purpose |
+|----------|---------|
+| `.bmad-core/prd.md` | Product requirements |
+| `.bmad-core/epics.md` | User stories (23 stories) |
+| `.bmad-core/architecture.md` | Technical architecture |
+| `.bmad-core/roadmap.md` | Development phases |
+| `.bmad-core/quality.md` | Quality standards |
+
+### Serena Memories (Technical Context)
+| Memory | Purpose |
+|--------|---------|
+| `project_overview` | Current status |
+| `architecture_overview` | System architecture |
+| `backend_architecture` | Multi-backend details |
+| `bmad_integration` | BMAD-Serena mapping |
+
 ## Auto-Activation Rules
 
 When GitHub Copilot Chat is invoked in this workspace, Serena symbolic tools should be preferred for code analysis tasks.
@@ -10,11 +37,13 @@ When GitHub Copilot Chat is invoked in this workspace, Serena symbolic tools sho
    - `.github/copilot-instructions.md` - Coding guidelines and patterns
    - `.serena/project_memory.md` - Complete project architecture
    - `.serena/optimization_rules.md` - Serena efficiency rules
+   - `.bmad-core/README.md` - BMAD documentation index
 
 2. **Secondary Context** (loaded on demand):
    - `README.md` - Project overview
-   - `TODO.md` - Implementation status
-   - `MIGRATION_GUIDE.md` - PostgreSQL to multi-backend migration
+   - `.bmad-core/prd.md` - Requirements
+   - `.bmad-core/epics.md` - User stories
+   - Serena memories as needed
 
 ## Trigger Patterns
 

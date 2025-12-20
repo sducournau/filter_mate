@@ -5,7 +5,9 @@
   "github.copilot.referencedFiles": [
     ".github/copilot-instructions.md",
     ".serena/project_memory.md",
-    ".serena/optimization_rules.md"
+    ".serena/optimization_rules.md",
+    ".serena/serena_bmad_integration.md",
+    ".bmad-core/README.md"
   ],
   "github.copilot.chat.codeGeneration.instructions": [
     {
@@ -15,16 +17,22 @@
       "text": "Use Serena symbolic tools efficiently - read .serena/optimization_rules.md"
     },
     {
+      "text": "Check .bmad-core/ for project requirements, epics, and roadmap"
+    },
+    {
       "text": "Always check POSTGRESQL_AVAILABLE before PostgreSQL operations"
     },
     {
       "text": "Use get_symbols_overview() before reading large files"
     },
     {
-      "text": "Serena MCP server auto-starts when Chat opens (Windows: configured via MCP with SERENA_PROJECT)"
+      "text": "Serena MCP server auto-starts when Chat opens"
+    },
+    {
+      "text": "FilterMate v2.3.8 - All core phases complete (PostgreSQL/Spatialite/OGR)"
     }
   ],
-  "github.copilot.chat.welcomeMessage": "FilterMate QGIS Plugin Assistant\n\n✅ Phase 1 Complete: PostgreSQL optional\n🔄 Phase 2 In Progress: Spatialite backend\n\n🔧 Serena MCP auto-starts on Windows (symbolic tools ready)\n📚 Reference: .serena/optimization_rules.md",
+  "github.copilot.chat.welcomeMessage": "🔍 FilterMate QGIS Plugin v2.3.8\n\n✅ Production-ready with multi-backend support\n📚 BMAD docs: .bmad-core/\n🔧 Serena tools: Active (symbolic navigation)\n\n🎯 Current focus: Test coverage (70% → 80%)",
   "files.watcherExclude": {
     "**/.git/objects/**": true,
     "**/.git/subtree-cache/**": true,

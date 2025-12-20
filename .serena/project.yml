@@ -78,7 +78,27 @@ excluded_tools: []
 
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
-initial_prompt: ""
+initial_prompt: |
+  FilterMate v2.3.8 - Production QGIS Plugin
+  
+  📚 Documentation System:
+  - BMAD: .bmad-core/ (PRD, epics, roadmap, architecture)
+  - Serena: .serena/memories/ (18 technical memories)
+  - Copilot: .github/copilot-instructions.md
+  
+  🏗️ Architecture: Multi-backend (PostgreSQL/Spatialite/OGR)
+  ✅ Status: All core phases complete (1-7)
+  🎯 Current: Test coverage improvement (70% → 80%)
+  
+  📋 Key memories to read:
+  - project_overview: Current status and recent changes
+  - architecture_overview: System architecture
+  - backend_architecture: Multi-backend details
+  
+  📋 BMAD documents:
+  - prd.md: Product requirements
+  - epics.md: User stories (23 stories, 6 epics)
+  - roadmap.md: Development phases
 
 project_name: "filter_mate"
 included_optional_tools: []

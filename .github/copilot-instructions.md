@@ -2,12 +2,59 @@
 
 You are working on **FilterMate**, a QGIS plugin written in Python that provides advanced filtering and export capabilities for vector data.
 
-## Project Context
+## 📋 Project Context
 
-- **Type**: QGIS Plugin (Python 3.7+)
-- **Framework**: QGIS API, PyQt5
-- **Architecture**: Multi-backend support (PostgreSQL/PostGIS, Spatialite, OGR)
-- **Current Status**: Phase 1 complete (PostgreSQL optional), Phase 2 in progress (Spatialite backend)
+| Field | Value |
+|-------|-------|
+| **Type** | QGIS Plugin (Python 3.7+) |
+| **Version** | 2.3.8 (December 2025) |
+| **Status** | Production - Stable |
+| **Framework** | QGIS API, PyQt5 |
+| **Architecture** | Multi-backend (PostgreSQL, Spatialite, OGR) |
+| **Quality Score** | 9.0/10 |
+
+## 🔗 Documentation System
+
+FilterMate uses **Serena + BMAD** for comprehensive development support:
+
+### Quick Reference
+| Need | Location |
+|------|----------|
+| **Coding patterns** | This file + `.serena/memories/code_style_conventions.md` |
+| **Architecture** | `.bmad-core/architecture.md` + `.serena/memories/architecture_overview.md` |
+| **Requirements** | `.bmad-core/prd.md` |
+| **User stories** | `.bmad-core/epics.md` |
+| **Roadmap** | `.bmad-core/roadmap.md` |
+| **Quality standards** | `.bmad-core/quality.md` |
+
+### Serena Tools (MCP)
+Use Serena symbolic tools for efficient code navigation:
+```python
+# Overview first (NOT read_file!)
+get_symbols_overview("modules/appTasks.py")
+
+# Find specific symbol
+find_symbol("FilterTask", depth=1, include_body=False)
+
+# Read only what you need
+find_symbol("FilterTask/run", include_body=True)
+```
+
+## 🏗️ Current Architecture
+
+```
+filter_mate.py          → Plugin entry point
+filter_mate_app.py      → Application orchestrator
+filter_mate_dockwidget.py → UI management
+modules/
+├── backends/           → Multi-backend system (Factory pattern)
+│   ├── factory.py     → Backend selection
+│   ├── postgresql_backend.py
+│   ├── spatialite_backend.py
+│   └── ogr_backend.py
+├── tasks/              → Async operations (QgsTask)
+└── *.py                → Utility modules
+```
 
 ## Code Style Guidelines
 
@@ -413,20 +460,23 @@ transformed_geom = geom.transform(transform)
 
 ## Phase-Specific Notes
 
-### Phase 1 (✅ Complete)
-- PostgreSQL is optional
-- POSTGRESQL_AVAILABLE flag in place
-- Graceful degradation working
+### ✅ All Core Phases Complete (v2.3.8)
+- Phase 1: PostgreSQL optional (POSTGRESQL_AVAILABLE flag)
+- Phase 2: Spatialite backend (temp tables, R-tree)
+- Phase 3: OGR backend (universal fallback)
+- Phase 4: UI refactoring (dark mode, themes)
+- Phase 5: Code quality (9.0/10 score)
+- Phase 6: Configuration v2.0 (metadata, migration)
+- Phase 7: Advanced features (undo/redo, favorites)
 
-### Phase 2 (🔄 In Progress)
-- Focus: Spatialite backend implementation
-- Create alternatives to materialized views
-- Maintain PostgreSQL performance when available
+### 🔄 Current Phase: Testing & Documentation
+- Target: 80% test coverage (currently ~70%)
+- Focus: Stability, documentation, user guide
 
-### Phase 3-5 (📋 Planned)
-- Tests and documentation
-- Optimization and caching
-- Beta testing and deployment
+### 📋 Future Phases (see .bmad-core/roadmap.md)
+- Phase 9: Performance optimization (caching)
+- Phase 10: Extensibility (plugin API)
+- Phase 11: Enterprise features
 
 ## Quick Reference
 
