@@ -6,17 +6,15 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.3.9
+version=3.4.0
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.3.9 - Critical Stability Fix
+about=FilterMate v3.4.0 - International Edition
 
- NEW in v2.3.9:
- - 🔥 CRITICAL: Fixed GEOS crash during OGR backend filtering
- - 🛡️ New geometry_safety.py module for GEOS-safe operations
- - ✅ validate_geometry_for_geos() - deep geometry validation
- - 🔧 create_geos_safe_layer() - filters invalid geometries
+ NEW in v3.4.0:
+ - 🌍 18 languages supported! Added: Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian
+ - 🔤 Enhanced language selection in configuration
  - 🐛 Fixed access violation crash on plugin reload
  - 🔒 Safe Qt timer callbacks with weak references
  - 📦 New object_safety.py module for Qt/QGIS object validation

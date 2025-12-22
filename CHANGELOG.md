@@ -2,10 +2,54 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [3.4.0] - 2025-12-22 - International Edition
+
+### 🌍 New Languages (11 Added!)
+
+- **Polish (Polski)** - `pl`
+- **Chinese Simplified (简体中文)** - `zh`
+- **Russian (Русский)** - `ru`
+- **Indonesian (Bahasa Indonesia)** - `id`
+- **Vietnamese (Tiếng Việt)** - `vi`
+- **Turkish (Türkçe)** - `tr`
+- **Hindi (हिन्दी)** - `hi`
+- **Finnish (Suomi)** - `fi`
+- **Danish (Dansk)** - `da`
+- **Swedish (Svenska)** - `sv`
+- **Norwegian (Norsk)** - `nb`
+
+### 📊 Total Languages: 18
+
+FilterMate now supports: English, French, German, Spanish, Italian, Dutch, Portuguese, Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian
+
+### 🔧 Configuration Updates
+
+- Updated `config.default.json` with all 18 language choices
+- Updated `config_schema.json` validation for new languages
+- Enhanced language selection dropdown in Configuration panel
+
+### 📁 New Translation Files
+
+- `i18n/FilterMate_pl.ts` - Polish
+- `i18n/FilterMate_zh.ts` - Chinese Simplified
+- `i18n/FilterMate_ru.ts` - Russian
+- `i18n/FilterMate_id.ts` - Indonesian
+- `i18n/FilterMate_vi.ts` - Vietnamese
+- `i18n/FilterMate_tr.ts` - Turkish
+- `i18n/FilterMate_hi.ts` - Hindi
+- `i18n/FilterMate_fi.ts` - Finnish
+- `i18n/FilterMate_da.ts` - Danish
+- `i18n/FilterMate_sv.ts` - Swedish
+- `i18n/FilterMate_nb.ts` - Norwegian
+
+---
+
 ## [2.3.9] - 2025-12-22 - Critical Stability Fix
 
 ### 🔥 Critical Bug Fixes
+
 - **Fixed GEOS Crash during OGR Backend Filtering** - Resolved fatal "access violation" crash
+
   - Crash occurred during `native:selectbylocation` with invalid geometries
   - Some geometries cause C++/GEOS level crashes that cannot be caught by Python
   - New validation prevents these geometries from reaching GEOS operations
@@ -15,7 +59,9 @@ All notable changes to FilterMate will be documented in this file.
   - Now uses weak references with safe callback wrappers
 
 ### 🛡️ New Modules
+
 - **`modules/geometry_safety.py`** - GEOS-safe geometry operations
+
   - `validate_geometry_for_geos()` - Deep validation: NaN/Inf check, isGeosValid(), buffer(0) test
   - `create_geos_safe_layer()` - Creates memory layer with only valid geometries
   - Graceful fallbacks: returns original layer if no geometries can be processed
@@ -29,7 +75,9 @@ All notable changes to FilterMate will be documented in this file.
   - `make_safe_callback(obj, method)` - Wrapper for QTimer callbacks
 
 ### 🔧 Technical Improvements
+
 - **Safe `selectbylocation` Wrapper** - `_safe_select_by_location()` in OGR backend
+
   - Validates intersect layer before spatial operations
   - Uses `QgsProcessingContext.GeometrySkipInvalid`
   - Creates GEOS-safe layers automatically
@@ -39,6 +87,7 @@ All notable changes to FilterMate will be documented in this file.
   - Virtual layers always copied to memory for safety
 
 ### 📁 Files Changed
+
 - `modules/geometry_safety.py` - New file for geometry validation
 - `modules/object_safety.py` - New file for object safety utilities
 - `modules/backends/ogr_backend.py` - Added validation and safe wrappers
@@ -49,18 +98,22 @@ All notable changes to FilterMate will be documented in this file.
 ## [2.3.8] - 2025-12-19 - Automatic Dark Mode Support
 
 ### ✨ New Features
+
 - **Automatic Dark Mode Detection** - Plugin now detects QGIS theme in real-time
+
   - Added `QGISThemeWatcher` class that monitors `QApplication.paletteChanged` signal
   - Automatically switches UI theme when user changes QGIS theme settings
   - Supports Night Mapping and other dark themes
 
 - **Icon Inversion for Dark Mode** - PNG icons now visible in dark themes
+
   - Added `IconThemeManager` class for theme-aware icon management
   - Automatic icon color inversion using `QImage.invertPixels()`
   - Support for `_black`/`_white` icon variants
   - Icon caching for optimal performance
 
 - **Filter Favorites System** - Save and reuse complex filter configurations
+
   - ⭐ **FavoritesManager** class for managing saved filters
   - 💾 **SQLite Persistence** - Favorites stored in database, organized by project UUID
   - 📊 **Usage Tracking** - Track application count and last used date
@@ -70,6 +123,7 @@ All notable changes to FilterMate will be documented in this file.
   - ⭐ **Favorites Indicator** - Header widget showing favorite count with quick access menu
 
 - **New `modules/icon_utils.py` Module**
+
   - `IconThemeManager`: Singleton for managing themed icons
   - `invert_pixmap()`: Inverts dark icons to white
   - `get_icon_for_theme()`: Returns appropriate icon for current theme
@@ -83,7 +137,9 @@ All notable changes to FilterMate will be documented in this file.
   - Max 50 favorites per project (oldest removed when limit exceeded)
 
 ### 🎨 UI/UX Improvements
+
 - **JsonView Theme Synchronization** - Config editor updates with main theme
+
   - Added `refresh_theme_stylesheet()` method to JsonView
   - Config editor now matches plugin theme
   - Smooth transition when switching themes
@@ -93,7 +149,9 @@ All notable changes to FilterMate will be documented in this file.
   - Logs theme transitions for debugging
 
 ### 🛠️ Technical Improvements
+
 - **Theme Detection** - Luminance-based algorithm (threshold: 128)
+
   - Uses `QgsApplication.palette().color(QPalette.Window).lightness()`
   - Consistent detection across QGIS versions
 
@@ -102,6 +160,7 @@ All notable changes to FilterMate will be documented in this file.
   - Prevents memory leaks and dangling signal connections
 
 ### 📁 Files Changed
+
 - `modules/icon_utils.py` - New file for icon theming
 - `modules/ui_styles.py` - Added `QGISThemeWatcher` class
 - `modules/qt_json_view/view.py` - Added `refresh_theme_stylesheet()` method
@@ -110,13 +169,16 @@ All notable changes to FilterMate will be documented in this file.
 ## [2.3.7] - 2025-12-18 - Project Change Stability Enhancement
 
 ### 🛡️ Stability Improvements
+
 - **Enhanced Project Change Handling** - Complete rewrite of `_handle_project_change()`
+
   - Forces cleanup of previous project state before reinitializing
   - Clears `PROJECT_LAYERS`, add_layers queue, and all state flags
   - Resets dockwidget layer references to prevent stale data
   - Added 300ms delay before reinitialization for QGIS signal processing
 
 - **New `cleared` Signal Handler** - Proper cleanup on project close/clear
+
   - Added `_handle_project_cleared()` method
   - Connected to `QgsProject.instance().cleared` signal
   - Ensures plugin state is reset when project is closed or new project created
@@ -131,7 +193,9 @@ All notable changes to FilterMate will be documented in this file.
   - New: `POSTGRESQL_EXTRA_DELAY_MS`: 1000
 
 ### ✨ New Features
+
 - **Force Reload Layers (F5 Shortcut)** - Manual layer reload when project change fails
+
   - Press F5 in dockwidget to force complete layer reload
   - Also available via `launchingTask.emit('reload_layers')`
   - Resets all state flags and reloads all vector layers from current project
@@ -145,6 +209,7 @@ All notable changes to FilterMate will be documented in this file.
   - Adds extra delay for PostgreSQL layers
 
 ### 🐛 Bug Fixes
+
 - **Fixed Project Change Not Reloading Layers** - More aggressive cleanup prevents stale state
 - **Fixed Dockwidget Not Updating After Project Switch** - Full reset of layer references
 - **Fixed Plugin Requiring Reload After Project Change** - Proper signal handling
@@ -154,6 +219,7 @@ All notable changes to FilterMate will be documented in this file.
   - Now manually triggers `add_layers` after cleanup instead of waiting for missed signal
 
 ### 📝 Technical Details
+
 ```python
 # Updated stability constants
 STABILITY_CONSTANTS = {
@@ -171,6 +237,7 @@ STABILITY_CONSTANTS = {
 ```
 
 ### 🔧 Files Changed
+
 - `filter_mate.py`: Rewrote `_handle_project_change()`, added `_handle_project_cleared()`, updated signal connections
 - `filter_mate_app.py`: Added `force_reload_layers()`, updated `STABILITY_CONSTANTS`, added `reload_layers` task
 - `filter_mate_dockwidget.py`: Added F5 shortcut via `_setup_keyboard_shortcuts()` and `_on_reload_layers_shortcut()`
@@ -180,7 +247,9 @@ STABILITY_CONSTANTS = {
 ## [2.3.6] - 2025-12-18 - Project & Layer Loading Stability
 
 ### 🛡️ Stability Improvements
+
 - **Centralized Timing Constants** - All timing values now in `STABILITY_CONSTANTS` dict
+
   - `MAX_ADD_LAYERS_QUEUE`: 50 (prevents memory overflow)
   - `FLAG_TIMEOUT_MS`: 30000 (30-second timeout for stale flags)
   - `LAYER_RETRY_DELAY_MS`: 500 (consistent retry delays)
@@ -188,12 +257,14 @@ STABILITY_CONSTANTS = {
   - `SIGNAL_DEBOUNCE_MS`: 100 (debounce rapid signals)
 
 - **Timestamp-Tracked Flags** - Automatic stale flag detection and reset
+
   - `_set_loading_flag(bool)`: Sets `_loading_new_project` with timestamp
   - `_set_initializing_flag(bool)`: Sets `_initializing_project` with timestamp
   - `_check_and_reset_stale_flags()`: Auto-resets flags after 30 seconds
   - Prevents plugin from getting stuck in "loading" state
 
 - **Layer Validation** - Better C++ object validation
+
   - `_is_layer_valid(layer)`: Checks if layer object is still valid
   - Prevents crashes from accessing deleted layer objects
   - Used in `_on_layers_added` and layer filtering
@@ -204,12 +275,14 @@ STABILITY_CONSTANTS = {
   - Graceful handling of rapid project/layer changes
 
 ### 🐛 Bug Fixes
+
 - **Fixed Stuck Flags** - Flags now auto-reset after 30-second timeout
 - **Fixed Queue Overflow** - add_layers queue capped at 50 items
 - **Fixed Error Recovery** - Flags properly reset on exception in `_handle_project_change`
 - **Fixed Negative Counter** - `_pending_add_layers_tasks` sanitized if negative
 
 ### 📝 Technical Details
+
 ```python
 # New stability constants
 STABILITY_CONSTANTS = {
@@ -226,6 +299,7 @@ STABILITY_CONSTANTS = {
 ## [2.3.5] - 2025-12-17 - Code Quality & Configuration v2.0
 
 ### 🛠️ Centralized Feedback System
+
 - **Unified Message Bar Notifications** - Consistent user feedback across all modules
   - New `show_info()`, `show_warning()`, `show_error()`, `show_success()` functions
   - Graceful fallback when iface is unavailable
@@ -233,6 +307,7 @@ STABILITY_CONSTANTS = {
   - Files updated: `filter_mate_dockwidget.py`, `widgets.py`, `config_editor_widget.py`
 
 ### ⚡ PostgreSQL Init Optimization
+
 - **5-50× Faster Layer Loading** - Smarter initialization for PostgreSQL layers
   - Check index existence before creating (avoids slow CREATE IF NOT EXISTS)
   - Connection caching per datasource (eliminates repeated connection tests)
@@ -240,7 +315,9 @@ STABILITY_CONSTANTS = {
   - Conditional ANALYZE only if table has no statistics (check pg_statistic first)
 
 ### ⚙️ Configuration System v2.0
+
 - **Integrated Metadata Structure** - Metadata embedded directly in parameters
+
   - No more fragmented `_*_META` sections
   - Pattern uniforme: `{value, choices, description, ...}`
   - `modules/config_metadata_handler.py` - Intelligent extraction and tooltips
@@ -248,6 +325,7 @@ STABILITY_CONSTANTS = {
   - Automatic backup before any migration
 
 - **Forced Backend Respect** - User choice strictly enforced
+
   - System always uses the backend chosen by user
   - No automatic fallback to OGR when a backend is forced
 
@@ -256,32 +334,38 @@ STABILITY_CONSTANTS = {
   - Backup creation before migration with rollback capability
 
 ### 🐛 Bug Fixes
+
 - **Fixed Syntax Errors** - Corrected unmatched parentheses in dockwidget module
 - **Fixed Bare Except Clauses** - Specific exception handling
 
 ### 🧹 Code Quality
+
 - **Score Improvement**: 8.5 → 8.9/10
 - **Obsolete Code Removal** - Removed 22 lines of dead commented code
 
 ---
 
 ## [2.3.4] - 2025-12-16 - PostgreSQL 2-Part Table Reference Fix
-  - Reset to defaults option
-  - Organized by categories with tooltips
+
+- Reset to defaults option
+- Organized by categories with tooltips
 
 ### ⚡ Performance Improvements
+
 - **~30% Faster PostgreSQL Layer Loading**
-  - Fast feature count using `pg_stat_user_tables` (500× faster than COUNT(*))
+  - Fast feature count using `pg_stat_user_tables` (500× faster than COUNT(\*))
   - UNLOGGED materialized views (30-50% faster creation)
   - Smart caching to eliminate double counting
   - Benchmarks: 1M features load in 32s vs 46s previously
 
 ### 🔧 Fixed
+
 - **Configuration Editor Save** (P0 - CRITICAL) - Config now persists correctly
 - **Validation Error Messages** (P1 - HIGH) - Clear user feedback for invalid values
 - **Improved Error Handling** - 40+ try/finally blocks for resource management
 
 ### 📊 Code Quality
+
 - **Complete Performance & Stability Audit** - Score: 9.0/10
   - Performance: 9/10 (excellent optimizations)
   - Stability: 9/10 (robust error handling)
@@ -289,7 +373,9 @@ STABILITY_CONSTANTS = {
   - Critical TODOs: 0 remaining (all implemented)
 
 ### 📚 Documentation (30+ new files)
+
 - **Configuration System**:
+
   - `docs/CONFIG_SYSTEM.md` - Complete system guide
   - `docs/CONFIG_MIGRATION.md` - Migration guide with examples
   - `docs/CONFIG_OVERVIEW.md` - System overview
@@ -304,6 +390,7 @@ STABILITY_CONSTANTS = {
   - `docs/AUDIT_IMPLEMENTATION_2025-12-17.md` - TODOs implementation
 
 ### ✅ Testing
+
 - 20+ new unit tests for configuration system
   - `tests/test_config_migration.py` - Migration tests
   - `tests/test_auto_activate_config.py` - AUTO_ACTIVATE behavior tests
@@ -312,6 +399,7 @@ STABILITY_CONSTANTS = {
   - `tools/demo_config_migration.py` - Migration demo
 
 ### 🎯 Technical Details
+
 - **New Modules**:
   - `modules/config_metadata.py` (~600 lines)
   - `modules/config_editor_widget.py` (~450 lines)
@@ -326,6 +414,7 @@ STABILITY_CONSTANTS = {
   - `.serena/memories/code_quality_improvements_2025.md` - Audit results
 
 ### 📚 Additional Documentation
+
 - `docs/CONFIG_DEVELOPER_GUIDE_2025-12-17.md` - Quick reference for developers
 - `docs/CONFIG_INTEGRATION_ANALYSIS_2025-12-17.md` - Complete integration analysis (47 usage cases)
 - `docs/CONFIG_USAGE_CASES_2025-12-17.md` - All usage patterns documented
@@ -334,6 +423,7 @@ STABILITY_CONSTANTS = {
 - `docs/fixes/FIX_AUTO_CONFIG_RESET_2025-12-17.md` - Auto-reset documentation
 
 ### ✅ New Tests
+
 - `tests/test_auto_config_reset.py` - Migration and reset tests
 - `tests/test_config_improved_structure.py` - Structure validation
 - `tests/test_forced_backend_respect.py` - Backend respect tests
@@ -343,11 +433,13 @@ STABILITY_CONSTANTS = {
   - Excellent error handling patterns established
 
 ### 📚 Documentation
+
 - `docs/AUDIT_PERFORMANCE_STABILITY_2025-12-17.md` - Complete audit report
 - `docs/AUDIT_IMPLEMENTATION_2025-12-17.md` - TODOs implementation details
 - Updated Serena memory: `code_quality_improvements_2025`
 
 ### 🎯 Technical Details
+
 - Modified: `modules/config_editor_widget.py` (+20 lines)
 - Added imports: `json`, `os`
 - Uses `ENV_VARS['CONFIG_JSON_PATH']` for config location
@@ -356,8 +448,9 @@ STABILITY_CONSTANTS = {
 ## [2.3.7] - 2025-12-17 - PostgreSQL Loading Optimizations
 
 ### ⚡ Performance Improvements
+
 - **~30% Faster PostgreSQL Layer Loading** - Major optimizations for large datasets
-  - **Fast Feature Count Estimation** - Using `pg_stat_user_tables` instead of COUNT(*)
+  - **Fast Feature Count Estimation** - Using `pg_stat_user_tables` instead of COUNT(\*)
     - 500× faster for large tables (5ms vs 2.5s for 1M features)
     - Automatic fallback to exact count if statistics unavailable
   - **UNLOGGED Materialized Views** - 30-50% faster MV creation
@@ -369,11 +462,13 @@ STABILITY_CONSTANTS = {
     - Single exact count only when needed for user reporting
 
 ### 📊 Benchmark Results (1M features, spatial intersection)
+
 - Total time: 46.1s → 32.1s (**30% improvement**)
 - Initial count: 2.5s → 0.005s (**500× faster**)
 - MV creation: 30s → 18s (**40% faster**)
 
 ### 📚 Documentation
+
 - New comprehensive guide: `docs/POSTGRESQL_LOADING_OPTIMIZATION.md`
   - Detailed problem analysis and solutions
   - Performance benchmarks by dataset size
@@ -381,6 +476,7 @@ STABILITY_CONSTANTS = {
 - Executive summary: `docs/POSTGRESQL_LOADING_OPTIMIZATION_SUMMARY.md`
 
 ### 🔧 Technical Details
+
 - New method: `PostgreSQLGeometricFilter._get_fast_feature_count()`
 - Modified: `apply_filter()` and `_apply_with_materialized_view()`
 - Configuration flag: `ENABLE_MV_UNLOGGED = True` (line 61)
@@ -388,6 +484,7 @@ STABILITY_CONSTANTS = {
 ## [2.3.6] - 2025-12-17 - Interactive Backend Selector
 
 ### ✨ New Features
+
 - **Interactive Backend Selector** - Backend indicator is now clickable to manually force a specific backend
   - Click on backend badge to open context menu with available backends
   - Forced backends marked with ⚡ lightning bolt symbol
@@ -407,6 +504,7 @@ STABILITY_CONSTANTS = {
   - One-click optimization for entire project
 
 ### 🎨 UI Improvements
+
 - **Enhanced Backend Indicator**
   - Added hover effect with cursor change to pointer
   - Improved tooltips showing backend info and "(Forced: backend)" when applicable
@@ -414,18 +512,21 @@ STABILITY_CONSTANTS = {
   - Visual feedback for forced backend with ⚡ symbol
 
 ### 🛠️ Technical Improvements
+
 - Added backend forcing logic to task parameter building
 - Backend preferences stored per layer ID in `forced_backends` dictionary
 - Task filtering respects forced backend when creating backend instances
 - Enhanced logging to show when forced backend is active
 
 ### 📝 Documentation
+
 - New comprehensive documentation: `docs/BACKEND_SELECTOR_FEATURE.md`
 - Covers user interaction, technical implementation, and testing guidelines
 
 ## [2.3.5] - 2025-12-17 - Stability & Backend Improvements
 
 ### 🐛 Bug Fixes
+
 - **CRITICAL: Fixed GeometryCollection error in OGR backend buffer operations** - When using `native:buffer` with OGR backend on GeoPackage layers, the buffer result could contain GeometryCollection type instead of MultiPolygon when buffered features don't overlap.
   - Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type GeometryCollection à une couche de type MultiPolygon"
   - Added automatic conversion from GeometryCollection to MultiPolygon in `_apply_buffer()` method
@@ -440,6 +541,7 @@ STABILITY_CONSTANTS = {
 - **Fixed GeoPackage geometric filtering** - GeoPackage layers now use fast Spatialite backend with direct SQL queries instead of slow OGR algorithms (10× performance improvement)
 
 ### 🛠️ Improvements
+
 - **Improved exception handling throughout codebase** - Replaced generic exception handlers with specific types for better debugging:
   - `postgresql_backend.py`: Cleanup errors now logged with specific exception types
   - `layer_management_task.py`: Connection close errors properly typed and logged
@@ -448,6 +550,7 @@ STABILITY_CONSTANTS = {
   - `filter_mate_app.py`: Connection close errors typed as `OSError, AttributeError`
 
 ### 📝 Technical Details
+
 - Modified `modules/backends/ogr_backend.py`:
   - Enhanced `_apply_buffer()` to check and convert GeometryCollection results
   - Added `_convert_geometry_collection_to_multipolygon()` method for geometry type conversion
@@ -459,6 +562,7 @@ STABILITY_CONSTANTS = {
 ## [2.3.4] - 2025-12-16 - PostgreSQL 2-Part Table Reference Fix & Smart Display Fields
 
 ### 🐛 Bug Fixes
+
 - **CRITICAL: Fixed PostgreSQL 2-part table reference error** - Filtering remote layers by spatial intersection with source layer using 2-part table references (`"table"."geom"` format without schema) now works correctly. Previously caused "missing FROM-clause entry" SQL error.
   - Added Pattern 4: Handle 2-part table references for regular tables (uses default "public" schema)
   - Added Pattern 2: Handle 2-part buffer references (`ST_Buffer("table"."geom", value)`)
@@ -469,6 +573,7 @@ STABILITY_CONSTANTS = {
 - **Fixed PostgreSQL virtual_id error** - PostgreSQL layers without a unique field/primary key now raise an informative error instead of attempting to use a `virtual_id` field in SQL queries.
 
 ### ✨ New Features
+
 - **Smart display field selection** - New layers now auto-select the best display field for exploring expressions
   - Prioritizes descriptive text fields (name, label, titre, description, etc.)
   - Falls back to primary key only when no descriptive field found
@@ -476,6 +581,7 @@ STABILITY_CONSTANTS = {
   - New `get_best_display_field()` utility function in `appUtils.py`
 
 ### 🛠️ Improvements
+
 - **Automatic ANALYZE on source tables** - PostgreSQL query planner now has proper statistics
   - Checks `pg_stats` for geometry column statistics before spatial queries
   - Runs ANALYZE automatically if stats are missing
@@ -483,9 +589,11 @@ STABILITY_CONSTANTS = {
 - **Reduced log noise** - Task cancellation now logs at Info level instead of Warning
 
 ### 🛠️ New Tools
+
 - **cleanup_postgresql_virtual_id.py** - Utility script to clean up corrupted layers from previous versions
 
 ### 📝 Technical Details
+
 - Modified `_parse_source_table_reference()` in `postgresql_backend.py` to handle 2-part references
 - Added `_ensure_source_table_stats()` method in `filter_task.py`
 - Buffer layer creation now forces `MultiPolygon` geometry type
@@ -494,25 +602,30 @@ STABILITY_CONSTANTS = {
 ## [2.3.3] - 2025-12-15 - Project Loading Auto-Activation Fix
 
 ### 🐛 Bug Fixes
+
 - **CRITICAL: Fixed plugin auto-activation on project load** - Plugin now correctly activates when loading a QGIS project containing vector layers, even if it was activated in a previous empty project. The `projectRead` and `newProjectCreated` signals are now properly connected to `_auto_activate_plugin()` instead of `_handle_project_change()`, enabling automatic detection and activation for new projects.
 
 ### 📝 Documentation
+
 - Updated plugin metadata, README, and Docusaurus documentation
 - Consolidated version synchronization across all files
 
 ## [2.3.1] - 2025-12-14 - Stability & Performance Improvements
 
 ### 🐛 Bug Fixes
+
 - **Critical stability improvements** - Enhanced error handling across all modules
 - **Filter operation optimization** - Improved performance for large datasets
 - **Memory management** - Better resource cleanup and connection handling
 
 ### 🛠️ Code Quality
+
 - **Enhanced logging** - More detailed debug information for troubleshooting
 - **Error recovery** - Improved graceful degradation in edge cases
 - **Test coverage** - Additional test cases for stability scenarios
 
 ### 📝 Documentation
+
 - **Version updates** - Synchronized version across all documentation files
 - **Configuration guides** - Updated setup instructions
 
@@ -523,7 +636,9 @@ STABILITY_CONSTANTS = {
 ### 🛠️ Code Quality
 
 #### Code Quality Audit (December 13, 2025)
+
 Comprehensive codebase audit with overall score **4.2/5**
+
 - **Architecture**: 4.5/5 - Excellent multi-backend factory pattern
 - **PEP 8 Compliance**: 4.5/5 - 95% compliant, all `!= None` and `== True/False` fixed
 - **Exception Handling**: 4/5 - Good coverage, ~100 `except Exception` remaining (logged appropriately)
@@ -532,7 +647,9 @@ Comprehensive codebase audit with overall score **4.2/5**
 - **No breaking changes**, 100% backward compatible
 
 #### Debug Statements Cleanup & PEP 8 Compliance
+
 Improved code quality by removing debug print statements and fixing style issues
+
 - **Debug prints removed**: All `print(f"FilterMate DEBUG: ...")` statements converted to `logger.debug()`
 - **Affected files**: `filter_mate_app.py`, `filter_mate_dockwidget.py`
 - **PEP 8 fixes**: Boolean comparisons corrected in `modules/qt_json_view/datatypes.py`
@@ -541,18 +658,21 @@ Improved code quality by removing debug print statements and fixing style issues
 ### 🐛 Bug Fixes
 
 #### QSplitter Freeze Fix (December 13, 2025)
+
 - **Issue**: Plugin would freeze QGIS when ACTION_BAR_POSITION set to 'left' or 'right'
 - **Root Cause**: `_setup_main_splitter()` created then immediately deleted a QSplitter
 - **Solution**: Skip splitter creation when action bar will be on the side
 - **Files Changed**: `filter_mate_dockwidget.py`
 
 #### Project Load Race Condition Fix (December 13, 2025)
+
 - **Issue**: Plugin would freeze when loading a project with layers
 - **Root Cause**: Multiple signal handlers triggering simultaneously
 - **Solution**: Added null checks and `_loading_new_project` flag guards
 - **Files Changed**: `filter_mate_app.py`, `filter_mate.py`
 
 #### Global Undo Remote Layers Fix (December 13, 2025)
+
 - **Issue**: Undo didn't restore all remote layers in multi-layer filtering
 - **Root Cause**: Pre-filter state only captured on first filter operation
 - **Solution**: Always push global state before each filter operation
@@ -561,7 +681,9 @@ Improved code quality by removing debug print statements and fixing style issues
 ### ✨ Enhancement
 
 #### Auto-Activation on Layer Addition or Project Load
+
 Improved user experience by automatically activating the plugin when needed
+
 - **Behavior**: Plugin now auto-activates when vector layers are added to an empty project
 - **Triggers**: Layer addition, project read, new project creation
 - **Smart Detection**: Only activates if there are vector layers
@@ -570,9 +692,11 @@ Improved user experience by automatically activating the plugin when needed
 ### 🚀 Major Features
 
 #### 0. Reduced Notification Fatigue - Configurable Feedback System ⭐ NEW
+
 Improved user experience by reducing unnecessary messages and adding verbosity control
+
 - **Problem Solved**: Plugin displayed 48+ messages during normal usage, creating notification overload
-- **Reduction Achieved**: 
+- **Reduction Achieved**:
   - Normal mode: **-42% messages** (52 vs 90 per session)
   - Minimal mode: **-92% messages** (7 vs 90 per session)
 - **Three Verbosity Levels**:
@@ -591,7 +715,9 @@ Improved user experience by reducing unnecessary messages and adding verbosity c
 ### 🚀 Major Features
 
 #### 1. Global Undo/Redo Functionality
+
 Intelligent undo/redo system with context-aware behavior
+
 - **Source Layer Only Mode**: Undo/redo applies only to the source layer when no remote layers are selected
 - **Global Mode**: When remote layers are selected and filtered, undo/redo restores the complete state of all layers simultaneously
 - **Smart Button States**: Undo/redo buttons automatically enable/disable based on history availability
@@ -602,11 +728,13 @@ Intelligent undo/redo system with context-aware behavior
 - **User Feedback**: Clear success/warning messages indicating which mode is active
 
 #### 2. Automatic Filter Preservation ⭐ NEW
+
 Critical feature preventing filter loss during layer switching and multi-step filtering workflows
+
 - **Problem Solved**: Previously, applying a new filter would replace existing filters, causing data loss when switching layers
 - **Solution**: Filters are now automatically combined using logical operators (AND by default)
 - **Default Behavior**: When no operator is specified, uses AND to preserve all existing filters
-- **Available Operators**: 
+- **Available Operators**:
   - AND (default): Intersection of filters - `(filter1) AND (filter2)`
   - OR: Union of filters - `(filter1) OR (filter2)`
   - AND NOT: Exclusion - `(filter1) AND NOT (filter2)`
@@ -623,6 +751,7 @@ Critical feature preventing filter loss during layer switching and multi-step fi
 ### 🛠️ Technical Improvements
 
 #### Undo/Redo System
+
 - **New Module Components**:
   - `GlobalFilterState` class in `modules/filter_history.py`: Manages multi-layer state snapshots
   - `handle_undo()` and `handle_redo()` methods in `filter_mate_app.py`: Intelligent undo/redo with conditional logic
@@ -630,6 +759,7 @@ Critical feature preventing filter loss during layer switching and multi-step fi
   - `currentLayerChanged` signal: Real-time button updates on layer switching
 
 #### Filter Preservation
+
 - **Modified Methods** in `modules/tasks/filter_task.py`:
   - `_initialize_source_filtering_parameters()`: Always captures existing subset string
   - `_combine_with_old_subset()`: Uses AND operator by default when no operator specified
@@ -638,13 +768,15 @@ Critical feature preventing filter loss during layer switching and multi-step fi
 - **Backwards Compatible**: No breaking changes, 100% compatible with existing projects
 
 ### 🧪 Testing
+
 - **New Test Suite**: `tests/test_filter_preservation.py`
   - 8+ unit tests covering all operator combinations
   - Tests for workflow scenarios (geometric → attribute filtering)
   - Tests for complex WHERE clause preservation
   - Tests for multi-layer operations
-  
+
 ### 📚 Documentation
+
 - Added `docs/UNDO_REDO_IMPLEMENTATION.md`: Comprehensive implementation guide with architecture, workflows, and use cases
 - Added `docs/FILTER_PRESERVATION.md`: Complete technical guide for filter preservation system
   - Architecture and logic explanation
@@ -656,10 +788,11 @@ Critical feature preventing filter loss during layer switching and multi-step fi
 ## [2.2.5] - 2025-12-08 - Automatic Geographic CRS Handling
 
 ### 🚀 Major Improvements
+
 - **Automatic EPSG:3857 Conversion for Geographic CRS**: FilterMate now automatically detects geographic coordinate systems (EPSG:4326, etc.) and switches to EPSG:3857 (Web Mercator) for all metric-based operations
   - **Why**: Ensures accurate buffer distances in meters instead of imprecise degrees
   - **Benefit**: 50m buffer is always 50 meters, regardless of latitude (no more 30-50% errors at high latitudes!)
-  - **Implementation**: 
+  - **Implementation**:
     - Zoom operations: Auto-convert to EPSG:3857 for metric buffer, then transform back
     - Filtering: Spatialite and OGR backends auto-convert for buffer calculations
     - Logging: Clear messages when CRS switching occurs (🌍 indicator)
@@ -667,11 +800,12 @@ Critical feature preventing filter loss during layer switching and multi-step fi
   - **Performance**: Minimal (~1ms per feature for transformation)
 
 ### 🐛 Bug Fixes
+
 - **Geographic Coordinates Zoom & Flash Fix**: Fixed critical issues with EPSG:4326 and other geographic coordinate systems
   - Issue #1: Feature geometry was modified in-place during transformation, causing flickering with `flashFeatureIds`
   - Issue #2: Buffer distances in degrees were imprecise (varied with latitude: 100m at equator ≠ 100m at 60° latitude)
   - Issue #3: No standardization of buffer calculations across different latitudes
-  - Solution: 
+  - Solution:
     - Use `QgsGeometry()` copy constructor to prevent original geometry modification
     - **Automatic switch to EPSG:3857 for all geographic CRS buffer operations**
     - Calculate buffer in EPSG:3857 (metric), then transform back to original CRS
@@ -680,7 +814,9 @@ Critical feature preventing filter loss during layer switching and multi-step fi
   - See `docs/fixes/geographic_coordinates_zoom_fix.md` for detailed technical documentation
 
 ### 📊 Technical Details
+
 **CRS Switching Logic**:
+
 ```python
 if layer_crs.isGeographic() and buffer_value > 0:
     # Auto-convert: EPSG:4326 → EPSG:3857 → buffer → back to EPSG:4326
@@ -692,13 +828,15 @@ if layer_crs.isGeographic() and buffer_value > 0:
 ```
 
 **Backends Updated**:
-- ✅ `filter_mate_dockwidget.py`: `zooming_to_features()` 
+
+- ✅ `filter_mate_dockwidget.py`: `zooming_to_features()`
 - ✅ `modules/appTasks.py`: `prepare_spatialite_source_geom()`
 - ✅ `modules/appTasks.py`: `prepare_ogr_source_geom()` (already had it!)
 
 ## [2.2.4] - 2025-12-08 - Bug Fix Release
 
 ### 🐛 Bug Fixes
+
 - **CRITICAL FIX: Spatialite Expression Quotes**: Fixed bug where double quotes around field names were removed during expression conversion
   - Issue: `"HOMECOUNT" > 100` was incorrectly converted to `HOMECOUNT > 100`
   - Impact: Filters failed on Spatialite layers with case-sensitive field names
@@ -707,6 +845,7 @@ if layer_crs.isGeographic() and buffer_value > 0:
   - Added comprehensive test suite in `tests/test_spatialite_expression_quotes.py`
 
 ### 🧪 Testing
+
 - Added comprehensive test suite for Spatialite expression conversion
 - Validated field name quote preservation across various scenarios
 - Ensured backward compatibility with existing expressions
@@ -714,6 +853,7 @@ if layer_crs.isGeographic() and buffer_value > 0:
 ## [2.2.4] - 2025-12-08 - Production Release
 
 ### 🚀 Release Highlights
+
 - **Production-Ready**: Stable release with all v2.2.x improvements
 - **Color Harmonization**: Complete WCAG AA/AAA accessibility compliance
 - **Configuration System**: Real-time JSON reactivity and dynamic UI
@@ -721,7 +861,9 @@ if layer_crs.isGeographic() and buffer_value > 0:
 - **Enhanced Stability**: Robust error handling and crash prevention
 
 ### 📦 What's Included
+
 All features from v2.2.0 through v2.2.3:
+
 - Color harmonization with +300% frame contrast
 - WCAG 2.1 AA/AAA text contrast (17.4:1 primary, 8.86:1 secondary)
 - Real-time configuration updates without restart
@@ -731,7 +873,9 @@ All features from v2.2.0 through v2.2.3:
 - Enhanced visual hierarchy and reduced eye strain
 
 ### 🎯 Target Audience
+
 Production users requiring:
+
 - Accessibility compliance (WCAG 2.1)
 - Multi-backend flexibility
 - Long work session comfort
@@ -740,12 +884,13 @@ Production users requiring:
 ## [2.2.3] - 2025-12-08 - Color Harmonization & Accessibility
 
 ### 🎨 UI Improvements - Color Harmonization Excellence
+
 - **Enhanced Visual Distinction**: Significantly improved contrast between UI elements
 - **WCAG 2.1 Compliance**: AA/AAA accessibility standards met for all text
   - Primary text contrast: 17.4:1 (AAA compliance)
   - Secondary text contrast: 8.86:1 (AAA compliance)
   - Disabled text: 4.6:1 (AA compliance)
-- **Theme Refinements**: 
+- **Theme Refinements**:
   - `default` theme: Darker frame backgrounds (#EFEFEF), clearer borders (#D0D0D0)
   - `light` theme: Better widget contrast (#F8F8F8), visible borders (#CCCCCC)
 - **Accent Colors**: Deeper blue (#1565C0) for better contrast on white backgrounds
@@ -753,17 +898,20 @@ Production users requiring:
 - **Border Visibility**: +40% darker borders for clearer field delimitation
 
 ### 📊 Accessibility & Ergonomics
+
 - Reduced eye strain with optimized color contrasts
 - Clear visual hierarchy throughout the interface
 - Better distinction for users with mild visual impairments
 - Long work session comfort improved
 
 ### 🧪 Testing & Documentation
+
 - **New Test Suite**: `test_color_contrast.py` validates WCAG compliance
 - **Visual Preview**: `generate_color_preview.py` creates interactive HTML comparison
 - **Documentation**: Complete color harmonization guide in `docs/COLOR_HARMONIZATION.md`
 
 ### ✨ Configuration Features (from v2.2.2)
+
 - Real-time configuration updates without restart
 - Dynamic UI profile switching (compact/normal/auto)
 - Live icon updates and auto-save
@@ -772,8 +920,9 @@ Production users requiring:
 ## [2.2.2] - 2025-12-08 - Configuration Reactivity & Initial Color Work
 
 ### 🎨 UI Improvements - Color Harmonization
+
 - **Enhanced Visual Distinction**: Improved contrast between UI elements in normal mode
-- **Theme Refinements**: 
+- **Theme Refinements**:
   - `default` theme: Darker frame backgrounds (#EFEFEF), clearer borders (#D0D0D0)
   - `light` theme: Better widget contrast (#F8F8F8), visible borders (#CCCCCC)
 - **Text Contrast**: WCAG AAA compliance (17.4:1 for primary text)
@@ -785,29 +934,34 @@ Production users requiring:
 - **Border Visibility**: +40% darker borders for clearer field delimitation
 
 ### 📊 Accessibility Improvements
+
 - WCAG 2.1 AA/AAA compliance for all text elements
 - Reduced eye strain with optimized color contrasts
 - Clear visual hierarchy throughout the interface
 - Better distinction for users with mild visual impairments
 
 ### 🧪 Testing & Documentation
+
 - **New Test Suite**: `test_color_contrast.py` validates WCAG compliance
 - **Visual Preview**: `generate_color_preview.py` creates interactive HTML comparison
 - **Documentation**: Complete color harmonization guide in `docs/COLOR_HARMONIZATION.md`
 
 ### ✨ New Features - Configuration Reactivity
+
 - **Real-time Configuration Updates**: JSON tree view changes now auto-apply without restart
 - **Dynamic UI Profile Switching**: Instant switching between compact/normal/auto modes
 - **Live Icon Updates**: Configuration icon changes reflected immediately
 - **Automatic Saving**: All config changes auto-save to config.json
 
 ### 🎯 Enhanced Configuration Types
+
 - **ChoicesType Integration**: Dropdown selectors for key config fields
   - UI_PROFILE, ACTIVE_THEME, THEME_SOURCE dropdowns
   - STYLES_TO_EXPORT, DATATYPE_TO_EXPORT format selectors
 - **Type Safety**: Invalid values prevented at UI level
 
 ### 🔧 Technical Improvements
+
 - **Signal Management**: Activated itemChanged signal for config handler
 - **Smart Path Detection**: Auto-detection of configuration change type
 - **New Module**: config_helpers.py with get/set config utilities
@@ -818,6 +972,7 @@ Production users requiring:
 ### ✨ New Features
 
 #### Real-time Configuration Updates
+
 - **JSON Tree View Reactivity**: Configuration changes in the JSON tree view are now automatically detected and applied
 - **Dynamic UI Profile Switching**: Change between `compact`, `normal`, and `auto` modes without restarting
   - Changes to `UI_PROFILE` in config instantly update all widget dimensions
@@ -827,6 +982,7 @@ Production users requiring:
 - **Automatic Saving**: All configuration changes are automatically saved to `config.json`
 
 #### Enhanced Configuration Types
+
 - **ChoicesType Integration**: Key configuration fields now use dropdown selectors in the JSON tree view
   - `UI_PROFILE`: Select from auto/compact/normal with visual dropdown
   - `ACTIVE_THEME`: Choose from auto/default/dark/light themes
@@ -839,6 +995,7 @@ Production users requiring:
 ### 🔧 Technical Improvements
 
 #### Signal Management
+
 - **Activated itemChanged Signal**: Connected `JsonModel.itemChanged` signal to configuration handler
 - **Smart Path Detection**: Automatic detection of configuration path to determine change type
 - **ChoicesType Support**: Proper handling of dict-based choice values `{"value": "...", "choices": [...]}`
@@ -846,6 +1003,7 @@ Production users requiring:
 - **UI_CONFIG Integration**: Proper integration with `UIConfig` system and `DisplayProfile` enum
 
 #### Configuration Helpers
+
 - **New Module**: `modules/config_helpers.py` with utility functions for config access
   - `get_config_value()`: Read values with automatic ChoicesType extraction
   - `set_config_value()`: Write values with validation
@@ -856,10 +1014,11 @@ Production users requiring:
 - **Type Safety**: Validation prevents invalid choices
 
 #### Code Quality
-- **New Tests**: 
+
+- **New Tests**:
   - `test_config_json_reactivity.py` with 9 tests for reactivity
   - `test_choices_type_config.py` with 19 tests for ChoicesType
-- **Documentation**: 
+- **Documentation**:
   - `docs/CONFIG_JSON_REACTIVITY.md` - Reactivity architecture
   - `docs/CONFIG_JSON_IMPROVEMENTS.md` - Configuration improvements roadmap
 - **Extensibility**: Architecture ready for future reactive configuration types (themes, language, styles)
@@ -906,12 +1065,14 @@ Production users requiring:
 ### 🔧 Stability Enhancements
 
 #### Qt JSON View Crash Prevention
+
 - **Improved Error Handling**: Enhanced crash prevention in Qt JSON view component
 - **Tab Widget Safety**: Better handling of tab widget errors during initialization
 - **Theme Integration**: More robust QGIS theme detection and synchronization
 - **Resource Management**: Optimized memory usage and cleanup
 
 #### UI/UX Refinements
+
 - **Error Recovery**: Graceful degradation when UI components fail
 - **Visual Consistency**: Improved theme synchronization across all widgets
 - **Feedback Messages**: Enhanced user notifications for edge cases
@@ -946,6 +1107,7 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 ### ✨ Major Features
 
 #### Complete Backend Architecture
+
 - **PostgreSQL Backend**: Materialized views, server-side operations (>50k features)
 - **Spatialite Backend**: Temporary tables, R-tree indexes (10k-50k features)
 - **OGR Backend**: Universal fallback for all data sources (<10k features)
@@ -953,6 +1115,7 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 - **Performance Warnings**: Intelligent recommendations for optimal backend usage
 
 #### Advanced UI System
+
 - **Dynamic Dimensions**: Adaptive interface based on screen resolution
   - Compact mode (<1920x1080): Optimized for laptops
   - Normal mode (≥1920x1080): Comfortable spacing
@@ -961,12 +1124,14 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 - **Responsive Design**: All widgets adapt to available space
 
 #### Robust Error Handling
+
 - **Geometry Repair**: 5-strategy automatic repair system
 - **SQLite Lock Management**: Retry mechanism with exponential backoff (5 attempts)
 - **Connection Pooling**: Optimized database connection management
 - **Graceful Degradation**: Fallback mechanisms for all operations
 
 #### Filter History System
+
 - **In-Memory Management**: No database overhead
 - **Full Undo/Redo**: Multiple levels of history
 - **State Persistence**: Layer-specific filter history
@@ -975,12 +1140,14 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 ### 🔧 Improvements
 
 #### Performance Optimizations
+
 - Query predicate ordering (2.5x faster)
 - Intelligent caching for repeated queries
 - Optimized spatial index usage
 - Reduced memory footprint
 
 #### User Experience
+
 - Clear performance warnings with recommendations
 - Better error messages with actionable guidance
 - Visual feedback during long operations
@@ -1019,6 +1186,7 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 ### 🎨 UI/UX Improvements - Dynamic Adaptive Interface
 
 #### Comprehensive Dynamic Dimensions System
+
 - **Adaptive UI**: Interface automatically adjusts to screen resolution
   - Compact mode (< 1920x1080): Optimized for laptops and small screens
   - Normal mode (≥ 1920x1080): Comfortable spacing for large displays
@@ -1030,6 +1198,7 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 - **Layouts**: Dynamic spacing and margins (3/2px compact / 6/4px normal)
 
 #### Implementation Details
+
 - Added 8 new dimension categories in `ui_config.py`
 - New `apply_dynamic_dimensions()` method applies settings at runtime
 - Automatic detection and application based on screen resolution
@@ -1037,18 +1206,21 @@ FilterMate 2.1.0 marks the stable production release with full multi-backend arc
 - ~15-20% vertical space saved in compact mode
 
 #### Space Optimization (Compact Mode)
+
 - Widget heights: -20% (30px → 24px)
 - Tool buttons: -36% (28px → 18px)
 - Frame heights: -20% reduction
 - Widget keys width: -18% reduction
 
 **Files Modified**:
+
 - `modules/ui_config.py`: +52 lines (new dimensions)
 - `filter_mate_dockwidget.py`: +113 lines (apply_dynamic_dimensions)
 - `filter_mate_dockwidget_base.ui`: Tool buttons constraints updated
 - `fix_tool_button_sizes.py`: Utility script for UI modifications
 
 **Documentation Added**:
+
 - `docs/UI_DYNAMIC_PARAMETERS_ANALYSIS.md`: Complete analysis
 - `docs/IMPLEMENTATION_DYNAMIC_DIMENSIONS.md`: Implementation details
 - `docs/DEPLOYMENT_GUIDE_DYNAMIC_DIMENSIONS.md`: Deployment guide
@@ -1073,23 +1245,27 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 ### 🐛 Critical Bug Fixes
 
 #### Undo/Redo Functionality Restored
+
 - Fixed undo button clearing all filters instead of restoring previous state
 - Integrated HistoryManager for proper state restoration
 - Enabled multiple undo/redo operations
 - Preserved in-memory history without database deletion
 
 #### Field Selection Fixed
+
 - All fields now visible in exploring dropdowns (including "id", "fid")
 - Fixed field filters persistence across layer switches
 - Consistent field availability in all selection modes
 
 #### SQLite Database Lock Errors Eliminated
+
 - Implemented retry mechanism with exponential backoff
 - Increased timeout from 30s to 60s
 - New `sqlite_execute_with_retry()` utility
 - Comprehensive test coverage for concurrent operations
 
 #### Buffer Operations Robustness
+
 - Fixed crashes on invalid geometries
 - Implemented 5-strategy geometry repair system
 - Fixed subset string handling for OGR layers
@@ -1137,6 +1313,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 ### 🐛 Bug Fixes
 
 #### Field Selection in Exploring GroupBoxes Now Includes All Fields (e.g., "id")
+
 - **Problem**: Some fields (like "id") were not selectable in exploring groupboxes
   - Field filters were applied during initialization with `QgsFieldProxyModel.AllTypes`
   - However, filters were NOT reapplied when switching layers in `current_layer_changed()`
@@ -1153,6 +1330,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
   - `filter_mate_dockwidget.py`: Added `setFilters(QgsFieldProxyModel.AllTypes)` in `current_layer_changed()`
 
 #### Undo Button (Unfilter) Now Correctly Restores Previous Filter State
+
 - **Problem**: Undo button cleared all filters instead of restoring the previous filter state
   - New `HistoryManager` system implemented for in-memory history tracking
   - Old database-based system in `FilterEngineTask._unfilter_action()` still active
@@ -1175,6 +1353,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 - **Note**: Associated layers are cleared during undo (future enhancement: restore their filters too)
 
 #### SQLite Database Lock Error Fix
+
 - **Problem**: `sqlite3.OperationalError: database is locked` when multiple concurrent operations
   - Error occurred in `insert_properties_to_spatialite()` during layer management
   - Multiple QgsTasks writing to same database simultaneously caused locks
@@ -1199,6 +1378,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 - **Documentation**: See `docs/SQLITE_LOCK_FIX.md` for details
 
 #### Critical Subset String Handling for Buffer Operations
+
 - **Problem**: Buffer operations failed on OGR layers with active subset strings (single selection mode)
   - Error: "Both buffer methods failed... Impossible d'écrire l'entité dans OUTPUT"
   - QGIS processing algorithms don't always handle subset strings correctly
@@ -1214,6 +1394,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
   - ✅ Works with all OGR providers (Shapefile, GeoPackage, etc.)
 
 #### Critical Buffer Operation Error Fix
+
 - **Problem**: Buffer operations failed completely when encountering invalid geometries
   - Error: "Both buffer methods failed. QGIS: Impossible d'écrire l'entité dans OUTPUT, Manual: No valid geometries could be buffered"
   - Both QGIS algorithm and manual fallback failed
@@ -1228,10 +1409,10 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
   - **Enhanced validation**: Check for null/empty geometries after repair
   - **Skip invalid features**: Continue processing valid features even if some fail
   - **Detailed logging**: Shows which repair strategy succeeded
-  - **Better error messages**: 
+  - **Better error messages**:
     - CRS hints for geographic coordinate systems
     - Geometry repair suggestions with QGIS tool references
-- **Impact**: 
+- **Impact**:
   - ✅ Fixes crash on layers with invalid geometries
   - ✅ Multiple repair strategies increase success rate
   - ✅ Graceful degradation with clear user feedback
@@ -1239,7 +1420,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
   - ⚠️ Note: Convex hull/bbox may alter geometry shapes (only as last resort)
 - **Tests**: New comprehensive test suite in `tests/test_buffer_error_handling.py`
 - **Documentation**: See `docs/BUFFER_ERROR_FIX.md`
-- **Diagnostic tools**: 
+- **Diagnostic tools**:
   - `diagnose_geometry.py`: Analyze problematic geometries
   - `GEOMETRY_DIAGNOSIS_GUIDE.md`: Complete troubleshooting guide
 
@@ -1248,6 +1429,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 ### 🐛 Bug Fixes
 
 #### Invalid Geometry Repair
+
 - **Problem**: Geometric filtering with buffer crashed on OGR layers (GeoPackage, Shapefile) when geometries were invalid
   - Error: "Both buffer methods failed... No valid geometries could be buffered. Valid after buffer: 0"
 - **Solution**: Added automatic geometry validation and repair before buffer operations
@@ -1255,7 +1437,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
   - Uses `geom.makeValid()` to repair invalid geometries automatically
   - Transparent to user - repairs happen automatically
   - Detailed logging of repair operations
-- **Impact**: 
+- **Impact**:
   - ✅ Fixes crash on OGR layers with invalid geometries
   - ✅ No performance impact if all geometries valid
   - ✅ Robust error handling with detailed diagnostics
@@ -1265,6 +1447,7 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 ### 🎯 Performance - Final Optimization (Predicate Ordering)
 
 #### Predicate Ordering Optimization
+
 - **Spatialite Backend** (`modules/backends/spatialite_backend.py`):
   - ✅ Predicates now ordered by selectivity (intersects → within → contains → overlaps → touches)
   - ✅ More selective predicates evaluated first = fewer expensive geometry operations
@@ -1272,7 +1455,9 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
   - ✅ Short-circuit evaluation reduces CPU time
 
 #### Performance Validation
+
 - **New Tests** (`tests/test_performance.py`):
+
   - ✅ Unit tests for all optimization features
   - ✅ Regression tests (fallback scenarios)
   - ✅ Integration tests
@@ -1289,16 +1474,19 @@ FilterMate 2.0 represents a major milestone: a stable, production-ready multi-ba
 Lors de l'implémentation, nous avons découvert que **toutes les optimisations majeures étaient déjà en place** :
 
 1. **✅ OGR Spatial Index** - Déjà implémenté
+
    - `_ensure_spatial_index()` crée automatiquement les index
    - Utilisé dans `apply_filter()` pour datasets 10k+
    - Gain: 4× plus rapide
 
 2. **✅ OGR Large Dataset Optimization** - Déjà implémenté
+
    - `_apply_filter_large()` pour datasets ≥10k features
    - Attribut temporaire au lieu de liste d'IDs massive
    - Gain: 3× plus rapide
 
 3. **✅ Geometry Cache** - Déjà implémenté
+
    - `SourceGeometryCache` dans `appTasks.py`
    - Évite recalcul pour multi-layer filtering
    - Gain: 5× sur 5 layers
@@ -1310,12 +1498,12 @@ Lors de l'implémentation, nous avons découvert que **toutes les optimisations 
 
 #### Performance Globale Actuelle
 
-| Scénario | Performance | Status |
-|----------|-------------|--------|
-| Spatialite 1k features | <1s | ✅ Optimal |
-| Spatialite 5k features | ~2s | ✅ Excellent |
-| OGR Shapefile 10k | ~3s | ✅ Excellent |
-| 5 layers filtrés | ~7s | ✅ Excellent |
+| Scénario               | Performance | Status       |
+| ---------------------- | ----------- | ------------ |
+| Spatialite 1k features | <1s         | ✅ Optimal   |
+| Spatialite 5k features | ~2s         | ✅ Excellent |
+| OGR Shapefile 10k      | ~3s         | ✅ Excellent |
+| 5 layers filtrés       | ~7s         | ✅ Excellent |
 
 **Toutes les optimisations critiques sont maintenant actives!**
 
@@ -1326,7 +1514,9 @@ Lors de l'implémentation, nous avons découvert que **toutes les optimisations 
 ### 🚀 Performance - Phase 3 Optimizations (Prepared Statements SQL)
 
 #### SQL Query Performance Boost
+
 - **Prepared Statements Module** (`modules/prepared_statements.py`):
+
   - ✅ New `PreparedStatementManager` base class for SQL optimization
   - ✅ `PostgreSQLPreparedStatements` with named prepared statements
   - ✅ `SpatialitePreparedStatements` with parameterized queries
@@ -1335,6 +1525,7 @@ Lors de l'implémentation, nous avons découvert que **toutes les optimisations 
   - ✅ Automatic query plan caching in database
 
 - **Integration in FilterEngineTask** (`modules/appTasks.py`):
+
   - ✅ Modified `_insert_subset_history()` to use prepared statements
   - ✅ Modified `_reset_action_postgresql()` to use prepared statements
   - ✅ Modified `_reset_action_spatialite()` to use prepared statements
@@ -1350,17 +1541,18 @@ Lors de l'implémentation, nous avons découvert que **toutes les optimisations 
 
 #### Expected Performance Gains (Phase 3)
 
-| Operation | Before | After | Gain |
-|-----------|--------|-------|------|
-| Insert subset history (10×) | 100ms | 70ms | **30%** |
-| Delete subset history | 50ms | 35ms | **30%** |
-| Insert layer properties (100×) | 500ms | 350ms | **30%** |
-| Batch operations | N×T | N×(0.7T) | **~25%** |
+| Operation                      | Before | After    | Gain     |
+| ------------------------------ | ------ | -------- | -------- |
+| Insert subset history (10×)    | 100ms  | 70ms     | **30%**  |
+| Delete subset history          | 50ms   | 35ms     | **30%**  |
+| Insert layer properties (100×) | 500ms  | 350ms    | **30%**  |
+| Batch operations               | N×T    | N×(0.7T) | **~25%** |
 
 **Key Insight:** SQL parsing overhead is eliminated for repeated queries.
 Database server caches the query plan and only parameters change.
 
 #### Technical Details
+
 - **PostgreSQL:** Uses `PREPARE` and `EXECUTE` with named statements
 - **Spatialite:** Uses parameterized queries with `?` placeholders
 - **Complexity:** Parse once, execute many (vs parse every time)
@@ -1382,6 +1574,7 @@ ps_manager.insert_subset_history(
 ```
 
 #### Tests
+
 - ✅ 25+ unit tests created (`tests/test_prepared_statements.py`)
 - ✅ Coverage for both PostgreSQL and Spatialite managers
 - ✅ SQL injection prevention tests
@@ -1394,24 +1587,22 @@ ps_manager.insert_subset_history(
 ### 🚀 Performance - Phase 2 Optimizations (Spatialite Temp Tables)
 
 #### Spatialite Backend Major Performance Boost
+
 - **Temporary Table with Spatial Index** (`modules/backends/spatialite_backend.py`):
   - ✅ New `_create_temp_geometry_table()` method creates indexed temp table
   - ✅ Replaces inline WKT parsing (O(n × m)) with indexed JOIN (O(n log n))
   - ✅ **Gain: 10-50× faster** on medium-large datasets (5k-20k features)
   - ✅ Automatic decision: uses temp table for WKT >50KB
   - ✅ Spatial index on temp table for maximum performance
-  
 - **Smart Strategy Selection**:
   - ✅ Detects WKT size and chooses optimal method
   - ✅ Temp table for large WKT (>50KB or >100KB based on size)
   - ✅ Inline WKT for small datasets (backward compatible)
   - ✅ Fallback to inline if temp table creation fails
-  
 - **Database Path Extraction**:
   - ✅ New `_get_spatialite_db_path()` method
   - ✅ Robust parsing with multiple fallback strategies
   - ✅ Supports various Spatialite source string formats
-  
 - **Cleanup Management**:
   - ✅ New `cleanup()` method to drop temp tables
   - ✅ Automatic connection management
@@ -1419,17 +1610,18 @@ ps_manager.insert_subset_history(
 
 #### Expected Performance Gains (Phase 2)
 
-| Scenario | Before | After | Gain |
-|----------|--------|-------|------|
-| Spatialite 1k features | 5s | 0.5s | **10×** |
-| Spatialite 5k features | 15s | 2s | **7.5×** |
-| Spatialite 10k features | timeout | 5s | **∞** |
-| Spatialite 20k features | timeout | 8s | **∞** |
+| Scenario                | Before  | After | Gain     |
+| ----------------------- | ------- | ----- | -------- |
+| Spatialite 1k features  | 5s      | 0.5s  | **10×**  |
+| Spatialite 5k features  | 15s     | 2s    | **7.5×** |
+| Spatialite 10k features | timeout | 5s    | **∞**    |
+| Spatialite 20k features | timeout | 8s    | **∞**    |
 
 **Key Insight:** WKT inline parsing becomes bottleneck above 1k features.
 Temp table eliminates this bottleneck entirely.
 
 #### Technical Details
+
 - **Before:** `GeomFromText('...2MB WKT...')` parsed for EACH row comparison
 - **After:** Single INSERT into indexed temp table, then fast indexed JOINs
 - **Complexity:** O(n × m) → O(n log n) where m = WKT size
@@ -1442,7 +1634,9 @@ Temp table eliminates this bottleneck entirely.
 ### 🚀 Performance - Phase 1 Optimizations (Quick Wins)
 
 #### Optimized OGR Backend Performance
+
 - **Automatic Spatial Index Creation** (`modules/backends/ogr_backend.py`):
+
   - ✅ New `_ensure_spatial_index()` method automatically creates spatial indexes
   - ✅ Creates .qix files for Shapefiles, internal indexes for other formats
   - ✅ **Gain: 4-100× faster** spatial queries depending on dataset size
@@ -1450,6 +1644,7 @@ Temp table eliminates this bottleneck entirely.
   - ✅ Performance boost especially visible for 10k+ features datasets
 
 - **Smart Filtering Strategy Selection**:
+
   - ✅ Refactored `apply_filter()` to detect dataset size automatically
   - ✅ `_apply_filter_standard()`: Optimized for <10k features (standard method)
   - ✅ `_apply_filter_large()`: Optimized for ≥10k features (uses temp attribute)
@@ -1462,7 +1657,9 @@ Temp table eliminates this bottleneck entirely.
   - ✅ Comprehensive error handling with fallbacks
 
 #### Source Geometry Caching System
+
 - **New SourceGeometryCache Class** (`modules/appTasks.py`):
+
   - ✅ LRU cache with max 10 entries to prevent memory issues
   - ✅ Cache key: `(feature_ids, buffer_value, target_crs_authid)`
   - ✅ **Gain: 5× when filtering 5+ layers** with same source selection
@@ -1477,17 +1674,18 @@ Temp table eliminates this bottleneck entirely.
 
 #### Expected Performance Gains (Phase 1)
 
-| Scenario | Before | After | Gain |
-|----------|--------|-------|------|
-| OGR 1k features | 5s | 2s | **2.5×** |
-| OGR 10k features | 15s | 4s | **3.75×** |
-| OGR 50k features | timeout | 12s | **∞** (now works!) |
-| 5 layers filtering | 15s | 7s | **2.14×** |
-| 10 layers filtering | 30s | 12s | **2.5×** |
+| Scenario            | Before  | After | Gain               |
+| ------------------- | ------- | ----- | ------------------ |
+| OGR 1k features     | 5s      | 2s    | **2.5×**           |
+| OGR 10k features    | 15s     | 4s    | **3.75×**          |
+| OGR 50k features    | timeout | 12s   | **∞** (now works!) |
+| 5 layers filtering  | 15s     | 7s    | **2.14×**          |
+| 10 layers filtering | 30s     | 12s   | **2.5×**           |
 
 **Overall:** 3-5× improvement on average, with support for datasets up to 50k+ features.
 
 #### Documentation
+
 - ✅ `docs/PHASE1_IMPLEMENTATION_COMPLETE.md`: Complete implementation guide
 - ✅ `docs/PERFORMANCE_ANALYSIS.md`: Technical analysis and bottlenecks
 - ✅ `docs/PERFORMANCE_OPTIMIZATIONS_CODE.md`: Code examples and patterns
@@ -1501,13 +1699,16 @@ Temp table eliminates this bottleneck entirely.
 ### 🔧 Fixed - Filtering Workflow Improvements
 
 #### Improved Filtering Sequence & Validation
+
 - **Sequential Filtering Logic** (`modules/appTasks.py:execute_filtering()`):
+
   - ✅ Source layer is now ALWAYS filtered FIRST before distant layers
   - ✅ Distant layers are ONLY filtered if source layer filtering succeeds
   - ✅ Immediate abort if source filtering fails (prevents inconsistent state)
   - ✅ Clear validation of source layer result before proceeding
 
 - **Selection Mode Detection & Logging**:
+
   - ✅ **SINGLE SELECTION**: Automatically detected when 1 feature selected
   - ✅ **MULTIPLE SELECTION**: Detected when multiple features checked
   - ✅ **CUSTOM EXPRESSION**: Detected when using filter expression
@@ -1515,6 +1716,7 @@ Temp table eliminates this bottleneck entirely.
   - ✅ Early error detection if no valid selection mode
 
 - **Enhanced Error Handling**:
+
   - ✅ Structured, visual logging with success (✓), error (✗), and warning (⚠) indicators
   - ✅ Step-by-step progress: "STEP 1/2: Filtering SOURCE LAYER"
   - ✅ Actionable error messages explain WHY filtering failed
@@ -1528,6 +1730,7 @@ Temp table eliminates this bottleneck entirely.
   - ✅ Logs help users understand exactly what happened at each step
 
 #### Benefits
+
 - 🎯 **Reliability**: Guaranteed consistent state (source filtered before distant)
 - 🐛 **Debugging**: Clear logs make issues immediately visible
 - ⚡ **Performance**: Fast fail if source filtering doesn't work
@@ -1542,7 +1745,9 @@ Temp table eliminates this bottleneck entirely.
 Combined implementation of highest-priority improvements across UX, logging, testing, and new features.
 
 #### Added - URGENCE 1 (User Experience)
+
 - **Backend-Aware User Feedback** (`modules/feedback_utils.py`, ~240 lines): Visual backend indicators
+
   - `show_backend_info()`: Display which backend (PostgreSQL/Spatialite/OGR) is processing operations
   - `show_progress_message()`: Informative progress messages for long operations
   - `show_success_with_backend()`: Success messages include backend and operation details
@@ -1554,9 +1759,10 @@ Combined implementation of highest-priority improvements across UX, logging, tes
     - ⚡ Memory (temporary)
 
 - **Enhanced Progress Tracking**: Real-time operation visibility
+
   - Task descriptions update in QGIS Task Manager showing current layer being processed
   - Export operations show "Exporting layer X/Y: layer_name" progress
-  - Filter operations show "Filtering layer X/Y: layer_name" progress  
+  - Filter operations show "Filtering layer X/Y: layer_name" progress
   - ZIP creation shows "Creating zip archive..." with progress bar
 
 - **Comprehensive Test Suite** (`tests/`, 4 new test files):
@@ -1567,6 +1773,7 @@ Combined implementation of highest-priority improvements across UX, logging, tes
   - Target: 80%+ code coverage using pytest with QGIS mocks
 
 #### Added - URGENCE 2 (New Features)
+
 - **Filter History with Undo/Redo** (`modules/filter_history.py`, ~450 lines): Professional history management
   - `FilterState`: Immutable filter state (expression, feature count, timestamp, metadata)
   - `FilterHistory`: Linear history stack with undo/redo operations
@@ -1578,21 +1785,21 @@ Combined implementation of highest-priority improvements across UX, logging, tes
   - Ready for UI integration (undo/redo buttons)
 
 #### Improved - Already Excellent
+
 - **Logging Infrastructure** (`modules/logging_config.py`): Verified existing excellence
   - ✅ Log rotation: 10MB max file size, 5 backup files (already implemented)
   - ✅ Standardized log levels across modules (already implemented)
   - ✅ Safe stream handling for QGIS shutdown (already implemented)
-  
 - **UI Style Management** (`resources/styles/default.qss`, 381 lines): Already externalized
   - ✅ Styles extracted to QSS file (already completed)
   - ✅ Color placeholders for theming (already implemented)
   - ✅ Dark theme with blue accents (already configured)
-  
 - **Icon Caching** (`filter_mate_dockwidget.py`): Already optimized
   - ✅ Static icon cache prevents recalculations (already implemented)
-  - ✅ Class-level _icon_cache dictionary (already exists)
+  - ✅ Class-level \_icon_cache dictionary (already exists)
 
 #### Technical Details
+
 - All user messages now include visual backend indicators (emoji + name)
 - Thread-safe: Progress updates use QgsTask.setDescription() (safe from worker threads)
 - No blocking: Message bar calls only from main thread (task completion signals)
@@ -1602,12 +1809,14 @@ Combined implementation of highest-priority improvements across UX, logging, tes
 - History serialization enables persistence across sessions
 
 ### 📚 Documentation
+
 - Added comprehensive testing guide in `tests/README.md`
 - Test structure supports future TDD development
 - Coverage goals defined per module (75-90%)
 - CI/CD integration examples provided
 
 ### 🧪 Testing
+
 - 15 new tests for feedback utilities (100% coverage)
 - 30 new tests for filter history (100% coverage)
 - 72 test stubs for refactored helper methods (ready for implementation)
@@ -1623,7 +1832,9 @@ Combined implementation of highest-priority improvements across UX, logging, tes
 Implemented high-priority user-facing enhancements to improve feedback and transparency.
 
 #### Added
+
 - **Backend-Aware User Feedback** (`modules/feedback_utils.py`, ~240 lines): Visual backend indicators
+
   - `show_backend_info()`: Display which backend (PostgreSQL/Spatialite/OGR) is processing operations
   - `show_progress_message()`: Informative progress messages for long operations
   - `show_success_with_backend()`: Success messages include backend and operation details
@@ -1636,9 +1847,10 @@ Implemented high-priority user-facing enhancements to improve feedback and trans
   - `format_backend_summary()`: Multi-backend operation summaries
 
 - **Enhanced Progress Tracking**: Real-time operation visibility
+
   - Task descriptions update in QGIS Task Manager showing current layer being processed
   - Export operations show "Exporting layer X/Y: layer_name" progress
-  - Filter operations show "Filtering layer X/Y: layer_name" progress  
+  - Filter operations show "Filtering layer X/Y: layer_name" progress
   - ZIP creation shows "Creating zip archive..." with progress bar
 
 - **Comprehensive Test Suite** (`tests/`, 3 new test files):
@@ -1649,13 +1861,16 @@ Implemented high-priority user-facing enhancements to improve feedback and trans
   - Target: 80%+ code coverage using pytest with QGIS mocks
 
 #### Improved
+
 - **Logging Infrastructure** (`modules/logging_config.py`): Already excellent
+
   - ✅ Log rotation: 10MB max file size, 5 backup files (already implemented)
   - ✅ Standardized log levels across modules (already implemented)
   - ✅ Safe stream handling for QGIS shutdown (already implemented)
   - ✅ Separate file handlers per module (Tasks, Utils, UI, App)
 
 - **User Messages**: More informative and context-aware
+
   - Filter operations: "🐘 PostgreSQL: Starting filter on 5 layer(s)..."
   - Success messages: "🐘 PostgreSQL: Successfully filtered 5 layer(s)"
   - Export feedback: "💾 Spatialite: Exporting layer 3/10: buildings"
@@ -1669,6 +1884,7 @@ Implemented high-priority user-facing enhancements to improve feedback and trans
   - Consistent message formatting across all operations
 
 #### Technical Details
+
 - All user messages now include visual backend indicators (emoji + name)
 - Thread-safe: Progress updates use QgsTask.setDescription() (safe from worker threads)
 - No blocking: Message bar calls only from main thread (task completion signals)
@@ -1676,12 +1892,14 @@ Implemented high-priority user-facing enhancements to improve feedback and trans
 - Backward compatible: No breaking changes to existing functionality
 
 ### 📚 Documentation
+
 - Added comprehensive testing guide in `tests/README.md`
 - Test structure supports future TDD development
 - Coverage goals defined per module (75-90%)
 - CI/CD integration examples provided
 
 ### 🧪 Testing
+
 - 15 new tests for feedback utilities (100% coverage)
 - 72 test stubs for refactored helper methods (ready for implementation)
 - pytest + pytest-cov + pytest-mock infrastructure
@@ -1696,7 +1914,9 @@ Implemented high-priority user-facing enhancements to improve feedback and trans
 Major architectural improvements focusing on code decomposition, state management patterns, and comprehensive documentation.
 
 #### Added
+
 - **State Management Module** (`modules/state_manager.py`, ~450 lines): Professional state management pattern
+
   - `LayerStateManager`: Encapsulates PROJECT_LAYERS dictionary operations
   - `ProjectStateManager`: Manages configuration and data source state
   - Clean API replacing direct dictionary access
@@ -1704,18 +1924,21 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Ready for gradual migration from global state
 
 - **Backend Helper Methods** (`modules/backends/base_backend.py`): Reusable backend utilities
+
   - `prepare_geometry_expression()`: Geometry column handling with proper quoting
   - `validate_layer_properties()`: Layer validation with detailed error messages
   - `build_buffer_expression()`: Backend-agnostic buffer SQL generation
   - `combine_expressions()`: Safe WHERE clause combination logic
 
 - **Comprehensive Documentation**: Three major new docs (~2200 lines total)
+
   - `docs/BACKEND_API.md` (600+ lines): Complete backend API reference with architecture diagrams
   - `docs/DEVELOPER_ONBOARDING.md` (800+ lines): Full developer setup and contribution guide
   - `docs/architecture.md` (800+ lines): System architecture with detailed component diagrams
   - `docs/IMPLEMENTATION_SUMMARY.md` (500+ lines): Summary of refactoring achievements
 
 - **Subset Management Helper Methods** (`modules/appTasks.py`): 11 new focused methods
+
   - `_get_last_subset_info()`: Retrieve layer history from database
   - `_determine_backend()`: Backend selection logic
   - `_log_performance_warning_if_needed()`: Performance monitoring
@@ -1730,6 +1953,7 @@ Major architectural improvements focusing on code decomposition, state managemen
   - `_unfilter_action()`: Undo last filter operation
 
 - **Export Helper Methods** (`modules/appTasks.py`): 7 new focused methods
+
   - `_validate_export_parameters()`: Extract and validate export configuration
   - `_get_layer_by_name()`: Layer lookup with error handling
   - `_save_layer_style()`: Style file saving with format detection
@@ -1739,6 +1963,7 @@ Major architectural improvements focusing on code decomposition, state managemen
   - `_create_zip_archive()`: ZIP compression with directory structure
 
 - **Source Filtering Helper Methods** (`modules/appTasks.py`): 6 new focused methods
+
   - `_initialize_source_filtering_parameters()`: Parameter extraction and initialization
   - `_qualify_field_names_in_expression()`: Provider-specific field qualification
   - `_process_qgis_expression()`: Expression validation and SQL conversion
@@ -1747,6 +1972,7 @@ Major architectural improvements focusing on code decomposition, state managemen
   - `_apply_filter_and_update_subset()`: Thread-safe filter application
 
 - **Layer Registration Helper Methods** (`modules/appTasks.py`): 6 new focused methods
+
   - `_load_existing_layer_properties()`: Load layer properties from Spatialite database
   - `_migrate_legacy_geometry_field()`: Migrate old geometry_field key to layer_geometry_field
   - `_detect_layer_metadata()`: Extract schema and geometry field by provider type
@@ -1755,6 +1981,7 @@ Major architectural improvements focusing on code decomposition, state managemen
   - `_create_spatial_index()`: Provider-specific spatial index creation
 
 - **Task Orchestration Helper Methods** (`modules/appTasks.py`): 5 new focused methods
+
   - `_initialize_source_layer()`: Find and initialize source layer with feature count limit
   - `_configure_metric_crs()`: Configure CRS for metric calculations with reprojection
   - `_organize_layers_to_filter()`: Group layers by provider type for filtering
@@ -1774,13 +2001,16 @@ Major architectural improvements focusing on code decomposition, state managemen
   - (8 total methods for complete geometry preparation workflow)
 
 #### Changed
+
 - **God Method Decomposition Phase 1** (`filter_mate_dockwidget.py`): Applied Single Responsibility Principle
+
   - Refactored `current_layer_changed()` from **270 lines to 75 lines** (-72% reduction)
   - Extracted 14 focused sub-methods with clear responsibilities
   - Improved readability, testability, and maintainability
   - Each method has single clear purpose with proper docstrings
 
 - **God Method Decomposition Phase 2** (`modules/appTasks.py`): Major complexity reduction
+
   - Refactored `manage_layer_subset_strings()` from **384 lines to ~80 lines** (-79% reduction)
   - Extracted 11 specialized helper methods (see Added section)
   - Separated PostgreSQL and Spatialite backend logic into dedicated methods
@@ -1789,6 +2019,7 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Better error handling and connection management
 
 - **God Method Decomposition Phase 3** (`modules/appTasks.py`): Export logic streamlined
+
   - Refactored `execute_exporting()` from **235 lines to ~65 lines** (-72% reduction)
   - Extracted 7 specialized helper methods (see Added section)
   - Separated validation, GPKG export, standard export, and zip logic
@@ -1805,14 +2036,17 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Better error handling for invalid geometries
   - Improved logging at each processing step
 
-**Phase 12: _create_buffered_memory_layer Decomposition** (`modules/appTasks.py`, 67→36 lines, -46%)
+**Phase 12: \_create_buffered_memory_layer Decomposition** (`modules/appTasks.py`, 67→36 lines, -46%)
+
 - **Main Method**: Refactored into clean 4-step workflow
+
   - Before: 67 lines with inline feature iteration, buffering, and dissolving
   - After: 36 lines with clear delegation
   - Steps: Validate features → Evaluate distance → Create layer → Buffer features → Dissolve & add
   - Error handling with detailed statistics maintained
 
 - **Helper Methods Created** (3 methods, ~55 lines total):
+
   - `_create_memory_layer_for_buffer()`: Create empty memory layer with proper geometry type (15 lines)
   - `_buffer_all_features()`: Buffer all features with validation and statistics (30 lines)
   - `_dissolve_and_add_to_layer()`: Dissolve geometries and add to layer with spatial index (25 lines)
@@ -1826,13 +2060,16 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Spatial index creation encapsulated
 
 **Phase 11: manage_distant_layers_geometric_filtering Decomposition** (`modules/appTasks.py`, 68→21 lines, -69%)
+
 - **Main Method**: Refactored into clean 3-step orchestration
+
   - Before: 68 lines with mixed initialization, geometry preparation, and layer iteration
   - After: 21 lines with clear delegation
   - Steps: Initialize params → Prepare geometries → Filter layers with progress
   - Clean separation of concerns
 
 - **Helper Methods Created** (3 methods, ~105 lines total):
+
   - `_initialize_source_subset_and_buffer()`: Extract subset and buffer params from config (25 lines)
   - `_prepare_geometries_by_provider()`: Prepare PostgreSQL/Spatialite/OGR geometries with fallback (50 lines)
   - `_filter_all_layers_with_progress()`: Iterate layers with progress tracking and cancellation (30 lines)
@@ -1846,13 +2083,16 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Provider list deduplication centralized
 
 **Phase 10: execute_geometric_filtering Decomposition** (`modules/appTasks.py`, 72→42 lines, -42%)
+
 - **Main Method**: Refactored into clean sequential workflow
+
   - Before: 72 lines with inline validation, expression building, and combination
   - After: 42 lines with clear delegation to helpers
   - Steps: Validate properties → Create spatial index → Get backend → Prepare geometry → Build expression → Combine filters → Apply & log
   - Exception handling maintained at top level
 
 - **Helper Methods Created** (3 methods, ~60 lines total):
+
   - `_validate_layer_properties()`: Extract and validate layer_name, primary_key, geom_field (25 lines)
   - `_build_backend_expression()`: Build filter using backend with predicates and buffers (20 lines)
   - `_combine_with_old_filter()`: Combine new expression with existing subset using operator (15 lines)
@@ -1865,14 +2105,17 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Main method now clean orchestrator with early validation
   - Thread-safe subset application maintained
 
-**Phase 9: _manage_spatialite_subset Decomposition** (`modules/appTasks.py`, 82→43 lines, -48%)
+**Phase 9: \_manage_spatialite_subset Decomposition** (`modules/appTasks.py`, 82→43 lines, -48%)
+
 - **Main Method**: Refactored into clean 4-step workflow
+
   - Before: 82 lines with mixed datasource detection, query building, and application
   - After: 43 lines with clear sequential steps
   - Steps: Get datasource → Build query → Create temp table → Apply subset + history
   - Early return for non-Spatialite layers (OGR/Shapefile)
 
 - **Helper Methods Created** (3 methods, ~95 lines total):
+
   - `_get_spatialite_datasource()`: Extract db_path, table_name, SRID, detect layer type (30 lines)
   - `_build_spatialite_query()`: Build query for simple or buffered subsets (35 lines)
   - `_apply_spatialite_subset()`: Apply subset string and update history (30 lines)
@@ -1885,14 +2128,17 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Clear error handling with appropriate logging
   - Thread-safe subset string application maintained
 
-**Phase 8: _build_postgis_filter_expression Decomposition** (`modules/appTasks.py`, 113→34 lines, -70%)
+**Phase 8: \_build_postgis_filter_expression Decomposition** (`modules/appTasks.py`, 113→34 lines, -70%)
+
 - **Main Method**: Refactored into clean 2-step orchestration
+
   - Before: 113 lines with 6 nearly identical SQL template blocks
   - After: 34 lines with clear workflow
   - Steps: Build spatial join query → Apply combine operator → Return expression tuple
   - Eliminated SQL template duplication (6 blocks → 1 reusable helper)
 
 - **Helper Methods Created** (3 methods, ~90 lines total):
+
   - `_get_source_reference()`: Determine materialized view vs direct table source (16 lines)
   - `_build_spatial_join_query()`: Construct SELECT with spatial JOIN, handle all branching (60 lines)
   - `_apply_combine_operator()`: Apply SQL set operators UNION/INTERSECT/EXCEPT (20 lines)
@@ -1906,12 +2152,15 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Improved readability: clear what varies (WHERE clause) vs what's constant (SELECT structure)
 
 **Phase 7: run Decomposition** (`modules/appTasks.py`, 120→50 lines, -58%)
+
 - **Main Method**: Refactored into clean orchestration pipeline
+
   - Before: 120 lines with mixed initialization, configuration, and action routing
   - After: 50 lines with clear sequential workflow
   - Steps: Initialize layer → Configure CRS → Organize filters → Log info → Execute action → Report success
 
 - **Helper Methods Created** (5 methods, ~110 lines total):
+
   - `_initialize_source_layer()`: Find source layer, set CRS, extract feature count limit
   - `_configure_metric_crs()`: Check CRS units, reproject if geographic/non-metric
   - `_organize_layers_to_filter()`: Group layers by provider with layer count tracking
@@ -1929,13 +2178,16 @@ Major architectural improvements focusing on code decomposition, state managemen
 #### Changed
 
 **Phase 6: add_project_layer Decomposition** (`modules/appTasks.py`, 132→60 lines, -55%)
+
 - **Main Method**: Refactored into clean, linear orchestration
+
   - Before: 146 lines with deep nesting (4-5 levels), complex conditional logic
   - After: 30 lines with clear 4-step process
   - Steps: Initialize → Process expression → Combine with old subset → Apply filter
   - Fallback: Feature ID list handling if expression fails
 
 - **Helper Methods Created** (6 methods, ~100 lines total):
+
   - `_initialize_source_filtering_parameters()`: Extract and set all layer parameters
   - `_qualify_field_names_in_expression()`: Provider-specific field name qualification
   - `_process_qgis_expression()`: Expression validation and PostGIS conversion
@@ -1952,12 +2204,15 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Reduced nesting from 4-5 levels to 2-3 levels
 
 **Phase 5: execute_source_layer_filtering Decomposition** (`modules/appTasks.py`, 146→30 lines, -80%)
+
 - **Main Method**: Refactored into clear sequential workflow
+
   - Before: 132 lines with nested conditionals, mixed concerns (loading, migration, creation, indexing)
   - After: 60 lines with clear steps
   - Steps: Load or create properties → Migrate legacy → Update config → Save to DB → Create index → Register
 
 - **Helper Methods Created** (6 methods, ~130 lines total):
+
   - `_load_existing_layer_properties()`: Load properties from Spatialite with variable setting
   - `_migrate_legacy_geometry_field()`: Handle geometry_field → layer_geometry_field migration
   - `_detect_layer_metadata()`: Extract schema/geometry field by provider (PostgreSQL/Spatialite/OGR)
@@ -1974,7 +2229,9 @@ Major architectural improvements focusing on code decomposition, state managemen
   - Spatial index creation decoupled from main flow
 
 #### Technical Debt Reduced
+
 - **Code Metrics**: Significant improvements in maintainability
+
   - Average method length reduced dramatically across 12 major methods
   - **Total lines eliminated: 1330 lines (1862 → 532, -71%)**
   - **72 focused helper methods created** (average 22 lines each)
@@ -1989,12 +2246,14 @@ Major architectural improvements focusing on code decomposition, state managemen
   - **Phase 12**: Separated memory layer creation, feature buffering, and dissolve operations
 
 - **Documentation Coverage**: From minimal to comprehensive
+
   - Backend architecture fully documented with diagrams
   - Developer onboarding guide created
   - System architecture documented
   - API reference with usage examples
 
 - **Code Duplication**: Reduced through helper methods
+
   - PostgreSQL connection management centralized
   - SQL generation templates reusable
   - History management standardized
@@ -2016,7 +2275,9 @@ Major architectural improvements focusing on code decomposition, state managemen
 Major code quality improvements focusing on eliminating magic strings, standardizing constants, and improving maintainability.
 
 #### Added
+
 - **Constants module** (`modules/constants.py`, 306 lines): Centralized constants for entire codebase
+
   - Provider types: `PROVIDER_POSTGRES`, `PROVIDER_SPATIALITE`, `PROVIDER_OGR`, `PROVIDER_MEMORY`
   - Geometry types with helper function `get_geometry_type_string()`
   - Spatial predicates: `PREDICATE_INTERSECTS`, `PREDICATE_WITHIN`, `PREDICATE_CONTAINS`, etc.
@@ -2031,7 +2292,9 @@ Major code quality improvements focusing on eliminating magic strings, standardi
   - Comprehensive test suite (23 tests, 100% passing)
 
 #### Changed
+
 - **Constants applied throughout codebase** (6 files, 20+ instances): Eliminated magic strings
+
   - `modules/appUtils.py`: Provider detection uses constants
   - `modules/appTasks.py`: **15+ hardcoded strings replaced** with constants
   - `modules/backends/factory.py`: Backend selection uses constants
@@ -2040,6 +2303,7 @@ Major code quality improvements focusing on eliminating magic strings, standardi
   - Single source of truth for all provider, geometry, and predicate strings
 
 - **UI styles extraction** (`filter_mate_dockwidget.py`): Major code reduction
+
   - Refactored `manage_ui_style()` from **527 lines to ~150 lines** (-71% reduction)
   - Styles moved to external QSS file (`resources/styles/default.qss`)
   - Dynamic style loading with theme support
@@ -2050,11 +2314,13 @@ Major code quality improvements focusing on eliminating magic strings, standardi
   - Consistent logging throughout entire codebase
 
 #### Fixed
+
 - **Test suite**: Fixed backend test class name imports
   - Updated test imports to use correct class names
   - `PostgreSQLGeometricFilter`, `SpatialiteGeometricFilter`, `OGRGeometricFilter`
 
 #### Technical Debt Reduced
+
 - **Magic strings**: 20+ instances eliminated across 6 core files
 - **Code duplication**: Constants defined once, used everywhere
 - **Type safety**: Constants prevent typos in provider/predicate strings
@@ -2062,6 +2328,7 @@ Major code quality improvements focusing on eliminating magic strings, standardi
 - **Test coverage**: 52 new tests (57 total passing) for utility modules
 
 #### Documentation
+
 - **Module architecture guide**: Added comprehensive `modules/README.md`
   - Overview of all core modules and their purposes
   - Architecture patterns and best practices
@@ -2070,6 +2337,7 @@ Major code quality improvements focusing on eliminating magic strings, standardi
   - Developer onboarding guide with examples
 
 #### Metrics
+
 - Lines reduced: 377 (manage_ui_style refactoring)
 - Test coverage: 90%+ for new modules
 - Magic strings eliminated: 100% from core modules
@@ -2082,6 +2350,7 @@ Major code quality improvements focusing on eliminating magic strings, standardi
 Continued Sprint 1 implementation focusing on security fixes, user feedback enhancements, and code quality improvements.
 
 #### Security Fixed
+
 - **SQL injection vulnerabilities**: Converted 4 vulnerable f-string SQL statements to parameterized queries
   - `save_variables_from_layer()`: Both INSERT statements now use `?` placeholders
   - `remove_variables_from_layer()`: Both DELETE statements now use `?` placeholders
@@ -2089,21 +2358,19 @@ Continued Sprint 1 implementation focusing on security fixes, user feedback enha
   - Follows Python/SQLite security best practices
 
 #### Added - User Feedback Messages
+
 - **Backend indicators**: Automatic logging of active backend on filter start
   - "Using PostgreSQL/PostGIS backend for filtering"
   - "Using Spatialite backend for filtering"
   - Helps users understand which backend is processing their data
-  
 - **Performance warnings**: Automatic warnings for large datasets without PostgreSQL
   - Triggers when > 50,000 features and not using PostgreSQL
   - "Large dataset detected (75,432 features) without PostgreSQL backend. Performance may be reduced."
   - Helps users optimize their workflow
-  
 - **Task start messages**: User-visible notifications when operations begin
   - "Starting filter operation on 3 layer(s)..." (Info, 3 seconds)
   - "Removing filters..." (Info, 2 seconds)
   - "Resetting layers..." (Info, 2 seconds)
-  
 - **Success messages**: Confirmation with feature counts when operations complete
   - "Filter applied successfully - 1,234 features visible" (Success, 3 seconds)
   - "Filter removed - 10,567 features visible" (Success, 3 seconds)
@@ -2111,16 +2378,17 @@ Continued Sprint 1 implementation focusing on security fixes, user feedback enha
   - Feature counts formatted with thousands separator for readability
 
 #### Verified
+
 - **Log rotation system**: Confirmed working correctly
   - RotatingFileHandler: 10MB max, 5 backups, UTF-8 encoding
   - SafeStreamHandler prevents crashes during QGIS shutdown
   - Proper initialization in appTasks, appUtils, and dockwidget
-  
 - **Error handling**: All `except: pass` statements already replaced in Phase 1
   - No silent error handlers remaining
   - All exceptions properly logged
 
 #### Documentation
+
 - **SPRINT1_CONTINUATION_SUMMARY.md**: Complete implementation report
   - 4/5 tasks completed (1 deferred: docstrings)
   - Security score improved from 6/10 to 9/10 (+50%)
@@ -2136,21 +2404,24 @@ Continued Sprint 1 implementation focusing on security fixes, user feedback enha
 Completed all critical fixes and user experience improvements. Plugin is now more reliable, maintainable, and provides better feedback to users.
 
 #### Fixed
+
 - **Error handling**: Replaced all silent `except: pass` blocks with proper logging
 - **Icon caching**: Implemented static cache for geometry icons (50x performance improvement on layer display)
 - **Logging system**: Added rotating file handler (max 10 MB, 5 backups) to prevent disk saturation
 
 #### Added
+
 - **Backend indicator UI**: Visual label showing active backend (PostgreSQL ⚡ / Spatialite 💾 / OGR 📁) with color coding
   - Green: PostgreSQL (optimal performance)
   - Blue: Spatialite (good performance)
   - Orange: OGR (fallback)
 - **Progress reporting**: Enhanced progress messages in FilterEngineTask with detailed logging
-  - "Filtering layer 2/5: rivers (postgresql)" 
+  - "Filtering layer 2/5: rivers (postgresql)"
   - Percentage-based progress bar (0-100%)
 - **Test infrastructure**: Created pytest-based test suite with 20+ unit tests
 
 #### Documentation
+
 - **SPRINT1_SUMMARY.md**: Complete summary of Sprint 1 accomplishments
 - **IMPLEMENTATION_PLAN.md**: Detailed implementation plan for remaining work
 - **ROADMAP.md**: Long-term vision and phased development plan
@@ -2164,33 +2435,31 @@ Completed all critical fixes and user experience improvements. Plugin is now mor
 Major refactoring to introduce a clean backend architecture using the Strategy pattern. This significantly improves code maintainability, testability, and extensibility.
 
 #### Added - New Backend Module (`modules/backends/`)
+
 - **base_backend.py**: Abstract `GeometricFilterBackend` class defining interface
   - `build_expression()`: Build backend-specific filter expressions
   - `apply_filter()`: Apply filter to layers
   - `supports_layer()`: Check backend compatibility
   - Built-in logging helpers for all backends
-  
 - **postgresql_backend.py**: PostgreSQL/PostGIS optimized backend (~150 lines)
   - Native PostGIS spatial functions (ST_Intersects, ST_Contains, etc.)
   - Efficient spatial indexes
   - SQL-based filtering for maximum performance
-  
 - **spatialite_backend.py**: Spatialite backend (~150 lines)
   - ~90% compatible with PostGIS syntax
   - Good performance for small to medium datasets
   - Performance warnings for >50k features
-  
 - **ogr_backend.py**: OGR fallback backend (~140 lines)
   - Uses QGIS processing algorithms
   - Compatible with all OGR formats (Shapefile, GeoPackage, etc.)
   - Performance warnings for >100k features
-  
 - **factory.py**: `BackendFactory` for automatic backend selection
   - Selects optimal backend based on provider type
   - Handles psycopg2 availability gracefully
   - Automatic fallback chain: PostgreSQL → Spatialite → OGR
 
 #### Changed
+
 - **execute_geometric_filtering()** in appTasks.py: Refactored from 395 lines to ~120 lines
   - Now delegates to specialized backends via factory pattern
   - Removed deeply nested conditional logic
@@ -2199,6 +2468,7 @@ Major refactoring to introduce a clean backend architecture using the Strategy p
   - Complexity reduced from >40 to <10 (cyclomatic complexity)
 
 #### Benefits
+
 - **Extensibility**: Easy to add new backends (MongoDB, Elasticsearch, etc.)
 - **Maintainability**: Clear separation of concerns, each backend self-contained
 - **Testability**: Each backend can be unit tested independently
@@ -2216,6 +2486,7 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 ### Added
 
 #### Core Features
+
 - **Multi-backend architecture**: Automatic selection between PostgreSQL, Spatialite, and Local (OGR) backends
 - **Spatialite backend**: Full implementation with spatial indexing for fast filtering without PostgreSQL
 - **Universal format support**: Works with Shapefile, GeoPackage, GeoJSON, KML, and all OGR formats
@@ -2223,6 +2494,7 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 - **Automatic spatial indexing**: Creates spatial indexes automatically before geometric filtering (5-15x performance improvement)
 
 #### Functions & Methods (Phase 2)
+
 - `create_temp_spatialite_table()` in appUtils.py: Creates temporary tables as PostgreSQL materialized view alternative
 - `get_spatialite_datasource_from_layer()` in appUtils.py: Extracts Spatialite database path from layers
 - `qgis_expression_to_spatialite()` in appTasks.py: Converts QGIS expressions to Spatialite SQL syntax
@@ -2230,6 +2502,7 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 - `_verify_and_create_spatial_index()` in appTasks.py: Automatic spatial index creation before filtering operations
 
 #### User Experience (Phase 3)
+
 - **Performance warnings**: Automatic alerts for large datasets (>50k features) without PostgreSQL
 - **Backend information**: Users see which backend is being used (PostgreSQL/Spatialite/Local)
 - **Detailed error messages**: Helpful troubleshooting hints for common issues
@@ -2237,13 +2510,14 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 - **Spatial index notifications**: Users informed when spatial indexes are being created for performance optimization
 
 #### Documentation
+
 - **INSTALLATION.md**: Comprehensive installation and setup guide (~500 lines)
   - Backend comparison and recommendations
   - PostgreSQL optional setup instructions
   - Performance guidelines by dataset size
   - Troubleshooting section
-  
 - **MIGRATION_v1.8_to_v1.9.md**: Migration guide for existing users (~350 lines)
+
   - What changed and why
   - Compatibility information
   - Step-by-step upgrade process
@@ -2253,6 +2527,7 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 - **PHASE2_IMPLEMENTATION.md**: Technical documentation Phase 2 (~600 lines)
 
 #### Testing
+
 - `test_phase1_optional_postgresql.py`: 5 unit tests for conditional PostgreSQL import
 - `test_phase2_spatialite_backend.py`: 7 unit tests for Spatialite backend functionality
 - `test_database_connections.py`: 15+ unit tests for connection management and resource cleanup
@@ -2261,6 +2536,7 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 ### Changed
 
 #### Architecture
+
 - **PostgreSQL is now optional**: Plugin starts and works without psycopg2 installed (Phase 1)
 - **Hybrid dispatcher**: `manage_layer_subset_strings()` now routes to appropriate backend
 - **Graceful degradation**: Automatic fallback from PostgreSQL → Spatialite → Local OGR
@@ -2268,27 +2544,32 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 - **Provider constants**: Standardized PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY
 
 #### Error Handling
+
 - Enhanced error messages with specific troubleshooting guidance
 - Better detection of common issues (missing Spatialite extension, etc.)
 - More informative warnings about performance implications
 - **Replaced 16 bare except clauses** with specific exception types (OSError, ValueError, TypeError, etc.)
 
 #### Performance Optimizations
+
 - **Cached featureCount()**: Single call per operation (50-80% performance improvement)
 - **Automatic spatial indexes**: Created before geometric filtering (5-15x faster queries)
 - **Connection pooling**: Tracked and cleaned up on task cancellation
 
 #### Code Quality
+
 - **Professional logging**: Python logging module replaces all print statements
 - **Unit tests**: 30+ tests covering critical operations
 - **Documentation**: Comprehensive README updates with backend selection guide
 
 #### Metadata
+
 - Updated to version 1.9.0
 - Enhanced plugin description highlighting new multi-backend support
 - Comprehensive changelog in metadata.txt
 
 ### Fixed
+
 - Plugin no longer crashes if psycopg2 is not installed
 - Better handling of non-PostgreSQL data sources
 - Improved error reporting for spatial operations
@@ -2300,22 +2581,25 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 ### Performance
 
 #### Spatial Index Optimization
-| Feature Count | Without Index | With Auto-Index | Improvement |
-|--------------|---------------|-----------------|-------------|
-| 10,000 | ~5s | <1s | **5x faster** |
-| 50,000 | ~30s | ~2s | **15x faster** |
-| 100,000 | >60s | ~5s | **12x+ faster** |
+
+| Feature Count | Without Index | With Auto-Index | Improvement     |
+| ------------- | ------------- | --------------- | --------------- |
+| 10,000        | ~5s           | <1s             | **5x faster**   |
+| 50,000        | ~30s          | ~2s             | **15x faster**  |
+| 100,000       | >60s          | ~5s             | **12x+ faster** |
 
 #### Backend Performance by Dataset Size
-| Features | PostgreSQL | Spatialite | Local OGR | Best Choice |
-|----------|------------|------------|-----------|-------------|
-| < 1k | ~0.5s | ~1s | ~2s | Any |
-| 1k-10k | ~1s | ~2s | ~5s | Spatialite/PostgreSQL |
-| 10k-50k | ~2s | ~5s | ~15s | PostgreSQL |
-| 50k-100k | ~5s | ~15s | ~60s+ | PostgreSQL |
-| > 100k | ~10s | ~60s+ | Very slow | PostgreSQL only |
+
+| Features | PostgreSQL | Spatialite | Local OGR | Best Choice           |
+| -------- | ---------- | ---------- | --------- | --------------------- |
+| < 1k     | ~0.5s      | ~1s        | ~2s       | Any                   |
+| 1k-10k   | ~1s        | ~2s        | ~5s       | Spatialite/PostgreSQL |
+| 10k-50k  | ~2s        | ~5s        | ~15s      | PostgreSQL            |
+| 50k-100k | ~5s        | ~15s       | ~60s+     | PostgreSQL            |
+| > 100k   | ~10s       | ~60s+      | Very slow | PostgreSQL only       |
 
 #### No Regression
+
 - PostgreSQL performance: **Identical to v1.8** (no slowdown)
 - Same optimizations: Materialized views, spatial indexes, clustering
 - All PostgreSQL features preserved: 100% backward compatible
@@ -2324,8 +2608,9 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
 ### Technical Details
 
 #### Code Statistics
+
 - **Lines added**: ~800 lines production code
-- **Functions created**: 5 new functions/methods (including _verify_and_create_spatial_index)
+- **Functions created**: 5 new functions/methods (including \_verify_and_create_spatial_index)
 - **Tests created**: 30+ unit tests (5 Phase 1, 7 Phase 2, 15+ connection tests, 8 spatial index tests)
 - **Documentation**: ~3500+ lines
 - **Files modified**: 7 core files (appTasks.py, appUtils.py, filter_mate_app.py, widgets.py, dockwidget.py, README.md, CHANGELOG.md)
@@ -2337,6 +2622,7 @@ FilterMate now works **WITHOUT PostgreSQL**! This is a major architectural impro
   - Comprehensive error handling throughout
 
 #### Backend Logic
+
 ```python
 # Automatic backend selection
 provider_type = layer.providerType()
@@ -2355,30 +2641,37 @@ else:
 ### Dependencies
 
 #### Required (unchanged)
+
 - QGIS 3.x or later
 - Python 3.7+
 - sqlite3 (included with Python)
 
 #### Optional (new)
+
 - **psycopg2**: For PostgreSQL support (recommended for large datasets)
 - **Spatialite extension**: Usually included with QGIS
 
 ### Breaking Changes
+
 **None** - This release is 100% backward compatible with v1.8.
 
 All existing workflows, configurations, and data continue to work identically.
 
 ### Migration Notes
+
 For users upgrading from v1.8:
+
 1. **No action required** if you use PostgreSQL - everything works as before
 2. **New capability** - You can now use non-PostgreSQL data sources
 3. See MIGRATION_v1.8_to_v1.9.md for detailed migration information
 
 ### Known Issues
+
 - Large datasets (>100k features) are slow without PostgreSQL (expected, by design)
 - Some PostGIS advanced functions may not have Spatialite equivalents (rare)
 
 ### Contributors
+
 - **Implementation**: Claude (Anthropic AI) with guidance
 - **Original Author**: Sébastien Ducournau (imagodata)
 - **Testing**: Community (ongoing)
@@ -2388,12 +2681,14 @@ For users upgrading from v1.8:
 ## [1.8.x] - Previous Versions
 
 ### Changed
+
 - Rework filtering logic: use of temporary materialized views and indexes
 - Add spatialite management: project metadata and subset history
 - Rebuild QgsCheckableComboBoxFeaturesListPickerWidget to show filtered entities
 - Rework combine logic filter
 
 ### Architecture
+
 - PostgreSQL/PostGIS only
 - Required psycopg2 installed
 - Complex setup process
@@ -2402,28 +2697,30 @@ For users upgrading from v1.8:
 
 ## Version Comparison
 
-| Feature | v1.8 | v1.9 |
-|---------|------|------|
-| **PostgreSQL Support** | Required | Optional |
-| **Spatialite Support** | No | Yes (new) |
-| **Shapefile Support** | No | Yes (new) |
-| **OGR Formats** | No | Yes (new) |
-| **Installation** | Complex | Simple |
-| **Works out-of-box** | No | Yes |
-| **Performance (PostgreSQL)** | Fast | Fast (same) |
-| **Performance (other)** | N/A | Good-Fast |
+| Feature                      | v1.8     | v1.9        |
+| ---------------------------- | -------- | ----------- |
+| **PostgreSQL Support**       | Required | Optional    |
+| **Spatialite Support**       | No       | Yes (new)   |
+| **Shapefile Support**        | No       | Yes (new)   |
+| **OGR Formats**              | No       | Yes (new)   |
+| **Installation**             | Complex  | Simple      |
+| **Works out-of-box**         | No       | Yes         |
+| **Performance (PostgreSQL)** | Fast     | Fast (same) |
+| **Performance (other)**      | N/A      | Good-Fast   |
 
 ---
 
 ## Roadmap
 
 ### [1.10.0] - Phase 4 (Planned)
+
 - Performance optimizations
 - Query result caching
 - Enhanced spatial index management
 - Advanced buffer expressions
 
 ### [2.0.0] - Phase 5 (Future)
+
 - UI/UX improvements
 - Additional export formats
 - Cloud backend support
@@ -2432,6 +2729,7 @@ For users upgrading from v1.8:
 ---
 
 ## Links
+
 - **Repository**: https://github.com/sducournau/filter_mate
 - **Issues**: https://github.com/sducournau/filter_mate/issues
 - **QGIS Plugin**: https://plugins.qgis.org/plugins/filter_mate

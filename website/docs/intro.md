@@ -7,38 +7,44 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.9 - Critical Stability Fix
+## 🎉 What's New in v3.4.0 - International Edition
 
-### 🔥 Critical Bug Fixes
-- **Fixed GEOS Crash during OGR Backend Filtering** - Resolved fatal "access violation" crash
-  - Crash occurred during `native:selectbylocation` with invalid geometries
-  - Some geometries cause C++/GEOS level crashes that cannot be caught by Python
-  - New validation prevents these geometries from reaching GEOS operations
+### 🌍 18 Languages Supported!
 
-- **Fixed Access Violation on Plugin Reload** - Resolved crash during plugin reload/QGIS close
-  - Lambdas in `QTimer.singleShot` captured references to destroyed objects
-  - Now uses weak references with safe callback wrappers
+FilterMate now speaks your language! We've added **11 new translations**:
 
-### 🛡️ New Safety Modules
-- 📦 **modules/geometry_safety.py** - GEOS-safe geometry operations
-  - `validate_geometry_for_geos()` - Deep validation: NaN/Inf check, isGeosValid(), buffer(0) test
-  - `create_geos_safe_layer()` - Creates memory layer with only valid geometries
-  - Graceful fallbacks: returns original layer if no geometries can be processed
+| Language           | Code | Native Name      |
+| ------------------ | ---- | ---------------- |
+| Polish             | `pl` | Polski           |
+| Chinese Simplified | `zh` | 简体中文         |
+| Russian            | `ru` | Русский          |
+| Indonesian         | `id` | Bahasa Indonesia |
+| Vietnamese         | `vi` | Tiếng Việt       |
+| Turkish            | `tr` | Türkçe           |
+| Hindi              | `hi` | हिन्दी           |
+| Finnish            | `fi` | Suomi            |
+| Danish             | `da` | Dansk            |
+| Swedish            | `sv` | Svenska          |
+| Norwegian          | `nb` | Norsk            |
 
-- 📦 **modules/object_safety.py** - Qt/QGIS object validation utilities
-  - `is_sip_deleted(obj)` - Checks if C++ object is deleted
-  - `is_valid_layer(layer)` - Complete QGIS layer validation  
-  - `safe_disconnect(signal)` / `safe_emit(signal, *args)` - Safe signal operations
-  - `make_safe_callback(obj, method)` - Wrapper for QTimer callbacks
+Plus the existing 7 languages: English, French, German, Spanish, Italian, Dutch, Portuguese.
 
-### 🔧 Technical Improvements
-- **Safe `selectbylocation` Wrapper** - Validates layers before spatial operations
-- **Virtual Layer Support** - Improved handling with automatic memory copy
-- **GeometrySkipInvalid Context** - All processing calls skip invalid geometries
+### 🔤 Enhanced Language Selection
+
+- Choose your preferred language in the **Configuration** panel
+- Set to `auto` to follow QGIS locale settings
+- All 92 UI strings fully translated
 
 ## Previous Updates
 
+### v2.3.9 - Critical Stability Fix (December 22, 2025)
+
+- 🔥 **Fixed GEOS Crash** - Resolved fatal crash during OGR backend filtering
+- 🛡️ **New Safety Modules** - `geometry_safety.py` and `object_safety.py`
+- 🐛 **Fixed Access Violation** - Resolved crash on plugin reload/QGIS close
+
 ### v2.3.8 - Automatic Dark Mode Support & Filter Favorites (December 19, 2025)
+
 - 🎨 **Automatic Dark Mode Detection** - Real-time QGIS theme detection
 - 🌓 **Icon Inversion for Dark Mode** - PNG icons visible in dark themes
 - ⭐ **Filter Favorites System** - Save, organize, and reuse filter configurations
@@ -46,18 +52,21 @@ slug: /
 - 📦 **New Modules** - `icon_utils.py` and `filter_favorites.py`
 
 ### v2.3.7 - Project Change Stability Enhancement (December 19, 2025)
+
 - 🛡️ **Enhanced Project Change Handling** - Complete rewrite of project change logic
 - 🔄 **New `cleared` Signal Handler** - Proper cleanup on project close
 - ⌨️ **F5 Shortcut** - Force reload layers when project change fails
 - 🐛 **Bug Fixes** - Fixed project change not reloading layers and signal timing issues
 
 ### v2.3.6 - Project & Layer Loading Stability (December 18, 2025)
+
 - 🛡️ **Centralized Timing Constants** - `STABILITY_CONSTANTS` dict
 - ⏱️ **Timestamp-Tracked Flags** - Auto-reset after 30 seconds
 - ✅ **Layer Validation** - `_is_layer_valid()` checks C++ object validity
 - 🔄 **Signal Debouncing** - Graceful handling of rapid signals
 
 ### v2.3.5 - Code Quality & Configuration v2.0 (December 17, 2025)
+
 - 🛠️ **Centralized Feedback System** - Unified message bar notifications (`show_info/warning/error/success`)
 - ⚡ **PostgreSQL Init Optimization** - 5-50× faster layer loading with connection caching
 - ⚙️ **Configuration v2.0** - Integrated metadata structure with auto-migration
@@ -66,6 +75,7 @@ slug: /
 - 🧹 **Code Quality** - Score improved to 8.9/10
 
 ### v2.3.4 - PostgreSQL 2-Part Table Reference Fix (December 16, 2025)
+
 - 🐛 **CRITICAL: Fixed PostgreSQL 2-part table references** - Spatial filtering now works correctly with tables using `"table"."geom"` format
 - ✨ **Smart display field selection** - New layers auto-select the best descriptive field (name, label, titre, etc.)
 - 🛠️ **Automatic PostgreSQL ANALYZE** - Query planner now gets proper statistics before spatial queries
@@ -97,6 +107,7 @@ New to FilterMate? Start with a quick task to see it in action immediately:
 <div class="quick-tasks-grid">
 
 ### 🔍 Task 1: Filter by Attribute
+
 **Time**: 2 minutes | **Difficulty**: ⭐  
 **Goal**: Show only large cities
 
@@ -106,7 +117,8 @@ Filter expression: `"population" > 100000`
 
 ---
 
-### 📐 Task 2: Geometric Filter  
+### 📐 Task 2: Geometric Filter
+
 **Time**: 3 minutes | **Difficulty**: ⭐  
 **Goal**: Find buildings near roads
 
@@ -117,6 +129,7 @@ Use spatial predicates with 200m buffer
 ---
 
 ### 💾 Task 3: Export Filtered Data
+
 **Time**: 2 minutes | **Difficulty**: ⭐  
 **Goal**: Save filtered features to GeoPackage
 
@@ -137,6 +150,7 @@ Don't have data to test? Download our [sample dataset](https://github.com/sducou
 Explore what you can achieve with FilterMate:
 
 ### 🏙️ Urban Planning
+
 **Find properties within walking distance of transit stations**
 
 Combine buffer operations with attribute filtering for transit-oriented development analysis.
@@ -146,6 +160,7 @@ Combine buffer operations with attribute filtering for transit-oriented developm
 ---
 
 ### 🏠 Real Estate Analysis
+
 **Filter homes by price, size, and school proximity**
 
 Multi-criteria filtering for investment opportunities and market analysis.
@@ -155,6 +170,7 @@ Multi-criteria filtering for investment opportunities and market analysis.
 ---
 
 ### 🌳 Environmental Protection
+
 **Identify industrial sites in protected zones**
 
 Geometric filtering to assess regulatory compliance and environmental impact.
@@ -164,6 +180,7 @@ Geometric filtering to assess regulatory compliance and environmental impact.
 ---
 
 ### 🚒 Emergency Services
+
 **Analyze service coverage areas**
 
 Distance calculations to identify underserved areas.
@@ -173,12 +190,14 @@ Distance calculations to identify underserved areas.
 ## Key Features
 
 ### Advanced Filtering
+
 - Attribute filtering with QGIS expressions
 - Geometric filtering (intersects, contains, within, etc.)
 - Buffer operations with automatic CRS conversion
 - Multi-layer support
 
 ### Multiple Backends
+
 - **PostgreSQL**: Best for large datasets (`>50k` features) - 10-50× faster
 - **Spatialite**: Good for medium datasets (`<50k` features)
 - **OGR**: Universal compatibility (Shapefiles, GeoPackage, etc.)
@@ -186,6 +205,7 @@ Distance calculations to identify underserved areas.
 **FilterMate automatically chooses the best backend** for your data source - no configuration needed! Learn more in the [Backend Selection Guide](/docs/backends/choosing-backend).
 
 ### Export Capabilities
+
 - Multiple formats: GPKG, SHP, GeoJSON, KML, CSV, PostGIS
 - CRS transformation on export
 - Style export (QML, SLD, ArcGIS)
@@ -225,6 +245,7 @@ New to FilterMate? Follow this path:
 - **[Developer Guide](/docs/developer-guide/architecture)** - Contributing and development
 
 ### v2.2.0 & Earlier
+
 - ✅ **Complete Multi-Backend** - PostgreSQL, Spatialite, and OGR implementations
 - ✅ **Dynamic UI** - Adaptive interface that adjusts to screen resolution
 - ✅ **Robust Error Handling** - Automatic geometry repair and retry mechanisms

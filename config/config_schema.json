@@ -91,7 +91,27 @@
         "data_type": "string",
         "validation": {
           "required": true,
-          "allowed_values": ["auto", "en", "fr", "de", "es", "it", "nl", "pt"]
+          "allowed_values": [
+            "auto",
+            "en",
+            "fr",
+            "de",
+            "es",
+            "it",
+            "nl",
+            "pt",
+            "pl",
+            "zh",
+            "ru",
+            "id",
+            "vi",
+            "tr",
+            "hi",
+            "fi",
+            "da",
+            "sv",
+            "nb"
+          ]
         },
         "default": "auto",
         "user_friendly_label": "Language"
