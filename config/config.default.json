@@ -47,7 +47,10 @@
           "fi",
           "da",
           "sv",
-          "nb"
+          "nb",
+          "sl",
+          "tl",
+          "am"
         ],
         "description": "Interface language: 'auto' (use QGIS locale), or force specific language",
         "available_translations": [
@@ -68,7 +71,10 @@
           "fi (Suomi)",
           "da (Dansk)",
           "sv (Svenska)",
-          "nb (Norsk)"
+          "nb (Norsk)",
+          "sl (Slovenščina)",
+          "tl (Tagalog)",
+          "am (አማርኛ)"
         ]
       },
       "UI_PROFILE": {

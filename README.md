@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 3.4.0** | December 2025 | **Production-Ready**
+**Version 2.4.1** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -19,7 +19,7 @@
 | 📐 **Geometric Filtering** | Spatial predicates with buffer support             |
 | ⭐ **Filter Favorites**    | Save, organize and reuse filter configurations     |
 | 📝 **Undo/Redo**           | Complete filter history with context-aware restore |
-| 🌍 **18 Languages**        | Full internationalization support                  |
+| 🌍 **21 Languages**        | Full internationalization support                  |
 | 🎨 **Dark Mode**           | Automatic theme detection and synchronization      |
 | 🚀 **Multi-Backend**       | PostgreSQL, Spatialite, OGR - optimal performance  |
 
@@ -27,7 +27,13 @@
 
 ## 📋 Recent Changes
 
-### v3.4.0 - International Edition
+### v2.4.1 - International Edition Extended
+
+- 🌍 **21 Languages** - Added Slovenian, Filipino/Tagalog, Amharic
+- 🔤 Fixed hardcoded French strings - all UI now translatable
+- ✨ 19 new translatable configuration messages
+
+### v2.4.0 - International Edition
 
 - 🌍 **18 Languages** - Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian
 - 🔤 Enhanced language selection in configuration panel
@@ -36,11 +42,6 @@
 
 - 🔥 Fixed GEOS crash during OGR backend filtering
 - 🛡️ New `geometry_safety.py` and `object_safety.py` modules
-
-### v2.3.8 - Dark Mode & Favorites
-
-- 🎨 Automatic dark mode detection with real-time UI sync
-- ⭐ Filter Favorites system with SQLite persistence
 
 > 📖 See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 

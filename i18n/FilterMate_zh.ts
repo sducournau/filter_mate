@@ -71,6 +71,50 @@ Please restart QGIS to apply all changes.</source>
         <source>Error during reset: {error}</source>
         <translation>重置时出错：{error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>检测到过时配置</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>未知版本</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>检测到损坏的配置</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>配置未重置。某些功能可能无法正常工作。</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>已使用默认值创建配置</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>损坏的配置已重置。默认设置已恢复。</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>过时的配置已重置。默认设置已恢复。</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>配置已更新至最新版本</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>几何验证设置</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>无效几何过滤已成功禁用。</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>无效几何过滤未修改。某些要素可能会从导出中排除。</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

@@ -222,23 +222,23 @@ class FilterMate:
 
         icon_path = ':/plugins/filter_mate/icon.png'
         
-        # Action principale pour ouvrir FilterMate
+        # Main action to open FilterMate
         self.add_action(
             icon_path,
             text=self.tr(u'FilterMate'),
             callback=self.run,
             parent=self.iface.mainWindow(),
-            status_tip=self.tr(u'Ouvrir le panneau FilterMate'))
+            status_tip=self.tr(u'Open FilterMate panel'))
         
-        # Action pour réinitialiser la configuration et la base de données
+        # Action to reset configuration and database
         reset_icon_path = ':/plugins/filter_mate/icons/parameters.png'
         self.add_action(
             reset_icon_path,
-            text=self.tr(u'Réinitialiser config et base de données'),
+            text=self.tr(u'Reset configuration and database'),
             callback=self.reset_configuration,
             parent=self.iface.mainWindow(),
             add_to_toolbar=False,
-            status_tip=self.tr(u'Réinitialiser la configuration par défaut et supprimer la base de données SQLite'))
+            status_tip=self.tr(u'Reset the default configuration and delete the SQLite database'))
         
         # Connect signals to handle project changes and automatically reload layers
         # Note: layersAdded signal is NOT connected to avoid freeze issues
@@ -294,27 +294,27 @@ class FilterMate:
             True if user confirms reset, False otherwise
         """
         if reason == "obsolete":
-            title = self.tr("Configuration obsolète détectée")
-            version_str = f"v{version}" if version else self.tr("version inconnue")
+            title = self.tr("Obsolete configuration detected")
+            version_str = f"v{version}" if version else self.tr("unknown version")
             message = self.tr(
-                "Une configuration obsolète ({}) a été détectée.\n\n"
-                "Voulez-vous réinitialiser aux paramètres par défaut?\n\n"
-                "• Oui: Réinitialiser (une sauvegarde sera créée)\n"
-                "• Non: Garder la configuration actuelle (peut causer des problèmes)"
+                "An obsolete configuration ({}) has been detected.\n\n"
+                "Do you want to reset to default settings?\n\n"
+                "• Yes: Reset (a backup will be created)\n"
+                "• No: Keep current configuration (may cause issues)"
             ).format(version_str)
         elif reason == "corrupted":
-            title = self.tr("Configuration corrompue détectée")
+            title = self.tr("Corrupted configuration detected")
             message = self.tr(
-                "Le fichier de configuration est corrompu et ne peut pas être lu.\n\n"
-                "Voulez-vous réinitialiser aux paramètres par défaut?\n\n"
-                "• Oui: Réinitialiser (une sauvegarde sera créée si possible)\n"
-                "• Non: Annuler (le plugin peut ne pas fonctionner correctement)"
+                "The configuration file is corrupted and cannot be read.\n\n"
+                "Do you want to reset to default settings?\n\n"
+                "• Yes: Reset (a backup will be created if possible)\n"
+                "• No: Cancel (the plugin may not work correctly)"
             )
         else:
-            title = self.tr("Réinitialisation de la configuration")
+            title = self.tr("Configuration reset")
             message = self.tr(
-                "La configuration doit être réinitialisée.\n\n"
-                "Voulez-vous continuer?"
+                "The configuration needs to be reset.\n\n"
+                "Do you want to continue?"
             )
         
         reply = QMessageBox.question(
@@ -348,7 +348,7 @@ class FilterMate:
                 logger.info("User declined configuration reset")
                 self.iface.messageBar().pushWarning(
                     "FilterMate",
-                    self.tr("Configuration non réinitialisée. Certaines fonctionnalités peuvent ne pas fonctionner correctement.")
+                    self.tr("Configuration not reset. Some features may not work correctly.")
                 )
                 return
             
@@ -357,16 +357,16 @@ class FilterMate:
                 
                 # Determine the type of action performed
                 if any("missing" in str(w).lower() for w in warnings):
-                    msg = self.tr("Configuration créée avec les valeurs par défaut")
+                    msg = self.tr("Configuration created with default values")
                     msg_type = "info"
                 elif any("corrupted" in str(w).lower() or "failed to load" in str(w).lower() for w in warnings):
-                    msg = self.tr("Configuration corrompue réinitialisée. Les paramètres par défaut ont été restaurés.")
+                    msg = self.tr("Corrupted configuration reset. Default settings have been restored.")
                     msg_type = "warning"
                 elif any("obsolete" in str(w).lower() for w in warnings):
-                    msg = self.tr("Configuration obsolète réinitialisée. Les paramètres par défaut ont été restaurés.")
+                    msg = self.tr("Obsolete configuration reset. Default settings have been restored.")
                     msg_type = "warning"
                 else:
-                    msg = self.tr("Configuration mise à jour vers la dernière version")
+                    msg = self.tr("Configuration updated to latest version")
                     msg_type = "success"
                 
                 # Display appropriate message
@@ -385,7 +385,7 @@ class FilterMate:
             logger.error(f"Error during config migration: {e}")
             self.iface.messageBar().pushCritical(
                 "FilterMate",
-                self.tr("Erreur lors de la migration de la configuration: {}").format(str(e))
+                self.tr("Error during configuration migration: {}").format(str(e))
             )
             # Don't block plugin initialization if migration fails
     
@@ -416,22 +416,22 @@ class FilterMate:
                 }
                 current_mode = validation_modes.get(current_value, str(current_value))
                 
-                title = self.tr("Paramètre de validation des géométries")
+                title = self.tr("Geometry validation setting")
                 
                 message = self.tr(
-                    "Le paramètre QGIS 'Filtrage des éléments invalides' est actuellement "
-                    "configuré sur '{mode}'.\n\n"
-                    "FilterMate recommande de désactiver ce paramètre (valeur 'Désactivé') "
-                    "pour les raisons suivantes :\n\n"
-                    "• Les entités avec des géométries invalides pourraient être "
-                    "silencieusement exclues des exports et des filtres\n"
-                    "• FilterMate gère la validation des géométries de manière interne "
-                    "avec des options de réparation automatique\n"
-                    "• Certaines données légitimes peuvent avoir des géométries considérées "
-                    "comme 'invalides' selon les règles strictes OGC\n\n"
-                    "Voulez-vous désactiver ce paramètre maintenant ?\n\n"
-                    "• Oui : Désactiver le filtrage (recommandé pour FilterMate)\n"
-                    "• Non : Garder le paramètre actuel"
+                    "The QGIS setting 'Invalid features filtering' is currently "
+                    "set to '{mode}'.\n\n"
+                    "FilterMate recommends disabling this setting (value 'Off') "
+                    "for the following reasons:\n\n"
+                    "• Features with invalid geometries could be "
+                    "silently excluded from exports and filters\n"
+                    "• FilterMate handles geometry validation internally "
+                    "with automatic repair options\n"
+                    "• Some legitimate data may have geometries considered "
+                    "as 'invalid' according to strict OGC rules\n\n"
+                    "Do you want to disable this setting now?\n\n"
+                    "• Yes: Disable filtering (recommended for FilterMate)\n"
+                    "• No: Keep current setting"
                 ).format(mode=current_mode)
                 
                 reply = QMessageBox.question(
@@ -448,15 +448,15 @@ class FilterMate:
                     logger.info("Geometry validation disabled by user via FilterMate startup check")
                     self.iface.messageBar().pushSuccess(
                         "FilterMate",
-                        self.tr("Filtrage des géométries invalides désactivé avec succès.")
+                        self.tr("Invalid geometry filtering disabled successfully.")
                     )
                 else:
                     # User declined - just log and show info
                     logger.info(f"User declined to disable geometry validation (current: {current_mode})")
                     self.iface.messageBar().pushWarning(
                         "FilterMate",
-                        self.tr("Filtrage des géométries invalides non modifié. "
-                               "Certaines entités peuvent être exclues des exports.")
+                        self.tr("Invalid geometry filtering not modified. "
+                               "Some features may be excluded from exports.")
                     )
             else:
                 logger.debug("Geometry validation already disabled (Off) - no action needed")
@@ -980,12 +980,12 @@ class FilterMate:
         # Ask for confirmation
         reply = QMessageBox.question(
             self.iface.mainWindow(),
-            self.tr('Réinitialiser la configuration'),
-            self.tr('Êtes-vous sûr de vouloir réinitialiser la configuration par défaut ?\n\n'
-                   'Cette action va :\n'
-                   '- Restaurer les paramètres par défaut\n'
-                   '- Supprimer la base de données des couches\n\n'
-                   'QGIS devra être redémarré pour appliquer les changements.'),
+            self.tr('Reset Configuration'),
+            self.tr('Are you sure you want to reset to the default configuration?\n\n'
+                   'This will:\n'
+                   '- Restore default settings\n'
+                   '- Delete the layer database\n\n'
+                   'QGIS must be restarted to apply the changes.'),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -1003,12 +1003,12 @@ class FilterMate:
                 shutil.copy2(default_config_file, config_file)
                 self.iface.messageBar().pushSuccess(
                     "FilterMate",
-                    self.tr("Configuration réinitialisée avec succès.")
+                    self.tr("Configuration reset successfully.")
                 )
             else:
                 self.iface.messageBar().pushWarning(
                     "FilterMate",
-                    self.tr("Fichier de configuration par défaut introuvable.")
+                    self.tr("Default configuration file not found.")
                 )
                 return
             
@@ -1029,12 +1029,12 @@ class FilterMate:
                                 os.remove(db_path)
                                 self.iface.messageBar().pushInfo(
                                     "FilterMate",
-                                    self.tr(f"Base de données supprimée : {filename}")
+                                    self.tr(f"Database deleted: {filename}")
                                 )
                             except OSError as e:
                                 self.iface.messageBar().pushWarning(
                                     "FilterMate",
-                                    self.tr(f"Impossible de supprimer {filename}: {e}")
+                                    self.tr(f"Unable to delete {filename}: {e}")
                                 )
             except Exception as e:
                 # Non-critical error, config was already reset
@@ -1043,15 +1043,15 @@ class FilterMate:
             # Prompt to restart QGIS
             QMessageBox.information(
                 self.iface.mainWindow(),
-                self.tr('Redémarrage requis'),
-                self.tr('La configuration a été réinitialisée.\n\n'
-                       'Veuillez redémarrer QGIS pour appliquer les changements.')
+                self.tr('Restart required'),
+                self.tr('The configuration has been reset.\n\n'
+                       'Please restart QGIS to apply the changes.')
             )
             
         except Exception as e:
             self.iface.messageBar().pushCritical(
                 "FilterMate",
-                self.tr(f"Erreur lors de la réinitialisation : {str(e)}")
+                self.tr(f"Error during reset: {str(e)}")
             )
 
 

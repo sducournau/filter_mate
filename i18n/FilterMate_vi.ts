@@ -71,6 +71,50 @@ Vui lòng khởi động lại QGIS để áp dụng tất cả các thay đổi
         <source>Error during reset: {error}</source>
         <translation>Lỗi khi đặt lại: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Phát hiện cấu hình lỗi thời</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>phiên bản không xác định</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Phát hiện cấu hình bị hỏng</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Cấu hình chưa được đặt lại. Một số tính năng có thể không hoạt động đúng.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Cấu hình đã được tạo với giá trị mặc định</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Cấu hình bị hỏng đã được đặt lại. Cài đặt mặc định đã được khôi phục.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Cấu hình lỗi thời đã được đặt lại. Cài đặt mặc định đã được khôi phục.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Cấu hình đã được cập nhật lên phiên bản mới nhất</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Cài đặt xác thực hình học</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Đã tắt thành công bộ lọc hình học không hợp lệ.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Bộ lọc hình học không hợp lệ không được thay đổi. Một số đối tượng có thể bị loại khỏi xuất.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

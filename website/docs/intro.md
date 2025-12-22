@@ -7,35 +7,35 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v3.4.0 - International Edition
+## 🎉 What's New in v2.4.1 - International Edition Extended
 
-### 🌍 18 Languages Supported!
+### 🌍 21 Languages Supported!
 
-FilterMate now speaks your language! We've added **11 new translations**:
+FilterMate now speaks your language! We've added **3 new translations**:
 
-| Language           | Code | Native Name      |
-| ------------------ | ---- | ---------------- |
-| Polish             | `pl` | Polski           |
-| Chinese Simplified | `zh` | 简体中文         |
-| Russian            | `ru` | Русский          |
-| Indonesian         | `id` | Bahasa Indonesia |
-| Vietnamese         | `vi` | Tiếng Việt       |
-| Turkish            | `tr` | Türkçe           |
-| Hindi              | `hi` | हिन्दी           |
-| Finnish            | `fi` | Suomi            |
-| Danish             | `da` | Dansk            |
-| Swedish            | `sv` | Svenska          |
-| Norwegian          | `nb` | Norsk            |
+| Language              | Code | Native Name  |
+| --------------------- | ---- | ------------ |
+| Slovenian             | `sl` | Slovenščina  |
+| Filipino/Tagalog      | `tl` | Tagalog      |
+| Amharic               | `am` | አማርኛ         |
 
-Plus the existing 7 languages: English, French, German, Spanish, Italian, Dutch, Portuguese.
+### 🔧 Translation Improvements
 
-### 🔤 Enhanced Language Selection
+- **Fixed Hardcoded French Strings** - All UI now properly translatable
+- **19 New Translatable Strings** - Configuration migration, geometry validation, reset dialogs
+- **Translation Utility Scripts** - New developer tools for managing translations
 
-- Choose your preferred language in the **Configuration** panel
-- Set to `auto` to follow QGIS locale settings
-- All 92 UI strings fully translated
+### 📊 Complete Language List (21 Languages)
+
+English, French, German, Spanish, Italian, Dutch, Portuguese, Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian, Slovenian, Filipino, Amharic
 
 ## Previous Updates
+
+### v2.4.0 - International Edition (December 22, 2025)
+
+- 🌍 **11 New Languages** - Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian
+- 🔤 Enhanced language selection in Configuration panel
+- All 140+ UI strings fully translated
 
 ### v2.3.9 - Critical Stability Fix (December 22, 2025)
 

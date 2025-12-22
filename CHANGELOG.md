@@ -2,7 +2,39 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [3.4.0] - 2025-12-22 - International Edition
+## [2.4.1] - 2025-12-22 - International Edition Extended
+
+### 🌍 3 New Languages Added!
+
+- **Slovenian (Slovenščina)** - `sl` - For Slovenia users
+- **Filipino/Tagalog (Tagalog)** - `tl` - For Philippines users
+- **Amharic (አማርኛ)** - `am` - For Ethiopia users
+
+### 📊 Total Languages: 21
+
+FilterMate now supports: English, French, German, Spanish, Italian, Dutch, Portuguese, Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian, **Slovenian**, **Filipino**, **Amharic**
+
+### 🔧 Translation Improvements
+
+- **Fixed Hardcoded French Strings** - All French source strings in `filter_mate.py` replaced with English
+- **19 New Translatable Strings** - Configuration migration, geometry validation, reset dialogs
+- **Translation Utility Scripts** - New tools for managing translations:
+  - `tools/update_translations.py` - Add new strings to existing translations
+  - `tools/create_new_translations.py` - Create new language files
+
+### 📁 New Translation Files
+
+- `i18n/FilterMate_sl.ts` - Slovenian (140 strings)
+- `i18n/FilterMate_tl.ts` - Filipino/Tagalog (140 strings)
+- `i18n/FilterMate_am.ts` - Amharic (140 strings)
+
+### 🔄 Updated All Existing Translation Files
+
+All 18 existing translation files updated with 11 new configuration-related strings.
+
+---
+
+## [2.4.0] - 2025-12-22 - International Edition
 
 ### 🌍 New Languages (11 Added!)
 

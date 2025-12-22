@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.1" language="en_US" sourcelanguage="en_US">
+<TS version="2.1" language="fil_PH" sourcelanguage="fil_PH">
 <context>
     <name>FilterMate</name>
     <message>
@@ -13,19 +13,19 @@
     </message>
     <message>
         <source>Open FilterMate panel</source>
-        <translation>Open FilterMate panel</translation>
+        <translation>Buksan ang FilterMate panel</translation>
     </message>
     <message>
         <source>Reset configuration and database</source>
-        <translation>Reset configuration and database</translation>
+        <translation>I-reset ang pagsasaayos at database</translation>
     </message>
     <message>
         <source>Reset the default configuration and delete the SQLite database</source>
-        <translation>Reset the default configuration and delete the SQLite database</translation>
+        <translation>I-reset ang default na pagsasaayos at burahin ang SQLite database</translation>
     </message>
     <message>
         <source>Reset Configuration</source>
-        <translation>Reset Configuration</translation>
+        <translation>I-reset ang Pagsasaayos</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -33,51 +33,51 @@
 This will:
 - Reset all FilterMate settings
 - Delete all filter history databases</source>
-        <translation>Are you sure you want to reset to the default configuration?
+        <translation>Sigurado ka bang gusto mong i-reset sa default na pagsasaayos?
 
-This will:
-- Reset all FilterMate settings
-- Delete all filter history databases</translation>
+Ito ay:
+- I-reset lahat ng mga setting ng FilterMate
+- Burahin lahat ng mga database ng kasaysayan ng filter</translation>
     </message>
     <message>
         <source>Configuration reset successfully.</source>
-        <translation>Configuration reset successfully.</translation>
+        <translation>Matagumpay na na-reset ang pagsasaayos.</translation>
     </message>
     <message>
         <source>Default configuration file not found.</source>
-        <translation>Default configuration file not found.</translation>
+        <translation>Hindi nahanap ang default na file ng pagsasaayos.</translation>
     </message>
     <message>
         <source>Database deleted: {filename}</source>
-        <translation>Database deleted: {filename}</translation>
+        <translation>Nabura ang database: {filename}</translation>
     </message>
     <message>
         <source>Unable to delete {filename}: {error}</source>
-        <translation>Unable to delete {filename}: {error}</translation>
+        <translation>Hindi mabura ang {filename}: {error}</translation>
     </message>
     <message>
         <source>Restart required</source>
-        <translation>Restart required</translation>
+        <translation>Kailangang i-restart</translation>
     </message>
     <message>
         <source>The configuration has been reset.
 
 Please restart QGIS to apply all changes.</source>
-        <translation>The configuration has been reset.
+        <translation>Na-reset na ang pagsasaayos.
 
-Please restart QGIS to apply all changes.</translation>
+Paki-restart ang QGIS upang mailapat ang lahat ng mga pagbabago.</translation>
     </message>
     <message>
         <source>Error during reset: {error}</source>
-        <translation>Error during reset: {error}</translation>
+        <translation>Error sa panahon ng pag-reset: {error}</translation>
     </message>
     <message>
         <source>Obsolete configuration detected</source>
-        <translation>Obsolete configuration detected</translation>
+        <translation>Lumang pagsasaayos ang nakita</translation>
     </message>
     <message>
         <source>unknown version</source>
-        <translation>unknown version</translation>
+        <translation>hindi kilalang bersyon</translation>
     </message>
     <message>
         <source>An obsolete configuration ({}) has been detected.
@@ -95,7 +95,7 @@ Do you want to reset to default settings?
     </message>
     <message>
         <source>Corrupted configuration detected</source>
-        <translation>Corrupted configuration detected</translation>
+        <translation>Sirang pagsasaayos ang nakita</translation>
     </message>
     <message>
         <source>The configuration file is corrupted and cannot be read.
@@ -113,7 +113,7 @@ Do you want to reset to default settings?
     </message>
     <message>
         <source>Configuration reset</source>
-        <translation>Configuration reset</translation>
+        <translation>I-reset ang Pagsasaayos</translation>
     </message>
     <message>
         <source>The configuration needs to be reset.
@@ -125,23 +125,23 @@ Do you want to continue?</translation>
     </message>
     <message>
         <source>Configuration not reset. Some features may not work correctly.</source>
-        <translation>Configuration not reset. Some features may not work correctly.</translation>
+        <translation>Hindi na-reset ang pagsasaayos. Ang ilang mga tampok ay maaaring hindi gumana ng tama.</translation>
     </message>
     <message>
         <source>Configuration created with default values</source>
-        <translation>Configuration created with default values</translation>
+        <translation>Ang pagsasaayos ay nilikha gamit ang mga default na halaga</translation>
     </message>
     <message>
         <source>Corrupted configuration reset. Default settings have been restored.</source>
-        <translation>Corrupted configuration reset. Default settings have been restored.</translation>
+        <translation>Na-reset ang sirang pagsasaayos. Naibalik na ang mga default na setting.</translation>
     </message>
     <message>
         <source>Obsolete configuration reset. Default settings have been restored.</source>
-        <translation>Obsolete configuration reset. Default settings have been restored.</translation>
+        <translation>Na-reset ang lumang pagsasaayos. Naibalik na ang mga default na setting.</translation>
     </message>
     <message>
         <source>Configuration updated to latest version</source>
-        <translation>Configuration updated to latest version</translation>
+        <translation>Na-update ang pagsasaayos sa pinakabagong bersyon</translation>
     </message>
     <message>
         <source>Error during configuration migration: {}</source>
@@ -149,7 +149,7 @@ Do you want to continue?</translation>
     </message>
     <message>
         <source>Geometry validation setting</source>
-        <translation>Geometry validation setting</translation>
+        <translation>Setting ng geometry validation</translation>
     </message>
     <message>
         <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
@@ -179,11 +179,11 @@ Do you want to disable this setting now?
     </message>
     <message>
         <source>Invalid geometry filtering disabled successfully.</source>
-        <translation>Invalid geometry filtering disabled successfully.</translation>
+        <translation>Matagumpay na na-disable ang pag-filter ng invalid na geometry.</translation>
     </message>
     <message>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
-        <translation>Invalid geometry filtering not modified. Some features may be excluded from exports.</translation>
+        <translation>Hindi binago ang pag-filter ng invalid na geometry. Ang ilang mga tampok ay maaaring ihiwalay sa mga pag-export.</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -242,55 +242,55 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Identify feature - Display feature attributes</source>
-        <translation>Identify feature - Display feature attributes</translation>
+        <translation>Tukuyin ang feature - Ipakita ang mga attribute ng feature</translation>
     </message>
     <message>
         <source>Zoom to feature - Center the map on the selected feature</source>
-        <translation>Zoom to feature - Center the map on the selected feature</translation>
+        <translation>Zoom sa feature - I-center ang mapa sa napiling feature</translation>
     </message>
     <message>
         <source>Enable selection - Select features on map</source>
-        <translation>Enable selection - Select features on map</translation>
+        <translation>Paganahin ang pagpili - Pumili ng mga feature sa mapa</translation>
     </message>
     <message>
         <source>Enable tracking - Follow the selected feature on the map</source>
-        <translation>Enable tracking - Follow the selected feature on the map</translation>
+        <translation>Paganahin ang pagsubaybay - Sundan ang napiling feature sa mapa</translation>
     </message>
     <message>
         <source>Link widgets - Synchronize selection between widgets</source>
-        <translation>Link widgets - Synchronize selection between widgets</translation>
+        <translation>I-link ang mga widget - I-synchronize ang pagpili sa pagitan ng mga widget</translation>
     </message>
     <message>
         <source>Reset layer properties - Restore default layer settings</source>
-        <translation>Reset layer properties - Restore default layer settings</translation>
+        <translation>I-reset ang mga property ng layer - Ibalik ang mga default na setting ng layer</translation>
     </message>
     <message>
         <source>Auto-sync with current layer - Automatically update when layer changes</source>
-        <translation>Auto-sync with current layer - Automatically update when layer changes</translation>
+        <translation>Auto-sync sa kasalukuyang layer - Awtomatikong i-update kapag nagbago ang layer</translation>
     </message>
     <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
-        <translation>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</translation>
+        <translation>Paganahin ang multi-layer filtering - Ilapat ang filter sa maraming layer nang sabay-sabay</translation>
     </message>
     <message>
         <source>Enable additive filtering - Combine multiple filters on the current layer</source>
-        <translation>Enable additive filtering - Combine multiple filters on the current layer</translation>
+        <translation>Paganahin ang additive filtering - Pagsamahin ang maraming filter sa kasalukuyang layer</translation>
     </message>
     <message>
         <source>Enable spatial filtering - Filter features using geometric relationships</source>
-        <translation>Enable spatial filtering - Filter features using geometric relationships</translation>
+        <translation>Paganahin ang spatial filtering - I-filter ang mga feature gamit ang geometric relationships</translation>
     </message>
     <message>
         <source>Enable buffer - Add a buffer zone around selected features</source>
-        <translation>Enable buffer - Add a buffer zone around selected features</translation>
+        <translation>Paganahin ang buffer - Magdagdag ng buffer zone sa paligid ng mga napiling feature</translation>
     </message>
     <message>
         <source>Buffer type - Select the buffer calculation method</source>
-        <translation>Buffer type - Select the buffer calculation method</translation>
+        <translation>Uri ng buffer - Pumili ng paraan ng pagkalkula ng buffer</translation>
     </message>
     <message>
         <source>Current layer - Select the layer to filter</source>
-        <translation>Current layer - Select the layer to filter</translation>
+        <translation>Kasalukuyang layer - Piliin ang layer na i-filter</translation>
     </message>
     <message>
         <source>Logical operator for combining filters on the source layer</source>
@@ -382,7 +382,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Apply Filter</source>
-        <translation>Apply Filter</translation>
+        <translation>Ilapat ang Filter</translation>
     </message>
     <message>
         <source>Apply the current filter expression to filter features on the selected layer(s)</source>
@@ -394,7 +394,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Undo Filter</source>
-        <translation>Undo Filter</translation>
+        <translation>I-undo ang Filter</translation>
     </message>
     <message>
         <source>Undo the last filter operation and restore the previous state</source>
@@ -406,7 +406,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Redo Filter</source>
-        <translation>Redo Filter</translation>
+        <translation>I-redo ang Filter</translation>
     </message>
     <message>
         <source>Redo the previously undone filter operation</source>
@@ -418,7 +418,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Clear All Filters</source>
-        <translation>Clear All Filters</translation>
+        <translation>Burahin Lahat ng Filter</translation>
     </message>
     <message>
         <source>Remove all active filters from all layers in the project</source>
@@ -430,7 +430,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Export</source>
-        <translation>Export</translation>
+        <translation>I-export</translation>
     </message>
     <message>
         <source>Export the filtered layers to the configured output location and format</source>
@@ -442,15 +442,15 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>AND</source>
-        <translation>AND</translation>
+        <translation>AT</translation>
     </message>
     <message>
         <source>AND NOT</source>
-        <translation>AND NOT</translation>
+        <translation>AT HINDI</translation>
     </message>
     <message>
         <source>OR</source>
-        <translation>OR</translation>
+        <translation>O</translation>
     </message>
     <message>
         <source>QML</source>
@@ -474,7 +474,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Additive filtering for the selected layer</source>
-        <translation>Additive filtering for the selected layer</translation>
+        <translation>Additive filtering para sa napiling layer</translation>
     </message>
     <message>
         <source>Geospatial filtering</source>
@@ -494,7 +494,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Value in meters</source>
-        <translation>Value in meters</translation>
+        <translation>Halaga sa metro</translation>
     </message>
     <message>
         <source>Output format</source>
@@ -506,19 +506,19 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Reset</source>
-        <translation>Reset</translation>
+        <translation>I-reset</translation>
     </message>
     <message>
         <source>Layers to export</source>
-        <translation>Layers to export</translation>
+        <translation>Mga layer na i-export</translation>
     </message>
     <message>
         <source>Layers projection</source>
-        <translation>Layers projection</translation>
+        <translation>Projection ng mga layer</translation>
     </message>
     <message>
         <source>Save styles</source>
-        <translation>Save styles</translation>
+        <translation>I-save ang mga style</translation>
     </message>
     <message>
         <source>Datatype export</source>
@@ -526,7 +526,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Name of file/directory</source>
-        <translation>Name of file/directory</translation>
+        <translation>Pangalan ng file/directory</translation>
     </message>
 </context>
 <context>
@@ -537,7 +537,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Reload Plugin</source>
-        <translation>Reload Plugin</translation>
+        <translation>I-reload ang Plugin</translation>
     </message>
     <message>
         <source>Do you want to reload FilterMate to apply all configuration changes?</source>
@@ -549,7 +549,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>No layer selected</source>
-        <translation>No layer selected</translation>
+        <translation>Walang napiling layer</translation>
     </message>
     <message>
         <source>Selected layers:</source>
@@ -557,11 +557,11 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Multiple layers selected</source>
-        <translation>Multiple layers selected</translation>
+        <translation>Maraming layer ang napili</translation>
     </message>
     <message>
         <source>No layers selected</source>
-        <translation>No layers selected</translation>
+        <translation>Walang napiling mga layer</translation>
     </message>
     <message>
         <source>Expression:</source>
@@ -569,7 +569,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>No expression defined</source>
-        <translation>No expression defined</translation>
+        <translation>Walang tinukoy na expression</translation>
     </message>
     <message>
         <source>Display expression: {expr}</source>

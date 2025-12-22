@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.1" language="en_US" sourcelanguage="en_US">
+<TS version="2.1" language="am_ET" sourcelanguage="am_ET">
 <context>
     <name>FilterMate</name>
     <message>
@@ -13,19 +13,19 @@
     </message>
     <message>
         <source>Open FilterMate panel</source>
-        <translation>Open FilterMate panel</translation>
+        <translation>FilterMate ፓነልን ክፈት</translation>
     </message>
     <message>
         <source>Reset configuration and database</source>
-        <translation>Reset configuration and database</translation>
+        <translation>ውቅረትና ዳታቤዝ ዳግም አስጀምር</translation>
     </message>
     <message>
         <source>Reset the default configuration and delete the SQLite database</source>
-        <translation>Reset the default configuration and delete the SQLite database</translation>
+        <translation>ነባሪ ውቅረትን ዳግም አስጀምርና SQLite ዳታቤዝን ሰርዝ</translation>
     </message>
     <message>
         <source>Reset Configuration</source>
-        <translation>Reset Configuration</translation>
+        <translation>ውቅረት ዳግም አስጀምር</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -33,51 +33,51 @@
 This will:
 - Reset all FilterMate settings
 - Delete all filter history databases</source>
-        <translation>Are you sure you want to reset to the default configuration?
+        <translation>ነባሪ ውቅረት ላይ ዳግም ማስጀመር ትፈልጋለህ?
 
-This will:
-- Reset all FilterMate settings
-- Delete all filter history databases</translation>
+ይህ:
+- ሁሉንም FilterMate ቅንብሮች ዳግም ያስጀምራል
+- ሁሉንም የማጣሪያ ታሪክ ዳታቤዞች ይሰርዛል</translation>
     </message>
     <message>
         <source>Configuration reset successfully.</source>
-        <translation>Configuration reset successfully.</translation>
+        <translation>ውቅረት በተሳካ ሁኔታ ዳግም ተጀምሯል።</translation>
     </message>
     <message>
         <source>Default configuration file not found.</source>
-        <translation>Default configuration file not found.</translation>
+        <translation>ነባሪ ውቅረት ፋይል አልተገኘም።</translation>
     </message>
     <message>
         <source>Database deleted: {filename}</source>
-        <translation>Database deleted: {filename}</translation>
+        <translation>ዳታቤዝ ተሰርዟል: {filename}</translation>
     </message>
     <message>
         <source>Unable to delete {filename}: {error}</source>
-        <translation>Unable to delete {filename}: {error}</translation>
+        <translation>{filename} መሰረዝ አልተቻለም: {error}</translation>
     </message>
     <message>
         <source>Restart required</source>
-        <translation>Restart required</translation>
+        <translation>ዳግም ማስጀመር ያስፈልጋል</translation>
     </message>
     <message>
         <source>The configuration has been reset.
 
 Please restart QGIS to apply all changes.</source>
-        <translation>The configuration has been reset.
+        <translation>ውቅረቱ ዳግም ተጀምሯል።
 
-Please restart QGIS to apply all changes.</translation>
+ሁሉንም ለውጦች ለማስፈጸም እባክዎ QGIS ን ዳግም ያስጀምሩ።</translation>
     </message>
     <message>
         <source>Error during reset: {error}</source>
-        <translation>Error during reset: {error}</translation>
+        <translation>በዳግም ማስጀመር ወቅት ስህተት: {error}</translation>
     </message>
     <message>
         <source>Obsolete configuration detected</source>
-        <translation>Obsolete configuration detected</translation>
+        <translation>ያረጀ ውቅረት ተገኝቷል</translation>
     </message>
     <message>
         <source>unknown version</source>
-        <translation>unknown version</translation>
+        <translation>ያልታወቀ ስሪት</translation>
     </message>
     <message>
         <source>An obsolete configuration ({}) has been detected.
@@ -95,7 +95,7 @@ Do you want to reset to default settings?
     </message>
     <message>
         <source>Corrupted configuration detected</source>
-        <translation>Corrupted configuration detected</translation>
+        <translation>የተበላሸ ውቅረት ተገኝቷል</translation>
     </message>
     <message>
         <source>The configuration file is corrupted and cannot be read.
@@ -113,7 +113,7 @@ Do you want to reset to default settings?
     </message>
     <message>
         <source>Configuration reset</source>
-        <translation>Configuration reset</translation>
+        <translation>ውቅረት ዳግም አስጀምር</translation>
     </message>
     <message>
         <source>The configuration needs to be reset.
@@ -125,23 +125,23 @@ Do you want to continue?</translation>
     </message>
     <message>
         <source>Configuration not reset. Some features may not work correctly.</source>
-        <translation>Configuration not reset. Some features may not work correctly.</translation>
+        <translation>ውቅረት አልተዘዋወረም። አንዳንድ ባህሪያት በትክክል ላይሰሩ ይችላሉ።</translation>
     </message>
     <message>
         <source>Configuration created with default values</source>
-        <translation>Configuration created with default values</translation>
+        <translation>ውቅረት በነባሪ እሴቶች ተፈጥሯል</translation>
     </message>
     <message>
         <source>Corrupted configuration reset. Default settings have been restored.</source>
-        <translation>Corrupted configuration reset. Default settings have been restored.</translation>
+        <translation>የተበላሸ ውቅረት ዳግም ተጀምሯል። ነባሪ ቅንብሮች ተመልሰዋል።</translation>
     </message>
     <message>
         <source>Obsolete configuration reset. Default settings have been restored.</source>
-        <translation>Obsolete configuration reset. Default settings have been restored.</translation>
+        <translation>ያረጀ ውቅረት ዳግም ተጀምሯል። ነባሪ ቅንብሮች ተመልሰዋል።</translation>
     </message>
     <message>
         <source>Configuration updated to latest version</source>
-        <translation>Configuration updated to latest version</translation>
+        <translation>ውቅረት ወደ አዲሱ ስሪት ተዘምኗል</translation>
     </message>
     <message>
         <source>Error during configuration migration: {}</source>
@@ -149,7 +149,7 @@ Do you want to continue?</translation>
     </message>
     <message>
         <source>Geometry validation setting</source>
-        <translation>Geometry validation setting</translation>
+        <translation>የጂኦሜትሪ ማረጋገጫ ቅንብር</translation>
     </message>
     <message>
         <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
@@ -179,11 +179,11 @@ Do you want to disable this setting now?
     </message>
     <message>
         <source>Invalid geometry filtering disabled successfully.</source>
-        <translation>Invalid geometry filtering disabled successfully.</translation>
+        <translation>ልክ ያልሆነ ጂኦሜትሪ ማጣራት በተሳካ ሁኔታ ተሰናክሏል።</translation>
     </message>
     <message>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
-        <translation>Invalid geometry filtering not modified. Some features may be excluded from exports.</translation>
+        <translation>ልክ ያልሆነ ጂኦሜትሪ ማጣራት አልተሻሻለም። አንዳንድ ባህሪያት ከወጪዎች ሊገለሉ ይችላሉ።</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -218,79 +218,79 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>SINGLE SELECTION</source>
-        <translation>SINGLE SELECTION</translation>
+        <translation>ነጠላ ምርጫ</translation>
     </message>
     <message>
         <source>MULTIPLE SELECTION</source>
-        <translation>MULTIPLE SELECTION</translation>
+        <translation>ብዙ ምርጫ</translation>
     </message>
     <message>
         <source>CUSTOM SELECTION</source>
-        <translation>CUSTOM SELECTION</translation>
+        <translation>ብጁ ምርጫ</translation>
     </message>
     <message>
         <source>FILTERING</source>
-        <translation>FILTERING</translation>
+        <translation>ማጣራት</translation>
     </message>
     <message>
         <source>EXPORTING</source>
-        <translation>EXPORTING</translation>
+        <translation>መላክ</translation>
     </message>
     <message>
         <source>CONFIGURATION</source>
-        <translation>CONFIGURATION</translation>
+        <translation>ውቅረት</translation>
     </message>
     <message>
         <source>Identify feature - Display feature attributes</source>
-        <translation>Identify feature - Display feature attributes</translation>
+        <translation>ባህሪ ለይ - የባህሪ ባህሪያትን አሳይ</translation>
     </message>
     <message>
         <source>Zoom to feature - Center the map on the selected feature</source>
-        <translation>Zoom to feature - Center the map on the selected feature</translation>
+        <translation>ወደ ባህሪ አጉላ - ካርታውን በተመረጠው ባህሪ ላይ አስቀምጥ</translation>
     </message>
     <message>
         <source>Enable selection - Select features on map</source>
-        <translation>Enable selection - Select features on map</translation>
+        <translation>ምርጫን አንቃ - በካርታ ላይ ባህሪያትን ምረጥ</translation>
     </message>
     <message>
         <source>Enable tracking - Follow the selected feature on the map</source>
-        <translation>Enable tracking - Follow the selected feature on the map</translation>
+        <translation>መከታተልን አንቃ - የተመረጠውን ባህሪ በካርታ ላይ ተከተል</translation>
     </message>
     <message>
         <source>Link widgets - Synchronize selection between widgets</source>
-        <translation>Link widgets - Synchronize selection between widgets</translation>
+        <translation>ዊጀቶችን አገናኝ - በዊጀቶች መካከል ምርጫን አስተባብር</translation>
     </message>
     <message>
         <source>Reset layer properties - Restore default layer settings</source>
-        <translation>Reset layer properties - Restore default layer settings</translation>
+        <translation>የንብርብር ባህሪያትን ዳግም አስጀምር - ነባሪ የንብርብር ቅንብሮችን መልስ</translation>
     </message>
     <message>
         <source>Auto-sync with current layer - Automatically update when layer changes</source>
-        <translation>Auto-sync with current layer - Automatically update when layer changes</translation>
+        <translation>ከአሁኑ ንብርብር ጋር በራስ-ሰር አስተባብር - ንብርብር ሲቀየር በራስ-ሰር አዘምን</translation>
     </message>
     <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
-        <translation>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</translation>
+        <translation>ብዙ-ንብርብር ማጣራትን አንቃ - ማጣሪያውን በአንድ ጊዜ በብዙ ንብርብሮች ላይ ተግብር</translation>
     </message>
     <message>
         <source>Enable additive filtering - Combine multiple filters on the current layer</source>
-        <translation>Enable additive filtering - Combine multiple filters on the current layer</translation>
+        <translation>ተጨማሪ ማጣራትን አንቃ - በአሁኑ ንብርብር ላይ ብዙ ማጣሪያዎችን አዋህድ</translation>
     </message>
     <message>
         <source>Enable spatial filtering - Filter features using geometric relationships</source>
-        <translation>Enable spatial filtering - Filter features using geometric relationships</translation>
+        <translation>የቦታ ማጣራትን አንቃ - ጂኦሜትሪያዊ ግንኙነቶችን በመጠቀም ባህሪያትን አጣራ</translation>
     </message>
     <message>
         <source>Enable buffer - Add a buffer zone around selected features</source>
-        <translation>Enable buffer - Add a buffer zone around selected features</translation>
+        <translation>ቋት አንቃ - በተመረጡ ባህሪያት ዙሪያ የቋት ዞን ጨምር</translation>
     </message>
     <message>
         <source>Buffer type - Select the buffer calculation method</source>
-        <translation>Buffer type - Select the buffer calculation method</translation>
+        <translation>የቋት አይነት - የቋት ስሌት ዘዴን ምረጥ</translation>
     </message>
     <message>
         <source>Current layer - Select the layer to filter</source>
-        <translation>Current layer - Select the layer to filter</translation>
+        <translation>አሁኑ ንብርብር - ለማጣራት ንብርብር ምረጥ</translation>
     </message>
     <message>
         <source>Logical operator for combining filters on the source layer</source>
@@ -362,7 +362,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Batch mode</source>
-        <translation>Batch mode</translation>
+        <translation>ቡድን ሁነታ</translation>
     </message>
     <message>
         <source>ZIP filename - Enter the name for the compressed archive</source>
@@ -382,7 +382,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Apply Filter</source>
-        <translation>Apply Filter</translation>
+        <translation>ማጣሪያ ተግብር</translation>
     </message>
     <message>
         <source>Apply the current filter expression to filter features on the selected layer(s)</source>
@@ -394,7 +394,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Undo Filter</source>
-        <translation>Undo Filter</translation>
+        <translation>ማጣሪያ ሻር</translation>
     </message>
     <message>
         <source>Undo the last filter operation and restore the previous state</source>
@@ -406,7 +406,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Redo Filter</source>
-        <translation>Redo Filter</translation>
+        <translation>ማጣሪያ መልስ</translation>
     </message>
     <message>
         <source>Redo the previously undone filter operation</source>
@@ -418,7 +418,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Clear All Filters</source>
-        <translation>Clear All Filters</translation>
+        <translation>ሁሉንም ማጣሪያዎች አጽዳ</translation>
     </message>
     <message>
         <source>Remove all active filters from all layers in the project</source>
@@ -430,7 +430,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Export</source>
-        <translation>Export</translation>
+        <translation>ላክ</translation>
     </message>
     <message>
         <source>Export the filtered layers to the configured output location and format</source>
@@ -442,15 +442,15 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>AND</source>
-        <translation>AND</translation>
+        <translation>እና</translation>
     </message>
     <message>
         <source>AND NOT</source>
-        <translation>AND NOT</translation>
+        <translation>እና አይደለም</translation>
     </message>
     <message>
         <source>OR</source>
-        <translation>OR</translation>
+        <translation>ወይም</translation>
     </message>
     <message>
         <source>QML</source>
@@ -462,71 +462,71 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source> m</source>
-        <translation> m</translation>
+        <translation> ሜ</translation>
     </message>
     <message>
         <source>, </source>
-        <translation>, </translation>
+        <translation>፣ </translation>
     </message>
     <message>
         <source>Multi-layer filtering</source>
-        <translation>Multi-layer filtering</translation>
+        <translation>ብዙ-ንብርብር ማጣራት</translation>
     </message>
     <message>
         <source>Additive filtering for the selected layer</source>
-        <translation>Additive filtering for the selected layer</translation>
+        <translation>ለተመረጠው ንብርብር ተጨማሪ ማጣራት</translation>
     </message>
     <message>
         <source>Geospatial filtering</source>
-        <translation>Geospatial filtering</translation>
+        <translation>ጂኦስፓሻል ማጣራት</translation>
     </message>
     <message>
         <source>Buffer</source>
-        <translation>Buffer</translation>
+        <translation>ቋት</translation>
     </message>
     <message>
         <source>Expression layer</source>
-        <translation>Expression layer</translation>
+        <translation>የአገላለጽ ንብርብር</translation>
     </message>
     <message>
         <source>Geometric predicate</source>
-        <translation>Geometric predicate</translation>
+        <translation>ጂኦሜትሪያዊ ቅድመ-ሁኔታ</translation>
     </message>
     <message>
         <source>Value in meters</source>
-        <translation>Value in meters</translation>
+        <translation>እሴት በሜትር</translation>
     </message>
     <message>
         <source>Output format</source>
-        <translation>Output format</translation>
+        <translation>የውጤት ቅርጸት</translation>
     </message>
     <message>
         <source>Filter</source>
-        <translation>Filter</translation>
+        <translation>ማጣሪያ</translation>
     </message>
     <message>
         <source>Reset</source>
-        <translation>Reset</translation>
+        <translation>ዳግም አስጀምር</translation>
     </message>
     <message>
         <source>Layers to export</source>
-        <translation>Layers to export</translation>
+        <translation>ለመላክ ንብርብሮች</translation>
     </message>
     <message>
         <source>Layers projection</source>
-        <translation>Layers projection</translation>
+        <translation>የንብርብሮች ትንበያ</translation>
     </message>
     <message>
         <source>Save styles</source>
-        <translation>Save styles</translation>
+        <translation>ቅጦችን አስቀምጥ</translation>
     </message>
     <message>
         <source>Datatype export</source>
-        <translation>Datatype export</translation>
+        <translation>የዳታ አይነት ወጪ</translation>
     </message>
     <message>
         <source>Name of file/directory</source>
-        <translation>Name of file/directory</translation>
+        <translation>የፋይል/ማውጫ ስም</translation>
     </message>
 </context>
 <context>
@@ -537,7 +537,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Reload Plugin</source>
-        <translation>Reload Plugin</translation>
+        <translation>ፕላጊንን ዳግም ጫን</translation>
     </message>
     <message>
         <source>Do you want to reload FilterMate to apply all configuration changes?</source>
@@ -549,7 +549,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>No layer selected</source>
-        <translation>No layer selected</translation>
+        <translation>ምንም ንብርብር አልተመረጠም</translation>
     </message>
     <message>
         <source>Selected layers:</source>
@@ -557,11 +557,11 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Multiple layers selected</source>
-        <translation>Multiple layers selected</translation>
+        <translation>ብዙ ንብርብሮች ተመርጠዋል</translation>
     </message>
     <message>
         <source>No layers selected</source>
-        <translation>No layers selected</translation>
+        <translation>ምንም ንብርብሮች አልተመረጡም</translation>
     </message>
     <message>
         <source>Expression:</source>
@@ -569,7 +569,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>No expression defined</source>
-        <translation>No expression defined</translation>
+        <translation>ምንም አገላለጽ አልተገለጸም</translation>
     </message>
     <message>
         <source>Display expression: {expr}</source>

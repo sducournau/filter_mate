@@ -71,6 +71,50 @@ Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</t
         <source>Error during reset: {error}</source>
         <translation>Sıfırlama sırasında hata: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Eski yapılandırma algılandı</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>bilinmeyen sürüm</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Bozuk yapılandırma algılandı</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Yapılandırma sıfırlanmadı. Bazı özellikler düzgün çalışmayabilir.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Yapılandırma varsayılan değerlerle oluşturuldu</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Bozuk yapılandırma sıfırlandı. Varsayılan ayarlar geri yüklendi.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Eski yapılandırma sıfırlandı. Varsayılan ayarlar geri yüklendi.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Yapılandırma en son sürüme güncellendi</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Geometri doğrulama ayarı</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Geçersiz geometri filtreleme başarıyla devre dışı bırakıldı.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Geçersiz geometri filtreleme değiştirilmedi. Bazı özellikler dışa aktarmalardan hariç tutulabilir.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

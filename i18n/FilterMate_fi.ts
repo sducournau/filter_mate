@@ -71,6 +71,50 @@ Käynnistä QGIS uudelleen ottaaksesi kaikki muutokset käyttöön.</translation
         <source>Error during reset: {error}</source>
         <translation>Virhe palautuksen aikana: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Vanhentunut asetustiedosto havaittu</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>tuntematon versio</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Vioittunut asetustiedosto havaittu</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Asetuksia ei nollattu. Jotkin toiminnot eivät ehkä toimi oikein.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Asetukset luotu oletusarvoilla</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Vioittunut asetustiedosto nollattu. Oletusasetukset on palautettu.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Vanhentunut asetustiedosto nollattu. Oletusasetukset on palautettu.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Asetukset päivitetty uusimpaan versioon</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Geometrian tarkistusasetus</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Virheellisten geometrioiden suodatus poistettu käytöstä onnistuneesti.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Virheellisten geometrioiden suodatusta ei muutettu. Jotkin kohteet voivat jäädä pois viennistä.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

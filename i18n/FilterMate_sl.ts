@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.1" language="en_US" sourcelanguage="en_US">
+<TS version="2.1" language="sl_SI" sourcelanguage="sl_SI">
 <context>
     <name>FilterMate</name>
     <message>
@@ -13,19 +13,19 @@
     </message>
     <message>
         <source>Open FilterMate panel</source>
-        <translation>Open FilterMate panel</translation>
+        <translation>Odpri ploščo FilterMate</translation>
     </message>
     <message>
         <source>Reset configuration and database</source>
-        <translation>Reset configuration and database</translation>
+        <translation>Ponastavi konfiguracijo in bazo podatkov</translation>
     </message>
     <message>
         <source>Reset the default configuration and delete the SQLite database</source>
-        <translation>Reset the default configuration and delete the SQLite database</translation>
+        <translation>Ponastavi privzeto konfiguracijo in izbriši SQLite bazo podatkov</translation>
     </message>
     <message>
         <source>Reset Configuration</source>
-        <translation>Reset Configuration</translation>
+        <translation>Ponastavi konfiguracijo</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -33,51 +33,51 @@
 This will:
 - Reset all FilterMate settings
 - Delete all filter history databases</source>
-        <translation>Are you sure you want to reset to the default configuration?
+        <translation>Ali ste prepričani, da želite ponastaviti privzeto konfiguracijo?
 
-This will:
-- Reset all FilterMate settings
-- Delete all filter history databases</translation>
+To bo:
+- Ponastavilo vse nastavitve FilterMate
+- Izbrisalo vse baze podatkov zgodovine filtrov</translation>
     </message>
     <message>
         <source>Configuration reset successfully.</source>
-        <translation>Configuration reset successfully.</translation>
+        <translation>Konfiguracija uspešno ponastavljena.</translation>
     </message>
     <message>
         <source>Default configuration file not found.</source>
-        <translation>Default configuration file not found.</translation>
+        <translation>Privzeta konfiguracijska datoteka ni bila najdena.</translation>
     </message>
     <message>
         <source>Database deleted: {filename}</source>
-        <translation>Database deleted: {filename}</translation>
+        <translation>Baza podatkov izbrisana: {filename}</translation>
     </message>
     <message>
         <source>Unable to delete {filename}: {error}</source>
-        <translation>Unable to delete {filename}: {error}</translation>
+        <translation>Ni mogoče izbrisati {filename}: {error}</translation>
     </message>
     <message>
         <source>Restart required</source>
-        <translation>Restart required</translation>
+        <translation>Potreben ponovni zagon</translation>
     </message>
     <message>
         <source>The configuration has been reset.
 
 Please restart QGIS to apply all changes.</source>
-        <translation>The configuration has been reset.
+        <translation>Konfiguracija je bila ponastavljena.
 
-Please restart QGIS to apply all changes.</translation>
+Prosimo, ponovno zaženite QGIS za uporabo vseh sprememb.</translation>
     </message>
     <message>
         <source>Error during reset: {error}</source>
-        <translation>Error during reset: {error}</translation>
+        <translation>Napaka med ponastavitvijo: {error}</translation>
     </message>
     <message>
         <source>Obsolete configuration detected</source>
-        <translation>Obsolete configuration detected</translation>
+        <translation>Zastarela konfiguracija zaznana</translation>
     </message>
     <message>
         <source>unknown version</source>
-        <translation>unknown version</translation>
+        <translation>neznana različica</translation>
     </message>
     <message>
         <source>An obsolete configuration ({}) has been detected.
@@ -95,7 +95,7 @@ Do you want to reset to default settings?
     </message>
     <message>
         <source>Corrupted configuration detected</source>
-        <translation>Corrupted configuration detected</translation>
+        <translation>Poškodovana konfiguracija zaznana</translation>
     </message>
     <message>
         <source>The configuration file is corrupted and cannot be read.
@@ -113,7 +113,7 @@ Do you want to reset to default settings?
     </message>
     <message>
         <source>Configuration reset</source>
-        <translation>Configuration reset</translation>
+        <translation>Ponastavitev konfiguracije</translation>
     </message>
     <message>
         <source>The configuration needs to be reset.
@@ -125,23 +125,23 @@ Do you want to continue?</translation>
     </message>
     <message>
         <source>Configuration not reset. Some features may not work correctly.</source>
-        <translation>Configuration not reset. Some features may not work correctly.</translation>
+        <translation>Konfiguracija ni bila ponastavljena. Nekatere funkcije morda ne bodo delovale pravilno.</translation>
     </message>
     <message>
         <source>Configuration created with default values</source>
-        <translation>Configuration created with default values</translation>
+        <translation>Konfiguracija ustvarjena s privzetimi vrednostmi</translation>
     </message>
     <message>
         <source>Corrupted configuration reset. Default settings have been restored.</source>
-        <translation>Corrupted configuration reset. Default settings have been restored.</translation>
+        <translation>Poškodovana konfiguracija ponastavljena. Privzete nastavitve so bile obnovljene.</translation>
     </message>
     <message>
         <source>Obsolete configuration reset. Default settings have been restored.</source>
-        <translation>Obsolete configuration reset. Default settings have been restored.</translation>
+        <translation>Zastarela konfiguracija ponastavljena. Privzete nastavitve so bile obnovljene.</translation>
     </message>
     <message>
         <source>Configuration updated to latest version</source>
-        <translation>Configuration updated to latest version</translation>
+        <translation>Konfiguracija posodobljena na najnovejšo različico</translation>
     </message>
     <message>
         <source>Error during configuration migration: {}</source>
@@ -149,7 +149,7 @@ Do you want to continue?</translation>
     </message>
     <message>
         <source>Geometry validation setting</source>
-        <translation>Geometry validation setting</translation>
+        <translation>Nastavitev preverjanja geometrije</translation>
     </message>
     <message>
         <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
@@ -179,11 +179,11 @@ Do you want to disable this setting now?
     </message>
     <message>
         <source>Invalid geometry filtering disabled successfully.</source>
-        <translation>Invalid geometry filtering disabled successfully.</translation>
+        <translation>Filtriranje neveljavnih geometrij je uspešno onemogočeno.</translation>
     </message>
     <message>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
-        <translation>Invalid geometry filtering not modified. Some features may be excluded from exports.</translation>
+        <translation>Filtriranje neveljavnih geometrij ni bilo spremenjeno. Nekatere funkcije so lahko izključene iz izvoza.</translation>
     </message>
     <message>
         <source>Are you sure you want to reset to the default configuration?
@@ -218,79 +218,79 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>SINGLE SELECTION</source>
-        <translation>SINGLE SELECTION</translation>
+        <translation>ENOJNI IZBOR</translation>
     </message>
     <message>
         <source>MULTIPLE SELECTION</source>
-        <translation>MULTIPLE SELECTION</translation>
+        <translation>MNOŽIČNI IZBOR</translation>
     </message>
     <message>
         <source>CUSTOM SELECTION</source>
-        <translation>CUSTOM SELECTION</translation>
+        <translation>PRILAGOJENI IZBOR</translation>
     </message>
     <message>
         <source>FILTERING</source>
-        <translation>FILTERING</translation>
+        <translation>FILTRIRANJE</translation>
     </message>
     <message>
         <source>EXPORTING</source>
-        <translation>EXPORTING</translation>
+        <translation>IZVAŽANJE</translation>
     </message>
     <message>
         <source>CONFIGURATION</source>
-        <translation>CONFIGURATION</translation>
+        <translation>KONFIGURACIJA</translation>
     </message>
     <message>
         <source>Identify feature - Display feature attributes</source>
-        <translation>Identify feature - Display feature attributes</translation>
+        <translation>Identificiraj element - Prikaži atribute elementa</translation>
     </message>
     <message>
         <source>Zoom to feature - Center the map on the selected feature</source>
-        <translation>Zoom to feature - Center the map on the selected feature</translation>
+        <translation>Povečaj na element - Centriraj zemljevid na izbrani element</translation>
     </message>
     <message>
         <source>Enable selection - Select features on map</source>
-        <translation>Enable selection - Select features on map</translation>
+        <translation>Omogoči izbor - Izberi elemente na zemljevidu</translation>
     </message>
     <message>
         <source>Enable tracking - Follow the selected feature on the map</source>
-        <translation>Enable tracking - Follow the selected feature on the map</translation>
+        <translation>Omogoči sledenje - Sledi izbranemu elementu na zemljevidu</translation>
     </message>
     <message>
         <source>Link widgets - Synchronize selection between widgets</source>
-        <translation>Link widgets - Synchronize selection between widgets</translation>
+        <translation>Poveži gradnike - Sinhroniziraj izbor med gradniki</translation>
     </message>
     <message>
         <source>Reset layer properties - Restore default layer settings</source>
-        <translation>Reset layer properties - Restore default layer settings</translation>
+        <translation>Ponastavi lastnosti sloja - Obnovi privzete nastavitve sloja</translation>
     </message>
     <message>
         <source>Auto-sync with current layer - Automatically update when layer changes</source>
-        <translation>Auto-sync with current layer - Automatically update when layer changes</translation>
+        <translation>Samodejna sinhronizacija s trenutnim slojem - Samodejno posodobi ob spremembi sloja</translation>
     </message>
     <message>
         <source>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</source>
-        <translation>Enable multi-layer filtering - Apply filter to multiple layers simultaneously</translation>
+        <translation>Omogoči večslojno filtriranje - Uporabi filter na več slojih hkrati</translation>
     </message>
     <message>
         <source>Enable additive filtering - Combine multiple filters on the current layer</source>
-        <translation>Enable additive filtering - Combine multiple filters on the current layer</translation>
+        <translation>Omogoči aditivno filtriranje - Združi več filtrov na trenutnem sloju</translation>
     </message>
     <message>
         <source>Enable spatial filtering - Filter features using geometric relationships</source>
-        <translation>Enable spatial filtering - Filter features using geometric relationships</translation>
+        <translation>Omogoči prostorsko filtriranje - Filtriraj elemente z uporabo geometrijskih razmerij</translation>
     </message>
     <message>
         <source>Enable buffer - Add a buffer zone around selected features</source>
-        <translation>Enable buffer - Add a buffer zone around selected features</translation>
+        <translation>Omogoči medpomnilnik - Dodaj območje medpomnilnika okoli izbranih elementov</translation>
     </message>
     <message>
         <source>Buffer type - Select the buffer calculation method</source>
-        <translation>Buffer type - Select the buffer calculation method</translation>
+        <translation>Vrsta medpomnilnika - Izberi metodo izračuna medpomnilnika</translation>
     </message>
     <message>
         <source>Current layer - Select the layer to filter</source>
-        <translation>Current layer - Select the layer to filter</translation>
+        <translation>Trenutni sloj - Izberi sloj za filtriranje</translation>
     </message>
     <message>
         <source>Logical operator for combining filters on the source layer</source>
@@ -362,7 +362,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Batch mode</source>
-        <translation>Batch mode</translation>
+        <translation>Paketni način</translation>
     </message>
     <message>
         <source>ZIP filename - Enter the name for the compressed archive</source>
@@ -382,7 +382,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Apply Filter</source>
-        <translation>Apply Filter</translation>
+        <translation>Uporabi filter</translation>
     </message>
     <message>
         <source>Apply the current filter expression to filter features on the selected layer(s)</source>
@@ -394,7 +394,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Undo Filter</source>
-        <translation>Undo Filter</translation>
+        <translation>Razveljavi filter</translation>
     </message>
     <message>
         <source>Undo the last filter operation and restore the previous state</source>
@@ -406,7 +406,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Redo Filter</source>
-        <translation>Redo Filter</translation>
+        <translation>Uveljavi filter</translation>
     </message>
     <message>
         <source>Redo the previously undone filter operation</source>
@@ -418,7 +418,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Clear All Filters</source>
-        <translation>Clear All Filters</translation>
+        <translation>Počisti vse filtre</translation>
     </message>
     <message>
         <source>Remove all active filters from all layers in the project</source>
@@ -430,7 +430,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Export</source>
-        <translation>Export</translation>
+        <translation>Izvozi</translation>
     </message>
     <message>
         <source>Export the filtered layers to the configured output location and format</source>
@@ -442,15 +442,15 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>AND</source>
-        <translation>AND</translation>
+        <translation>IN</translation>
     </message>
     <message>
         <source>AND NOT</source>
-        <translation>AND NOT</translation>
+        <translation>IN NE</translation>
     </message>
     <message>
         <source>OR</source>
-        <translation>OR</translation>
+        <translation>ALI</translation>
     </message>
     <message>
         <source>QML</source>
@@ -470,35 +470,35 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Multi-layer filtering</source>
-        <translation>Multi-layer filtering</translation>
+        <translation>Večslojno filtriranje</translation>
     </message>
     <message>
         <source>Additive filtering for the selected layer</source>
-        <translation>Additive filtering for the selected layer</translation>
+        <translation>Aditivno filtriranje za izbrani sloj</translation>
     </message>
     <message>
         <source>Geospatial filtering</source>
-        <translation>Geospatial filtering</translation>
+        <translation>Geoprostorsko filtriranje</translation>
     </message>
     <message>
         <source>Buffer</source>
-        <translation>Buffer</translation>
+        <translation>Medpomnilnik</translation>
     </message>
     <message>
         <source>Expression layer</source>
-        <translation>Expression layer</translation>
+        <translation>Sloj izraza</translation>
     </message>
     <message>
         <source>Geometric predicate</source>
-        <translation>Geometric predicate</translation>
+        <translation>Geometrični predikat</translation>
     </message>
     <message>
         <source>Value in meters</source>
-        <translation>Value in meters</translation>
+        <translation>Vrednost v metrih</translation>
     </message>
     <message>
         <source>Output format</source>
-        <translation>Output format</translation>
+        <translation>Izhodni format</translation>
     </message>
     <message>
         <source>Filter</source>
@@ -506,27 +506,27 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Reset</source>
-        <translation>Reset</translation>
+        <translation>Ponastavi</translation>
     </message>
     <message>
         <source>Layers to export</source>
-        <translation>Layers to export</translation>
+        <translation>Sloji za izvoz</translation>
     </message>
     <message>
         <source>Layers projection</source>
-        <translation>Layers projection</translation>
+        <translation>Projekcija slojev</translation>
     </message>
     <message>
         <source>Save styles</source>
-        <translation>Save styles</translation>
+        <translation>Shrani sloge</translation>
     </message>
     <message>
         <source>Datatype export</source>
-        <translation>Datatype export</translation>
+        <translation>Izvoz podatkovnega tipa</translation>
     </message>
     <message>
         <source>Name of file/directory</source>
-        <translation>Name of file/directory</translation>
+        <translation>Ime datoteke/mape</translation>
     </message>
 </context>
 <context>
@@ -537,7 +537,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Reload Plugin</source>
-        <translation>Reload Plugin</translation>
+        <translation>Ponovno naloži vtičnik</translation>
     </message>
     <message>
         <source>Do you want to reload FilterMate to apply all configuration changes?</source>
@@ -549,7 +549,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>No layer selected</source>
-        <translation>No layer selected</translation>
+        <translation>Noben sloj ni izbran</translation>
     </message>
     <message>
         <source>Selected layers:</source>
@@ -557,11 +557,11 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>Multiple layers selected</source>
-        <translation>Multiple layers selected</translation>
+        <translation>Več slojev izbranih</translation>
     </message>
     <message>
         <source>No layers selected</source>
-        <translation>No layers selected</translation>
+        <translation>Nobeni sloji niso izbrani</translation>
     </message>
     <message>
         <source>Expression:</source>
@@ -569,7 +569,7 @@ Please restart QGIS to apply the changes.</translation>
     </message>
     <message>
         <source>No expression defined</source>
-        <translation>No expression defined</translation>
+        <translation>Noben izraz ni definiran</translation>
     </message>
     <message>
         <source>Display expression: {expr}</source>

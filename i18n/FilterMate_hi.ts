@@ -71,6 +71,50 @@ Please restart QGIS to apply all changes.</source>
         <source>Error during reset: {error}</source>
         <translation>रीसेट के दौरान त्रुटि: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>पुरानी कॉन्फ़िगरेशन का पता चला</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>अज्ञात संस्करण</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>क्षतिग्रस्त कॉन्फ़िगरेशन का पता चला</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>कॉन्फ़िगरेशन रीसेट नहीं हुई। कुछ सुविधाएं सही ढंग से काम नहीं कर सकती हैं।</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>डिफ़ॉल्ट मानों के साथ कॉन्फ़िगरेशन बनाई गई</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>क्षतिग्रस्त कॉन्फ़िगरेशन रीसेट हो गई। डिफ़ॉल्ट सेटिंग्स पुनर्स्थापित हो गई हैं।</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>पुरानी कॉन्फ़िगरेशन रीसेट हो गई। डिफ़ॉल्ट सेटिंग्स पुनर्स्थापित हो गई हैं।</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>कॉन्फ़िगरेशन नवीनतम संस्करण में अपडेट हो गई</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>ज्यामिति सत्यापन सेटिंग</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>अमान्य ज्यामिति फ़िल्टरिंग सफलतापूर्वक अक्षम हो गई।</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>अमान्य ज्यामिति फ़िल्टरिंग संशोधित नहीं की गई। कुछ सुविधाएं निर्यात से बाहर हो सकती हैं।</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

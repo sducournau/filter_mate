@@ -71,6 +71,50 @@ Silakan restart QGIS untuk menerapkan semua perubahan.</translation>
         <source>Error during reset: {error}</source>
         <translation>Error saat reset: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Konfigurasi usang terdeteksi</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>versi tidak dikenal</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Konfigurasi rusak terdeteksi</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Konfigurasi tidak direset. Beberapa fitur mungkin tidak berfungsi dengan benar.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Konfigurasi dibuat dengan nilai default</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Konfigurasi rusak telah direset. Pengaturan default telah dipulihkan.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Konfigurasi usang telah direset. Pengaturan default telah dipulihkan.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Konfigurasi diperbarui ke versi terbaru</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Pengaturan validasi geometri</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Pemfilteran geometri tidak valid berhasil dinonaktifkan.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Pemfilteran geometri tidak valid tidak diubah. Beberapa fitur mungkin dikecualikan dari ekspor.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

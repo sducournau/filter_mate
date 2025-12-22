@@ -71,6 +71,50 @@ Bitte starten Sie QGIS neu, um alle Änderungen anzuwenden.</translation>
         <source>Error during reset: {error}</source>
         <translation>Fehler beim Zurücksetzen: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Veraltete Konfiguration erkannt</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>unbekannte Version</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Beschädigte Konfiguration erkannt</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Konfiguration nicht zurückgesetzt. Einige Funktionen funktionieren möglicherweise nicht korrekt.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Konfiguration mit Standardwerten erstellt</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Beschädigte Konfiguration zurückgesetzt. Standardeinstellungen wurden wiederhergestellt.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Veraltete Konfiguration zurückgesetzt. Standardeinstellungen wurden wiederhergestellt.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Konfiguration auf neueste Version aktualisiert</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Einstellung zur Geometrievalidierung</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Filterung ungültiger Geometrien erfolgreich deaktiviert.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Filterung ungültiger Geometrien nicht geändert. Einige Features können vom Export ausgeschlossen werden.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

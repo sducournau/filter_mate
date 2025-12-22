@@ -71,6 +71,50 @@ Genstart QGIS for at anvende alle ændringer.</translation>
         <source>Error during reset: {error}</source>
         <translation>Fejl under nulstilling: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Forældet konfiguration fundet</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>ukendt version</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Beskadiget konfiguration fundet</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Konfiguration ikke nulstillet. Nogle funktioner fungerer muligvis ikke korrekt.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Konfiguration oprettet med standardværdier</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Beskadiget konfiguration nulstillet. Standardindstillinger er gendannet.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Forældet konfiguration nulstillet. Standardindstillinger er gendannet.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Konfiguration opdateret til seneste version</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Geometri valideringsindstilling</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Filtrering af ugyldige geometrier deaktiveret.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Filtrering af ugyldige geometrier ikke ændret. Nogle objekter kan udelukkes fra eksport.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

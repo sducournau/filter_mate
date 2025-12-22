@@ -71,6 +71,50 @@ Start QGIS opnieuw om alle wijzigingen toe te passen.</translation>
         <source>Error during reset: {error}</source>
         <translation>Fout tijdens resetten: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Verouderde configuratie gedetecteerd</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>onbekende versie</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Beschadigde configuratie gedetecteerd</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Configuratie niet gereset. Sommige functies werken mogelijk niet correct.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Configuratie aangemaakt met standaardwaarden</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Beschadigde configuratie gereset. Standaardinstellingen zijn hersteld.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Verouderde configuratie gereset. Standaardinstellingen zijn hersteld.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Configuratie bijgewerkt naar nieuwste versie</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Geometrie validatie instelling</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Filteren van ongeldige geometrieën succesvol uitgeschakeld.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Filteren van ongeldige geometrieën niet gewijzigd. Sommige objecten kunnen worden uitgesloten van exports.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

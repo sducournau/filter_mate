@@ -71,6 +71,50 @@ Please restart QGIS to apply all changes.</source>
         <source>Error during reset: {error}</source>
         <translation>Ошибка при сбросе: {error}</translation>
     </message>
+    <message>
+        <source>Obsolete configuration detected</source>
+        <translation>Обнаружена устаревшая конфигурация</translation>
+    </message>
+    <message>
+        <source>unknown version</source>
+        <translation>неизвестная версия</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration detected</source>
+        <translation>Обнаружена повреждённая конфигурация</translation>
+    </message>
+    <message>
+        <source>Configuration not reset. Some features may not work correctly.</source>
+        <translation>Конфигурация не сброшена. Некоторые функции могут работать некорректно.</translation>
+    </message>
+    <message>
+        <source>Configuration created with default values</source>
+        <translation>Конфигурация создана со значениями по умолчанию</translation>
+    </message>
+    <message>
+        <source>Corrupted configuration reset. Default settings have been restored.</source>
+        <translation>Повреждённая конфигурация сброшена. Настройки по умолчанию восстановлены.</translation>
+    </message>
+    <message>
+        <source>Obsolete configuration reset. Default settings have been restored.</source>
+        <translation>Устаревшая конфигурация сброшена. Настройки по умолчанию восстановлены.</translation>
+    </message>
+    <message>
+        <source>Configuration updated to latest version</source>
+        <translation>Конфигурация обновлена до последней версии</translation>
+    </message>
+    <message>
+        <source>Geometry validation setting</source>
+        <translation>Настройка проверки геометрии</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering disabled successfully.</source>
+        <translation>Фильтрация недопустимых геометрий успешно отключена.</translation>
+    </message>
+    <message>
+        <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
+        <translation>Фильтрация недопустимых геометрий не изменена. Некоторые объекты могут быть исключены из экспорта.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>
