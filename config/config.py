@@ -5,6 +5,66 @@ import json
 
 ENV_VARS = {}
 
+# Minimal hardcoded fallback configuration
+# Used when all config files are inaccessible or corrupted
+FALLBACK_CONFIG = {
+    "_CONFIG_VERSION": "2.0",
+    "_CONFIG_META": {
+        "description": "FilterMate Fallback Configuration (in-memory)",
+        "version": "2.0",
+        "fallback": True
+    },
+    "APP": {
+        "AUTO_ACTIVATE": {
+            "value": False,
+            "description": "Auto-activate plugin when a project with vector layers is loaded"
+        },
+        "DOCKWIDGET": {
+            "FEEDBACK_LEVEL": {
+                "value": "normal",
+                "choices": ["minimal", "normal", "verbose"],
+                "description": "User feedback verbosity level"
+            },
+            "LANGUAGE": {
+                "value": "auto",
+                "description": "Interface language"
+            },
+            "THEME": {
+                "value": "auto",
+                "choices": ["auto", "light", "dark"],
+                "description": "UI theme"
+            }
+        },
+        "OPTIONS": {
+            "APP_SQLITE_PATH": "",
+            "FRESH_RELOAD_FLAG": False
+        }
+    },
+    "POSTGRESQL": {
+        "FILTER": {
+            "MATERIALIZED_VIEW": {
+                "value": True,
+                "description": "Use materialized views for filtering"
+            }
+        }
+    }
+}
+
+
+def get_fallback_config():
+    """
+    Return a deep copy of the fallback configuration.
+    
+    This is used when all configuration files fail to load.
+    The plugin will continue to work with minimal/default settings.
+    
+    Returns:
+        dict: A copy of FALLBACK_CONFIG
+    """
+    import copy
+    return copy.deepcopy(FALLBACK_CONFIG)
+
+
 def merge(a, b, path=None):
     "merges b into a"
     if path is None: path = []
@@ -92,6 +152,8 @@ def init_env_vars():
     
     # Load configuration
     CONFIG_DATA = None
+    using_fallback = False
+    
     try:
         with open(config_json_path) as f:
             CONFIG_DATA = json.load(f)
@@ -99,42 +161,64 @@ def init_env_vars():
         QgsMessageLog.logMessage(
             f"Failed to load config from {config_json_path}: {e}",
             "FilterMate",
-            Qgis.Critical
+            Qgis.Warning
         )
-        # Try to load default config as last resort
+        # Try to load default config as second option
         try:
             with open(config_default_path) as f:
                 CONFIG_DATA = json.load(f)
+            QgsMessageLog.logMessage(
+                "FilterMate: Loaded default configuration file",
+                "FilterMate",
+                Qgis.Info
+            )
         except Exception as e2:
             QgsMessageLog.logMessage(
-                f"Failed to load default config: {e2}",
+                f"Failed to load default config: {e2}. Using in-memory fallback configuration.",
                 "FilterMate",
-                Qgis.Critical
+                Qgis.Warning
             )
-            raise
-
+            # Ultimate fallback: use hardcoded minimal config
+            CONFIG_DATA = get_fallback_config()
+            using_fallback = True
+    
     # Validate that CONFIG_DATA has the expected structure
     # Support both uppercase (config.default.json) and lowercase (migrated config.json) keys
     has_app_config = isinstance(CONFIG_DATA, dict) and ("APP" in CONFIG_DATA or "app" in CONFIG_DATA)
     if not has_app_config:
         QgsMessageLog.logMessage(
-            f"FilterMate: Configuration invalide détectée, réinitialisation aux valeurs par défaut",
+            f"FilterMate: Configuration invalide détectée, utilisation de la configuration de secours",
             "FilterMate",
             Qgis.Warning
         )
-        # Reset to default
+        # Use hardcoded fallback instead of raising
+        CONFIG_DATA = get_fallback_config()
+        using_fallback = True
+        
+        # Try to write fallback to disk for next time
         try:
-            import shutil
-            shutil.copy2(config_default_path, config_json_path)
-            with open(config_json_path) as f:
-                CONFIG_DATA = json.load(f)
+            with open(config_json_path, 'w') as outfile:
+                outfile.write(json.dumps(CONFIG_DATA, indent=4))
+            QgsMessageLog.logMessage(
+                f"FilterMate: Configuration de secours sauvegardée: {config_json_path}",
+                "FilterMate",
+                Qgis.Info
+            )
         except Exception as e:
             QgsMessageLog.logMessage(
-                f"FilterMate: Impossible de réinitialiser la configuration: {e}",
+                f"FilterMate: Impossible de sauvegarder la configuration de secours: {e}",
                 "FilterMate",
-                Qgis.Critical
+                Qgis.Warning
             )
-            raise
+    
+    # Log if using fallback configuration
+    if using_fallback:
+        QgsMessageLog.logMessage(
+            "FilterMate: Plugin démarré avec configuration de secours. "
+            "Certains paramètres peuvent être réinitialisés aux valeurs par défaut.",
+            "FilterMate",
+            Qgis.Warning
+        )
 
     # Ensure OPTIONS exists in APP (support both uppercase and lowercase keys)
     app_key = "APP" if "APP" in CONFIG_DATA else "app"

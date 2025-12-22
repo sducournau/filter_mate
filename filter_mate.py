@@ -214,6 +214,9 @@ class FilterMate:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
         
+        # Install message log filter to suppress known QGIS warnings about missing form dependencies
+        self._install_message_filter()
+        
         # Auto-migrate configuration if needed
         self._auto_migrate_config()
         
@@ -388,6 +391,91 @@ class FilterMate:
                 self.tr("Error during configuration migration: {}").format(str(e))
             )
             # Don't block plugin initialization if migration fails
+    
+    def _install_message_filter(self):
+        """Check for layers with missing ValueRelation dependencies and optionally clear warnings.
+        
+        QGIS emits individual warnings for each missing layer form dependency.
+        This method detects affected layers, clears the message bar after a delay,
+        and shows a single consolidated informational message instead.
+        
+        The check is triggered:
+        1. At plugin initialization (for already loaded projects)
+        2. When a project is read/loaded (via readProject signal)
+        """
+        self._form_dependency_warning_shown = False
+        self._missing_dependency_layers = set()
+        
+        try:
+            from qgis.core import QgsProject
+            from qgis.PyQt.QtCore import QTimer
+            
+            def check_and_clear_warnings():
+                """Check all layers for missing ValueRelation dependencies and clear message bar."""
+                if self._form_dependency_warning_shown:
+                    return
+                
+                try:
+                    from .modules.appUtils import get_value_relation_info
+                    
+                    project = QgsProject.instance()
+                    
+                    for layer_id, layer in project.mapLayers().items():
+                        if not hasattr(layer, 'fields'):
+                            continue
+                        
+                        for field in layer.fields():
+                            vr_info = get_value_relation_info(layer, field.name(), check_layer_availability=False)
+                            if vr_info and not vr_info.get('layer_available', True):
+                                ref_name = vr_info.get('layer_name', 'unknown')
+                                self._missing_dependency_layers.add(ref_name)
+                    
+                    if self._missing_dependency_layers and not self._form_dependency_warning_shown:
+                        self._form_dependency_warning_shown = True
+                        
+                        # Clear the message bar to remove QGIS's individual warnings
+                        try:
+                            self.iface.messageBar().clearWidgets()
+                        except Exception:
+                            pass
+                        
+                        # Show a single consolidated info message
+                        count = len(self._missing_dependency_layers)
+                        layers_list = ', '.join(list(self._missing_dependency_layers)[:3])
+                        if count > 3:
+                            layers_list += f" (+{count - 3} more)"
+                        
+                        self.iface.messageBar().pushInfo(
+                            "FilterMate",
+                            self.tr(f"{count} referenced layer(s) not loaded ({layers_list}). Using fallback display.")
+                        )
+                        
+                        logger.info(
+                            f"FilterMate: {count} referenced layer(s) not loaded. "
+                            f"ValueRelation fallback active: {', '.join(self._missing_dependency_layers)}"
+                        )
+                
+                except Exception as e:
+                    logger.debug(f"FilterMate: Dependency check error (non-critical): {e}")
+            
+            def on_project_read(*args):
+                """Handler for project read signal - reset state and schedule check."""
+                # Reset state for new project
+                self._form_dependency_warning_shown = False
+                self._missing_dependency_layers = set()
+                # Schedule check after QGIS warnings have appeared (project load is async)
+                QTimer.singleShot(2000, check_and_clear_warnings)
+            
+            # Connect to project read signal for future project loads
+            # Store reference to avoid garbage collection and allow disconnection
+            self._on_project_read_handler = on_project_read
+            QgsProject.instance().readProject.connect(on_project_read)
+            
+            # Also check now for already loaded project (e.g., plugin activated after project load)
+            QTimer.singleShot(1500, check_and_clear_warnings)
+            
+        except Exception as e:
+            logger.debug(f"FilterMate: Message filter setup note: {e}")
     
     def _check_geometry_validation_settings(self):
         """Check QGIS geometry validation settings and warn user if not disabled.
@@ -905,6 +993,16 @@ class FilterMate:
         
         # Disconnect project change signals using dedicated method
         self._disconnect_auto_activation_signals()
+        
+        # Disconnect project read signal for form dependency warnings
+        try:
+            from qgis.core import QgsProject
+            if hasattr(self, '_on_project_read_handler') and self._on_project_read_handler:
+                QgsProject.instance().readProject.disconnect(self._on_project_read_handler)
+                self._on_project_read_handler = None
+                logger.debug("FilterMate: readProject signal disconnected")
+        except Exception as e:
+            logger.debug(f"FilterMate: Error disconnecting readProject signal: {e}")
         
         # PERFORMANCE v2.4.0: Clean up PostgreSQL connection pools
         try:

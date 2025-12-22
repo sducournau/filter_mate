@@ -50,7 +50,8 @@
           "nb",
           "sl",
           "tl",
-          "am"
+          "am",
+          "uz"
         ],
         "description": "Interface language: 'auto' (use QGIS locale), or force specific language",
         "available_translations": [
@@ -74,7 +75,8 @@
           "nb (Norsk)",
           "sl (Slovenščina)",
           "tl (Tagalog)",
-          "am (አማርኛ)"
+          "am (አማርኛ)",
+          "uz (Oʻzbekcha)"
         ]
       },
       "UI_PROFILE": {

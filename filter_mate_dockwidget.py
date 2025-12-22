@@ -5387,6 +5387,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["single_selection_expression"])
+                # SPATIALITE FIX: Allow the model to populate before further operations
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setAllowNull(True)
             except (AttributeError, KeyError, RuntimeError) as e:
                 logger.error(f"Error setting single selection features widget: {type(e).__name__}: {e}")
             
@@ -6152,15 +6154,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     pk_name = layer_props["infos"].get("primary_key_name")
                     
                     if pk_name is None:
-                        # Primary key not detected - try to use fid for OGR layers
-                        logger.debug(f"No primary_key_name in layer properties")
+                        # Primary key not detected - use universal $id fallback
+                        logger.debug(f"No primary_key_name in layer properties, using $id fallback")
                         provider_type = layer_props["infos"].get("layer_provider_type", "")
+                        feature_id = input.id()
                         
-                        # For OGR layers, use fid as the identifier
+                        # UNIVERSAL FALLBACK: Use $id which works for all providers
+                        # $id is QGIS internal feature ID, works regardless of provider
+                        expression = f'$id = {feature_id}'
+                        logger.debug(f"Using universal $id fallback expression: {expression}")
+                        
+                        # For OGR layers, also try "fid" field as alternative
                         if provider_type == 'ogr':
-                            feature_id = input.id()
-                            expression = f'"fid" = {feature_id}'
-                            logger.debug(f"OGR layer: using fid expression: {expression}")
+                            # Check if fid field exists
+                            fid_idx = self.current_layer.fields().indexFromName('fid')
+                            if fid_idx >= 0:
+                                expression = f'"fid" = {feature_id}'
+                                logger.debug(f"OGR layer: using fid field expression: {expression}")
                         
                         # Always reload feature to ensure geometry is available
                         try:
@@ -6217,12 +6227,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             logger.debug(f"Could not reload feature: {e}")
                             features = [input]
                     else:
-                        # If we can't get the primary key value, use fid for OGR layers
+                        # UNIVERSAL FALLBACK: If we can't get the primary key value, use $id
                         provider_type = layer_props["infos"].get("layer_provider_type", "")
+                        feature_id = input.id()
+                        
+                        # Use $id as universal fallback - works for all providers
+                        expression = f'$id = {feature_id}'
+                        logger.debug(f"pk_value not found, using universal $id fallback: {expression}")
+                        
+                        # For OGR layers, also try "fid" field as alternative
                         if provider_type == 'ogr':
-                            feature_id = input.id()
-                            expression = f'"fid" = {feature_id}'
-                            logger.debug(f"OGR layer fallback: using fid expression: {expression}")
+                            fid_idx = self.current_layer.fields().indexFromName('fid')
+                            if fid_idx >= 0:
+                                expression = f'"fid" = {feature_id}'
+                                logger.debug(f"OGR layer fallback: using fid field expression: {expression}")
                         
                         # Reload feature from layer by ID for geometry
                         try:
@@ -6235,7 +6253,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             features = [input]
                             logger.debug(f"Error reloading feature: {e}")
                         logger.debug(f"Could not access primary key '{pk_name}' in feature. "
-                                    f"Available fields: {[f.name() for f in input.fields()]}. Using feature directly.")
+                                    f"Available fields: {[f.name() for f in input.fields()]}. Using $id fallback.")
                 else:
                     # CRITICAL: Reload feature from layer to ensure geometry is loaded
                     # QgsFeaturePickerWidget.featureChanged may emit features without geometry
@@ -6255,20 +6273,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     return features, expression
                 
                 if identify_by_primary_key_name is True:
-                    pk_name = layer_props["infos"]["primary_key_name"]
-                    pk_is_numeric = layer_props["infos"]["primary_key_is_numeric"]
+                    # FALLBACK FIX: Safely get primary key with fallback to feature ID ($id)
+                    pk_name = layer_props["infos"].get("primary_key_name")
+                    pk_is_numeric = layer_props["infos"].get("primary_key_is_numeric", True)
                     provider_type = layer_props["infos"].get("layer_provider_type", "")
                     
-                    # CRITICAL FIX: Field names must be quoted for QgsExpression to work
-                    # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
-                    if pk_is_numeric is True:
-                        input_ids = [str(feat[1]) for feat in input]  
-                        expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
+                    if pk_name is None:
+                        # FALLBACK: Use feature IDs directly when no primary key is available
+                        # input format from CustomCheckableFeatureComboBox: [(display_value, pk_value, ...), ...]
+                        # When pk_name is None, feat[1] may be the feature id
+                        logger.debug(f"No primary_key_name available for list input, using $id fallback")
+                        try:
+                            # Try to extract feature IDs from input
+                            # Format depends on how the list was built
+                            feature_ids = []
+                            for feat in input:
+                                if isinstance(feat, (list, tuple)) and len(feat) > 1:
+                                    # Assume feat[1] contains an ID-like value
+                                    feature_ids.append(str(feat[1]))
+                                elif isinstance(feat, QgsFeature):
+                                    feature_ids.append(str(feat.id()))
+                            
+                            if feature_ids:
+                                expression = f'$id IN ({", ".join(feature_ids)})'
+                                logger.debug(f"Generated $id fallback expression: {expression}")
+                        except Exception as e:
+                            logger.warning(f"Could not generate fallback expression for list: {e}")
+                            # Return features directly without expression if we can't build one
+                            for feat in input:
+                                if isinstance(feat, QgsFeature):
+                                    features.append(feat)
+                            return features, None
                     else:
-                        input_ids = [str(feat[1]) for feat in input]
-                        quoted_ids = "', '".join(input_ids)
-                        expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
-                    logger.debug(f"Generated list expression for {provider_type}: {expression}")
+                        # CRITICAL FIX: Field names must be quoted for QgsExpression to work
+                        # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
+                        if pk_is_numeric is True:
+                            input_ids = [str(feat[1]) for feat in input]  
+                            expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
+                        else:
+                            input_ids = [str(feat[1]) for feat in input]
+                            quoted_ids = "', '".join(input_ids)
+                            expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
+                        logger.debug(f"Generated list expression for {provider_type}: {expression}")
                 
             if custom_expression is not None:
                     expression = custom_expression
@@ -6349,6 +6395,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             
             else:
+                # NOTE: When is_linking is False, we clear the filter expressions
+                # to ensure the widgets show all features from the layer.
+                # However, this should NOT be called immediately after setLayer() as it
+                # may interfere with the widget's initial data load.
+                logger.debug(f"exploring_link_widgets: is_linking=False, clearing filter expressions")
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('')
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setFilterExpression('', layer_props)
 
@@ -6783,6 +6834,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_expr)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
+                # SPATIALITE FIX: Allow null to prevent widget from blocking on first load
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setAllowNull(True)
             
             # Multiple selection widget - use validated layer parameter
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
@@ -6808,6 +6861,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            
+            # DEBUG: Log widget state after reload
+            picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            logger.debug(f"_reload_exploration_widgets complete:")
+            logger.debug(f"  layer: {layer.name() if layer else 'None'}")
+            logger.debug(f"  single_expr: {single_expr}")
+            logger.debug(f"  picker layer: {picker_widget.layer().name() if picker_widget.layer() else 'None'}")
+            logger.debug(f"  picker displayExpression: {picker_widget.displayExpression()}")
+            logger.debug(f"  picker allowNull: {picker_widget.allowNull()}")
+            logger.debug(f"  picker feature valid: {picker_widget.feature().isValid() if picker_widget.feature() else False}")
         except (AttributeError, KeyError, RuntimeError) as e:
             # Widget may not be ready yet or already destroyed
             logger.warning(f"Error in _reload_exploration_widgets: {type(e).__name__}: {e}")

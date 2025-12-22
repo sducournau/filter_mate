@@ -903,7 +903,50 @@ def escape_json_string(s: str) -> str:
     return escaped
 
 
-def get_value_relation_info(layer, field_name):
+def is_value_relation_layer_available(layer_id, layer_name=None):
+    """
+    Check if a ValueRelation referenced layer is available in the project.
+    
+    This provides a fallback mechanism when layers with ValueRelation widgets
+    reference other layers that are not loaded in the current project.
+    
+    Args:
+        layer_id (str): The ID of the referenced layer
+        layer_name (str, optional): The name of the referenced layer (fallback lookup)
+        
+    Returns:
+        bool: True if the referenced layer exists and is valid, False otherwise
+        
+    Example:
+        >>> if is_value_relation_layer_available(vr_info['layer_id']):
+        ...     # Use ValueRelation expression
+        ... else:
+        ...     # Fallback to raw field value
+    """
+    from qgis.core import QgsProject
+    
+    if not layer_id and not layer_name:
+        return False
+    
+    project = QgsProject.instance()
+    
+    # Try to find by ID first (most reliable)
+    if layer_id:
+        ref_layer = project.mapLayer(layer_id)
+        if ref_layer and ref_layer.isValid():
+            return True
+    
+    # Fallback: try to find by name
+    if layer_name:
+        layers_by_name = project.mapLayersByName(layer_name)
+        for layer in layers_by_name:
+            if layer and layer.isValid():
+                return True
+    
+    return False
+
+
+def get_value_relation_info(layer, field_name, check_layer_availability=False):
     """
     Extract ValueRelation configuration from a field's editor widget setup.
     
@@ -917,6 +960,9 @@ def get_value_relation_info(layer, field_name):
     Args:
         layer (QgsVectorLayer): The layer containing the field
         field_name (str): The name of the field to check
+        check_layer_availability (bool): If True, returns None if the referenced
+            layer is not available in the project. This prevents QGIS warnings
+            about missing layer form dependencies. Default: False
         
     Returns:
         dict or None: Dictionary with keys:
@@ -927,6 +973,7 @@ def get_value_relation_info(layer, field_name):
             - 'filter_expression': Optional filter expression
             - 'allow_null': Whether null values are allowed
             - 'order_by_value': Whether to order by display value
+            - 'layer_available': Boolean indicating if referenced layer exists
         Returns None if field is not a ValueRelation or config is invalid
         
     Example:
@@ -953,19 +1000,32 @@ def get_value_relation_info(layer, field_name):
             return None
         
         # Extract ValueRelation configuration
+        layer_id = config.get('Layer', config.get('LayerId', ''))
+        layer_name = config.get('LayerName', '')
+        
         result = {
-            'layer_id': config.get('Layer', config.get('LayerId', '')),
-            'layer_name': config.get('LayerName', ''),
+            'layer_id': layer_id,
+            'layer_name': layer_name,
             'key_field': config.get('Key', ''),
             'value_field': config.get('Value', ''),
             'filter_expression': config.get('FilterExpression', ''),
             'allow_null': config.get('AllowNull', False),
-            'order_by_value': config.get('OrderByValue', False)
+            'order_by_value': config.get('OrderByValue', False),
+            'layer_available': is_value_relation_layer_available(layer_id, layer_name)
         }
         
         # Validate required fields
         if not result['key_field'] or not result['value_field']:
             logger.debug(f"ValueRelation config incomplete for {field_name}: {config}")
+            return None
+        
+        # If checking availability and layer is missing, return None to trigger fallback
+        if check_layer_availability and not result['layer_available']:
+            logger.debug(
+                f"ValueRelation for '{field_name}' references missing layer "
+                f"'{layer_name}' (id={layer_id[:8] if layer_id else 'N/A'}...). "
+                f"Fallback to raw field value."
+            )
             return None
         
         return result
@@ -975,7 +1035,7 @@ def get_value_relation_info(layer, field_name):
         return None
 
 
-def get_field_display_expression(layer, field_name):
+def get_field_display_expression(layer, field_name, check_layer_availability=True):
     """
     Get the display expression for a field based on its widget configuration.
     
@@ -988,10 +1048,13 @@ def get_field_display_expression(layer, field_name):
     Args:
         layer (QgsVectorLayer): The layer containing the field
         field_name (str): The name of the field
+        check_layer_availability (bool): If True, returns None for ValueRelation
+            fields where the referenced layer is not available. This prevents
+            QGIS warnings about missing layer form dependencies. Default: True
         
     Returns:
         str or None: A QGIS expression string for display, or None if no special
-                     display is configured
+                     display is configured or if the referenced layer is missing
                      
     Example:
         >>> expr = get_field_display_expression(layer, 'category_id')
@@ -1010,9 +1073,17 @@ def get_field_display_expression(layer, field_name):
         widget_setup = layer.editorWidgetSetup(field_idx)
         widget_type = widget_setup.type()
         
-        # For ValueRelation, use represent_value() which is the most reliable method
-        # It automatically handles the lookup to the referenced layer
+        # For ValueRelation, check if referenced layer is available
         if widget_type == 'ValueRelation':
+            if check_layer_availability:
+                vr_info = get_value_relation_info(layer, field_name, check_layer_availability=True)
+                if vr_info is None:
+                    # Referenced layer is missing - fallback to raw field value
+                    logger.debug(
+                        f"Skipping represent_value() for '{field_name}' - "
+                        f"referenced layer not available"
+                    )
+                    return None
             # represent_value() is the QGIS built-in function that resolves
             # widget values to their display representation
             return f'represent_value("{field_name}")'
@@ -1023,6 +1094,19 @@ def get_field_display_expression(layer, field_name):
         
         # For RelationReference widgets  
         elif widget_type == 'RelationReference':
+            # Check if the relation's referenced layer is available
+            if check_layer_availability:
+                config = widget_setup.config()
+                relation_id = config.get('Relation', '') if config else ''
+                if relation_id:
+                    from qgis.core import QgsProject
+                    relation = QgsProject.instance().relationManager().relation(relation_id)
+                    if not relation.isValid():
+                        logger.debug(
+                            f"Skipping represent_value() for '{field_name}' - "
+                            f"relation '{relation_id}' not valid"
+                        )
+                        return None
             return f'represent_value("{field_name}")'
         
         return None
@@ -1063,7 +1147,7 @@ def get_layer_display_expression(layer):
         return None
 
 
-def get_fields_with_value_relations(layer):
+def get_fields_with_value_relations(layer, only_available=True):
     """
     Get all fields in a layer that have ValueRelation widget configuration.
     
@@ -1072,10 +1156,14 @@ def get_fields_with_value_relations(layer):
     
     Args:
         layer (QgsVectorLayer): The layer to analyze
+        only_available (bool): If True (default), only returns ValueRelation
+            fields where the referenced layer is available in the project.
+            This provides a fallback mechanism for missing layer dependencies.
         
     Returns:
         list: List of tuples (field_name, value_relation_info) for each 
-              ValueRelation field
+              ValueRelation field. If only_available=True, excludes fields
+              where referenced layers are missing.
               
     Example:
         >>> relations = get_fields_with_value_relations(layer)
@@ -1089,8 +1177,15 @@ def get_fields_with_value_relations(layer):
     
     for field in layer.fields():
         field_name = field.name()
-        vr_info = get_value_relation_info(layer, field_name)
+        vr_info = get_value_relation_info(layer, field_name, check_layer_availability=False)
         if vr_info:
+            # Filter out unavailable layers if requested
+            if only_available and not vr_info.get('layer_available', False):
+                logger.debug(
+                    f"Skipping ValueRelation field '{field_name}' - "
+                    f"referenced layer '{vr_info.get('layer_name', 'unknown')}' not available"
+                )
+                continue
             result.append((field_name, vr_info))
     
     return result

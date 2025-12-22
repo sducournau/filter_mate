@@ -10,12 +10,14 @@ version=2.4.3
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.3 - Export System Fix & Message Bar Improvements
+about=FilterMate v2.4.3 - Export System Fix & Stability Improvements
 
  NEW in v2.4.3:
  - 🐛 Fixed export system: Files now export with correct extensions (.shp, .gpkg, .geojson, etc.)
  - 🔧 Fixed driver mapping: Proper QGIS driver names for all export formats
  - 💬 Improved message bar: Better error reporting with correct argument order
+ - 🛡️ ValueRelation fallback: Gracefully handles missing referenced layers
+ - ⚙️ Fixed expression context: represent_value() now works properly with layer context
  
  Previous (v2.4.2):
  - ✨ Smart display detection: Auto-detects ValueRelation fields and shows human-readable values
