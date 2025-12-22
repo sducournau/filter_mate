@@ -2128,6 +2128,9 @@ class FilterEngineTask(QgsTask):
         """
         Copy filtered layer (with subset string) to memory layer.
         
+        STABILITY FIX v2.3.9: Added geometry validation AND repair during copy to prevent
+        access violations when processing corrupted geometries from virtual layers.
+        
         This is crucial for OGR layers with subset strings, as some QGIS
         algorithms don't handle subset strings correctly.
         
@@ -2136,18 +2139,24 @@ class FilterEngineTask(QgsTask):
             layer_name: Name for memory layer
             
         Returns:
-            QgsVectorLayer: Memory layer with only filtered features
+            QgsVectorLayer: Memory layer with only filtered features and valid geometries
         """
         # Check if layer has active filter
         subset_string = layer.subsetString()
         feature_count = layer.featureCount()
         
-        logger.debug(f"_copy_filtered_layer_to_memory: {layer.name()}, features={feature_count}, subset='{subset_string[:50] if subset_string else 'None'}'")
+        logger.debug(f"_copy_filtered_layer_to_memory: {layer.name()}, features={feature_count}, "
+                    f"subset='{subset_string[:50] if subset_string else 'None'}', provider={layer.providerType()}")
         
         # If no filter and reasonable feature count, return original
-        if not subset_string and feature_count < 10000:
+        # EXCEPTION: Always copy virtual layers to memory - they may have unstable geometries
+        is_virtual_layer = layer.providerType() == 'virtual'
+        if not subset_string and feature_count < 10000 and not is_virtual_layer:
             logger.debug("  → No subset string, returning original layer")
             return layer
+        
+        if is_virtual_layer:
+            logger.debug("  → Virtual layer detected, copying to memory for stability")
         
         # Create memory layer with same structure
         geom_type = QgsWkbTypes.displayString(layer.wkbType())
@@ -2158,20 +2167,52 @@ class FilterEngineTask(QgsTask):
         memory_layer.dataProvider().addAttributes(layer.fields())
         memory_layer.updateFields()
         
-        # Copy filtered features
+        # STABILITY FIX v2.3.9: Validate AND REPAIR geometries during copy
+        # Virtual layers and some OGR sources may have corrupted geometries
+        # that pass validation but crash GEOS
         features_to_copy = []
+        skipped_invalid = 0
+        repaired_count = 0
+        
         for feature in layer.getFeatures():
-            new_feature = QgsFeature(feature)
-            features_to_copy.append(new_feature)
+            geom = feature.geometry()
+            
+            # CRITICAL: First check if geometry exists
+            if geom is None or geom.isNull() or geom.isEmpty():
+                skipped_invalid += 1
+                continue
+            
+            # STABILITY FIX: Try to repair ALL geometries with makeValid()
+            try:
+                repaired_geom = geom.makeValid()
+                if repaired_geom and not repaired_geom.isNull() and not repaired_geom.isEmpty():
+                    new_feature = QgsFeature(feature)
+                    new_feature.setGeometry(repaired_geom)
+                    features_to_copy.append(new_feature)
+                    if geom.wkbType() != repaired_geom.wkbType():
+                        repaired_count += 1
+                elif validate_geometry(geom):
+                    new_feature = QgsFeature(feature)
+                    features_to_copy.append(new_feature)
+                else:
+                    skipped_invalid += 1
+            except Exception as e:
+                logger.debug(f"  Exception repairing feature {feature.id()}: {e}")
+                skipped_invalid += 1
+        
+        if repaired_count > 0:
+            logger.info(f"  🔧 Repaired {repaired_count} geometries during copy")
+        if skipped_invalid > 0:
+            logger.warning(f"  ⚠️ Skipped {skipped_invalid} features with invalid geometries")
         
         if not features_to_copy:
-            logger.warning(f"  ⚠️ No features to copy from {layer.name()}")
+            logger.warning(f"  ⚠️ No valid features to copy from {layer.name()}")
             return memory_layer
         
         memory_layer.dataProvider().addFeatures(features_to_copy)
         memory_layer.updateExtents()
         
-        logger.debug(f"  ✓ Copied {len(features_to_copy)} features to memory layer")
+        logger.debug(f"  ✓ Copied {len(features_to_copy)} features to memory layer (skipped {skipped_invalid} invalid, repaired {repaired_count})")
         
         # Create spatial index for improved performance
         self._verify_and_create_spatial_index(memory_layer, layer_name)
@@ -2182,6 +2223,9 @@ class FilterEngineTask(QgsTask):
         """
         Copy only selected features from layer to memory layer.
         
+        STABILITY FIX v2.3.9: Added geometry validation AND repair during copy to prevent
+        access violations when processing corrupted geometries from virtual layers.
+        
         This method extracts only the currently selected features from the source
         layer and copies them to a new memory layer. Essential for multi-selection
         mode where only selected features should be used for spatial operations.
@@ -2191,11 +2235,11 @@ class FilterEngineTask(QgsTask):
             layer_name: Name for the memory layer
             
         Returns:
-            QgsVectorLayer: Memory layer containing only selected features
+            QgsVectorLayer: Memory layer containing only selected features with valid geometries
         """
         selected_count = layer.selectedFeatureCount()
         logger.debug(f"_copy_selected_features_to_memory: {layer.name()}, "
-                    f"selected={selected_count}")
+                    f"selected={selected_count}, provider={layer.providerType()}")
         
         if selected_count == 0:
             logger.warning(f"  ⚠️ No features selected in {layer.name()}")
@@ -2216,11 +2260,48 @@ class FilterEngineTask(QgsTask):
         memory_layer.dataProvider().addAttributes(layer.fields())
         memory_layer.updateFields()
         
-        # Copy ONLY selected features
+        # STABILITY FIX v2.3.9: Validate AND REPAIR geometries during copy
+        # Virtual layers and some OGR sources may have corrupted geometries
+        # that pass validation but crash GEOS
         features_to_copy = []
+        skipped_invalid = 0
+        repaired_count = 0
+        
         for feature in layer.selectedFeatures():
-            new_feature = QgsFeature(feature)
-            features_to_copy.append(new_feature)
+            geom = feature.geometry()
+            
+            # CRITICAL: First check if geometry exists
+            if geom is None or geom.isNull() or geom.isEmpty():
+                skipped_invalid += 1
+                logger.debug(f"  Skipped feature {feature.id()} with null/empty geometry")
+                continue
+            
+            # STABILITY FIX: Try to repair ALL geometries with makeValid()
+            # This prevents crashes even on geometries that "look" valid
+            try:
+                repaired_geom = geom.makeValid()
+                if repaired_geom and not repaired_geom.isNull() and not repaired_geom.isEmpty():
+                    # Use repaired geometry
+                    new_feature = QgsFeature(feature)
+                    new_feature.setGeometry(repaired_geom)
+                    features_to_copy.append(new_feature)
+                    if geom.wkbType() != repaired_geom.wkbType():
+                        repaired_count += 1
+                elif validate_geometry(geom):
+                    # Fallback to original if makeValid failed but geometry seems OK
+                    new_feature = QgsFeature(feature)
+                    features_to_copy.append(new_feature)
+                else:
+                    skipped_invalid += 1
+                    logger.debug(f"  Skipped feature {feature.id()} - makeValid failed and geometry invalid")
+            except Exception as e:
+                logger.warning(f"  Exception repairing feature {feature.id()}: {e}")
+                skipped_invalid += 1
+        
+        if repaired_count > 0:
+            logger.info(f"  🔧 Repaired {repaired_count} geometries during copy")
+        if skipped_invalid > 0:
+            logger.warning(f"  ⚠️ Skipped {skipped_invalid} features with invalid geometries")
         
         if features_to_copy:
             memory_layer.dataProvider().addFeatures(features_to_copy)
@@ -2228,8 +2309,10 @@ class FilterEngineTask(QgsTask):
             
             # Create spatial index for improved performance
             self._verify_and_create_spatial_index(memory_layer, layer_name)
+        else:
+            logger.warning(f"  ⚠️ No valid features to copy from selection (all {selected_count} had invalid geometries)")
         
-        logger.debug(f"  ✓ Copied {len(features_to_copy)} selected features to memory layer")
+        logger.debug(f"  ✓ Copied {len(features_to_copy)} selected features to memory layer (skipped {skipped_invalid} invalid)")
         return memory_layer
 
     def _fix_invalid_geometries(self, layer, output_key):
@@ -2926,38 +3009,61 @@ class FilterEngineTask(QgsTask):
         Apply buffer to layer with automatic fallback to manual method.
         Validates and repairs geometries before buffering.
         
+        STABILITY FIX v2.3.9: Added input layer validation to prevent access violations.
+        
         Args:
             layer: Input layer
             buffer_distance: QgsProperty or float
             
         Returns:
-            QgsVectorLayer: Buffered layer (may be empty on failure)
+            QgsVectorLayer: Buffered layer, or None on failure
         """
         logger.info(f"Applying buffer: distance={buffer_distance}")
+        
+        # STABILITY FIX v2.3.9: Validate input layer before any operations
+        if layer is None:
+            logger.error("_apply_buffer_with_fallback: Input layer is None")
+            return None
+        
+        if not layer.isValid():
+            logger.error(f"_apply_buffer_with_fallback: Input layer is not valid")
+            return None
+        
+        if layer.featureCount() == 0:
+            logger.warning(f"_apply_buffer_with_fallback: Input layer has no features")
+            return None
         
         # DISABLED: Skip geometry repair
         # layer = self._repair_invalid_geometries(layer)
         
         try:
             # Try QGIS buffer algorithm first
-            return self._apply_qgis_buffer(layer, buffer_distance)
+            result = self._apply_qgis_buffer(layer, buffer_distance)
+            
+            # STABILITY FIX v2.3.9: Validate result before returning
+            if result is None or not result.isValid() or result.featureCount() == 0:
+                logger.warning("_apply_qgis_buffer returned invalid/empty result, trying manual buffer")
+                raise Exception("QGIS buffer returned invalid result")
+            
+            return result
+            
         except Exception as e:
             # Fallback to manual buffer
             logger.warning(f"QGIS buffer algorithm failed: {str(e)}, using manual buffer approach")
             try:
-                return self._create_buffered_memory_layer(layer, buffer_distance)
+                result = self._create_buffered_memory_layer(layer, buffer_distance)
+                
+                # STABILITY FIX v2.3.9: Validate result before returning
+                if result is None or not result.isValid() or result.featureCount() == 0:
+                    logger.error("Manual buffer also returned invalid/empty result")
+                    return None
+                
+                return result
+                
             except Exception as manual_error:
                 logger.error(f"Both buffer methods failed. QGIS: {str(e)}, Manual: {str(manual_error)}")
-                logger.warning("Returning empty buffer layer - continuing with empty geometry")
-                
-                # Return empty layer instead of raising exception
-                geom_type = "Polygon" if layer.geometryType() in [0, 1] else "MultiPolygon"
-                empty_layer = QgsVectorLayer(
-                    f"{geom_type}?crs={layer.crs().authid()}",
-                    "empty_buffer",
-                    "memory"
-                )
-                return empty_layer
+                logger.error("Returning None - buffer operation failed completely")
+                return None
 
 
     def prepare_ogr_source_geom(self):
@@ -3064,16 +3170,48 @@ class FilterEngineTask(QgsTask):
             # Only apply buffer via processing if Spatialite WKT is NOT available
             # (Spatialite backend will use ST_Buffer() in SQL instead)
             logger.info("Applying buffer via QGIS processing (Spatialite WKT not available)")
-            layer = self._apply_buffer_with_fallback(layer, buffer_distance)
-            # Check if buffer resulted in empty layer
-            if layer.featureCount() == 0:
-                logger.warning("⚠️ Buffer operation produced empty layer - using unbuffered geometry")
+            buffered_layer = self._apply_buffer_with_fallback(layer, buffer_distance)
+            
+            # STABILITY FIX v2.3.9: Check if buffer failed (returns None) or produced empty layer
+            if buffered_layer is None or not buffered_layer.isValid() or buffered_layer.featureCount() == 0:
+                logger.warning("⚠️ Buffer operation failed or produced empty layer - using unbuffered geometry")
                 # Fallback: use original geometry without buffer
                 layer = self.source_layer
                 if layer.subsetString():
                     layer = self._copy_filtered_layer_to_memory(layer, "source_filtered_no_buffer")
+            else:
+                layer = buffered_layer
         elif buffer_distance is not None and skip_buffer:
             logger.info(f"Buffer of {buffer_distance}m will be applied via ST_Buffer() in Spatialite SQL")
+        
+        # STABILITY FIX v2.3.9: Validate the final layer before storing
+        if layer is None:
+            logger.error("prepare_ogr_source_geom: Final layer is None")
+            self.ogr_source_geom = None
+            return
+        
+        if not layer.isValid():
+            logger.error(f"prepare_ogr_source_geom: Final layer is not valid")
+            self.ogr_source_geom = None
+            return
+        
+        if layer.featureCount() == 0:
+            logger.warning("prepare_ogr_source_geom: Final layer has no features")
+            self.ogr_source_geom = None
+            return
+        
+        # Validate at least one geometry is valid
+        has_valid_geom = False
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if validate_geometry(geom):
+                has_valid_geom = True
+                break
+        
+        if not has_valid_geom:
+            logger.error("prepare_ogr_source_geom: Final layer has no valid geometries")
+            self.ogr_source_geom = None
+            return
         
         # Store result
         self.ogr_source_geom = layer
@@ -3317,6 +3455,9 @@ class FilterEngineTask(QgsTask):
         """
         Execute spatial selection using QGIS processing for OGR/non-PostgreSQL layers.
         
+        STABILITY FIX v2.3.9: Added comprehensive validation before calling selectbylocation
+        to prevent access violations from invalid geometries.
+        
         Args:
             layer: Original layer
             current_layer: Potentially reprojected working layer
@@ -3342,66 +3483,135 @@ class FilterEngineTask(QgsTask):
             logger.warning("ogr_source_geom has no features - spatial selection will return no results")
             return
         
+        # STABILITY FIX v2.3.9: Validate that at least one geometry is valid before calling selectbylocation
+        # This prevents access violations from corrupted or invalid geometries
+        has_valid_geom = False
+        for feature in self.ogr_source_geom.getFeatures():
+            geom = feature.geometry()
+            if validate_geometry(geom):
+                has_valid_geom = True
+                break
+        
+        if not has_valid_geom:
+            logger.error("ogr_source_geom has no valid geometries - spatial selection would fail")
+            raise Exception("Source geometry layer has no valid geometries")
+        
         logger.info(f"Using ogr_source_geom: {self.ogr_source_geom.name()}, "
                    f"features={self.ogr_source_geom.featureCount()}, "
                    f"geomType={QgsWkbTypes.displayString(self.ogr_source_geom.wkbType())}")
         
+        # STABILITY FIX v2.3.9: Configure processing context to skip invalid geometries
+        # This prevents access violations when selectbylocation encounters corrupted geometries
+        context = QgsProcessingContext()
+        context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
+        feedback = QgsProcessingFeedback()
+        
+        # CRITICAL FIX v2.3.9: Use native:fixgeometries on BOTH layers BEFORE selectbylocation
+        # This is ESSENTIAL to prevent C++/GEOS level access violations that Python cannot catch
+        # The crash occurs in GEOS when it encounters certain invalid geometries
+        fixed_source_geom = self.ogr_source_geom
+        try:
+            logger.debug(f"Fixing geometries on source layer: {self.ogr_source_geom.name()}")
+            fix_result = processing.run("native:fixgeometries", {
+                'INPUT': self.ogr_source_geom,
+                'OUTPUT': 'memory:'
+            }, context=context, feedback=feedback)
+            fixed_source_geom = fix_result['OUTPUT']
+            logger.info(f"✓ Source geometries fixed: {fixed_source_geom.featureCount()} features")
+        except Exception as fix_error:
+            logger.warning(f"fixgeometries failed on source layer: {fix_error}, using original")
+        
+        # Also fix current_layer if not too large (to avoid performance issues)
+        fixed_current_layer = current_layer
+        use_fixed_current = False
+        if current_layer.featureCount() <= 50000:  # Only fix smaller layers
+            try:
+                logger.debug(f"Fixing geometries on target layer: {current_layer.name()}")
+                fix_result = processing.run("native:fixgeometries", {
+                    'INPUT': current_layer,
+                    'OUTPUT': 'memory:'
+                }, context=context, feedback=feedback)
+                fixed_current_layer = fix_result['OUTPUT']
+                use_fixed_current = True
+                logger.info(f"✓ Target geometries fixed: {fixed_current_layer.featureCount()} features")
+            except Exception as fix_error:
+                logger.warning(f"fixgeometries failed on target layer: {fix_error}, using original")
+                use_fixed_current = False
+        
+        predicate_list = [int(predicate) for predicate in self.current_predicates.keys()]
+        
+        # Helper function to map selection back to original layer if we used fixed layer
+        def map_selection_to_original():
+            if use_fixed_current and fixed_current_layer is not current_layer:
+                selected_fids = [f.id() for f in fixed_current_layer.selectedFeatures()]
+                if selected_fids:
+                    current_layer.selectByIds(selected_fids)
+                    logger.debug(f"Mapped {len(selected_fids)} features back to original layer")
+        
+        # Use fixed layers for spatial operations
+        work_layer = fixed_current_layer if use_fixed_current else current_layer
+        
         if self.has_combine_operator is True:
-            current_layer.selectAll()
+            work_layer.selectAll()
             
             if self.param_other_layers_combine_operator == 'OR':
-                self._verify_and_create_spatial_index(current_layer)
+                self._verify_and_create_spatial_index(work_layer)
                 # CRITICAL FIX: Thread-safe subset string application
-                safe_set_subset_string(current_layer, param_old_subset)
-                current_layer.selectAll()
-                safe_set_subset_string(current_layer, '')
+                safe_set_subset_string(work_layer, param_old_subset)
+                work_layer.selectAll()
+                safe_set_subset_string(work_layer, '')
                 
                 alg_params_select = {
-                    'INPUT': current_layer,
-                    'INTERSECT': self.ogr_source_geom,
+                    'INPUT': work_layer,
+                    'INTERSECT': fixed_source_geom,
                     'METHOD': 1,
-                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    'PREDICATE': predicate_list
                 }
-                processing.run("qgis:selectbylocation", alg_params_select)
+                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
+                map_selection_to_original()
                 
             elif self.param_other_layers_combine_operator == 'AND':
-                self._verify_and_create_spatial_index(current_layer)
+                self._verify_and_create_spatial_index(work_layer)
                 alg_params_select = {
-                    'INPUT': current_layer,
-                    'INTERSECT': self.ogr_source_geom,
+                    'INPUT': work_layer,
+                    'INTERSECT': fixed_source_geom,
                     'METHOD': 2,
-                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    'PREDICATE': predicate_list
                 }
-                processing.run("qgis:selectbylocation", alg_params_select)
+                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
+                map_selection_to_original()
                 
             elif self.param_other_layers_combine_operator == 'NOT AND':
-                self._verify_and_create_spatial_index(current_layer)
+                self._verify_and_create_spatial_index(work_layer)
                 alg_params_select = {
-                    'INPUT': current_layer,
-                    'INTERSECT': self.ogr_source_geom,
+                    'INPUT': work_layer,
+                    'INTERSECT': fixed_source_geom,
                     'METHOD': 3,
-                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    'PREDICATE': predicate_list
                 }
-                processing.run("qgis:selectbylocation", alg_params_select)
+                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
+                map_selection_to_original()
                 
             else:
-                self._verify_and_create_spatial_index(current_layer)
+                self._verify_and_create_spatial_index(work_layer)
                 alg_params_select = {
-                    'INPUT': current_layer,
-                    'INTERSECT': self.ogr_source_geom,
+                    'INPUT': work_layer,
+                    'INTERSECT': fixed_source_geom,
                     'METHOD': 0,
-                    'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                    'PREDICATE': predicate_list
                 }
-                processing.run("qgis:selectbylocation", alg_params_select)
+                processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
+                map_selection_to_original()
         else:
-            self._verify_and_create_spatial_index(current_layer)
+            self._verify_and_create_spatial_index(work_layer)
             alg_params_select = {
-                'INPUT': current_layer,
-                'INTERSECT': self.ogr_source_geom,
+                'INPUT': work_layer,
+                'INTERSECT': fixed_source_geom,
                 'METHOD': 0,
-                'PREDICATE': [int(predicate) for predicate in self.current_predicates.keys()]
+                'PREDICATE': predicate_list
             }
-            processing.run("qgis:selectbylocation", alg_params_select)
+            processing.run("qgis:selectbylocation", alg_params_select, context=context, feedback=feedback)
+            map_selection_to_original()
 
 
     def _build_ogr_filter_from_selection(self, current_layer, layer_props, param_distant_geom_expression):

@@ -16,6 +16,7 @@ PROVIDER_POSTGRES = 'postgresql'
 PROVIDER_SPATIALITE = 'spatialite'
 PROVIDER_OGR = 'ogr'
 PROVIDER_MEMORY = 'memory'
+PROVIDER_VIRTUAL = 'virtual'
 
 # Provider type mapping from QGIS internal names
 PROVIDER_TYPE_MAPPING = {
@@ -23,6 +24,7 @@ PROVIDER_TYPE_MAPPING = {
     'spatialite': PROVIDER_SPATIALITE,
     'ogr': PROVIDER_OGR,
     'memory': PROVIDER_MEMORY,
+    'virtual': PROVIDER_OGR,  # Virtual layers use OGR backend (fallback)
 }
 
 # ============================================================================

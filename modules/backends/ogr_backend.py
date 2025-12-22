@@ -337,11 +337,30 @@ class OGRGeometricFilter(GeometricFilterBackend):
         produce GeometryCollection which is incompatible with typed layers (MultiPolygon).
         This method converts GeometryCollection to MultiPolygon for compatibility.
         
+        STABILITY FIX v2.3.9: Added source layer validation to prevent access violations.
+        
         Uses buffer_type from task_params for END_CAP_STYLE:
         - 0: Round (default)
         - 1: Flat
         - 2: Square
         """
+        # STABILITY FIX v2.3.9: Validate source layer before any operations
+        if source_layer is None:
+            self.log_error("Source layer is None - cannot apply buffer")
+            return None
+        
+        if not isinstance(source_layer, QgsVectorLayer):
+            self.log_error(f"Source layer is not a QgsVectorLayer: {type(source_layer).__name__}")
+            return None
+        
+        if not source_layer.isValid():
+            self.log_error(f"Source layer is not valid: {source_layer.name()}")
+            return None
+        
+        if source_layer.featureCount() == 0:
+            self.log_warning(f"Source layer has no features: {source_layer.name()}")
+            return None
+        
         if buffer_value and buffer_value > 0:
             self.log_debug(f"Applying buffer of {buffer_value} to source layer")
             try:
@@ -363,8 +382,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
                               f"CRS: {source_layer.crs().authid()}, "
                               f"Features: {source_layer.featureCount()}")
                 
+                # STABILITY FIX v2.3.9: Use fixgeometries BEFORE buffer to prevent GEOS crashes
+                # This is critical because some source geometries can crash native:buffer
+                from qgis.core import QgsProcessingContext, QgsProcessingFeedback, QgsFeatureRequest
+                context = QgsProcessingContext()
+                context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
+                feedback = QgsProcessingFeedback()
+                
+                try:
+                    # First run fixgeometries to repair any invalid geometries
+                    fix_result = processing.run("native:fixgeometries", {
+                        'INPUT': source_layer,
+                        'OUTPUT': 'memory:'
+                    }, context=context, feedback=feedback)
+                    fixed_layer = fix_result['OUTPUT']
+                    self.log_debug(f"Fixed geometries: {fixed_layer.featureCount()} features")
+                except Exception as fix_error:
+                    self.log_warning(f"fixgeometries failed: {fix_error}, using original layer")
+                    fixed_layer = source_layer
+                
+                # Now apply buffer on the fixed layer
                 buffer_result = processing.run("native:buffer", {
-                    'INPUT': source_layer,
+                    'INPUT': fixed_layer,
                     'DISTANCE': buffer_dist,
                     'SEGMENTS': int(5),
                     'END_CAP_STYLE': int(buffer_type),  # Use configured buffer type
@@ -372,7 +411,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     'MITER_LIMIT': float(2.0),
                     'DISSOLVE': False,
                     'OUTPUT': 'memory:'
-                })
+                }, context=context, feedback=feedback)
                 
                 buffered_layer = buffer_result['OUTPUT']
                 
@@ -621,6 +660,214 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         return predicate_codes
     
+    def _validate_intersect_layer(self, intersect_layer: QgsVectorLayer) -> bool:
+        """
+        Validate that the intersect layer is safe to use for spatial operations.
+        
+        CRITICAL STABILITY FIX v2.3.9:
+        Prevents access violations when passing invalid layers to native:selectbylocation.
+        
+        Checks:
+        1. Layer is not None and is a QgsVectorLayer
+        2. Layer is valid
+        3. Layer has at least one feature
+        4. Features have valid geometries
+        
+        Args:
+            intersect_layer: The layer to validate
+            
+        Returns:
+            True if layer is safe to use, False otherwise
+        """
+        # Check layer exists and is valid
+        if intersect_layer is None:
+            self.log_error("Intersect layer is None")
+            return False
+        
+        if not isinstance(intersect_layer, QgsVectorLayer):
+            self.log_error(f"Intersect layer is not a QgsVectorLayer: {type(intersect_layer).__name__}")
+            return False
+        
+        if not intersect_layer.isValid():
+            self.log_error(f"Intersect layer is not valid: {intersect_layer.name()}")
+            return False
+        
+        # Check feature count
+        feature_count = intersect_layer.featureCount()
+        if feature_count == 0:
+            self.log_warning(f"Intersect layer has no features: {intersect_layer.name()}")
+            return False
+        
+        # Check that at least one feature has a valid geometry
+        has_valid_geometry = False
+        invalid_geom_count = 0
+        for feature in intersect_layer.getFeatures():
+            geom = feature.geometry()
+            if validate_geometry(geom):
+                has_valid_geometry = True
+                break
+            else:
+                invalid_geom_count += 1
+                if invalid_geom_count >= 10:  # Check first 10 only for performance
+                    break
+        
+        if not has_valid_geometry:
+            self.log_error(f"Intersect layer has no valid geometries (checked {invalid_geom_count} features)")
+            return False
+        
+        self.log_debug(f"✓ Intersect layer validated: {intersect_layer.name()} ({feature_count} features)")
+        return True
+    
+    def _validate_input_layer(self, layer: QgsVectorLayer) -> bool:
+        """
+        Validate that the input layer (to be filtered) is safe for spatial operations.
+        
+        CRITICAL STABILITY FIX v2.3.9:
+        Prevents access violations when passing invalid layers to native:selectbylocation.
+        
+        Args:
+            layer: The layer to validate
+            
+        Returns:
+            True if layer is safe to use, False otherwise
+        """
+        if layer is None:
+            self.log_error("Input layer is None")
+            return False
+        
+        if not isinstance(layer, QgsVectorLayer):
+            self.log_error(f"Input layer is not a QgsVectorLayer: {type(layer).__name__}")
+            return False
+        
+        if not layer.isValid():
+            self.log_error(f"Input layer is not valid: {layer.name()}")
+            return False
+        
+        # Check feature count - empty layers are OK (will just return no results)
+        feature_count = layer.featureCount()
+        if feature_count == 0:
+            self.log_debug(f"Input layer is empty: {layer.name()}")
+            return True  # OK to proceed, just won't match anything
+        
+        self.log_debug(f"✓ Input layer validated: {layer.name()} ({feature_count} features)")
+        return True
+    
+    def _safe_select_by_location(
+        self,
+        input_layer: QgsVectorLayer,
+        intersect_layer: QgsVectorLayer,
+        predicate_codes: list
+    ) -> bool:
+        """
+        Safely execute selectbylocation with comprehensive error handling.
+        
+        CRITICAL STABILITY FIX v2.3.9:
+        Wraps native:selectbylocation with validation and error recovery.
+        Uses native:fixgeometries on BOTH layers before selectbylocation to prevent
+        GEOS crashes from invalid geometries.
+        
+        Args:
+            input_layer: Layer to select features from
+            intersect_layer: Layer containing geometries to intersect with
+            predicate_codes: List of QGIS predicate codes
+            
+        Returns:
+            True if selection completed successfully, False on error
+        """
+        try:
+            # Validate both layers before processing
+            if not self._validate_input_layer(input_layer):
+                self.log_error("Input layer validation failed")
+                return False
+            
+            if not self._validate_intersect_layer(intersect_layer):
+                self.log_error("Intersect layer validation failed")
+                return False
+            
+            # Configure processing context to handle invalid geometries gracefully
+            from qgis.core import QgsProcessingContext, QgsProcessingFeedback, QgsFeatureRequest
+            context = QgsProcessingContext()
+            context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
+            feedback = QgsProcessingFeedback()
+            
+            self.log_info(f"🔍 Preparing selectbylocation: input={input_layer.name()} ({input_layer.featureCount()} features), "
+                         f"intersect={intersect_layer.name()} ({intersect_layer.featureCount()} features), "
+                         f"predicates={predicate_codes}")
+            
+            # STABILITY FIX v2.3.9: Use fixgeometries on BOTH layers to prevent C++ crashes
+            # This is critical because invalid geometries cause GEOS to crash at the C++ level
+            fixed_intersect = intersect_layer
+            try:
+                self.log_debug(f"Fixing geometries on intersect layer: {intersect_layer.name()}")
+                fix_result = processing.run("native:fixgeometries", {
+                    'INPUT': intersect_layer,
+                    'OUTPUT': 'memory:'
+                }, context=context, feedback=feedback)
+                fixed_intersect = fix_result['OUTPUT']
+                self.log_debug(f"✓ Intersect layer geometries fixed: {fixed_intersect.featureCount()} features")
+            except Exception as fix_error:
+                self.log_warning(f"fixgeometries failed on intersect layer: {fix_error}, using original")
+            
+            # Also fix input layer geometries if not too large
+            fixed_input = input_layer
+            if input_layer.featureCount() <= 50000:  # Only fix smaller layers
+                try:
+                    self.log_debug(f"Fixing geometries on input layer: {input_layer.name()}")
+                    fix_result = processing.run("native:fixgeometries", {
+                        'INPUT': input_layer,
+                        'OUTPUT': 'memory:'
+                    }, context=context, feedback=feedback)
+                    fixed_input = fix_result['OUTPUT']
+                    self.log_debug(f"✓ Input layer geometries fixed: {fixed_input.featureCount()} features")
+                except Exception as fix_error:
+                    self.log_warning(f"fixgeometries failed on input layer: {fix_error}, using original")
+            
+            self.log_info(f"🔍 Executing selectbylocation with fixed geometries")
+            
+            # Execute with error handling - use fixed layers
+            # Note: We need to map selection back to original input layer
+            if fixed_input is input_layer:
+                # Direct selection on original layer
+                select_result = processing.run("native:selectbylocation", {
+                    'INPUT': input_layer,
+                    'PREDICATE': predicate_codes,
+                    'INTERSECT': fixed_intersect,
+                    'METHOD': 0  # creating new selection
+                }, context=context, feedback=feedback)
+            else:
+                # Select on fixed layer, then map back to original
+                select_result = processing.run("native:selectbylocation", {
+                    'INPUT': fixed_input,
+                    'PREDICATE': predicate_codes,
+                    'INTERSECT': fixed_intersect,
+                    'METHOD': 0
+                }, context=context, feedback=feedback)
+                
+                # Get selected feature IDs from fixed layer
+                selected_fids = [f.id() for f in fixed_input.selectedFeatures()]
+                
+                # Select same features on original layer
+                if selected_fids:
+                    input_layer.selectByIds(selected_fids)
+                    self.log_debug(f"Mapped {len(selected_fids)} selected features back to original layer")
+            
+            selected_count = input_layer.selectedFeatureCount()
+            self.log_info(f"✓ Selection complete: {selected_count} features selected")
+            return True
+            
+        except Exception as e:
+            self.log_error(f"selectbylocation failed: {str(e)}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            
+            # Clear any partial selection to avoid inconsistent state
+            try:
+                input_layer.removeSelection()
+            except:
+                pass
+            
+            return False
+    
     def _apply_filter_standard(
         self, layer, source_layer, predicates, buffer_value,
         old_subset, combine_operator
@@ -638,20 +885,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
         # Map predicates
         predicate_codes = self._map_predicates(predicates)
         
-        # Apply selectbylocation
-        self.log_info(f"Selecting features using predicates: {predicate_codes}")
+        # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
+        if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
+            self.log_error("Safe select by location failed - cannot proceed")
+            return False
+        
+        selected_count = layer.selectedFeatureCount()
+        
+        # Convert selection to subset filter
         try:
-            select_result = processing.run("native:selectbylocation", {
-                'INPUT': layer,
-                'PREDICATE': predicate_codes,
-                'INTERSECT': intersect_layer,
-                'METHOD': 0  # creating new selection
-            })
-            
-            selected_count = layer.selectedFeatureCount()
-            self.log_info(f"Selection complete: {selected_count} features selected")
-            
-            # Convert selection to subset filter
             if selected_count > 0:
                 # Get primary key field name for proper subset string
                 # Note: $id is not always supported by all OGR providers
@@ -776,16 +1018,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 layer.changeAttributeValue(feature.id(), field_idx, 0)
             layer.commitChanges()
             
-            # Apply selectbylocation (benefits from spatial index)
-            self.log_debug(f"Selecting features with predicates: {predicate_codes}")
-            select_result = processing.run("native:selectbylocation", {
-                'INPUT': layer,
-                'PREDICATE': predicate_codes,
-                'INTERSECT': intersect_layer,
-                'METHOD': 0
-            })
+            # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
+            if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
+                self.log_error("Safe select by location failed in large dataset method")
+                return False
             
             selected_count = layer.selectedFeatureCount()
+
             
             if selected_count > 0:
                 # Mark selected features in temp field
@@ -882,13 +1121,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_info(f"  → Memory layer: {memory_layer.name()} ({memory_layer.featureCount()} features)")
             self.log_info(f"  → Predicates: {predicate_codes}")
             
-            # Apply selectbylocation on MEMORY layer (fast, no network)
-            select_result = processing.run("native:selectbylocation", {
-                'INPUT': memory_layer,
-                'PREDICATE': predicate_codes,
-                'INTERSECT': intersect_layer,
-                'METHOD': 0  # creating new selection
-            })
+            # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
+            if not self._safe_select_by_location(memory_layer, intersect_layer, predicate_codes):
+                self.log_error("Safe select by location failed in memory optimization")
+                return False
             
             selected_count = memory_layer.selectedFeatureCount()
             self.log_info(f"  → Selected {selected_count} features in memory layer")
