@@ -172,30 +172,30 @@ if layer.featureCount() > 50000:
 
 ### User-Facing Errors
 
+FilterMate uses a centralized feedback system via `modules/feedback_utils.py`:
+
 ```python
-from qgis.utils import iface
+from modules.feedback_utils import show_info, show_warning, show_error, show_success
 
-# Success (duration is positional argument)
-iface.messageBar().pushSuccess(
-    "FilterMate",
-    "Filter applied successfully",
-    3
-)
-
-# Warning
-iface.messageBar().pushWarning(
-    "FilterMate",
-    f"Large dataset ({count} features). Consider PostgreSQL.",
-    10
-)
-
-# Error
-iface.messageBar().pushCritical(
-    "FilterMate",
-    f"Error: {str(error)}",
-    5
-)
+# ✅ Recommended: Use centralized feedback functions
+show_success("Filter applied successfully")
+show_warning(f"Large dataset ({count} features). Consider PostgreSQL.")
+show_error(f"Error: {str(error)}")
+show_info("Operation completed")
 ```
+
+:::warning QGIS Message Bar API
+The QGIS `messageBar().push*()` methods only accept **2 arguments** (title, message).
+Do NOT pass a duration parameter - it will cause a TypeError.
+
+```python
+# ❌ WRONG - duration parameter doesn't exist
+iface.messageBar().pushSuccess("Title", "Message", 3)
+
+# ✅ CORRECT - only 2 arguments
+iface.messageBar().pushSuccess("Title", "Message")
+```
+:::
 
 ### Exception Handling
 
@@ -219,13 +219,14 @@ except Exception as e:
 ### Large Dataset Warnings
 
 ```python
+from modules.feedback_utils import show_warning
+from modules.appUtils import POSTGRESQL_AVAILABLE
+
 if layer.featureCount() > 50000 and not POSTGRESQL_AVAILABLE:
-    iface.messageBar().pushWarning(
-        "FilterMate",
+    show_warning(
         f"Large dataset ({layer.featureCount()} features) "
         "without PostgreSQL. Performance may be reduced. "
-        "Consider installing psycopg2.",
-        duration=10
+        "Consider installing psycopg2."
     )
 ```
 

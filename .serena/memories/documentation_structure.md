@@ -1,4 +1,6 @@
-# Documentation Structure - FilterMate v2.1.0
+# Documentation Structure - FilterMate v2.3.8
+
+**Last Updated**: December 22, 2025
 
 ## Documentation Organization
 
@@ -271,9 +273,29 @@ These documents describe specific bug fixes and solutions:
 3. UI_TESTING_GUIDE.md
 4. modules/ui_*.py files
 
-## Documentation Audit - December 19, 2025
+## Documentation Audit - December 22, 2025 (Updated)
 
-### Keyboard Shortcuts - CORRECTED ✅
+### Code Examples - CORRECTED ✅
+
+**Issue**: Documentation showed incorrect QGIS API calls with duration parameter.
+The QGIS `messageBar().push*()` methods only accept 2 arguments (title, message).
+
+**Fix Applied**: Updated `website/docs/developer-guide/code-style.md` to:
+1. Use centralized feedback system (`modules/feedback_utils.py`)
+2. Add warning about QGIS API limitations
+3. Show correct patterns with `show_success()`, `show_warning()`, etc.
+
+**Correct Pattern**:
+```python
+from modules.feedback_utils import show_success, show_warning, show_error
+
+show_success("Filter applied")  # Use centralized system
+# NOT: iface.messageBar().pushSuccess("Title", "Msg", 3)  # Wrong!
+```
+
+---
+
+### Keyboard Shortcuts - CORRECTED ✅ (Dec 19, 2025)
 
 **Issue**: Documentation mentioned Ctrl+Z/Ctrl+Shift+Z (Cmd+Z/Cmd+Shift+Z) keyboard shortcuts for undo/redo that were not implemented.
 

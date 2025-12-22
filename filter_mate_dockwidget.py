@@ -5517,6 +5517,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("exploring_identify_clicked: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return
+            except (RuntimeError, TypeError):
+                self.current_layer = None
+                return
+
             features, expression = self.get_current_features()
             
             if len(features) == 0:
@@ -5528,6 +5538,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def get_current_features(self):
 
         if self.widgets_initialized is True and self.current_layer is not None:
+
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("get_current_features: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return [], ''
+            except (RuntimeError, TypeError):
+                self.current_layer = None
+                return [], ''
 
             features = []    
             expression = ''
@@ -5578,6 +5598,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("exploring_zoom_clicked: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return
+            except (RuntimeError, TypeError):
+                self.current_layer = None
+                return
+
             if not features or len(features) == 0:   
                 features, expression = self.get_current_features()
             
@@ -5588,6 +5618,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def zooming_to_features(self, features):
         
         if self.widgets_initialized is True and self.current_layer is not None:
+
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("zooming_to_features: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return
+            except (RuntimeError, TypeError):
+                self.current_layer = None
+                return
 
             # DIAGNOSTIC: Log incoming features
             logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
@@ -5799,7 +5839,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
-            if self.current_layer is None:
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("exploring_deselect_features: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return
+            except (RuntimeError, TypeError):
+                self.current_layer = None
                 return
             
             self.current_layer.removeSelection()
@@ -5815,7 +5862,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if self.widgets_initialized is True and self.current_layer is not None:
             
-            if self.current_layer is None:
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("exploring_select_features: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return
+            except (RuntimeError, TypeError):
+                self.current_layer = None
                 return
             
             # Get features from the active groupbox
@@ -5843,6 +5897,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             preserve_filter_if_empty: DEPRECATED - no longer needed since filters aren't auto-applied
         """
         if self.widgets_initialized is True and self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
+            
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("exploring_features_changed: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return []
+            except (RuntimeError, TypeError):
+                self.current_layer = None
+                return []
             
             # Guard: Check if current_layer is in PROJECT_LAYERS
             if self.current_layer.id() not in self.PROJECT_LAYERS:
@@ -5897,6 +5961,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
 
         if self.widgets_initialized and self.current_layer is not None:
+
+            # CRITICAL: Check if layer C++ object has been deleted
+            try:
+                if sip.isdeleted(self.current_layer):
+                    logger.debug("get_exploring_features: current_layer C++ object deleted")
+                    self.current_layer = None
+                    return [], None
+            except (RuntimeError, TypeError):
+                self.current_layer = None
+                return [], None
 
             if self.current_layer is None:
                 return [], None
@@ -5973,20 +6047,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         pk_is_numeric = layer_props["infos"].get("primary_key_is_numeric", False)
                         provider_type = layer_props["infos"].get("layer_provider_type", "")
                         
-                        # CRITICAL FIX: For OGR and Spatialite, field names must be quoted
-                        # PostgreSQL uses qualified names ("table"."field") in filter_task.py
-                        if provider_type in ('ogr', 'spatialite'):
-                            if pk_is_numeric is True: 
-                                expression = f'"{pk_name}" = {pk_value}'
-                            else:
-                                expression = f'"{pk_name}" = \'{pk_value}\''
-                            logger.debug(f"Generated expression for {provider_type}: {expression}")
+                        # CRITICAL FIX: Field names must be quoted for QgsExpression to work
+                        # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
+                        # Note: filter_task.py handles qualified names for PostgreSQL subsetString separately
+                        if pk_is_numeric is True: 
+                            expression = f'"{pk_name}" = {pk_value}'
                         else:
-                            # PostgreSQL: use simple format (qualification happens in filter_task.py)
-                            if pk_is_numeric is True: 
-                                expression = pk_name + " = {}".format(pk_value)
-                            else:
-                                expression = pk_name + " = '{}'".format(pk_value)
+                            expression = f'"{pk_name}" = \'{pk_value}\''
+                        logger.debug(f"Generated expression for {provider_type}: {expression}")
                         
                         # CRITICAL: Also reload feature to ensure geometry is available for zoom
                         try:
@@ -6042,24 +6110,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     pk_is_numeric = layer_props["infos"]["primary_key_is_numeric"]
                     provider_type = layer_props["infos"].get("layer_provider_type", "")
                     
-                    # CRITICAL FIX: For OGR and Spatialite, field names must be quoted
-                    if provider_type in ('ogr', 'spatialite'):
-                        if pk_is_numeric is True:
-                            input_ids = [str(feat[1]) for feat in input]  
-                            expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
-                        else:
-                            input_ids = [str(feat[1]) for feat in input]
-                            quoted_ids = "', '".join(input_ids)
-                            expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
-                        logger.debug(f"Generated list expression for {provider_type}: {expression}")
+                    # CRITICAL FIX: Field names must be quoted for QgsExpression to work
+                    # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
+                    if pk_is_numeric is True:
+                        input_ids = [str(feat[1]) for feat in input]  
+                        expression = f'"{pk_name}" IN ({", ".join(input_ids)})'
                     else:
-                        # PostgreSQL: use simple format (qualification happens in filter_task.py)
-                        if pk_is_numeric is True:
-                            input_ids = [str(feat[1]) for feat in input]  
-                            expression = pk_name + " IN (" + ", ".join(input_ids) + ")"
-                        else:
-                            input_ids = [str(feat[1]) for feat in input]
-                            expression = pk_name + " IN (\'" + "\', \'".join(input_ids) + "\')"
+                        input_ids = [str(feat[1]) for feat in input]
+                        quoted_ids = "', '".join(input_ids)
+                        expression = f'"{pk_name}" IN (\'{quoted_ids}\')'
+                    logger.debug(f"Generated list expression for {provider_type}: {expression}")
                 
             if custom_expression is not None:
                     expression = custom_expression

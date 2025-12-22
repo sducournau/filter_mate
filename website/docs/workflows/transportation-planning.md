@@ -593,7 +593,7 @@ Source Data:
 Processing:
 - Filter: Major roads only (motorway, trunk, primary, secondary)
 - Area: Within city limits
-- Tool: QGIS FilterMate plugin v2.8.0
+- Tool: QGIS FilterMate plugin v2.3.8
 
 Export Specifications:
 - Format: GeoPackage
