@@ -27,6 +27,7 @@ import os
 import json
 import re
 import sip
+import weakref
 from functools import partial
 from osgeo import ogr
 
@@ -3651,10 +3652,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"Pending layers update detected - refreshing UI with {len(self.PROJECT_LAYERS)} layers")
             self._pending_layers_update = False
             # Use QTimer with increased delay to ensure event loop has processed widgets_initialized
-            # STABILITY FIX: Use explicit lambda captures to prevent variable mutation issues
+            # STABILITY FIX: Use weakref to prevent access violations
             pl = self.PROJECT_LAYERS
             pr = self.PROJECT
-            QTimer.singleShot(100, lambda: self.get_project_layers_from_app(pl, pr))
+            weak_self = weakref.ref(self)
+            def safe_layers_update():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self.get_project_layers_from_app(pl, pr)
+            QTimer.singleShot(100, safe_layers_update)
 
     def data_changed_configuration_model(self, input_data=None):
         """Track configuration changes without applying them immediately"""
@@ -6876,8 +6882,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._plugin_busy:
             from qgis.PyQt.QtCore import QTimer
             logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
-            # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-            QTimer.singleShot(150, lambda l=layer: self.current_layer_changed(l))
+            # STABILITY FIX: Use weakref to prevent access violations
+            weak_self = weakref.ref(self)
+            captured_layer = layer
+            def safe_layer_change():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self.current_layer_changed(captured_layer)
+            QTimer.singleShot(150, safe_layer_change)
             return
         
         # STABILITY FIX: Verify layer is valid before accessing properties

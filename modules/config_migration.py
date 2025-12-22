@@ -550,10 +550,44 @@ class ConfigMigration:
         
         return backups
     
-    def auto_migrate_if_needed(self) -> Tuple[bool, List[str]]:
+    def check_config_status(self) -> Tuple[str, Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Check the current configuration status without performing any changes.
+        
+        Returns:
+            Tuple of (status, version, config_data)
+            status: 'ok', 'missing', 'corrupted', 'obsolete', 'needs_migration'
+            version: detected version (or None if corrupted/missing)
+            config_data: loaded config (or None if corrupted/missing)
+        """
+        if not os.path.exists(self.config_path):
+            return 'missing', None, None
+        
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        except Exception:
+            return 'corrupted', None, None
+        
+        version = self.detect_version(config_data)
+        
+        if self.is_obsolete(config_data):
+            return 'obsolete', version, config_data
+        
+        if self.needs_migration(config_data):
+            return 'needs_migration', version, config_data
+        
+        return 'ok', version, config_data
+    
+    def auto_migrate_if_needed(self, confirm_reset_callback: Optional[callable] = None) -> Tuple[bool, List[str]]:
         """
         Automatically detect and migrate configuration if needed.
         Resets to default if configuration is obsolete or corrupted.
+        
+        Args:
+            confirm_reset_callback: Optional callback function that takes (reason, version) 
+                and returns True if user confirms reset, False otherwise.
+                If None, reset is performed automatically.
         
         Returns:
             Tuple of (migration_performed_or_reset, list_of_warnings)
@@ -577,7 +611,12 @@ class ConfigMigration:
                 config_data = json.load(f)
         except Exception as e:
             warnings.append(f"Failed to load configuration: {e}")
-            # Config is corrupted, reset to default
+            # Config is corrupted - ask user for confirmation if callback provided
+            if confirm_reset_callback is not None:
+                if not confirm_reset_callback("corrupted", None):
+                    warnings.append("User declined reset of corrupted configuration")
+                    return False, warnings
+            
             success, msg = self.reset_to_default(reason="corrupted")
             if success:
                 print(f"✓ Configuration was corrupted. {msg}")
@@ -590,7 +629,14 @@ class ConfigMigration:
         if self.is_obsolete(config_data):
             current_version = self.detect_version(config_data)
             print(f"⚠ Configuration version {current_version} is obsolete or unknown")
-            success, msg = self.reset_to_default(reason="obsolete")
+            
+            # Ask user for confirmation if callback provided
+            if confirm_reset_callback is not None:
+                if not confirm_reset_callback("obsolete", current_version):
+                    warnings.append("User declined reset of obsolete configuration")
+                    return False, warnings
+            
+            success, msg = self.reset_to_default(reason="obsolete", config_data=config_data)
             if success:
                 print(f"✓ {msg}")
                 return True, warnings

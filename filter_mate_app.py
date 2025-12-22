@@ -981,8 +981,14 @@ class FilterMateApp:
                     # No new layers, but update UI if it's empty
                     if len(self.PROJECT_LAYERS) == 0 and len(current_project_layers) > 0:
                         logger.info("FilterMate: PROJECT_LAYERS is empty but project has layers, refreshing")
-                        # STABILITY FIX: Use explicit lambda capture to prevent variable mutation issues
-                        QTimer.singleShot(300, lambda layers=self._filter_usable_layers(current_project_layers): self.manage_task('add_layers', layers))
+                        # STABILITY FIX: Use weakref to prevent access violations
+                        usable_layers = self._filter_usable_layers(current_project_layers)
+                        weak_self = weakref.ref(self)
+                        def safe_add_layers_refresh():
+                            strong_self = weak_self()
+                            if strong_self is not None:
+                                strong_self.manage_task('add_layers', usable_layers)
+                        QTimer.singleShot(300, safe_add_layers_refresh)
 
 
         """Keep the advanced filter combobox updated on adding or removing layers"""
@@ -1337,9 +1343,15 @@ class FilterMateApp:
         if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
                 logger.warning(f"Task '{task_name}' called before dockwidget initialization, deferring by 500ms...")
-                # STABILITY FIX: Use explicit lambda captures to prevent variable mutation issues
-                # Increased delay to ensure complete initialization
-                QTimer.singleShot(500, lambda tn=task_name, d=data: self.manage_task(tn, d))
+                # STABILITY FIX: Use weakref to prevent access violations
+                weak_self = weakref.ref(self)
+                captured_task_name = task_name
+                captured_data = data
+                def safe_deferred_task():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self.manage_task(captured_task_name, captured_data)
+                QTimer.singleShot(500, safe_deferred_task)
                 return
         
         # CRITICAL: For filtering tasks, ensure widgets are fully initialized AND connected
@@ -1366,14 +1378,29 @@ class FilterMateApp:
                         logger.warning("⚠️ EMERGENCY: Forcing _widgets_ready = True based on dockwidget.widgets_initialized")
                         iface.messageBar().pushWarning("FilterMate", "Emergency fallback: forcing widgets ready flag")
                         self._widgets_ready = True
-                        # Retry immediately
-                        QTimer.singleShot(100, lambda tn=task_name, d=data: self.manage_task(tn, d))
+                        # Retry immediately - use weakref for safety
+                        weak_self = weakref.ref(self)
+                        captured_tn = task_name
+                        captured_d = data
+                        def safe_emergency_retry():
+                            strong_self = weak_self()
+                            if strong_self is not None:
+                                strong_self.manage_task(captured_tn, captured_d)
+                        QTimer.singleShot(100, safe_emergency_retry)
                     return
                 
                 # Increment retry count
                 self._filter_retry_count[retry_key] = retry_count + 1
                 logger.warning(f"Task '{task_name}' called before dockwidget is ready for filtering, deferring by 500ms (attempt {retry_count + 1}/10)...")
-                QTimer.singleShot(500, lambda tn=task_name, d=data: self.manage_task(tn, d))
+                # STABILITY FIX: Use weakref to prevent access violations
+                weak_self = weakref.ref(self)
+                captured_tn = task_name
+                captured_d = data
+                def safe_filter_retry():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self.manage_task(captured_tn, captured_d)
+                QTimer.singleShot(500, safe_filter_retry)
                 return
             else:
                 # Success! Reset counter for this task
@@ -1563,7 +1590,14 @@ class FilterMateApp:
             if len(current_layers) > 0:
                 # Retry add_layers with a delay
                 logger.info(f"Recovery: Retrying add_layers with {len(current_layers)} layers")
-                QTimer.singleShot(STABILITY_CONSTANTS['LAYER_RETRY_DELAY_MS'], lambda layers=current_layers: self.manage_task('add_layers', layers))
+                # STABILITY FIX: Use weakref to prevent access violations
+                weak_self = weakref.ref(self)
+                captured_layers = current_layers
+                def safe_layer_retry():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self.manage_task('add_layers', captured_layers)
+                QTimer.singleShot(STABILITY_CONSTANTS['LAYER_RETRY_DELAY_MS'], safe_layer_retry)
             else:
                 # No layers - update UI to show waiting state
                 logger.info("No layers available after task termination")
@@ -1687,7 +1721,13 @@ class FilterMateApp:
         # Process any queued add_layers operations now that widgets are ready
         if self._add_layers_queue and self._pending_add_layers_tasks == 0:
             logger.info(f"Widgets ready - processing {len(self._add_layers_queue)} queued add_layers operations")
-            QTimer.singleShot(100, self._process_add_layers_queue)
+            # STABILITY FIX: Use weakref to prevent access violations
+            weak_self = weakref.ref(self)
+            def safe_process_queue():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self._process_add_layers_queue()
+            QTimer.singleShot(100, safe_process_queue)
 
     def on_remove_layer_task_begun(self):
         """Called when layer removal task begins. Cleanup UI before layers are removed."""
@@ -3343,14 +3383,26 @@ class FilterMateApp:
                 # Process next queued operation if any
                 if self._add_layers_queue and self._pending_add_layers_tasks == 0:
                     logger.info(f"Processing {len(self._add_layers_queue)} queued add_layers operations")
-                    QTimer.singleShot(STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS'], self._process_add_layers_queue)
+                    # STABILITY FIX: Use weakref to prevent access violations
+                    weak_self = weakref.ref(self)
+                    def safe_process_queue_on_complete():
+                        strong_self = weak_self()
+                        if strong_self is not None:
+                            strong_self._process_add_layers_queue()
+                    QTimer.singleShot(STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS'], safe_process_queue_on_complete)
             
             # If we're loading a new project, force UI refresh after add_layers completes
             if task_name == 'add_layers' and self._loading_new_project:
                 logger.info("New project loaded - forcing UI refresh")
                 self._set_loading_flag(False)  # Use timestamp-tracked flag
                 if self.dockwidget is not None and self.dockwidget.widgets_initialized:
-                    QTimer.singleShot(STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS'], lambda: self._refresh_ui_after_project_load())
+                    # STABILITY FIX: Use weakref to prevent access violations
+                    weak_self = weakref.ref(self)
+                    def safe_ui_refresh():
+                        strong_self = weak_self()
+                        if strong_self is not None:
+                            strong_self._refresh_ui_after_project_load()
+                    QTimer.singleShot(STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS'], safe_ui_refresh)
     
     def _validate_layer_info(self, layer_key):
         """Validate layer structure and return layer info if valid.
@@ -3475,7 +3527,13 @@ class FilterMateApp:
             self._reload_retry_count += 1
             if self._reload_retry_count < 3:
                 logger.warning(f"PROJECT_LAYERS still empty, retry {self._reload_retry_count}/3")
-                QTimer.singleShot(1000, self._force_ui_refresh_after_reload)
+                # STABILITY FIX: Use weakref to prevent access violations
+                weak_self = weakref.ref(self)
+                def safe_force_refresh_retry():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self._force_ui_refresh_after_reload()
+                QTimer.singleShot(1000, safe_force_refresh_retry)
                 return
             else:
                 logger.error("PROJECT_LAYERS still empty after 3 retries - layer loading may have failed")

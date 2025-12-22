@@ -29,6 +29,7 @@ from qgis.core import QgsMessageLog, Qgis
 from functools import partial
 import shutil
 import json
+import weakref
 
 # Initialize Qt resources from file resources.py
 from .resources import *  # Qt resources must be imported with wildcard
@@ -278,13 +279,75 @@ class FilterMate:
 
             return path
     
+    def _confirm_config_reset(self, reason: str, version: str) -> bool:
+        """
+        Ask user for confirmation before resetting configuration.
+        
+        Args:
+            reason: Reason for reset ('obsolete', 'corrupted')
+            version: Detected version (may be None)
+        
+        Returns:
+            True if user confirms reset, False otherwise
+        """
+        if reason == "obsolete":
+            title = self.tr("Configuration obsolète détectée")
+            version_str = f"v{version}" if version else self.tr("version inconnue")
+            message = self.tr(
+                "Une configuration obsolète ({}) a été détectée.\n\n"
+                "Voulez-vous réinitialiser aux paramètres par défaut?\n\n"
+                "• Oui: Réinitialiser (une sauvegarde sera créée)\n"
+                "• Non: Garder la configuration actuelle (peut causer des problèmes)"
+            ).format(version_str)
+        elif reason == "corrupted":
+            title = self.tr("Configuration corrompue détectée")
+            message = self.tr(
+                "Le fichier de configuration est corrompu et ne peut pas être lu.\n\n"
+                "Voulez-vous réinitialiser aux paramètres par défaut?\n\n"
+                "• Oui: Réinitialiser (une sauvegarde sera créée si possible)\n"
+                "• Non: Annuler (le plugin peut ne pas fonctionner correctement)"
+            )
+        else:
+            title = self.tr("Réinitialisation de la configuration")
+            message = self.tr(
+                "La configuration doit être réinitialisée.\n\n"
+                "Voulez-vous continuer?"
+            )
+        
+        reply = QMessageBox.question(
+            self.iface.mainWindow(),
+            title,
+            message,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        return reply == QMessageBox.Yes
+    
     def _auto_migrate_config(self):
-        """Auto-migrate configuration to latest version if needed."""
+        """Auto-migrate configuration to latest version if needed.
+        
+        If an obsolete or corrupted configuration is detected, asks the user
+        for confirmation before resetting to default values.
+        """
         try:
             from .modules.config_migration import ConfigMigration
             
             migrator = ConfigMigration()
-            performed, warnings = migrator.auto_migrate_if_needed()
+            
+            # Pass the confirmation callback for reset operations
+            performed, warnings = migrator.auto_migrate_if_needed(
+                confirm_reset_callback=self._confirm_config_reset
+            )
+            
+            # Check if user declined reset
+            if any("user declined" in str(w).lower() for w in warnings):
+                logger.info("User declined configuration reset")
+                self.iface.messageBar().pushWarning(
+                    "FilterMate",
+                    self.tr("Configuration non réinitialisée. Certaines fonctionnalités peuvent ne pas fonctionner correctement.")
+                )
+                return
             
             if performed:
                 logger.info("Configuration migrated to latest version")
@@ -353,20 +416,38 @@ class FilterMate:
             from qgis.core import QgsProject
             from qgis.PyQt.QtCore import QTimer
             
-            # Store lambda references for proper disconnection
+            # Store weakref and safe callbacks for proper disconnection
+            # STABILITY FIX: Use weakref to prevent access violations when timer fires after object destruction
+            weak_self = weakref.ref(self)
+            
+            def safe_auto_activate():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self._auto_activate_plugin()
+            
+            def safe_project_cleared():
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self._handle_project_cleared()
+            
+            def safe_layers_added(layers):
+                strong_self = weak_self()
+                if strong_self is not None:
+                    strong_self._auto_activate_for_new_layers(layers)
+            
             # _auto_activate_plugin handles both inactive (activates) and active (reinitializes) states
-            self._project_read_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
-            self._new_project_connection = lambda: QTimer.singleShot(100, self._auto_activate_plugin)
+            self._project_read_connection = lambda: QTimer.singleShot(100, safe_auto_activate)
+            self._new_project_connection = lambda: QTimer.singleShot(100, safe_auto_activate)
             
             # NEW: Connect to cleared signal for proper cleanup on project close/new
             # This ensures plugin state is properly reset when project is cleared
-            self._project_cleared_connection = lambda: self._handle_project_cleared()
+            self._project_cleared_connection = safe_project_cleared
             
             # NEW: Connect layersAdded to handle the case where user loads a layer 
             # into an empty project (no projectRead signal in that case)
             # The guard in _auto_activate_for_new_layers ensures this only triggers
             # when plugin is NOT active, avoiding freeze issues
-            self._layers_added_connection = lambda layers: self._auto_activate_for_new_layers(layers)
+            self._layers_added_connection = safe_layers_added
             
             # Auto-reload when a project is opened
             self.iface.projectRead.connect(self._project_read_connection)
@@ -526,7 +607,13 @@ class FilterMate:
         # STABILITY: Increased delay to 400ms for better stability
         # Especially important for PostgreSQL layers which need time to initialize connections
         # and for projects with multiple layers being added simultaneously
-        QTimer.singleShot(400, self.run)
+        # STABILITY FIX: Use weakref to prevent access violations when timer fires after object destruction
+        weak_self = weakref.ref(self)
+        def safe_run_from_layers_added():
+            strong_self = weak_self()
+            if strong_self is not None:
+                strong_self.run()
+        QTimer.singleShot(400, safe_run_from_layers_added)
     
     def _auto_activate_plugin(self, layers=None):
         """Auto-activate plugin if not already active.
@@ -577,7 +664,13 @@ class FilterMate:
                 # we need to reinitialize the app with the new project data.
                 # Use QTimer to defer and avoid blocking during project load.
                 logger.info("FilterMate: Project changed while plugin active - deferring reinitialization")
-                QTimer.singleShot(200, lambda: self._handle_project_change())
+                # STABILITY FIX: Use weakref to prevent access violations
+                weak_self = weakref.ref(self)
+                def safe_handle_project_change():
+                    strong_self = weak_self()
+                    if strong_self is not None:
+                        strong_self._handle_project_change()
+                QTimer.singleShot(200, safe_handle_project_change)
                 return
             return
         
@@ -596,7 +689,13 @@ class FilterMate:
         # Message bar notification removed - too verbose for UX
         
         # Defer activation to next event loop iteration for stability
-        QTimer.singleShot(50, self.run)
+        # STABILITY FIX: Use weakref to prevent access violations
+        weak_self = weakref.ref(self)
+        def safe_run_from_auto_activate():
+            strong_self = weak_self()
+            if strong_self is not None:
+                strong_self.run()
+        QTimer.singleShot(50, safe_run_from_auto_activate)
 
     def _handle_project_change(self):
         """Handle project change when plugin is already active.
@@ -696,17 +795,24 @@ class FilterMate:
         # STABILITY IMPROVEMENT: Use a longer delay for project reinitialization
         # This gives QGIS time to fully load the project and all layers
         # especially important for PostgreSQL layers
+        # STABILITY FIX: Use weakref to prevent access violations when timer fires after object destruction
+        weak_self = weakref.ref(self)
+        
         def perform_reinitialization():
+            strong_self = weak_self()
+            if strong_self is None or strong_self.app is None:
+                logger.debug("FilterMate: Skipping reinitialization - plugin was unloaded")
+                return
             try:
                 # Call the existing project initialization handler
-                self.app._handle_project_initialization('project_read')
+                strong_self.app._handle_project_initialization('project_read')
             except Exception as e:
                 logger.error(f"FilterMate: Error during project reinitialization: {e}")
                 # STABILITY FIX: Reset flags on error to prevent deadlock
-                if hasattr(self.app, '_set_loading_flag'):
-                    self.app._set_loading_flag(False)
-                if hasattr(self.app, '_set_initializing_flag'):
-                    self.app._set_initializing_flag(False)
+                if hasattr(strong_self.app, '_set_loading_flag'):
+                    strong_self.app._set_loading_flag(False)
+                if hasattr(strong_self.app, '_set_initializing_flag'):
+                    strong_self.app._set_initializing_flag(False)
         
         # STABILITY IMPROVEMENT: Increased delay from immediate to 300ms
         # This ensures all QGIS signals have been processed before we reinitialize
