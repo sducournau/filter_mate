@@ -6,22 +6,21 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.4.2
+version=2.4.3
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.2 - Exploring ValueRelation & Display Enhancement
+about=FilterMate v2.4.3 - Export System Fix & Message Bar Improvements
 
- NEW in v2.4.2:
+ NEW in v2.4.3:
+ - 🐛 Fixed export system: Files now export with correct extensions (.shp, .gpkg, .geojson, etc.)
+ - 🔧 Fixed driver mapping: Proper QGIS driver names for all export formats
+ - 💬 Improved message bar: Better error reporting with correct argument order
+ 
+ Previous (v2.4.2):
  - ✨ Smart display detection: Auto-detects ValueRelation fields and shows human-readable values
  - 🔗 Uses layer's display expression from Layer Properties when available
  - 🎯 Better exploring UX: See meaningful labels instead of cryptic IDs
- - 🔧 New utility functions: get_value_relation_info(), get_field_display_expression()
- 
- Previous (v2.4.1):
- - 🌍 21 languages supported! Added: Slovenian, Filipino/Tagalog, Amharic
- - 🔤 Fixed hardcoded French strings - all UI now properly translatable
- - ✨ 19 new translatable configuration messages
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)

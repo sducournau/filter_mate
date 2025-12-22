@@ -1579,7 +1579,8 @@ class LayersManagementEngineTask(QgsTask):
             safe_disconnect(self.resultingLayers)
             
             iface.messageBar().pushMessage(
+                message_category,
                 f"Exception: {self.exception}",
-                MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Critical
+                Qgis.Critical
             )
             raise self.exception

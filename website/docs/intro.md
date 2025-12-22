@@ -7,29 +7,33 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.4.1 - International Edition Extended
+## 🎉 What's New in v2.4.3 - Streaming Export Fix
 
-### 🌍 21 Languages Supported!
+### 🐛 Bug Fixes
 
-FilterMate now speaks your language! We've added **3 new translations**:
+- **Fixed Streaming Export Error** - Resolved missing `datatype` argument in `_save_layer_style()` that caused export failures
+- **Improved Message Bar Notifications** - Fixed argument order in all `pushMessage()` calls for better error reporting
+- **Better Partial Export Handling** - Users now see detailed messages when some layers fail during batch export
 
-| Language              | Code | Native Name  |
-| --------------------- | ---- | ------------ |
-| Slovenian             | `sl` | Slovenščina  |
-| Filipino/Tagalog      | `tl` | Tagalog      |
-| Amharic               | `am` | አማርኛ         |
+### 🔧 Technical Improvements
 
-### 🔧 Translation Improvements
-
-- **Fixed Hardcoded French Strings** - All UI now properly translatable
-- **19 New Translatable Strings** - Configuration migration, geometry validation, reset dialogs
-- **Translation Utility Scripts** - New developer tools for managing translations
-
-### 📊 Complete Language List (21 Languages)
-
-English, French, German, Spanish, Italian, Dutch, Portuguese, Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian, Slovenian, Filipino, Amharic
+- Streaming exports now correctly save layer styles with proper format detection
+- Failed export operations display specific error messages instead of generic failures
+- Layer management tasks use correct message bar API
 
 ## Previous Updates
+
+### v2.4.2 - ValueRelation & Display Enhancement (December 22, 2025)
+
+- ✨ **Smart Display Detection** - Auto-detects ValueRelation fields and shows human-readable values
+- 🔗 **Layer Display Expression** - Uses the layer's configured display expression from Layer Properties
+- 🎯 **Better Exploring UX** - See meaningful labels instead of cryptic IDs
+
+### v2.4.1 - International Edition Extended (December 22, 2025)
+
+- 🌍 **21 Languages Supported** - Added Slovenian, Filipino/Tagalog, Amharic
+- 🔤 Fixed hardcoded French strings - all UI now properly translatable
+- ✨ 19 new translatable configuration messages
 
 ### v2.4.0 - International Edition (December 22, 2025)
 

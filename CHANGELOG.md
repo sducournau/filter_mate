@@ -2,6 +2,34 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.3] - 2025-12-22 - Export System Fix & Message Bar Improvements
+
+### 🐛 Bug Fixes
+
+#### Export System Completely Fixed
+- **Fixed missing file extensions**: Exported files now have correct extensions (.shp, .gpkg, .geojson, etc.)
+  - `_export_multiple_layers_to_directory()`: Added extension mapping
+  - `_export_batch_to_folder()`: Added extension mapping
+  - `_export_batch_to_zip()`: Added extension mapping for temp files
+- **Fixed driver name mapping**: Added complete driver mapping in `_export_single_layer()` for formats like 'SHP' → 'ESRI Shapefile'
+- **Streaming export fixed**: Missing `datatype` argument in `_save_layer_style()` now correctly passed
+
+#### Message Bar Notifications Improved
+- **Fixed argument order**: All `iface.messageBar().pushMessage()` calls now use correct argument order `(category, message, level)`
+- **Better error reporting**: Failed tasks now display detailed error messages to users
+- **Partial export handling**: When some layers fail during export, users see which layers failed and why
+
+### 🔧 Technical Improvements
+
+- Added `extension_map` dictionary in export methods for consistent file extensions
+- Added `driver_map` dictionary in `_export_single_layer()` for QGIS driver names
+- Supported formats: GPKG, SHP, GeoJSON, GML, KML, CSV, XLSX, TAB/MapInfo, DXF, SQLite, SpatiaLite
+- `FilterEngineTask._export_with_streaming()`: Added `datatype` parameter to style saving call
+- `FilterEngineTask.finished()`: Improved error handling with proper message display
+- `LayersManagementEngineTask.finished()`: Fixed message bar argument order
+
+---
+
 ## [2.4.2] - 2025-12-22 - Exploring ValueRelation & Display Enhancement
 
 ### ✨ New Features

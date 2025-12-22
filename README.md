@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.4.1** | December 2025 | **Production-Ready**
+**Version 2.4.3** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,21 +27,22 @@
 
 ## 📋 Recent Changes
 
+### v2.4.3 - Streaming Export Fix
+
+- 🐛 **Fixed streaming export error** - Missing datatype argument in style saving
+- 💬 **Improved message bar** - Better error reporting with correct argument order
+- 🔧 **Better partial export handling** - Detailed failure messages
+
+### v2.4.2 - ValueRelation & Display Enhancement
+
+- ✨ **Smart display detection** - Auto-detects ValueRelation fields
+- 🔗 Uses layer's display expression from Layer Properties
+- 🎯 Better exploring UX with meaningful labels
+
 ### v2.4.1 - International Edition Extended
 
 - 🌍 **21 Languages** - Added Slovenian, Filipino/Tagalog, Amharic
 - 🔤 Fixed hardcoded French strings - all UI now translatable
-- ✨ 19 new translatable configuration messages
-
-### v2.4.0 - International Edition
-
-- 🌍 **18 Languages** - Polish, Chinese, Russian, Indonesian, Vietnamese, Turkish, Hindi, Finnish, Danish, Swedish, Norwegian
-- 🔤 Enhanced language selection in configuration panel
-
-### v2.3.9 - Critical Stability Fix
-
-- 🔥 Fixed GEOS crash during OGR backend filtering
-- 🛡️ New `geometry_safety.py` and `object_safety.py` modules
 
 > 📖 See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 

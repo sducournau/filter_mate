@@ -4723,7 +4723,7 @@ class FilterEngineTask(QgsTask):
             layer: QgsVectorLayer to export
             output_path: Output file path (without extension for some formats)
             projection: Target CRS or None to use layer's CRS
-            datatype: Export format (e.g., 'ESRI Shapefile', 'GeoJSON')
+            datatype: Export format (e.g., 'SHP', 'GPKG', 'GEOJSON')
             style_format: Style file format or None
             save_styles: Whether to save layer styles
             
@@ -4732,7 +4732,27 @@ class FilterEngineTask(QgsTask):
         """
         current_projection = projection if projection else layer.sourceCrs()
         
-        logger.debug(f"Exporting layer '{layer.name()}' to {output_path}")
+        # Map short datatype names to QGIS driver names
+        driver_map = {
+            'GPKG': 'GPKG',
+            'SHP': 'ESRI Shapefile',
+            'SHAPEFILE': 'ESRI Shapefile',
+            'ESRI SHAPEFILE': 'ESRI Shapefile',
+            'GEOJSON': 'GeoJSON',
+            'JSON': 'GeoJSON',
+            'GML': 'GML',
+            'KML': 'KML',
+            'CSV': 'CSV',
+            'XLSX': 'XLSX',
+            'TAB': 'MapInfo File',
+            'MAPINFO': 'MapInfo File',
+            'DXF': 'DXF',
+            'SQLITE': 'SQLite',
+            'SPATIALITE': 'SpatiaLite'
+        }
+        driver_name = driver_map.get(datatype.upper(), datatype)
+        
+        logger.debug(f"Exporting layer '{layer.name()}' to {output_path} (driver: {driver_name})")
         
         try:
             result = QgsVectorFileWriter.writeAsVectorFormat(
@@ -4740,7 +4760,7 @@ class FilterEngineTask(QgsTask):
                 os.path.normcase(output_path),
                 "UTF-8",
                 current_projection,
-                datatype
+                driver_name
             )
             
             if result[0] != QgsVectorFileWriter.NoError:
@@ -4840,9 +4860,29 @@ class FilterEngineTask(QgsTask):
             if not layer:
                 continue
             
+            # Determine file extension based on datatype
+            extension_map = {
+                'GPKG': '.gpkg',
+                'SHP': '.shp',
+                'SHAPEFILE': '.shp',
+                'ESRI SHAPEFILE': '.shp',
+                'GEOJSON': '.geojson',
+                'JSON': '.geojson',
+                'GML': '.gml',
+                'KML': '.kml',
+                'CSV': '.csv',
+                'XLSX': '.xlsx',
+                'TAB': '.tab',
+                'MAPINFO': '.tab',
+                'DXF': '.dxf',
+                'SQLITE': '.sqlite',
+                'SPATIALITE': '.sqlite'
+            }
+            file_extension = extension_map.get(datatype.upper(), f'.{datatype.lower()}')
+            
             # Sanitize filename to handle special characters like em-dash (—)
             safe_filename = sanitize_filename(layer_name)
-            output_path = os.path.join(output_folder, safe_filename)
+            output_path = os.path.join(output_folder, f"{safe_filename}{file_extension}")
             success = self._export_single_layer(
                 layer, output_path, projection, datatype, style_format, save_styles
             )
@@ -4900,10 +4940,30 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"Skipping layer '{layer_name}' (not found)")
                 continue
             
+            # Determine file extension based on datatype
+            extension_map = {
+                'GPKG': '.gpkg',
+                'SHP': '.shp',
+                'SHAPEFILE': '.shp',
+                'ESRI SHAPEFILE': '.shp',
+                'GEOJSON': '.geojson',
+                'JSON': '.geojson',
+                'GML': '.gml',
+                'KML': '.kml',
+                'CSV': '.csv',
+                'XLSX': '.xlsx',
+                'TAB': '.tab',
+                'MAPINFO': '.tab',
+                'DXF': '.dxf',
+                'SQLITE': '.sqlite',
+                'SPATIALITE': '.sqlite'
+            }
+            file_extension = extension_map.get(datatype.upper(), f'.{datatype.lower()}')
+            
             # Build output path for this layer
             # Sanitize filename to handle special characters like em-dash (—)
             safe_filename = sanitize_filename(layer_name)
-            output_path = os.path.join(output_folder, safe_filename)
+            output_path = os.path.join(output_folder, f"{safe_filename}{file_extension}")
             logger.info(f"Exporting layer '{layer_name}' to: {output_path}")
             logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
             
@@ -4978,13 +5038,33 @@ class FilterEngineTask(QgsTask):
             # Sanitize filename to handle special characters like em-dash (—)
             safe_filename = sanitize_filename(layer_name)
             
+            # Determine file extension based on datatype
+            extension_map = {
+                'GPKG': '.gpkg',
+                'SHP': '.shp',
+                'SHAPEFILE': '.shp',
+                'ESRI SHAPEFILE': '.shp',
+                'GEOJSON': '.geojson',
+                'JSON': '.geojson',
+                'GML': '.gml',
+                'KML': '.kml',
+                'CSV': '.csv',
+                'XLSX': '.xlsx',
+                'TAB': '.tab',
+                'MAPINFO': '.tab',
+                'DXF': '.dxf',
+                'SQLITE': '.sqlite',
+                'SPATIALITE': '.sqlite'
+            }
+            file_extension = extension_map.get(datatype.upper(), f'.{datatype.lower()}')
+            
             # Create temporary directory for this layer's export
             import tempfile
             temp_dir = tempfile.mkdtemp(prefix=f"fm_batch_{safe_filename}_")
             
             try:
                 # Export layer to temporary directory
-                temp_output = os.path.join(temp_dir, safe_filename)
+                temp_output = os.path.join(temp_dir, f"{safe_filename}{file_extension}")
                 logger.info(f"Exporting layer '{layer_name}' to temp: {temp_output}")
                 logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
                 
@@ -5183,7 +5263,8 @@ class FilterEngineTask(QgsTask):
                 )
                 if export_success:
                     self.message = f'Streaming export: {len(layers)} layer(s) ({total_features} features) exported to <a href="file:///{output_folder}">{output_folder}</a>'
-                else:
+                elif not self.message:
+                    # Only set generic message if _export_with_streaming didn't set a detailed one
                     self.message = f'Streaming export failed for {len(layers)} layer(s)'
                 
                 # Create zip if requested
@@ -5286,13 +5367,39 @@ class FilterEngineTask(QgsTask):
             bool: True if export successful
         """
         try:
-            config = StreamingConfig(chunk_size=chunk_size)
+            # Note: StreamingConfig uses batch_size, not chunk_size
+            config = StreamingConfig(batch_size=chunk_size)
             exporter = StreamingExporter(config)
             
-            # Progress callback
+            # Map datatype to format string expected by StreamingExporter
+            format_map = {
+                'GPKG': 'gpkg',
+                'SHP': 'shp',
+                'GEOJSON': 'geojson',
+                'GML': 'gml',
+                'KML': 'kml',
+                'CSV': 'csv'
+            }
+            export_format = format_map.get(datatype.upper(), datatype.lower())
+            
+            # Ensure output folder exists
+            if not os.path.exists(output_folder):
+                try:
+                    os.makedirs(output_folder)
+                    logger.info(f"Created output folder: {output_folder}")
+                except OSError as e:
+                    error_msg = f"Cannot create output folder '{output_folder}': {e}"
+                    logger.error(error_msg)
+                    self.message = error_msg
+                    return False
+            
+            # Progress callback - ExportProgress uses percent_complete, not percentage
             def progress_callback(progress):
-                self.setProgress(int(progress.percentage))
-                self.setDescription(f"Streaming export: {progress.features_exported}/{progress.total_features} features")
+                self.setProgress(int(progress.percent_complete))
+                self.setDescription(f"Streaming export: {progress.features_processed}/{progress.total_features} features")
+            
+            exported_count = 0
+            failed_layers = []
             
             for layer_info in layers:
                 layer_name = layer_info['layer_name'] if isinstance(layer_info, dict) else layer_info
@@ -5300,6 +5407,7 @@ class FilterEngineTask(QgsTask):
                 
                 if not layer:
                     logger.warning(f"Layer not found: {layer_name}")
+                    failed_layers.append(f"{layer_name} (not found)")
                     continue
                 
                 # Determine output path
@@ -5314,29 +5422,56 @@ class FilterEngineTask(QgsTask):
                 
                 logger.info(f"Streaming export: {layer_name} → {output_path}")
                 
-                success = exporter.export_layer_streaming(
-                    layer=layer,
+                # StreamingExporter.export_layer_streaming expects:
+                # source_layer (not layer), format (not target_crs)
+                # and returns a dict with 'success' key
+                result = exporter.export_layer_streaming(
+                    source_layer=layer,
                     output_path=output_path,
-                    target_crs=projection,
-                    progress_callback=progress_callback
+                    format=export_format,
+                    progress_callback=progress_callback,
+                    cancel_check=self.isCanceled
                 )
                 
-                if not success:
-                    logger.error(f"Streaming export failed for {layer_name}")
-                    return False
+                # Check the 'success' key in the returned dict
+                if not result.get('success', False):
+                    error_msg = result.get('error', 'Unknown error')
+                    logger.error(f"Streaming export failed for {layer_name}: {error_msg}")
+                    failed_layers.append(f"{layer_name} ({error_msg})")
+                    continue
+                
+                exported_count += 1
                 
                 # Save styles if requested
                 if save_styles and style_format:
-                    self._save_layer_style(layer, output_path, style_format)
+                    self._save_layer_style(layer, output_path, style_format, datatype)
                 
                 if self.isCanceled():
                     logger.info("Export cancelled by user")
+                    self.message = "Export cancelled by user"
+                    return False
+            
+            # Check results
+            if failed_layers:
+                if exported_count > 0:
+                    self.message = f"Partial export: {exported_count}/{len(layers)} layers exported. Failed: {', '.join(failed_layers[:3])}"
+                    if len(failed_layers) > 3:
+                        self.message += f" and {len(failed_layers) - 3} more"
+                    logger.warning(self.message)
+                    return True  # Partial success
+                else:
+                    self.message = f"Export failed for all {len(layers)} layers. Errors: {', '.join(failed_layers[:3])}"
+                    if len(failed_layers) > 3:
+                        self.message += f" and {len(failed_layers) - 3} more"
+                    logger.error(self.message)
                     return False
             
             return True
             
         except Exception as e:
-            logger.error(f"Streaming export error: {e}")
+            error_msg = f"Streaming export error: {e}"
+            logger.error(error_msg)
+            self.message = error_msg
             return False
 
     def _get_spatialite_datasource(self, layer):
@@ -6415,7 +6550,16 @@ class FilterEngineTask(QgsTask):
             if result is None:
                 # Task was likely canceled by user - log only, no message bar notification
                 logger.info('Task completed with no result (likely canceled by user)')
+            elif result is False:
+                # Task failed without exception - display error message
+                error_msg = self.message if hasattr(self, 'message') and self.message else 'Task failed'
+                logger.error(f"Task finished with failure: {error_msg}")
+                iface.messageBar().pushMessage(
+                    message_category,
+                    error_msg,
+                    Qgis.Critical)
             else:
+                # Task succeeded
                 if message_category == 'FilterLayers':
 
                     if self.task_action == 'filter':
@@ -6426,15 +6570,17 @@ class FilterEngineTask(QgsTask):
                         result_action = 'Layer(s) unfiltered'
                     
                     iface.messageBar().pushMessage(
-                        'Filter task : {}'.format(result_action),
-                        MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success)
+                        message_category,
+                        f'Filter task : {result_action}',
+                        Qgis.Success)
 
                 elif message_category == 'ExportLayers':
 
                     if self.task_action == 'export':
                         iface.messageBar().pushMessage(
-                            'Export task : {}'.format(self.message),
-                            MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Success)
+                            message_category,
+                            f'Export task : {self.message}',
+                            Qgis.Success)
                         
         else:
             # Exception occurred during task execution
@@ -6443,8 +6589,9 @@ class FilterEngineTask(QgsTask):
             
             # Display error to user
             iface.messageBar().pushMessage(
+                message_category,
                 error_msg,
-                MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Critical)
+                Qgis.Critical)
             
             # Only raise exception if task completely failed (result is False)
             # If result is True, some layers may have been processed successfully

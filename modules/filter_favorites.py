@@ -232,7 +232,8 @@ class FavoritesManager:
         try:
             cursor = conn.cursor()
             cursor.execute(self.CREATE_TABLE_SQL)
-            cursor.execute(self.CREATE_INDEX_SQL)
+            # Use executescript for multiple SQL statements (indexes)
+            cursor.executescript(self.CREATE_INDEX_SQL)
             conn.commit()
             self._table_initialized = True
             logger.debug("Favorites table initialized")
