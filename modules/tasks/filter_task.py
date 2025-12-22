@@ -5252,7 +5252,63 @@ class FilterEngineTask(QgsTask):
                 self.message = f'Batch ZIP export failed for {len(layers)} layer(s)'
             return export_success
         
-        # STANDARD MODE: Check if streaming should be used for large layers
+        # GPKG STANDARD MODE: Always use qgis:package for single file with all layers and styles
+        # This takes priority over streaming to ensure proper GeoPackage structure
+        if datatype == 'GPKG':
+            # GeoPackage export using processing - create single file with all layers and styles
+            # Determine GPKG output path
+            if output_folder.lower().endswith('.gpkg'):
+                # User selected a file path (via save dialog)
+                gpkg_output_path = output_folder
+                # Ensure parent directory exists
+                gpkg_dir = os.path.dirname(gpkg_output_path)
+                if gpkg_dir and not os.path.exists(gpkg_dir):
+                    try:
+                        os.makedirs(gpkg_dir)
+                        logger.info(f"Created output directory: {gpkg_dir}")
+                    except Exception as e:
+                        logger.error(f"Failed to create output directory: {e}")
+                        self.message = f'Failed to create output directory: {gpkg_dir}'
+                        return False
+            else:
+                # output_folder is a directory - construct default GPKG filename
+                if not os.path.exists(output_folder):
+                    try:
+                        os.makedirs(output_folder)
+                        logger.info(f"Created output directory: {output_folder}")
+                    except Exception as e:
+                        logger.error(f"Failed to create output directory: {e}")
+                        self.message = f'Failed to create output directory: {output_folder}'
+                        return False
+                # Default filename: use project name or "export"
+                project_title = self.PROJECT.title() if self.PROJECT.title() else None
+                project_basename = self.PROJECT.baseName() if self.PROJECT.baseName() else None
+                default_name = project_title or project_basename or 'export'
+                # Sanitize filename
+                default_name = sanitize_filename(default_name)
+                gpkg_output_path = os.path.join(output_folder, f"{default_name}.gpkg")
+                logger.info(f"GPKG output path constructed: {gpkg_output_path}")
+            
+            export_success = self._export_to_gpkg(layers, gpkg_output_path, save_styles)
+            
+            if not export_success:
+                self.message = 'GPKG export failed'
+                return False
+            
+            # Build success message with file path
+            self.message = f'Layer(s) exported to <a href="file:///{gpkg_output_path}">{gpkg_output_path}</a>'
+            
+            # Create zip archive if requested
+            if zip_path:
+                # For GPKG, zip the single file
+                gpkg_dir = os.path.dirname(gpkg_output_path)
+                zip_created = self._create_zip_archive(zip_path, gpkg_dir)
+                if zip_created:
+                    self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
+            
+            return True
+        
+        # STANDARD MODE: Check if streaming should be used for large layers (non-GPKG formats only)
         if streaming_enabled:
             # Check total feature count across all layers
             total_features = self._calculate_total_features(layers)
@@ -5275,37 +5331,32 @@ class FilterEngineTask(QgsTask):
                 
                 return export_success
         
-        # STANDARD MODE: Original behavior
-        if datatype == 'GPKG':
-            # GeoPackage export using processing
-            export_success = self._export_to_gpkg(layers, output_folder, save_styles)
-        else:
-            # Other formats (Shapefile, GeoJSON, etc.)
-            if not os.path.exists(output_folder):
-                logger.error(f"Output path does not exist: {output_folder}")
-                self.message = f'Output path does not exist: {output_folder}'
+        # STANDARD MODE: Other formats (Shapefile, GeoJSON, etc.)
+        if not os.path.exists(output_folder):
+            logger.error(f"Output path does not exist: {output_folder}")
+            self.message = f'Output path does not exist: {output_folder}'
+            return False
+        
+        if os.path.isdir(output_folder) and len(layers) > 1:
+            # Multiple layers to directory
+            export_success = self._export_multiple_layers_to_directory(
+                layers, output_folder, projection, datatype, style_format, save_styles
+            )
+        elif len(layers) == 1:
+            # Single layer export
+            # Handle both dict (layer info) and string (layer name) formats
+            layer_name = layers[0]['layer_name'] if isinstance(layers[0], dict) else layers[0]
+            layer = self._get_layer_by_name(layer_name)
+            if not layer:
                 return False
             
-            if os.path.isdir(output_folder) and len(layers) > 1:
-                # Multiple layers to directory
-                export_success = self._export_multiple_layers_to_directory(
-                    layers, output_folder, projection, datatype, style_format, save_styles
-                )
-            elif len(layers) == 1:
-                # Single layer export
-                # Handle both dict (layer info) and string (layer name) formats
-                layer_name = layers[0]['layer_name'] if isinstance(layers[0], dict) else layers[0]
-                layer = self._get_layer_by_name(layer_name)
-                if not layer:
-                    return False
-                
-                export_success = self._export_single_layer(
-                    layer, output_folder, projection, datatype, style_format, save_styles
-                )
-            else:
-                logger.error(f"Invalid export configuration: {len(layers)} layers but output is not a directory")
-                self.message = f'Invalid export configuration: {len(layers)} layers but output is not a directory'
-                return False
+            export_success = self._export_single_layer(
+                layer, output_folder, projection, datatype, style_format, save_styles
+            )
+        else:
+            logger.error(f"Invalid export configuration: {len(layers)} layers but output is not a directory")
+            self.message = f'Invalid export configuration: {len(layers)} layers but output is not a directory'
+            return False
         
         if not export_success:
             self.message = 'Export failed'
