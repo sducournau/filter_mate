@@ -1967,12 +1967,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 else:
                     logger.warning(f"Layer not found in project: {layer_name}")
         
-        # Refresh map canvas
+        # Zoom to filtered source layer extent
         try:
             from qgis.utils import iface
-            iface.mapCanvas().refresh()
-        except:
-            pass
+            if source_layer and source_layer.featureCount() > 0:
+                extent = source_layer.extent()
+                if not extent.isEmpty():
+                    iface.mapCanvas().zoomToFeatureExtent(extent)
+                    logger.info(f"Zoomed to filtered extent of source layer: {source_layer.name()}")
+            elif hasattr(self, 'current_layer') and self.current_layer and self.current_layer.featureCount() > 0:
+                extent = self.current_layer.extent()
+                if not extent.isEmpty():
+                    iface.mapCanvas().zoomToFeatureExtent(extent)
+                    logger.info(f"Zoomed to filtered extent of current layer: {self.current_layer.name()}")
+            else:
+                # Fallback: just refresh the canvas
+                iface.mapCanvas().refresh()
+        except Exception as e:
+            logger.warning(f"Could not zoom to filtered extent: {e}")
+            try:
+                iface.mapCanvas().refresh()
+            except:
+                pass
         
         # Update usage stats
         self._favorites_manager.mark_favorite_used(favorite_id)
