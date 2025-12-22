@@ -225,6 +225,9 @@ class ParallelFilterExecutor:
         """
         Filter a single layer (called in worker thread).
         
+        STABILITY FIX v2.3.9: Added layer validation to prevent access violations
+        when layer becomes invalid during parallel filtering.
+        
         Args:
             filter_func: Filtering function to call
             provider_type: Provider type string
@@ -234,8 +237,50 @@ class ParallelFilterExecutor:
         Returns:
             FilterResult: Result of the operation
         """
-        layer_name = layer.name() if hasattr(layer, 'name') else str(layer)
-        layer_id = layer.id() if hasattr(layer, 'id') else str(id(layer))
+        # STABILITY FIX v2.3.9: Validate layer before any operations
+        # This prevents crashes when layer is deleted/invalidated during parallel execution
+        try:
+            if layer is None:
+                return FilterResult(
+                    layer_id="unknown",
+                    layer_name="unknown",
+                    success=False,
+                    feature_count=0,
+                    execution_time_ms=0.0,
+                    error_message="Layer is None"
+                )
+            
+            # Check if layer is still valid (C++ object not deleted)
+            try:
+                layer_name = layer.name()
+                layer_id = layer.id()
+                if not layer.isValid():
+                    return FilterResult(
+                        layer_id=layer_id,
+                        layer_name=layer_name,
+                        success=False,
+                        feature_count=0,
+                        execution_time_ms=0.0,
+                        error_message="Layer is not valid"
+                    )
+            except (RuntimeError, AttributeError) as access_error:
+                return FilterResult(
+                    layer_id=str(id(layer)),
+                    layer_name="deleted_layer",
+                    success=False,
+                    feature_count=0,
+                    execution_time_ms=0.0,
+                    error_message=f"Layer C++ object deleted: {access_error}"
+                )
+        except Exception as validation_error:
+            return FilterResult(
+                layer_id=str(id(layer)) if layer else "unknown",
+                layer_name="unknown",
+                success=False,
+                feature_count=0,
+                execution_time_ms=0.0,
+                error_message=f"Layer validation failed: {validation_error}"
+            )
         
         start_time = time.time()
         

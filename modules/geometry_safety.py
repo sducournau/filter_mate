@@ -69,6 +69,74 @@ def validate_geometry(geom: Optional[QgsGeometry]) -> bool:
         return False
 
 
+def validate_geometry_for_geos(geom: Optional[QgsGeometry], strict: bool = False) -> bool:
+    """
+    Deep validation to check if geometry is safe for GEOS operations.
+    
+    This is more thorough than validate_geometry() and optionally tests if 
+    the geometry can survive a buffer(0) operation without crashing GEOS.
+    
+    CRITICAL: This function catches geometries that can crash GEOS at C++ level.
+    
+    Args:
+        geom: QgsGeometry to validate
+        strict: If True, also tests buffer(0) (more thorough but may reject valid geometries)
+        
+    Returns:
+        bool: True if geometry is safe for GEOS operations, False otherwise
+    """
+    if not validate_geometry(geom):
+        return False
+    
+    try:
+        # Test 1: Check for NaN/Inf in coordinates (can crash GEOS)
+        try:
+            import math
+            bbox = geom.boundingBox()
+            coords = [bbox.xMinimum(), bbox.xMaximum(), bbox.yMinimum(), bbox.yMaximum()]
+            for coord in coords:
+                if math.isnan(coord) or math.isinf(coord):
+                    logger.debug("validate_geometry_for_geos: NaN/Inf detected in bounding box")
+                    return False
+        except Exception:
+            # If bounding box fails, geometry is likely invalid
+            return False
+        
+        # Test 2: isGeosValid() - basic GEOS validation
+        # Note: Some geometries fail isGeosValid() but still work in selectbylocation
+        try:
+            if not geom.isGeosValid():
+                # Try makeValid() as a repair attempt
+                repaired = geom.makeValid()
+                if repaired and not repaired.isNull() and repaired.isGeosValid():
+                    # Geometry can be repaired, so it's usable
+                    return True
+                # If strict mode, reject; otherwise allow (selectbylocation might handle it)
+                if strict:
+                    logger.debug("validate_geometry_for_geos: isGeosValid() returned False")
+                    return False
+        except Exception:
+            pass  # isGeosValid() failed, but geometry might still work
+        
+        # Test 3 (strict only): Try buffer(0) - catches subtle corruptions
+        # This test is too aggressive for normal use as it rejects many valid geometries
+        if strict:
+            try:
+                buffered = geom.buffer(0, 1)  # Use minimal segments for speed
+                if buffered is None or buffered.isNull() or buffered.isEmpty():
+                    logger.debug("validate_geometry_for_geos: buffer(0) returned empty/null")
+                    return False
+            except Exception as buffer_error:
+                logger.debug(f"validate_geometry_for_geos: buffer(0) failed: {buffer_error}")
+                return False
+        
+        return True
+        
+    except Exception as e:
+        logger.debug(f"validate_geometry_for_geos exception: {e}")
+        return False
+
+
 def is_geometry_collection_type(geom: QgsGeometry) -> bool:
     """
     Check if geometry is a collection type (GeometryCollection or Multi*).
@@ -596,3 +664,146 @@ def repair_geometry(geom: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
     
     logger.warning("repair_geometry: All repair strategies failed")
     return None
+
+
+# =============================================================================
+# Safe Layer Creation for GEOS Operations
+# =============================================================================
+
+def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Optional[any]:
+    """
+    Create a memory layer containing only GEOS-safe geometries.
+    
+    CRITICAL FIX for crashes during selectbylocation:
+    This function filters out geometries that would cause GEOS to crash
+    at the C++ level (which cannot be caught by Python try/except).
+    
+    Process:
+    1. Validate each geometry with validate_geometry_for_geos()
+    2. Try to repair geometries that fail validation with makeValid()
+    3. Use multi-level fallback: strict -> normal -> repaired -> original
+    4. Create new memory layer with safe geometries
+    
+    Args:
+        layer: QgsVectorLayer to filter
+        layer_name_suffix: Suffix for the new layer name
+        
+    Returns:
+        QgsVectorLayer: Memory layer with GEOS-safe geometries, or original layer as last resort
+    """
+    from qgis.core import (
+        QgsVectorLayer, QgsMemoryProviderUtils, QgsFeature
+    )
+    
+    if layer is None:
+        logger.error("create_geos_safe_layer: Input layer is None")
+        return None
+    
+    if not isinstance(layer, QgsVectorLayer):
+        logger.error(f"create_geos_safe_layer: Input is not a QgsVectorLayer: {type(layer)}")
+        return None
+    
+    if not layer.isValid():
+        logger.error(f"create_geos_safe_layer: Input layer is not valid")
+        return None
+    
+    feature_count = layer.featureCount()
+    if feature_count == 0:
+        logger.warning("create_geos_safe_layer: Input layer has no features")
+        return None
+    
+    try:
+        # Create output memory layer
+        safe_layer = QgsMemoryProviderUtils.createMemoryLayer(
+            f"{layer.name()}{layer_name_suffix}",
+            layer.fields(),
+            layer.wkbType(),
+            layer.crs()
+        )
+        
+        if not safe_layer or not safe_layer.isValid():
+            logger.error("create_geos_safe_layer: Failed to create memory layer")
+            # Fallback: return original layer
+            logger.warning("create_geos_safe_layer: Falling back to original layer")
+            return layer
+        
+        data_provider = safe_layer.dataProvider()
+        safe_features = []
+        repaired_features = []  # Features that needed makeValid()
+        skipped_count = 0
+        repaired_count = 0
+        
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            
+            # Test 1: Basic validation - skip truly invalid geometries
+            if not validate_geometry(geom):
+                skipped_count += 1
+                continue
+            
+            # Test 2: Normal GEOS validation (not strict)
+            if validate_geometry_for_geos(geom, strict=False):
+                # Geometry passes normal validation
+                new_feature = QgsFeature(layer.fields())
+                new_feature.setGeometry(geom)
+                new_feature.setAttributes(feature.attributes())
+                safe_features.append(new_feature)
+            else:
+                # Try makeValid() repair
+                try:
+                    repaired = geom.makeValid()
+                    if repaired and not repaired.isNull() and not repaired.isEmpty():
+                        new_feature = QgsFeature(layer.fields())
+                        new_feature.setGeometry(repaired)
+                        new_feature.setAttributes(feature.attributes())
+                        repaired_features.append(new_feature)
+                        repaired_count += 1
+                    else:
+                        # makeValid failed, but include original geometry as fallback
+                        # selectbylocation might handle it
+                        new_feature = QgsFeature(layer.fields())
+                        new_feature.setGeometry(geom)
+                        new_feature.setAttributes(feature.attributes())
+                        repaired_features.append(new_feature)
+                        logger.debug(f"create_geos_safe_layer: Including geometry despite validation failure (fid={feature.id()})")
+                except Exception as repair_error:
+                    # Include original geometry as last resort
+                    new_feature = QgsFeature(layer.fields())
+                    new_feature.setGeometry(geom)
+                    new_feature.setAttributes(feature.attributes())
+                    repaired_features.append(new_feature)
+                    logger.debug(f"create_geos_safe_layer: Repair failed, including original (fid={feature.id()}): {repair_error}")
+        
+        # Combine safe and repaired features
+        all_features = safe_features + repaired_features
+        
+        if not all_features:
+            # No features at all - this shouldn't happen but handle gracefully
+            logger.warning(f"create_geos_safe_layer: No features could be processed (all {feature_count} skipped)")
+            logger.warning("create_geos_safe_layer: Falling back to original layer")
+            return layer
+        
+        # Add features to layer
+        success, _ = data_provider.addFeatures(all_features)
+        if not success:
+            logger.error("create_geos_safe_layer: Failed to add features to memory layer")
+            logger.warning("create_geos_safe_layer: Falling back to original layer")
+            return layer
+        
+        safe_layer.updateExtents()
+        
+        if repaired_count > 0 or skipped_count > 0:
+            logger.info(f"create_geos_safe_layer: Created layer with {len(all_features)}/{feature_count} features "
+                       f"({skipped_count} skipped, {repaired_count} repaired)")
+        else:
+            logger.debug(f"create_geos_safe_layer: All {feature_count} geometries passed validation")
+        
+        return safe_layer
+        
+    except Exception as e:
+        logger.error(f"create_geos_safe_layer: Exception: {e}")
+        import traceback
+        logger.debug(f"Traceback: {traceback.format_exc()}")
+        # Ultimate fallback: return original layer
+        logger.warning("create_geos_safe_layer: Exception occurred, falling back to original layer")
+        return layer

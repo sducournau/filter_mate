@@ -216,6 +216,9 @@ class FilterMate:
         
         # Auto-migrate configuration if needed
         self._auto_migrate_config()
+        
+        # Check and warn about invalid geometry filtering settings
+        self._check_geometry_validation_settings()
 
         icon_path = ':/plugins/filter_mate/icon.png'
         
@@ -385,6 +388,82 @@ class FilterMate:
                 self.tr("Erreur lors de la migration de la configuration: {}").format(str(e))
             )
             # Don't block plugin initialization if migration fails
+    
+    def _check_geometry_validation_settings(self):
+        """Check QGIS geometry validation settings and warn user if not disabled.
+        
+        FilterMate works best when QGIS's invalid geometry filtering is disabled
+        (set to "Off"). When enabled, QGIS may filter out features with invalid
+        geometries before FilterMate can process them, leading to missing features
+        in exports and filters.
+        
+        This method checks the current setting and offers to disable it if needed,
+        with an explanation of why this is recommended.
+        """
+        try:
+            from qgis.core import QgsSettings
+            
+            # Get current geometry validation setting
+            # Values: 0 = Off, 1 = QGIS validation, 2 = GEOS validation
+            settings = QgsSettings()
+            current_value = settings.value("qgis/digitizing/validate_geometries", 0, type=int)
+            
+            if current_value != 0:
+                # Setting is not "Off" - need to warn user
+                validation_modes = {
+                    1: "QGIS",
+                    2: "GEOS"
+                }
+                current_mode = validation_modes.get(current_value, str(current_value))
+                
+                title = self.tr("Paramètre de validation des géométries")
+                
+                message = self.tr(
+                    "Le paramètre QGIS 'Filtrage des éléments invalides' est actuellement "
+                    "configuré sur '{mode}'.\n\n"
+                    "FilterMate recommande de désactiver ce paramètre (valeur 'Désactivé') "
+                    "pour les raisons suivantes :\n\n"
+                    "• Les entités avec des géométries invalides pourraient être "
+                    "silencieusement exclues des exports et des filtres\n"
+                    "• FilterMate gère la validation des géométries de manière interne "
+                    "avec des options de réparation automatique\n"
+                    "• Certaines données légitimes peuvent avoir des géométries considérées "
+                    "comme 'invalides' selon les règles strictes OGC\n\n"
+                    "Voulez-vous désactiver ce paramètre maintenant ?\n\n"
+                    "• Oui : Désactiver le filtrage (recommandé pour FilterMate)\n"
+                    "• Non : Garder le paramètre actuel"
+                ).format(mode=current_mode)
+                
+                reply = QMessageBox.question(
+                    self.iface.mainWindow(),
+                    title,
+                    message,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                
+                if reply == QMessageBox.Yes:
+                    # Disable geometry validation
+                    settings.setValue("qgis/digitizing/validate_geometries", 0)
+                    logger.info("Geometry validation disabled by user via FilterMate startup check")
+                    self.iface.messageBar().pushSuccess(
+                        "FilterMate",
+                        self.tr("Filtrage des géométries invalides désactivé avec succès.")
+                    )
+                else:
+                    # User declined - just log and show info
+                    logger.info(f"User declined to disable geometry validation (current: {current_mode})")
+                    self.iface.messageBar().pushWarning(
+                        "FilterMate",
+                        self.tr("Filtrage des géométries invalides non modifié. "
+                               "Certaines entités peuvent être exclues des exports.")
+                    )
+            else:
+                logger.debug("Geometry validation already disabled (Off) - no action needed")
+                
+        except Exception as e:
+            logger.warning(f"Error checking geometry validation settings: {e}")
+            # Don't block plugin initialization if check fails
     
     def _connect_auto_activation_signals(self):
         """Connect signals to handle project changes and reload layers.

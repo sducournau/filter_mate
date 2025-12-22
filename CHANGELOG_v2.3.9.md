@@ -1,3 +1,142 @@
+# CHANGELOG - FilterMate v2.3.9.2 (2025-12-22)
+
+## 🔧 Fix - Validation GEOS trop stricte
+
+### Description
+
+Correction de la validation GEOS v2.3.9.1 qui était trop stricte et rejetait toutes les géométries, causant un nouveau crash.
+
+### Problème v2.3.9.1
+
+- **Symptôme**: Console affichait `create_geos_safe_layer: No safe geometries found (all X skipped)`
+- **Cause**: Le test `buffer(0)` rejetait des géométries qui fonctionnaient pourtant avec `selectbylocation`
+- **Impact**: Couche vide passée à `selectbylocation` → crash QGIS
+
+### Solution v2.3.9.2
+
+**1. Validation moins stricte par défaut**
+
+```python
+def validate_geometry_for_geos(geom, strict=False):
+    # Test NaN/Inf (toujours)
+    # Test isGeosValid() avec tentative de makeValid() si échec
+    # Test buffer(0) seulement en mode strict
+```
+
+**2. Fallbacks gracieux dans `create_geos_safe_layer()`**
+
+- Inclut les géométries même si elles échouent la validation (avec `makeValid()`)
+- Retourne la couche originale si aucune géométrie ne peut être traitée
+- Ne retourne plus jamais `None` pour une couche valide
+
+**3. Code simplifié**
+
+- Suppression des fallbacks `fixgeometries` redondants
+- Logique plus claire et prévisible
+
+### Fichiers modifiés
+
+- `modules/geometry_safety.py`: Validation assouplie + fallbacks
+- `modules/backends/ogr_backend.py`: Logique simplifiée
+- `modules/tasks/filter_task.py`: Logique simplifiée
+
+---
+
+# CHANGELOG - FilterMate v2.3.9.1 (2025-12-22)
+
+## 🔥 Critical Bug Fix - GEOS Crash during OGR Backend Filtering
+
+### Description
+
+Résolution d'un crash critique "Windows fatal exception: access violation" qui se produisait lors du filtrage géométrique avec le backend OGR sur certaines couches (notamment SubDucts, réseaux de conduits).
+
+### Problème
+
+- **Symptôme**: Crash fatal de QGIS ("access violation") pendant `native:selectbylocation`
+- **Déclencheur**: Filtrage avec backend OGR sur couches contenant des géométries problématiques
+- **Impact**: Crash immédiat de QGIS, perte de travail
+
+### Cause technique
+
+L'algorithme `native:fixgeometries` ne répare pas toutes les corruptions de géométrie. Certaines géométries peuvent toujours causer des crashes au niveau C++/GEOS:
+
+- Coordonnées NaN ou Infinity
+- Self-intersections extrêmes
+- Corruptions subtiles non détectées par `isGeosValid()`
+
+Le crash se produit dans GEOS au niveau C++ et ne peut PAS être intercepté par Python `try/except`.
+
+### Solution
+
+**1. Nouvelle fonction `validate_geometry_for_geos()`**
+
+Validation profonde qui teste si une géométrie peut survivre aux opérations GEOS:
+
+```python
+def validate_geometry_for_geos(geom):
+    # Test 1: isGeosValid()
+    if not geom.isGeosValid():
+        return False
+    # Test 2: buffer(0) - détecte les corruptions subtiles
+    try:
+        buffered = geom.buffer(0, 1)
+        if buffered is None or buffered.isEmpty():
+            return False
+    except:
+        return False
+    # Test 3: Vérification NaN/Inf dans bounding box
+    bbox = geom.boundingBox()
+    for coord in [bbox.xMinimum(), bbox.xMaximum(), ...]:
+        if math.isnan(coord) or math.isinf(coord):
+            return False
+    return True
+```
+
+**2. Nouvelle fonction `create_geos_safe_layer()`**
+
+Crée une couche mémoire contenant uniquement les géométries GEOS-safe:
+
+```python
+safe_layer = create_geos_safe_layer(input_layer, "_safe")
+# Filtre les géométries invalides
+# Tente de réparer les géométries récupérables
+# Retourne une couche avec uniquement des géométries sûres
+```
+
+**3. Utilisation dans `_safe_select_by_location()` et `_execute_ogr_spatial_selection()`**
+
+Les appels à `native:selectbylocation` utilisent maintenant des couches GEOS-safe:
+
+```python
+safe_intersect = create_geos_safe_layer(intersect_layer, "_safe")
+processing.run("native:selectbylocation", {
+    'INPUT': work_layer,
+    'INTERSECT': safe_intersect,  # ✅ GEOS-safe
+    ...
+})
+```
+
+### Fichiers modifiés
+
+- `modules/geometry_safety.py`:
+  - Ajout de `validate_geometry_for_geos()` - validation profonde GEOS
+  - Ajout de `create_geos_safe_layer()` - création de couche GEOS-safe
+- `modules/backends/ogr_backend.py`:
+  - Import des nouvelles fonctions
+  - `_safe_select_by_location()` utilise `create_geos_safe_layer()` au lieu de `fixgeometries`
+- `modules/tasks/filter_task.py`:
+  - Import des nouvelles fonctions
+  - `_execute_ogr_spatial_selection()` utilise `create_geos_safe_layer()`
+
+### Impact
+
+- ✅ Plus de crashes lors du filtrage OGR sur couches avec géométries problématiques
+- ✅ Les géométries invalides sont filtrées ou réparées avant les opérations spatiales
+- ✅ Log détaillé du nombre de géométries filtrées/réparées
+- ⚠️ Légère augmentation du temps de traitement (validation supplémentaire)
+
+---
+
 # CHANGELOG - FilterMate v2.3.9 (2025-12-19)
 
 ## 🔥 Critical Bug Fix - Access Violation Crash

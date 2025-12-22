@@ -24,12 +24,14 @@ from ..appUtils import safe_set_subset_string
 # Import geometry safety module (v2.3.9 - stability fix)
 from ..geometry_safety import (
     validate_geometry,
+    validate_geometry_for_geos,
     safe_as_geometry_collection,
     safe_as_polygon,
     safe_collect_geometry,
     safe_convert_to_multi_polygon,
     extract_polygons_from_collection,
-    get_geometry_type_name
+    get_geometry_type_name,
+    create_geos_safe_layer
 )
 
 logger = get_tasks_logger()
@@ -761,10 +763,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         Safely execute selectbylocation with comprehensive error handling.
         
-        CRITICAL STABILITY FIX v2.3.9:
+        CRITICAL STABILITY FIX v2.3.9.1:
         Wraps native:selectbylocation with validation and error recovery.
-        Uses native:fixgeometries on BOTH layers before selectbylocation to prevent
-        GEOS crashes from invalid geometries.
+        Uses create_geos_safe_layer() to filter out geometries that would crash GEOS
+        at the C++ level (cannot be caught by Python try/except).
         
         Args:
             input_layer: Layer to select features from
@@ -794,64 +796,75 @@ class OGRGeometricFilter(GeometricFilterBackend):
                          f"intersect={intersect_layer.name()} ({intersect_layer.featureCount()} features), "
                          f"predicates={predicate_codes}")
             
-            # STABILITY FIX v2.3.9: Use fixgeometries on BOTH layers to prevent C++ crashes
-            # This is critical because invalid geometries cause GEOS to crash at the C++ level
-            fixed_intersect = intersect_layer
-            try:
-                self.log_debug(f"Fixing geometries on intersect layer: {intersect_layer.name()}")
-                fix_result = processing.run("native:fixgeometries", {
-                    'INPUT': intersect_layer,
-                    'OUTPUT': 'memory:'
-                }, context=context, feedback=feedback)
-                fixed_intersect = fix_result['OUTPUT']
-                self.log_debug(f"✓ Intersect layer geometries fixed: {fixed_intersect.featureCount()} features")
-            except Exception as fix_error:
-                self.log_warning(f"fixgeometries failed on intersect layer: {fix_error}, using original")
+            # STABILITY FIX v2.3.9.2: Use create_geos_safe_layer() for geometry validation
+            # The function now handles fallbacks gracefully and returns original layer as last resort
+            self.log_info("🛡️ Creating GEOS-safe intersect layer (geometry validation)...")
+            safe_intersect = create_geos_safe_layer(intersect_layer, "_safe_intersect")
             
-            # Also fix input layer geometries if not too large
-            fixed_input = input_layer
-            if input_layer.featureCount() <= 50000:  # Only fix smaller layers
-                try:
-                    self.log_debug(f"Fixing geometries on input layer: {input_layer.name()}")
-                    fix_result = processing.run("native:fixgeometries", {
-                        'INPUT': input_layer,
-                        'OUTPUT': 'memory:'
-                    }, context=context, feedback=feedback)
-                    fixed_input = fix_result['OUTPUT']
-                    self.log_debug(f"✓ Input layer geometries fixed: {fixed_input.featureCount()} features")
-                except Exception as fix_error:
-                    self.log_warning(f"fixgeometries failed on input layer: {fix_error}, using original")
+            # create_geos_safe_layer now returns the original layer as fallback, never None for valid input
+            if safe_intersect is None:
+                self.log_warning("create_geos_safe_layer returned None, using original layer")
+                safe_intersect = intersect_layer
             
-            self.log_info(f"🔍 Executing selectbylocation with fixed geometries")
+            if not safe_intersect.isValid() or safe_intersect.featureCount() == 0:
+                self.log_error("No valid geometries in intersect layer")
+                return False
             
-            # Execute with error handling - use fixed layers
-            # Note: We need to map selection back to original input layer
-            if fixed_input is input_layer:
+            self.log_info(f"✓ Safe intersect layer: {safe_intersect.featureCount()} features")
+            
+            # Also process input layer if not too large
+            safe_input = input_layer
+            use_safe_input = False
+            if input_layer.featureCount() <= 50000:  # Only process smaller layers for performance
+                self.log_debug("🛡️ Creating GEOS-safe input layer...")
+                temp_safe_input = create_geos_safe_layer(input_layer, "_safe_input")
+                if temp_safe_input and temp_safe_input.isValid() and temp_safe_input.featureCount() > 0:
+                    safe_input = temp_safe_input
+                    use_safe_input = True
+                    self.log_debug(f"✓ Safe input layer: {safe_input.featureCount()} features")
+            
+            self.log_info(f"🔍 Executing selectbylocation with GEOS-safe geometries")
+            
+            # Execute with error handling - use safe layers
+            if not use_safe_input:
                 # Direct selection on original layer
                 select_result = processing.run("native:selectbylocation", {
                     'INPUT': input_layer,
                     'PREDICATE': predicate_codes,
-                    'INTERSECT': fixed_intersect,
+                    'INTERSECT': safe_intersect,
                     'METHOD': 0  # creating new selection
                 }, context=context, feedback=feedback)
             else:
-                # Select on fixed layer, then map back to original
+                # Select on safe layer, then map back to original
                 select_result = processing.run("native:selectbylocation", {
-                    'INPUT': fixed_input,
+                    'INPUT': safe_input,
                     'PREDICATE': predicate_codes,
-                    'INTERSECT': fixed_intersect,
+                    'INTERSECT': safe_intersect,
                     'METHOD': 0
                 }, context=context, feedback=feedback)
                 
-                # Get selected feature IDs from fixed layer
-                selected_fids = [f.id() for f in fixed_input.selectedFeatures()]
+                # STABILITY FIX v2.3.9.1: Wrap selectedFeatures in try-except
+                # Get selected feature IDs from safe layer
+                try:
+                    selected_fids = [f.id() for f in safe_input.selectedFeatures()]
+                except (RuntimeError, AttributeError) as e:
+                    self.log_error(f"Failed to get selected features from safe layer: {e}")
+                    return False
                 
                 # Select same features on original layer
                 if selected_fids:
-                    input_layer.selectByIds(selected_fids)
-                    self.log_debug(f"Mapped {len(selected_fids)} selected features back to original layer")
+                    try:
+                        input_layer.selectByIds(selected_fids)
+                        self.log_debug(f"Mapped {len(selected_fids)} selected features back to original layer")
+                    except (RuntimeError, AttributeError) as e:
+                        self.log_error(f"Failed to map selection to original layer: {e}")
+                        return False
             
-            selected_count = input_layer.selectedFeatureCount()
+            try:
+                selected_count = input_layer.selectedFeatureCount()
+            except (RuntimeError, AttributeError) as e:
+                self.log_error(f"Failed to get selected feature count: {e}")
+                return False
             self.log_info(f"✓ Selection complete: {selected_count} features selected")
             return True
             
@@ -876,7 +889,18 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Standard filtering method for small-medium datasets (<10k features).
         
         Uses direct selectbylocation and subset string with feature IDs.
+        
+        STABILITY FIX v2.3.9: Added layer validation to prevent access violations.
         """
+        # STABILITY FIX v2.3.9: Validate layers before any operations
+        if layer is None or not layer.isValid():
+            self.log_error("Target layer is None or invalid - cannot proceed with standard filtering")
+            return False
+        
+        if source_layer is None or not source_layer.isValid():
+            self.log_error("Source layer is None or invalid - cannot proceed with standard filtering")
+            return False
+        
         # Apply buffer
         intersect_layer = self._apply_buffer(source_layer, buffer_value)
         if intersect_layer is None:
@@ -909,7 +933,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # Get actual field values from selected features
                 if pk_field == "$id":
                     # Use QGIS feature IDs
-                    selected_ids = [f.id() for f in layer.selectedFeatures()]
+                    # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
+                    try:
+                        selected_ids = [f.id() for f in layer.selectedFeatures()]
+                    except (RuntimeError, AttributeError) as e:
+                        self.log_error(f"Failed to get selected features: {e}")
+                        return False
                     id_list = ','.join(str(fid) for fid in selected_ids)
                     new_subset_expression = f"$id IN ({id_list})"
                 else:
@@ -924,7 +953,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     field_type = layer.fields()[field_idx].type()
                     
                     # Extract values from the primary key field
-                    selected_values = [f.attribute(pk_field) for f in layer.selectedFeatures()]
+                    # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
+                    try:
+                        selected_values = [f.attribute(pk_field) for f in layer.selectedFeatures()]
+                    except (RuntimeError, AttributeError) as e:
+                        self.log_error(f"Failed to get selected features for PK extraction: {e}")
+                        return False
                     
                     # Quote string values, keep numeric values unquoted
                     if field_type == QMetaType.Type.QString:
@@ -952,9 +986,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # Apply subset filter
                 result = safe_set_subset_string(layer, final_expression)
                 if result:
-                    final_count = layer.featureCount()
+                    try:
+                        final_count = layer.featureCount()
+                    except (RuntimeError, AttributeError):
+                        final_count = -1  # Unknown
                     self.log_info(f"✓ {layer.name()}: {final_count} features")
-                    layer.removeSelection()
+                    
+                    # Clear selection safely
+                    try:
+                        layer.removeSelection()
+                    except (RuntimeError, AttributeError):
+                        pass
                     
                     if final_count == 0 and selected_count > 0:
                         self.log_warning(f"Filter returned 0 features - check primary key '{pk_field}'")
@@ -962,7 +1004,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     return True
                 else:
                     self.log_error(f"✗ Filter failed for {layer.name()}")
-                    layer.removeSelection()
+                    try:
+                        layer.removeSelection()
+                    except (RuntimeError, AttributeError):
+                        pass
                     return False
             else:
                 self.log_debug("No features selected by geometric filter")
@@ -986,8 +1031,34 @@ class OGRGeometricFilter(GeometricFilterBackend):
         3. Use attribute-based subset string (faster than ID list)
         
         Performance: O(log n) with spatial index vs O(n) without.
+        
+        STABILITY FIX v2.3.9: Falls back to standard method if layer cannot be edited
+        (e.g., read-only GeoPackage, locked database, etc.)
         """
         try:
+            # STABILITY FIX v2.3.9: Validate layer before any operations
+            if layer is None or not layer.isValid():
+                self.log_error("Layer is None or invalid - cannot proceed with large dataset filtering")
+                return False
+            
+            # Check if layer supports editing (some formats are read-only)
+            try:
+                caps = layer.dataProvider().capabilities()
+                from qgis.core import QgsVectorDataProvider
+                can_edit = bool(caps & QgsVectorDataProvider.AddAttributes) and bool(caps & QgsVectorDataProvider.ChangeAttributeValues)
+                if not can_edit:
+                    self.log_info(f"Layer {layer.name()} does not support attribute editing - using standard method")
+                    return self._apply_filter_standard(
+                        layer, source_layer, predicates, buffer_value,
+                        old_subset, combine_operator
+                    )
+            except Exception as caps_error:
+                self.log_warning(f"Could not check layer capabilities: {caps_error} - trying standard method")
+                return self._apply_filter_standard(
+                    layer, source_layer, predicates, buffer_value,
+                    old_subset, combine_operator
+                )
+            
             # Apply buffer
             intersect_layer = self._apply_buffer(source_layer, buffer_value)
             if intersect_layer is None:
@@ -1013,10 +1084,37 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             # Initialize all to 0 (no match)
             field_idx = layer.fields().indexFromName(temp_field)
-            layer.startEditing()
-            for feature in layer.getFeatures():
-                layer.changeAttributeValue(feature.id(), field_idx, 0)
-            layer.commitChanges()
+            if field_idx < 0:
+                self.log_error(f"Temp field '{temp_field}' not found after creation")
+                return False
+            
+            # STABILITY FIX v2.3.9: Use feature IDs list to avoid iterator issues
+            # Materializing the feature list first prevents concurrent modification issues
+            try:
+                feature_ids = [f.id() for f in layer.getFeatures()]
+            except (RuntimeError, AttributeError) as e:
+                self.log_error(f"Failed to get features for initialization: {e}")
+                return False
+            
+            if not layer.startEditing():
+                self.log_error(f"Failed to start editing on {layer.name()} for initialization")
+                return False
+            
+            try:
+                for fid in feature_ids:
+                    layer.changeAttributeValue(fid, field_idx, 0)
+                
+                if not layer.commitChanges():
+                    self.log_error(f"Failed to commit initialization changes")
+                    layer.rollBack()
+                    return False
+            except (RuntimeError, AttributeError) as e:
+                self.log_error(f"Error during initialization: {e}")
+                try:
+                    layer.rollBack()
+                except:
+                    pass
+                return False
             
             # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
             if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
@@ -1028,13 +1126,39 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             if selected_count > 0:
                 # Mark selected features in temp field
-                layer.startEditing()
-                for feature in layer.selectedFeatures():
-                    layer.changeAttributeValue(feature.id(), field_idx, 1)
-                layer.commitChanges()
+                # STABILITY FIX v2.3.9: Use list() to materialize iterator before editing
+                # This prevents access violation if selection changes during iteration
+                try:
+                    selected_features = list(layer.selectedFeatures())
+                except (RuntimeError, AttributeError) as e:
+                    self.log_error(f"Failed to get selected features: {e}")
+                    return False
                 
-                # Clear selection
-                layer.removeSelection()
+                if not layer.startEditing():
+                    self.log_error(f"Failed to start editing on {layer.name()}")
+                    return False
+                
+                try:
+                    for feature in selected_features:
+                        layer.changeAttributeValue(feature.id(), field_idx, 1)
+                    
+                    if not layer.commitChanges():
+                        self.log_error(f"Failed to commit changes on {layer.name()}")
+                        layer.rollBack()
+                        return False
+                except (RuntimeError, AttributeError) as e:
+                    self.log_error(f"Error during attribute update: {e}")
+                    try:
+                        layer.rollBack()
+                    except:
+                        pass
+                    return False
+                
+                # Clear selection - wrapped in try-except for safety
+                try:
+                    layer.removeSelection()
+                except (RuntimeError, AttributeError):
+                    self.log_warning("Could not clear selection (layer may be invalid)")
                 
                 # Use attribute-based filter (much faster than ID list for large datasets)
                 escaped_temp = escape_ogr_identifier(temp_field)
@@ -1150,7 +1274,16 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 field_type = memory_layer.fields()[field_idx].type()
                 
                 # Extract primary key values from selected features
-                selected_values = [f.attribute(pk_field) for f in memory_layer.selectedFeatures()]
+                # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
+                try:
+                    selected_values = [f.attribute(pk_field) for f in memory_layer.selectedFeatures()]
+                except (RuntimeError, AttributeError) as e:
+                    self.log_error(f"Failed to get selected features from memory layer: {e}")
+                    try:
+                        memory_layer.removeSelection()
+                    except:
+                        pass
+                    return False
                 
                 # Build subset expression for PostgreSQL layer
                 if field_type == QMetaType.Type.QString:

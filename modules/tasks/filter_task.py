@@ -126,6 +126,7 @@ from .task_utils import (
 # Import geometry safety module (v2.3.9 - stability fix)
 from ..geometry_safety import (
     validate_geometry,
+    validate_geometry_for_geos,
     safe_as_geometry_collection,
     safe_as_polygon,
     safe_buffer,
@@ -134,7 +135,8 @@ from ..geometry_safety import (
     safe_convert_to_multi_polygon,
     extract_polygons_from_collection,
     repair_geometry,
-    get_geometry_type_name
+    get_geometry_type_name,
+    create_geos_safe_layer
 )
 
 # Import geometry cache (Phase 3a extraction)
@@ -1550,22 +1552,42 @@ class FilterEngineTask(QgsTask):
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
+                # STABILITY FIX v2.3.9: Validate layer before any operations
+                # This prevents crashes when layer becomes invalid during sequential filtering
+                try:
+                    if not is_valid_layer(layer):
+                        logger.warning(f"⚠️ Layer {i}/{self.layers_count} is invalid - skipping")
+                        failed_filters += 1
+                        i += 1
+                        continue
+                    
+                    layer_name = layer.name()
+                    layer_feature_count = layer.featureCount()
+                except (RuntimeError, AttributeError) as access_error:
+                    logger.error(f"❌ Layer {i}/{self.layers_count} access error (C++ object deleted): {access_error}")
+                    failed_filters += 1
+                    i += 1
+                    continue
+                
                 # Update task description with current progress
-                self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer.name()}")
+                self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer_name}")
                 
                 logger.info("")
-                logger.info(f"🔄 FILTRAGE {i}/{self.layers_count}: {layer.name()} ({layer_provider_type})")
-                logger.info(f"   Features avant filtre: {layer.featureCount()}")
+                logger.info(f"🔄 FILTRAGE {i}/{self.layers_count}: {layer_name} ({layer_provider_type})")
+                logger.info(f"   Features avant filtre: {layer_feature_count}")
                 
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
                 
                 if result:
                     successful_filters += 1
-                    final_count = layer.featureCount()
-                    logger.info(f"✅ {layer.name()} has been filtered → {final_count} features")
+                    try:
+                        final_count = layer.featureCount()
+                        logger.info(f"✅ {layer_name} has been filtered → {final_count} features")
+                    except (RuntimeError, AttributeError):
+                        logger.info(f"✅ {layer_name} has been filtered (count unavailable)")
                 else:
                     failed_filters += 1
-                    logger.error(f"❌ {layer.name()} - errors occurred during filtering")
+                    logger.error(f"❌ {layer_name} - errors occurred during filtering")
                 
                 i += 1
                 progress_percent = int((i / self.layers_count) * 100)
@@ -3506,50 +3528,45 @@ class FilterEngineTask(QgsTask):
         context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
         feedback = QgsProcessingFeedback()
         
-        # CRITICAL FIX v2.3.9: Use native:fixgeometries on BOTH layers BEFORE selectbylocation
-        # This is ESSENTIAL to prevent C++/GEOS level access violations that Python cannot catch
-        # The crash occurs in GEOS when it encounters certain invalid geometries
-        fixed_source_geom = self.ogr_source_geom
-        try:
-            logger.debug(f"Fixing geometries on source layer: {self.ogr_source_geom.name()}")
-            fix_result = processing.run("native:fixgeometries", {
-                'INPUT': self.ogr_source_geom,
-                'OUTPUT': 'memory:'
-            }, context=context, feedback=feedback)
-            fixed_source_geom = fix_result['OUTPUT']
-            logger.info(f"✓ Source geometries fixed: {fixed_source_geom.featureCount()} features")
-        except Exception as fix_error:
-            logger.warning(f"fixgeometries failed on source layer: {fix_error}, using original")
+        # CRITICAL FIX v2.3.9.2: Use create_geos_safe_layer for geometry validation
+        # The function now handles fallbacks gracefully and returns original layer as last resort
+        logger.info("🛡️ Creating GEOS-safe source layer (geometry validation)...")
+        safe_source_geom = create_geos_safe_layer(self.ogr_source_geom, "_safe_source")
         
-        # Also fix current_layer if not too large (to avoid performance issues)
-        fixed_current_layer = current_layer
-        use_fixed_current = False
-        if current_layer.featureCount() <= 50000:  # Only fix smaller layers
-            try:
-                logger.debug(f"Fixing geometries on target layer: {current_layer.name()}")
-                fix_result = processing.run("native:fixgeometries", {
-                    'INPUT': current_layer,
-                    'OUTPUT': 'memory:'
-                }, context=context, feedback=feedback)
-                fixed_current_layer = fix_result['OUTPUT']
-                use_fixed_current = True
-                logger.info(f"✓ Target geometries fixed: {fixed_current_layer.featureCount()} features")
-            except Exception as fix_error:
-                logger.warning(f"fixgeometries failed on target layer: {fix_error}, using original")
-                use_fixed_current = False
+        # create_geos_safe_layer now returns the original layer as fallback, never None for valid input
+        if safe_source_geom is None:
+            logger.warning("create_geos_safe_layer returned None, using original")
+            safe_source_geom = self.ogr_source_geom
+        
+        if not safe_source_geom.isValid() or safe_source_geom.featureCount() == 0:
+            logger.error("No valid source geometries available")
+            raise Exception("Source geometry layer has no valid geometries")
+        
+        logger.info(f"✓ Safe source layer: {safe_source_geom.featureCount()} features")
+        
+        # Also process current_layer if not too large (to avoid performance issues)
+        safe_current_layer = current_layer
+        use_safe_current = False
+        if current_layer.featureCount() <= 50000:  # Only process smaller layers for performance
+            logger.debug("🛡️ Creating GEOS-safe target layer...")
+            temp_safe_layer = create_geos_safe_layer(current_layer, "_safe_target")
+            if temp_safe_layer and temp_safe_layer.isValid() and temp_safe_layer.featureCount() > 0:
+                safe_current_layer = temp_safe_layer
+                use_safe_current = True
+                logger.info(f"✓ Safe target layer: {safe_current_layer.featureCount()} features")
         
         predicate_list = [int(predicate) for predicate in self.current_predicates.keys()]
         
-        # Helper function to map selection back to original layer if we used fixed layer
+        # Helper function to map selection back to original layer if we used safe layer
         def map_selection_to_original():
-            if use_fixed_current and fixed_current_layer is not current_layer:
-                selected_fids = [f.id() for f in fixed_current_layer.selectedFeatures()]
+            if use_safe_current and safe_current_layer is not current_layer:
+                selected_fids = [f.id() for f in safe_current_layer.selectedFeatures()]
                 if selected_fids:
                     current_layer.selectByIds(selected_fids)
                     logger.debug(f"Mapped {len(selected_fids)} features back to original layer")
         
-        # Use fixed layers for spatial operations
-        work_layer = fixed_current_layer if use_fixed_current else current_layer
+        # Use safe layers for spatial operations
+        work_layer = safe_current_layer if use_safe_current else current_layer
         
         if self.has_combine_operator is True:
             work_layer.selectAll()
@@ -3563,7 +3580,7 @@ class FilterEngineTask(QgsTask):
                 
                 alg_params_select = {
                     'INPUT': work_layer,
-                    'INTERSECT': fixed_source_geom,
+                    'INTERSECT': safe_source_geom,
                     'METHOD': 1,
                     'PREDICATE': predicate_list
                 }
@@ -3574,7 +3591,7 @@ class FilterEngineTask(QgsTask):
                 self._verify_and_create_spatial_index(work_layer)
                 alg_params_select = {
                     'INPUT': work_layer,
-                    'INTERSECT': fixed_source_geom,
+                    'INTERSECT': safe_source_geom,
                     'METHOD': 2,
                     'PREDICATE': predicate_list
                 }
@@ -3585,7 +3602,7 @@ class FilterEngineTask(QgsTask):
                 self._verify_and_create_spatial_index(work_layer)
                 alg_params_select = {
                     'INPUT': work_layer,
-                    'INTERSECT': fixed_source_geom,
+                    'INTERSECT': safe_source_geom,
                     'METHOD': 3,
                     'PREDICATE': predicate_list
                 }
@@ -3596,7 +3613,7 @@ class FilterEngineTask(QgsTask):
                 self._verify_and_create_spatial_index(work_layer)
                 alg_params_select = {
                     'INPUT': work_layer,
-                    'INTERSECT': fixed_source_geom,
+                    'INTERSECT': safe_source_geom,
                     'METHOD': 0,
                     'PREDICATE': predicate_list
                 }
@@ -3606,7 +3623,7 @@ class FilterEngineTask(QgsTask):
             self._verify_and_create_spatial_index(work_layer)
             alg_params_select = {
                 'INPUT': work_layer,
-                'INTERSECT': fixed_source_geom,
+                'INTERSECT': safe_source_geom,
                 'METHOD': 0,
                 'PREDICATE': predicate_list
             }
@@ -4067,6 +4084,23 @@ class FilterEngineTask(QgsTask):
             bool: True if filtering succeeded, False otherwise
         """
         try:
+            # STABILITY FIX v2.3.9: Validate layer before any operations
+            # This prevents access violations on deleted/invalid layers
+            if not is_valid_layer(layer):
+                logger.error(f"Cannot filter layer: layer is invalid or has been deleted")
+                return False
+            
+            # Additional safety check - verify layer exists in project
+            try:
+                layer_id = layer.id()
+                layer_name_check = layer.name()
+                if not layer.isValid():
+                    logger.error(f"Layer {layer_name_check} is not valid - skipping filtering")
+                    return False
+            except (RuntimeError, AttributeError) as e:
+                logger.error(f"Layer access error (C++ object may be deleted): {e}")
+                return False
+            
             # CRITICAL FIX: Use effective provider type if PostgreSQL fallback is active
             effective_provider_type = layer_props.get("_effective_provider_type", layer_provider_type)
             is_postgresql_fallback = layer_props.get("_postgresql_fallback", False)
