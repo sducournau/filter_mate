@@ -9,6 +9,11 @@ Performance Strategy:
 - Small datasets (< 10k features): Direct setSubsetString for simplicity
 - Large datasets (≥ 10k features): Materialized views with GIST spatial indexes
 - Custom buffers: Always use materialized views for geometry operations
+
+v2.4.0 Performance Improvements:
+- Connection pooling to avoid ~50-100ms connection overhead per query
+- Batch metadata loading for multiple layers
+- Server-side cursors for streaming large result sets
 """
 
 from typing import Dict, Optional
@@ -20,6 +25,19 @@ import time
 import uuid
 
 logger = get_tasks_logger()
+
+# Import connection pooling for optimized PostgreSQL operations
+try:
+    from ..connection_pool import (
+        get_pool_manager,
+        pooled_connection_from_layer,
+        POSTGRESQL_AVAILABLE as POOL_AVAILABLE
+    )
+    CONNECTION_POOL_AVAILABLE = POOL_AVAILABLE
+except ImportError:
+    CONNECTION_POOL_AVAILABLE = False
+    get_pool_manager = None
+    pooled_connection_from_layer = None
 
 
 class PostgreSQLGeometricFilter(GeometricFilterBackend):
@@ -148,16 +166,29 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             return False
         
         # CRITICAL: Test actual connection - may fail with authcfg or network issues
+        # PERFORMANCE v2.4.0: Use connection pooling if available
         try:
-            conn, source_uri = get_datasource_connexion_from_layer(layer)
-            if conn is None:
-                self.log_warning(f"PostgreSQL connection failed for layer {layer.name()}, will use OGR fallback")
-                return False
-            # Test connection with simple query
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            conn.close()
-            return True
+            if CONNECTION_POOL_AVAILABLE and pooled_connection_from_layer:
+                # Use pooled connection (more efficient for repeated checks)
+                with pooled_connection_from_layer(layer) as (conn, source_uri):
+                    if conn is None:
+                        self.log_warning(f"PostgreSQL connection failed for layer {layer.name()} (pooled), will use OGR fallback")
+                        return False
+                    # Test connection with simple query
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT 1")
+                    return True
+            else:
+                # Fallback to non-pooled connection
+                conn, source_uri = get_datasource_connexion_from_layer(layer)
+                if conn is None:
+                    self.log_warning(f"PostgreSQL connection failed for layer {layer.name()}, will use OGR fallback")
+                    return False
+                # Test connection with simple query
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                conn.close()
+                return True
         except Exception as e:
             self.log_warning(f"PostgreSQL connection test failed for layer {layer.name()}: {e}, will use OGR fallback")
             return False

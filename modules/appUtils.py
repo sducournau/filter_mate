@@ -146,7 +146,7 @@ def safe_set_subset_string(layer, expression):
         return False
         return False
 
-def is_layer_source_available(layer) -> bool:
+def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
     """
     Check if a layer is usable: valid and its underlying data source is accessible.
 
@@ -154,15 +154,21 @@ def is_layer_source_available(layer) -> bool:
 
     Args:
         layer (QgsVectorLayer): Layer to check
+        require_psycopg2 (bool): If True, PostgreSQL layers require psycopg2 to be available.
+                                 Set to False for operations like export that use QGIS API
+                                 and don't need direct PostgreSQL connections.
+                                 Default is True for backward compatibility.
 
     Returns:
         bool: True if the layer is valid and its source seems available
     """
     try:
         if layer is None or not isinstance(layer, QgsVectorLayer):
+            logger.debug(f"is_layer_source_available: layer is None or not QgsVectorLayer")
             return False
 
         if not layer.isValid():
+            logger.debug(f"is_layer_source_available: layer '{layer.name()}' isValid=False (provider={layer.providerType()})")
             return False
 
         provider = detect_layer_provider_type(layer)
@@ -200,8 +206,8 @@ def is_layer_source_available(layer) -> bool:
 
         # PostgreSQL: verify connectivity
         if provider == 'postgresql':
-            # Check if psycopg2 is available first
-            if not POSTGRESQL_AVAILABLE:
+            # Check if psycopg2 is available (only if required for the operation)
+            if require_psycopg2 and not POSTGRESQL_AVAILABLE:
                 logger.warning(
                     f"PostgreSQL layer detected but psycopg2 not available: {layer.name() if layer else 'Unknown'}"
                 )
@@ -210,6 +216,8 @@ def is_layer_source_available(layer) -> bool:
             # For PostgreSQL, we rely on QGIS validity as connection test is expensive
             # The actual connection test will happen in get_datasource_connexion_from_layer()
             # when the layer is actually used for filtering
+            # When require_psycopg2=False, PostgreSQL layers are considered available
+            # for operations that use QGIS API (like export) without direct DB connection
             return True
 
         # Fallback to QGIS validity
@@ -895,31 +903,234 @@ def escape_json_string(s: str) -> str:
     return escaped
 
 
-def get_best_display_field(layer, sample_size=10):
+def get_value_relation_info(layer, field_name):
     """
-    Determine the best field to use as display expression for a layer.
+    Extract ValueRelation configuration from a field's editor widget setup.
+    
+    ValueRelation is a QGIS widget type that displays values from a related layer.
+    This function extracts the configuration to determine:
+    - The referenced layer
+    - The key field (stored value)
+    - The value field (displayed value)
+    - Any filter expression
+    
+    Args:
+        layer (QgsVectorLayer): The layer containing the field
+        field_name (str): The name of the field to check
+        
+    Returns:
+        dict or None: Dictionary with keys:
+            - 'layer_id': ID of the referenced layer
+            - 'layer_name': Name of the referenced layer  
+            - 'key_field': Field name used as key (stored value)
+            - 'value_field': Field name used for display
+            - 'filter_expression': Optional filter expression
+            - 'allow_null': Whether null values are allowed
+            - 'order_by_value': Whether to order by display value
+        Returns None if field is not a ValueRelation or config is invalid
+        
+    Example:
+        >>> info = get_value_relation_info(layer, 'category_id')
+        >>> if info:
+        ...     print(f"Display field: {info['value_field']}")
+    """
+    if layer is None or not layer.isValid():
+        return None
+    
+    try:
+        field_idx = layer.fields().indexOf(field_name)
+        if field_idx < 0:
+            return None
+        
+        widget_setup = layer.editorWidgetSetup(field_idx)
+        
+        # Check if it's a ValueRelation widget
+        if widget_setup.type() != 'ValueRelation':
+            return None
+        
+        config = widget_setup.config()
+        if not config:
+            return None
+        
+        # Extract ValueRelation configuration
+        result = {
+            'layer_id': config.get('Layer', config.get('LayerId', '')),
+            'layer_name': config.get('LayerName', ''),
+            'key_field': config.get('Key', ''),
+            'value_field': config.get('Value', ''),
+            'filter_expression': config.get('FilterExpression', ''),
+            'allow_null': config.get('AllowNull', False),
+            'order_by_value': config.get('OrderByValue', False)
+        }
+        
+        # Validate required fields
+        if not result['key_field'] or not result['value_field']:
+            logger.debug(f"ValueRelation config incomplete for {field_name}: {config}")
+            return None
+        
+        return result
+        
+    except Exception as e:
+        logger.debug(f"Error extracting ValueRelation info for {field_name}: {e}")
+        return None
+
+
+def get_field_display_expression(layer, field_name):
+    """
+    Get the display expression for a field based on its widget configuration.
+    
+    For ValueRelation fields, this returns an expression that displays the 
+    human-readable value from the referenced layer instead of the key.
+    
+    The expression uses QGIS's represent_value() function which automatically
+    resolves ValueRelation, ValueMap, and other widget types to their display values.
+    
+    Args:
+        layer (QgsVectorLayer): The layer containing the field
+        field_name (str): The name of the field
+        
+    Returns:
+        str or None: A QGIS expression string for display, or None if no special
+                     display is configured
+                     
+    Example:
+        >>> expr = get_field_display_expression(layer, 'category_id')
+        >>> if expr:
+        ...     # expr might be: represent_value("category_id")
+        ...     # or: attribute(get_feature('categories_layer_id', 'id', "category_id"), 'name')
+    """
+    if layer is None or not layer.isValid():
+        return None
+    
+    try:
+        field_idx = layer.fields().indexOf(field_name)
+        if field_idx < 0:
+            return None
+        
+        widget_setup = layer.editorWidgetSetup(field_idx)
+        widget_type = widget_setup.type()
+        
+        # For ValueRelation, use represent_value() which is the most reliable method
+        # It automatically handles the lookup to the referenced layer
+        if widget_type == 'ValueRelation':
+            # represent_value() is the QGIS built-in function that resolves
+            # widget values to their display representation
+            return f'represent_value("{field_name}")'
+        
+        # For ValueMap widgets (dropdown with predefined values)
+        elif widget_type == 'ValueMap':
+            return f'represent_value("{field_name}")'
+        
+        # For RelationReference widgets  
+        elif widget_type == 'RelationReference':
+            return f'represent_value("{field_name}")'
+        
+        return None
+        
+    except Exception as e:
+        logger.debug(f"Error getting display expression for {field_name}: {e}")
+        return None
+
+
+def get_layer_display_expression(layer):
+    """
+    Get the layer's configured display expression if it has one.
+    
+    Layers can have a display expression set in Layer Properties > Display
+    which is used for feature identification, map tips, etc.
+    
+    Args:
+        layer (QgsVectorLayer): The layer to check
+        
+    Returns:
+        str or None: The display expression, or None if not set
+        
+    Example:
+        >>> expr = get_layer_display_expression(layer)
+        >>> if expr:
+        ...     print(f"Layer uses: {expr}")  # e.g., "name" or "concat(id, ' - ', name)"
+    """
+    if layer is None or not layer.isValid():
+        return None
+    
+    try:
+        display_expr = layer.displayExpression()
+        if display_expr and display_expr.strip():
+            return display_expr.strip()
+        return None
+    except Exception as e:
+        logger.debug(f"Error getting layer display expression: {e}")
+        return None
+
+
+def get_fields_with_value_relations(layer):
+    """
+    Get all fields in a layer that have ValueRelation widget configuration.
+    
+    This is useful for understanding data relationships and for building
+    display expressions that show human-readable values.
+    
+    Args:
+        layer (QgsVectorLayer): The layer to analyze
+        
+    Returns:
+        list: List of tuples (field_name, value_relation_info) for each 
+              ValueRelation field
+              
+    Example:
+        >>> relations = get_fields_with_value_relations(layer)
+        >>> for field_name, info in relations:
+        ...     print(f"{field_name} -> {info['value_field']} from {info['layer_name']}")
+    """
+    if layer is None or not layer.isValid():
+        return []
+    
+    result = []
+    
+    for field in layer.fields():
+        field_name = field.name()
+        vr_info = get_value_relation_info(layer, field_name)
+        if vr_info:
+            result.append((field_name, vr_info))
+    
+    return result
+
+
+def get_best_display_field(layer, sample_size=10, use_value_relations=True):
+    """
+    Determine the best field or expression to use for display in a layer.
     
     This function analyzes layer fields and selects the most suitable one
-    for display purposes. It prioritizes descriptive text fields over 
-    primary keys or IDs, and verifies that the field has non-null values.
+    for display purposes. It now supports:
+    - Layer's configured display expression (from Layer Properties > Display)
+    - ValueRelation fields with represent_value() expressions
+    - Descriptive text fields (name, label, etc.)
+    - Fallback to primary key
     
     Priority order:
-    1. Fields matching common name patterns (name, nom, label, titre, etc.) with values
-    2. First text/string field that's not an ID/key field and has values
-    3. Any field with values (fallback)
-    4. Primary key if no better option
+    1. Layer's configured display expression (if set in QGIS)
+    2. ValueRelation fields using represent_value() for human-readable display
+    3. Fields matching common name patterns (name, nom, label, titre, etc.)
+    4. First text/string field that's not an ID/key field
+    5. Any field with values (fallback)
+    6. Primary key if no better option
     
     Args:
         layer (QgsVectorLayer): The layer to analyze
         sample_size (int): Number of features to sample for value checking (default: 10)
+        use_value_relations (bool): Whether to detect and use ValueRelation expressions
+                                    (default: True)
         
     Returns:
-        str: The field name to use as display expression, or empty string if no fields
+        str: The field name or expression to use for display, or empty string if no fields
         
     Examples:
         >>> layer = QgsVectorLayer("Point?field=id:integer&field=name:string", "test", "memory")
         >>> get_best_display_field(layer)
         'name'
+        >>> # For a layer with ValueRelation on category_id:
+        >>> get_best_display_field(layer_with_vr)
+        'represent_value("category_id")'  # Shows category name, not ID
     """
     if layer is None or not layer.isValid():
         return ""
@@ -927,6 +1138,44 @@ def get_best_display_field(layer, sample_size=10):
     fields = layer.fields()
     if fields.count() == 0:
         return ""
+    
+    # Priority 1: Check if layer has a configured display expression
+    layer_display_expr = get_layer_display_expression(layer)
+    if layer_display_expr:
+        logger.debug(f"Using layer display expression for {layer.name()}: {layer_display_expr}")
+        return layer_display_expr
+    
+    # Priority 2: Check for ValueRelation fields that could provide better display
+    if use_value_relations:
+        vr_fields = get_fields_with_value_relations(layer)
+        if vr_fields:
+            # Prefer ValueRelation fields with common name patterns in their value_field
+            name_patterns_vr = ['name', 'nom', 'label', 'titre', 'title', 'description', 
+                                'libelle', 'libellé', 'display', 'text']
+            
+            for field_name, vr_info in vr_fields:
+                value_field = vr_info.get('value_field', '').lower()
+                if any(pattern in value_field for pattern in name_patterns_vr):
+                    expr = get_field_display_expression(layer, field_name)
+                    if expr:
+                        logger.debug(f"Using ValueRelation display for {layer.name()}: {expr}")
+                        return expr
+            
+            # If no name-pattern match, use first ValueRelation anyway
+            # (any ValueRelation is likely better than raw IDs)
+            first_vr_field = vr_fields[0][0]
+            expr = get_field_display_expression(layer, first_vr_field)
+            if expr:
+                logger.debug(f"Using first ValueRelation for {layer.name()}: {expr}")
+                # Don't return here - only use if no better text field found
+                # Store for later comparison
+                first_vr_expression = expr
+            else:
+                first_vr_expression = None
+        else:
+            first_vr_expression = None
+    else:
+        first_vr_expression = None
     
     # Common name patterns for descriptive fields (case-insensitive)
     name_patterns = [
@@ -1020,6 +1269,11 @@ def get_best_display_field(layer, sample_size=10):
     # Return first text field with values if found
     if first_text_field:
         return first_text_field
+    
+    # If no text field but we have a ValueRelation expression, use it
+    # ValueRelation provides human-readable values from related tables
+    if first_vr_expression:
+        return first_vr_expression
     
     # Return first field with values if found
     if first_field_with_values:

@@ -2,6 +2,40 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.2] - 2025-12-22 - Exploring ValueRelation & Display Enhancement
+
+### ✨ New Features
+
+#### Smart Display Expression Detection for Exploring Widgets
+- **ValueRelation Support**: Automatically detects fields with ValueRelation widget configuration and uses `represent_value("field_name")` to display human-readable values instead of raw foreign keys
+- **Layer Display Expression**: Uses the layer's configured display expression (from Layer Properties > Display) when available
+- **Intelligent Field Selection**: Enhanced priority order for display field selection:
+  1. Layer's configured display expression
+  2. ValueRelation fields with descriptive value names
+  3. Fields matching name patterns (name, nom, label, titre, etc.)
+  4. First text field with values
+  5. Primary key as fallback
+
+### 🔧 New Utility Functions in `appUtils.py`
+
+- `get_value_relation_info(layer, field_name)` - Extract ValueRelation widget configuration including referenced layer, key field, and value field
+- `get_field_display_expression(layer, field_name)` - Get QGIS expression for displaying a field's value (supports ValueRelation, ValueMap, RelationReference)
+- `get_layer_display_expression(layer)` - Get the layer's configured display expression
+- `get_fields_with_value_relations(layer)` - List all fields with ValueRelation configuration
+
+### 🎯 Improvements
+
+- **Better Exploring UX**: When browsing features in the EXPLORING tab, users now see meaningful labels (like "Paris" or "Category A") instead of cryptic IDs
+- **Automatic Detection**: No configuration needed - FilterMate automatically detects the best display field for each layer
+- **Backward Compatible**: Existing configurations continue to work; new logic only applies when no expression is configured
+
+### 📚 Documentation
+
+- Updated function signatures and docstrings for `get_best_display_field()` with new `use_value_relations` parameter
+- Added examples showing ValueRelation expression output
+
+---
+
 ## [2.4.1] - 2025-12-22 - International Edition Extended
 
 ### 🌍 3 New Languages Added!

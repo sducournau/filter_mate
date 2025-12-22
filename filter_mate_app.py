@@ -146,6 +146,8 @@ class FilterMateApp:
             usable = []
             filtered_reasons = []
             
+            logger.info(f"_filter_usable_layers: Processing {input_count} layers (POSTGRESQL_AVAILABLE={POSTGRESQL_AVAILABLE})")
+            
             for l in (layers or []):
                 # CRITICAL: Check if C++ object was deleted before any access
                 if is_sip_deleted(l):
@@ -168,21 +170,22 @@ class FilterMateApp:
                         name = 'unknown'
                     filtered_reasons.append(f"{name}: invalid layer (C++ object may be deleted)")
                     continue
-                    
-                if not is_layer_source_available(l):
-                    filtered_reasons.append(f"{l.name()}: source not available")
+                
+                # IMPORTANT: For layer loading, we don't require psycopg2 to be available
+                # because the layer list should include all layers, even if some features
+                # (like filtering with PostgreSQL backend) won't work.
+                # Export uses QGIS API, not psycopg2 directly.
+                if not is_layer_source_available(l, require_psycopg2=False):
+                    filtered_reasons.append(f"{l.name()}: source not available (provider={l.providerType()})")
                     continue
                 usable.append(l)
             
             if filtered_reasons and input_count != len(usable):
                 logger.info(f"_filter_usable_layers: {input_count} input layers -> {len(usable)} usable layers. Filtered: {len(filtered_reasons)}")
-                if len(filtered_reasons) <= 5:
-                    for reason in filtered_reasons:
-                        logger.debug(f"  Filtered: {reason}")
-                else:
-                    for reason in filtered_reasons[:5]:
-                        logger.debug(f"  Filtered: {reason}")
-                    logger.debug(f"  ... and {len(filtered_reasons) - 5} more")
+                for reason in filtered_reasons:
+                    logger.info(f"  Filtered: {reason}")
+            else:
+                logger.info(f"_filter_usable_layers: All {input_count} layers are usable")
             
             return usable
         except Exception as e:
@@ -193,6 +196,7 @@ class FilterMateApp:
         """Signal handler for layersAdded: ignore broken/invalid layers.
         
         STABILITY: Debounces rapid layer additions and validates all layers.
+        PostgreSQL FIX: Retries layers that may not be immediately valid due to connection timing.
         """
         import time
         
@@ -214,12 +218,14 @@ class FilterMateApp:
         # STABILITY FIX: Check and reset stale flags
         self._check_and_reset_stale_flags()
         
+        # Identify PostgreSQL layers (even if not yet valid - for retry mechanism)
+        all_postgres = [l for l in layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
+        
         # Check if any PostgreSQL layers are being added without psycopg2
-        postgres_layers = [l for l in layers if self._is_layer_valid(l) and isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
-        if postgres_layers and not POSTGRESQL_AVAILABLE:
-            layer_names = ', '.join([l.name() for l in postgres_layers[:3]])  # Show first 3
-            if len(postgres_layers) > 3:
-                layer_names += f" (+{len(postgres_layers) - 3} autres)"
+        if all_postgres and not POSTGRESQL_AVAILABLE:
+            layer_names = ', '.join([l.name() for l in all_postgres[:3]])  # Show first 3
+            if len(all_postgres) > 3:
+                layer_names += f" (+{len(all_postgres) - 3} autres)"
             
             iface.messageBar().pushWarning(
                 "FilterMate",
@@ -228,14 +234,49 @@ class FilterMateApp:
                 "Installez psycopg2 pour activer le support PostgreSQL."
             )
             logger.warning(
-                f"FilterMate: Cannot use {len(postgres_layers)} PostgreSQL layer(s) - psycopg2 not available"
+                f"FilterMate: Cannot use {len(all_postgres)} PostgreSQL layer(s) - psycopg2 not available"
             )
         
         filtered = self._filter_usable_layers(layers)
-        if not filtered:
+        
+        # FIX: Identify PostgreSQL layers that failed validation (may be initializing)
+        postgres_pending = [l for l in all_postgres 
+                          if l.id() not in [f.id() for f in filtered] 
+                          and not is_sip_deleted(l)]
+        
+        if not filtered and not postgres_pending:
             logger.info("FilterMate: Ignoring layersAdded (no usable layers)")
             return
-        self.manage_task('add_layers', filtered)
+        
+        if filtered:
+            self.manage_task('add_layers', filtered)
+        
+        # FIX: Schedule retry for PostgreSQL layers that may become valid after connection is established
+        if postgres_pending:
+            logger.info(f"FilterMate: {len(postgres_pending)} PostgreSQL layers pending - scheduling retry")
+            weak_self = weakref.ref(self)
+            captured_pending = postgres_pending
+            
+            def retry_postgres():
+                strong_self = weak_self()
+                if strong_self is None:
+                    return
+                
+                now_valid = []
+                for layer in captured_pending:
+                    try:
+                        if not is_sip_deleted(layer) and layer.isValid() and layer.id() not in strong_self.PROJECT_LAYERS:
+                            now_valid.append(layer)
+                            logger.info(f"PostgreSQL layer '{layer.name()}' is now valid (retry)")
+                    except (RuntimeError, AttributeError):
+                        pass
+                
+                if now_valid:
+                    logger.info(f"FilterMate: Adding {len(now_valid)} PostgreSQL layers after retry")
+                    strong_self.manage_task('add_layers', now_valid)
+            
+            # Retry after PostgreSQL connection establishment delay
+            QTimer.singleShot(STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'], retry_postgres)
 
     def cleanup(self):
         """
@@ -1226,7 +1267,16 @@ class FilterMateApp:
                 logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
                 self.MapLayerStore = new_layer_store
             
-            init_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
+            all_project_layers = list(self.PROJECT.mapLayers().values())
+            init_layers = self._filter_usable_layers(all_project_layers)
+            
+            # FIX: Track PostgreSQL layers that failed initial validation (might not be ready yet)
+            postgres_pending = [l for l in all_project_layers 
+                               if isinstance(l, QgsVectorLayer) 
+                               and l.providerType() == 'postgres' 
+                               and l.id() not in [layer.id() for layer in init_layers]]
+            if postgres_pending:
+                logger.info(f"FilterMate: {len(postgres_pending)} PostgreSQL layers pending validation (connection may be initializing)")
             
             # Clear old PROJECT_LAYERS when switching projects
             self.PROJECT_LAYERS = {}
@@ -1243,26 +1293,66 @@ class FilterMateApp:
             # Since we just reconnected signals, we missed it. We MUST manually trigger add_layers.
             # 
             # Previous comment was WRONG: "waiting for layersAdded signal" - the signal already passed!
-            if len(init_layers) > 0:
+            
+            # Determine delay based on PostgreSQL presence
+            has_postgres = any(l.providerType() == 'postgres' for l in all_project_layers if isinstance(l, QgsVectorLayer))
+            base_delay = STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS']
+            if has_postgres:
+                base_delay += STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS']
+                logger.info(f"PostgreSQL project detected - using extended delay ({base_delay}ms)")
+            
+            if len(init_layers) > 0 or postgres_pending:
                 logger.info(f"FilterMate: {len(init_layers)} layers detected in {task_name} - manually triggering add_layers (signal already passed)")
                 
                 # CRITICAL: Manually call add_layers since we missed the signal
                 # Use a short delay to allow flag resets to complete
+                weak_self = weakref.ref(self)
+                captured_init_layers = init_layers
+                captured_postgres_pending = postgres_pending
+                
                 def trigger_add_layers():
+                    strong_self = weak_self()
+                    if strong_self is None:
+                        return
                     # Reset flags before calling add_layers to prevent blocking
-                    self._set_initializing_flag(False)
-                    self._set_loading_flag(False)
+                    strong_self._set_initializing_flag(False)
+                    strong_self._set_loading_flag(False)
                     
                     # Now trigger the add_layers task
-                    logger.info(f"FilterMate: Triggering add_layers for {len(init_layers)} layers")
-                    self.manage_task('add_layers', init_layers)
+                    logger.info(f"FilterMate: Triggering add_layers for {len(captured_init_layers)} layers")
+                    strong_self.manage_task('add_layers', captured_init_layers)
+                    
+                    # FIX: Schedule retry for PostgreSQL layers that might be valid now
+                    if captured_postgres_pending:
+                        def retry_postgres_layers():
+                            strong_self2 = weak_self()
+                            if strong_self2 is None:
+                                return
+                            # Re-check PostgreSQL layers that were pending
+                            now_valid = []
+                            for layer in captured_postgres_pending:
+                                try:
+                                    if layer.isValid() and layer.id() not in strong_self2.PROJECT_LAYERS:
+                                        now_valid.append(layer)
+                                        logger.info(f"PostgreSQL layer '{layer.name()}' is now valid")
+                                except (RuntimeError, AttributeError):
+                                    pass
+                            if now_valid:
+                                logger.info(f"FilterMate: Retrying {len(now_valid)} PostgreSQL layers that are now valid")
+                                strong_self2.manage_task('add_layers', now_valid)
+                        
+                        # Retry PostgreSQL layers after additional delay
+                        QTimer.singleShot(STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'] * 2, retry_postgres_layers)
                 
-                # Use delay to ensure QGIS is stable
-                QTimer.singleShot(STABILITY_CONSTANTS['UI_REFRESH_DELAY_MS'], trigger_add_layers)
+                # Use delay to ensure QGIS is stable (longer for PostgreSQL)
+                QTimer.singleShot(base_delay, trigger_add_layers)
                 
                 # CRITICAL: Force UI refresh after layers are loaded
                 # This ensures all widgets and signals are properly updated
-                # Use longer delay (3000ms) and verify PROJECT_LAYERS is populated
+                # Use longer delay and verify PROJECT_LAYERS is populated
+                # For PostgreSQL projects, use even longer delay to account for retry mechanism
+                refresh_delay = 3000 if not has_postgres else 5000
+                
                 def refresh_after_load():
                     if not self.dockwidget or not self.dockwidget.widgets_initialized:
                         return
@@ -1277,8 +1367,8 @@ class FilterMateApp:
                     logger.info(f"Forcing UI refresh after {task_name} layer load with {len(self.PROJECT_LAYERS)} layers")
                     self._refresh_ui_after_project_load()
                 
-                # Start with 3000ms delay to give layer tasks time to complete
-                QTimer.singleShot(3000, refresh_after_load)
+                # Start with appropriate delay based on project type
+                QTimer.singleShot(refresh_delay, refresh_after_load)
             else:
                 logger.info(f"FilterMate: No layers in {task_name}, resetting UI")
                 # CRITICAL: Check dockwidget exists before accessing (should be true due to check at start)
@@ -2168,6 +2258,29 @@ class FilterMateApp:
                 for key in self.dockwidget.project_props["EXPORTING"]["LAYERS_TO_EXPORT"]:
                     if key in self.PROJECT_LAYERS:
                         layers_to_export.append(self.PROJECT_LAYERS[key]["infos"])
+                    else:
+                        # FIX: Handle layers not in PROJECT_LAYERS but still in QGIS project
+                        # This can happen for PostgreSQL layers that weren't added to FilterMate
+                        layer = self.PROJECT.mapLayer(key)
+                        if layer and isinstance(layer, QgsVectorLayer) and layer.isValid():
+                            # Convert geometry type to string
+                            geom_type_map = {0: 'GeometryType.Point', 1: 'GeometryType.Line', 
+                                           2: 'GeometryType.Polygon', 3: 'GeometryType.Unknown', 4: 'GeometryType.Null'}
+                            geom_type_str = geom_type_map.get(layer.geometryType(), 'GeometryType.Unknown')
+                            
+                            # Build minimal layer info for export
+                            layer_info = {
+                                "layer_id": layer.id(),
+                                "layer_name": layer.name(),
+                                "layer_crs_authid": layer.crs().authid(),
+                                "layer_geometry_type": geom_type_str,
+                                "layer_provider_type": detect_layer_provider_type(layer),
+                                "layer_table_name": layer.name(),  # Fallback
+                                "layer_schema": "",
+                                "layer_geometry_field": layer.dataProvider().geometryColumn() if hasattr(layer.dataProvider(), 'geometryColumn') else "geometry"
+                            }
+                            layers_to_export.append(layer_info)
+                            logger.info(f"Export: Added layer '{layer.name()}' not in PROJECT_LAYERS")
                 
                 task_parameters["task"] = self.dockwidget.project_props
                 task_parameters["task"]["layers"] = layers_to_export
@@ -2625,9 +2738,32 @@ class FilterMateApp:
                 postgresql_conn = task_parameters.get('infos', {}).get('postgresql_connection_available')
                 self.dockwidget._update_backend_indicator(provider_type, postgresql_conn, actual_backend)
         
-        # Zoom to filtered extent and update dockwidget
-        extent = source_layer.extent()
-        self.iface.mapCanvas().zoomToFeatureExtent(extent)
+        # Zoom to filtered extent only if is_tracking (auto extent) is enabled in exploring
+        # Check if is_tracking is enabled for this layer
+        is_tracking_enabled = False
+        if source_layer.id() in self.PROJECT_LAYERS:
+            layer_props = self.PROJECT_LAYERS[source_layer.id()]
+            is_tracking_enabled = layer_props.get("exploring", {}).get("is_tracking", False)
+        
+        if is_tracking_enabled:
+            # IMPROVED: Use actual filtered extent instead of cached layer extent
+            source_layer.updateExtents()  # Force recalculation after filter
+            
+            # Use dockwidget helper if available, otherwise calculate directly
+            if hasattr(self.dockwidget, 'get_filtered_layer_extent'):
+                extent = self.dockwidget.get_filtered_layer_extent(source_layer)
+            else:
+                extent = source_layer.extent()
+                
+            if extent and not extent.isEmpty():
+                self.iface.mapCanvas().zoomToFeatureExtent(extent)
+                logger.debug(f"Auto-zoom to filtered extent enabled (is_tracking=True)")
+            else:
+                self.iface.mapCanvas().refresh()
+        else:
+            # Just refresh the canvas without zooming
+            self.iface.mapCanvas().refresh()
+            
         self.dockwidget.PROJECT_LAYERS = self.PROJECT_LAYERS
 
 

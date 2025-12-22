@@ -72,6 +72,7 @@ from qgis.core import (
     QgsProject,
     QgsProperty,
     QgsPropertyDefinition,
+    QgsRectangle,
     QgsVectorLayer
 )
 from qgis.gui import (
@@ -123,11 +124,15 @@ from .modules.appUtils import (
     get_datasource_connexion_from_layer,
     get_primary_key_name,
     get_best_display_field,
+    get_value_relation_info,
+    get_field_display_expression,
+    get_layer_display_expression,
+    get_fields_with_value_relations,
     POSTGRESQL_AVAILABLE,
     is_layer_source_available
 )
 from .modules.customExceptions import SignalStateChangeError
-from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
 from .modules.ui_styles import StyleLoader, QGISThemeWatcher
 from .modules.feedback_utils import show_info, show_warning, show_error, show_success
 from .modules.config_helpers import set_config_value
@@ -1968,22 +1973,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 else:
                     logger.warning(f"Layer not found in project: {layer_name}")
         
-        # Zoom to filtered source layer extent
+        # Zoom to filtered source layer extent (using actual filtered extent, not cached)
+        # Check if is_tracking (auto extent) is enabled for automatic zoom
+        is_tracking_enabled = False
+        target_layer = source_layer if source_layer else (self.current_layer if hasattr(self, 'current_layer') else None)
+        
+        if target_layer and target_layer.id() in self.PROJECT_LAYERS:
+            layer_props = self.PROJECT_LAYERS[target_layer.id()]
+            is_tracking_enabled = layer_props.get("exploring", {}).get("is_tracking", False)
+        
         try:
             from qgis.utils import iface
-            if source_layer and source_layer.featureCount() > 0:
-                extent = source_layer.extent()
-                if not extent.isEmpty():
+            
+            if is_tracking_enabled and target_layer and target_layer.featureCount() > 0:
+                # Force update extents after filter application
+                target_layer.updateExtents()
+                
+                # Use get_filtered_layer_extent for accurate bounding box of filtered features
+                extent = self.get_filtered_layer_extent(target_layer)
+                
+                if extent and not extent.isEmpty():
                     iface.mapCanvas().zoomToFeatureExtent(extent)
-                    logger.info(f"Zoomed to filtered extent of source layer: {source_layer.name()}")
-            elif hasattr(self, 'current_layer') and self.current_layer and self.current_layer.featureCount() > 0:
-                extent = self.current_layer.extent()
-                if not extent.isEmpty():
-                    iface.mapCanvas().zoomToFeatureExtent(extent)
-                    logger.info(f"Zoomed to filtered extent of current layer: {self.current_layer.name()}")
+                    logger.info(f"Zoomed to filtered extent of layer: {target_layer.name()} (is_tracking=True)")
+                else:
+                    iface.mapCanvas().refresh()
             else:
-                # Fallback: just refresh the canvas
+                # Just refresh without zooming if is_tracking is disabled
                 iface.mapCanvas().refresh()
+                if target_layer:
+                    logger.debug(f"Canvas refreshed without zoom (is_tracking={is_tracking_enabled})")
         except Exception as e:
             logger.warning(f"Could not zoom to filtered extent: {e}")
             try:
@@ -4419,18 +4437,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.project_props['EXPORTING']['HAS_DATATYPE_TO_EXPORT'] is True:
                 datatype_to_export = self.project_props['EXPORTING']['DATATYPE_TO_EXPORT']
 
+            # Debug: Log PROJECT_LAYERS count vs QGIS project layers count
+            qgis_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
+            postgres_layers = [l for l in qgis_layers if l.providerType() == 'postgres']
+            postgres_in_project_layers = sum(1 for lid in self.PROJECT_LAYERS.keys() 
+                                             if self.PROJECT.mapLayer(lid) and 
+                                             self.PROJECT.mapLayer(lid).providerType() == 'postgres')
+            logger.info(f"exporting_populate_combobox: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} entries ({postgres_in_project_layers} PostgreSQL), QGIS project has {len(qgis_layers)} vector layers ({len(postgres_layers)} PostgreSQL)")
+            
+            # Check for PostgreSQL layers missing from PROJECT_LAYERS
+            missing_postgres = [l for l in postgres_layers if l.id() not in self.PROJECT_LAYERS]
+            if missing_postgres:
+                logger.warning(f"exporting_populate_combobox: {len(missing_postgres)} PostgreSQL layer(s) in QGIS project but NOT in PROJECT_LAYERS: {[l.name() for l in missing_postgres]}")
 
             self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
             item_index = 0  # Track actual item position in widget
+            skipped_postgres_count = 0  # Track skipped PostgreSQL layers
             # Create a copy of keys to avoid RuntimeError if dictionary changes during iteration
             for key in list(self.PROJECT_LAYERS.keys()):
                 # Verify required keys exist in layer info
                 if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
+                    logger.debug(f"exporting_populate_combobox: Skipping layer {key} - missing from PROJECT_LAYERS or no 'infos' key")
                     continue
                 
                 layer_info = self.PROJECT_LAYERS[key]["infos"]
                 required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
                 if any(k not in layer_info or layer_info[k] is None for k in required_keys):
+                    missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                    logger.debug(f"exporting_populate_combobox: Skipping layer {key} - missing required keys: {missing_keys}")
                     continue
                 
                 layer_id = layer_info["layer_id"]
@@ -4439,8 +4473,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer_icon = self.icon_per_geometry_type(layer_info["layer_geometry_type"])
                 
                 # Only add usable vector layers (skip raster and broken layers)
+                # Note: require_psycopg2=False because export uses QGIS API (QgsVectorFileWriter)
+                # which handles PostgreSQL connections internally, without needing psycopg2
                 layer_obj = self.PROJECT.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj):
+                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
                     layer_name = layer_name + ' [%s]' % (layer_crs_authid)
                     self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name, key)
                     item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
@@ -4449,6 +4485,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     else:
                         item.setCheckState(Qt.Unchecked)
                     item_index += 1  # Increment only when item is actually added
+                else:
+                    # Debug: Log why layer was skipped
+                    if not layer_obj:
+                        logger.debug(f"exporting_populate_combobox: Skipping layer '{layer_name}' ({layer_id}) - layer_obj is None (not in QGIS project)")
+                    elif not isinstance(layer_obj, QgsVectorLayer):
+                        logger.debug(f"exporting_populate_combobox: Skipping layer '{layer_name}' ({layer_id}) - not a QgsVectorLayer")
+                    else:
+                        # More detailed logging for source availability issues
+                        provider_type = layer_obj.providerType() if layer_obj else 'unknown'
+                        is_valid = layer_obj.isValid() if layer_obj else False
+                        logger.debug(f"exporting_populate_combobox: Skipping layer '{layer_name}' ({layer_id}) - is_layer_source_available returned False (provider={provider_type}, isValid={is_valid})")
+                        if provider_type == 'postgres':
+                            skipped_postgres_count += 1
+            
+            # FIX: Add PostgreSQL layers that are in QGIS project but missing from PROJECT_LAYERS
+            # These layers can still be exported using QGIS API (QgsVectorFileWriter)
+            for postgres_layer in missing_postgres:
+                if postgres_layer.isValid() and is_layer_source_available(postgres_layer, require_psycopg2=False):
+                    layer_name_display = f"{postgres_layer.name()} [{postgres_layer.crs().authid()}]"
+                    # Convert geometry type integer to legacy string format for icon_per_geometry_type
+                    geom_type_str = get_geometry_type_string(postgres_layer.geometryType(), legacy_format=True)
+                    layer_icon = self.icon_per_geometry_type(geom_type_str)
+                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name_display, postgres_layer.id())
+                    item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
+                    if postgres_layer.id() in layers_to_export:
+                        item.setCheckState(Qt.Checked)
+                    else:
+                        item.setCheckState(Qt.Unchecked)
+                    item_index += 1
+                    logger.info(f"exporting_populate_combobox: Added missing PostgreSQL layer '{postgres_layer.name()}' to export list")
+            
+            logger.info(f"exporting_populate_combobox: Added {item_index} layers to export combobox")
+            if skipped_postgres_count > 0:
+                logger.warning(f"exporting_populate_combobox: {skipped_postgres_count} PostgreSQL layer(s) skipped - check layer validity")
             
             ogr_driver_list = [ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())]
             ogr_driver_list.sort()
@@ -5637,6 +5707,56 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.zooming_to_features(features)
 
 
+    def get_filtered_layer_extent(self, layer):
+        """
+        Calculate the actual bounding box of filtered features in a layer.
+        
+        This method correctly calculates the extent of only the visible/filtered
+        features, rather than using the cached layer extent which may include
+        features that are filtered out.
+        
+        Args:
+            layer (QgsVectorLayer): Layer to calculate extent for
+            
+        Returns:
+            QgsRectangle: Bounding box of filtered features, or layer extent if empty
+        """
+        if layer is None:
+            return None
+            
+        try:
+            # Force recalculation of extent for filtered features
+            layer.updateExtents()
+            
+            # Get extent from provider with current subset filter applied
+            extent = QgsRectangle()
+            
+            # Iterate through all filtered features to compute real extent
+            request = QgsFeatureRequest().setNoAttributes().setFlags(QgsFeatureRequest.NoGeometry)
+            # We need geometry for extent calculation, so remove NoGeometry flag
+            request = QgsFeatureRequest().setNoAttributes()
+            
+            feature_count = 0
+            for feature in layer.getFeatures(request):
+                if feature.hasGeometry() and not feature.geometry().isEmpty():
+                    if extent.isEmpty():
+                        extent = feature.geometry().boundingBox()
+                    else:
+                        extent.combineExtentWith(feature.geometry().boundingBox())
+                    feature_count += 1
+                    
+            if extent.isEmpty():
+                # Fallback to layer extent if no features with geometry
+                logger.debug(f"get_filtered_layer_extent: No features with geometry, using layer extent")
+                return layer.extent()
+                
+            logger.debug(f"get_filtered_layer_extent: Calculated extent from {feature_count} filtered features")
+            return extent
+            
+        except Exception as e:
+            logger.warning(f"get_filtered_layer_extent error: {e}, falling back to layer extent")
+            return layer.extent()
+
     def zooming_to_features(self, features):
         
         if self.widgets_initialized is True and self.current_layer is not None:
@@ -5665,9 +5785,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Safety check: ensure features is a list
             if not features or not isinstance(features, list) or len(features) == 0:
-                logger.debug("zooming_to_features: No features provided, zooming to layer extent")
-                extent = self.current_layer.extent()
-                self.iface.mapCanvas().zoomToFeatureExtent(extent) 
+                # IMPROVED: Zoom to filtered extent instead of global layer extent
+                logger.debug("zooming_to_features: No features provided, zooming to filtered layer extent")
+                extent = self.get_filtered_layer_extent(self.current_layer)
+                if extent and not extent.isEmpty():
+                    self.iface.mapCanvas().zoomToFeatureExtent(extent)
+                else:
+                    logger.debug("zooming_to_features: Empty extent, using canvas refresh")
+                    self.iface.mapCanvas().refresh() 
 
             else: 
                 # CRITICAL FIX: For features without geometry, try to reload from layer
@@ -5690,9 +5815,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info(f"   features_with_geometry count: {len(features_with_geometry)}")
 
                 if len(features_with_geometry) == 0:
-                    logger.debug("zooming_to_features: No features have geometry, zooming to layer extent")
-                    extent = self.current_layer.extent()
-                    self.iface.mapCanvas().zoomToFeatureExtent(extent)
+                    # IMPROVED: Zoom to filtered extent instead of global layer extent
+                    logger.debug("zooming_to_features: No features have geometry, zooming to filtered layer extent")
+                    extent = self.get_filtered_layer_extent(self.current_layer)
+                    if extent and not extent.isEmpty():
+                        self.iface.mapCanvas().zoomToFeatureExtent(extent)
                     return
 
                 if len(features_with_geometry) == 1:

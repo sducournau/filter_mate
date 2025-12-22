@@ -906,6 +906,16 @@ class FilterMate:
         # Disconnect project change signals using dedicated method
         self._disconnect_auto_activation_signals()
         
+        # PERFORMANCE v2.4.0: Clean up PostgreSQL connection pools
+        try:
+            from .modules.connection_pool import cleanup_pools
+            cleanup_pools()
+            logger.debug("FilterMate: PostgreSQL connection pools cleaned up")
+        except ImportError:
+            pass  # Connection pool module not available
+        except Exception as e:
+            logger.debug(f"FilterMate: Error cleaning up connection pools: {e}")
+        
         # CRITICAL: Clear QgsMapLayerComboBox before cleanup to prevent access violations
         if self.app and self.app.dockwidget:
             try:

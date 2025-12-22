@@ -89,6 +89,21 @@ except ImportError:
     POSTGRESQL_AVAILABLE = False
     psycopg2 = None
 
+# Import connection pool for optimized PostgreSQL operations
+try:
+    from ..connection_pool import (
+        get_pool_manager,
+        pooled_connection_from_layer,
+        POSTGRESQL_AVAILABLE as POOL_AVAILABLE
+    )
+    from ..postgresql_optimizer import BatchMetadataLoader
+    CONNECTION_POOL_AVAILABLE = POOL_AVAILABLE
+except ImportError:
+    CONNECTION_POOL_AVAILABLE = False
+    get_pool_manager = None
+    pooled_connection_from_layer = None
+    BatchMetadataLoader = None
+
 
 class LayersManagementEngineTask(QgsTask):
     """
@@ -972,6 +987,7 @@ class LayersManagementEngineTask(QgsTask):
         Create PostgreSQL spatial indexes (GIST + primary key) with performance optimizations.
         
         PERFORMANCE OPTIMIZATIONS (v2.4.0):
+        - Uses connection pooling to avoid connection overhead
         - Check if indexes already exist before creating (avoids slow CREATE IF NOT EXISTS)
         - Skip CLUSTER operation at init (very slow on large tables, ~minutes for 100k+ rows)
         - Only run ANALYZE if table has no statistics (check pg_statistic first)
@@ -1003,13 +1019,55 @@ class LayersManagementEngineTask(QgsTask):
         geometry_field = infos["layer_geometry_field"]
         primary_key_name = infos["primary_key_name"]
 
-        connexion, source_uri = get_datasource_connexion_from_layer(layer)
+        # PERFORMANCE v2.4.0: Use connection pooling if available
+        use_pooled = CONNECTION_POOL_AVAILABLE and pooled_connection_from_layer is not None
         
-        # CRITICAL FIX: Check if connexion is None (PostgreSQL unavailable or connection failed)
-        if connexion is None:
-            logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection")
-            return False
+        if use_pooled:
+            # Use pooled connection (auto-released on exit)
+            try:
+                with pooled_connection_from_layer(layer) as (connexion, source_uri):
+                    if connexion is None:
+                        logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection (pooled)")
+                        return False
+                    return self._create_postgresql_indexes(connexion, schema, table, geometry_field, primary_key_name, layer.name())
+            except Exception as e:
+                logger.error(f"Pooled connection error for spatial index: {e}")
+                # Fallback to non-pooled connection
+                use_pooled = False
+        
+        if not use_pooled:
+            connexion, source_uri = get_datasource_connexion_from_layer(layer)
+            
+            # CRITICAL FIX: Check if connexion is None (PostgreSQL unavailable or connection failed)
+            if connexion is None:
+                logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection")
+                return False
 
+            try:
+                return self._create_postgresql_indexes(connexion, schema, table, geometry_field, primary_key_name, layer.name())
+            finally:
+                try:
+                    connexion.close()
+                except (OSError, AttributeError) as e:
+                    logger.debug(f"Could not close connection: {e}")
+
+        return True
+
+    def _create_postgresql_indexes(self, connexion, schema, table, geometry_field, primary_key_name, layer_name):
+        """
+        Internal method to create PostgreSQL indexes.
+        
+        Args:
+            connexion: Active PostgreSQL connection
+            schema: Schema name
+            table: Table name
+            geometry_field: Geometry column name
+            primary_key_name: Primary key column name
+            layer_name: Layer name for logging
+            
+        Returns:
+            bool: True if successful
+        """
         try:
             with connexion.cursor() as cursor:
                 # PERFORMANCE: Check if GIST index already exists before creating
@@ -1072,15 +1130,10 @@ class LayersManagementEngineTask(QgsTask):
                     logger.debug(f"Table {schema}.{table} already has statistics, skipping ANALYZE")
                 
             connexion.commit()
-            logger.info(f"PostgreSQL layer {layer.name()}: spatial index setup completed")
+            logger.info(f"PostgreSQL layer {layer_name}: spatial index setup completed")
         except Exception as e:
-            logger.warning(f"Error creating spatial index for PostgreSQL layer {layer.name()}: {e}")
+            logger.warning(f"Error creating spatial index for PostgreSQL layer {layer_name}: {e}")
             return False
-        finally:
-            try:
-                connexion.close()
-            except (OSError, AttributeError) as e:
-                logger.debug(f"Could not close connection: {e}")
 
         if self.isCanceled():
             return False
