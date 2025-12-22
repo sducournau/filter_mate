@@ -7,44 +7,43 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.3.8 - Automatic Dark Mode Support & Filter Favorites
+## 🎉 What's New in v2.3.9 - Critical Stability Fix
 
-### Automatic Dark Mode Detection
-- 🎨 **Real-time Theme Detection** - Plugin now detects QGIS theme changes automatically
-- 📡 **QGISThemeWatcher Class** - Monitors `QApplication.paletteChanged` signal
-- 🌓 **Theme Synchronization** - Auto-switches UI theme when user changes QGIS theme settings
-- 🌙 **Night Mapping Support** - Works with Night Mapping and other dark themes
+### 🔥 Critical Bug Fixes
+- **Fixed GEOS Crash during OGR Backend Filtering** - Resolved fatal "access violation" crash
+  - Crash occurred during `native:selectbylocation` with invalid geometries
+  - Some geometries cause C++/GEOS level crashes that cannot be caught by Python
+  - New validation prevents these geometries from reaching GEOS operations
 
-### Icon Inversion for Dark Mode
-- 🖼️ **Automatic Icon Adaptation** - PNG icons now visible in dark themes
-- ♻️ **IconThemeManager Class** - Theme-aware icon management with caching
-- 🔄 **Color Inversion** - Automatic inversion using `QImage.invertPixels()`
-- 🎭 **Icon Variants** - Support for `_black`/`_white` icon variants
+- **Fixed Access Violation on Plugin Reload** - Resolved crash during plugin reload/QGIS close
+  - Lambdas in `QTimer.singleShot` captured references to destroyed objects
+  - Now uses weak references with safe callback wrappers
 
-### Filter Favorites System
-- ⭐ **Save Complex Filters** - Save and reuse filter configurations with descriptive names
-- 💾 **SQLite Persistence** - Favorites stored in database, organized by project UUID
-- 📊 **Usage Tracking** - Track application count and last used date
-- 🎯 **Multi-Layer Support** - Save configurations affecting multiple layers simultaneously
-- 📤 **Export/Import** - Share favorites via JSON files between projects
-- 🏷️ **Tags & Search** - Organize favorites with tags and search by name
-- ⭐ **Favorites Indicator** - Header widget showing favorite count with quick access menu
-- 📝 **Rich Metadata** - Store descriptions, notes, and filter context
+### 🛡️ New Safety Modules
+- 📦 **modules/geometry_safety.py** - GEOS-safe geometry operations
+  - `validate_geometry_for_geos()` - Deep validation: NaN/Inf check, isGeosValid(), buffer(0) test
+  - `create_geos_safe_layer()` - Creates memory layer with only valid geometries
+  - Graceful fallbacks: returns original layer if no geometries can be processed
 
-### New Modules
-- 📦 **modules/icon_utils.py** - Comprehensive icon theming utilities
-  - `IconThemeManager` - Singleton for managing themed icons
-  - Helper functions: `invert_pixmap()`, `get_icon_for_theme()`, `apply_icon_to_button()`
-- 📦 **modules/filter_favorites.py** - Filter favorites management
-  - `FilterFavorite` - Dataclass for saved filter configurations
-  - `FavoritesManager` - SQLite-backed favorites collection (max 50 per project)
+- 📦 **modules/object_safety.py** - Qt/QGIS object validation utilities
+  - `is_sip_deleted(obj)` - Checks if C++ object is deleted
+  - `is_valid_layer(layer)` - Complete QGIS layer validation  
+  - `safe_disconnect(signal)` / `safe_emit(signal, *args)` - Safe signal operations
+  - `make_safe_callback(obj, method)` - Wrapper for QTimer callbacks
 
-### UI/UX Improvements
-- ⚙️ **Config Editor Theme Sync** - JsonView updates with main theme
-- 🔔 **Theme Change Notifications** - Brief info messages and debug logging
-- 🧹 **Resource Cleanup** - Proper cleanup of theme watchers on plugin close
+### 🔧 Technical Improvements
+- **Safe `selectbylocation` Wrapper** - Validates layers before spatial operations
+- **Virtual Layer Support** - Improved handling with automatic memory copy
+- **GeometrySkipInvalid Context** - All processing calls skip invalid geometries
 
 ## Previous Updates
+
+### v2.3.8 - Automatic Dark Mode Support & Filter Favorites (December 19, 2025)
+- 🎨 **Automatic Dark Mode Detection** - Real-time QGIS theme detection
+- 🌓 **Icon Inversion for Dark Mode** - PNG icons visible in dark themes
+- ⭐ **Filter Favorites System** - Save, organize, and reuse filter configurations
+  - SQLite persistence, usage tracking, export/import via JSON
+- 📦 **New Modules** - `icon_utils.py` and `filter_favorites.py`
 
 ### v2.3.7 - Project Change Stability Enhancement (December 19, 2025)
 - 🛡️ **Enhanced Project Change Handling** - Complete rewrite of project change logic

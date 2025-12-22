@@ -1,20 +1,26 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
-**Version 2.3.8** | December 19, 2025
+**Version 2.3.9** | December 22, 2025
 
 **FilterMate is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!**
 
-### 🎉 What's New in v2.3.8 - Automatic Dark Mode Support & Filter Favorites
+### 🎉 What's New in v2.3.9 - Critical Stability Fix
+
+- 🔥 **CRITICAL: Fixed GEOS Crash** - Resolved fatal crash during OGR backend filtering with invalid geometries
+- 🛡️ **New `geometry_safety.py` Module** - GEOS-safe geometry operations
+  - `validate_geometry_for_geos()` - Deep geometry validation (NaN/Inf, buffer test)
+  - `create_geos_safe_layer()` - Creates memory layer with only GEOS-safe geometries
+- 🐛 **Fixed Access Violation Crash** - Resolved crash on plugin reload/QGIS close
+- 🔒 **Safe Qt Timer Callbacks** - Weak references prevent access to deleted objects
+- 📦 **New `object_safety.py` Module** - Qt/QGIS object validation utilities
+  - `is_sip_deleted()`, `is_valid_layer()`, `safe_disconnect()`, `safe_emit()`
+  - `make_safe_callback()` - Wrapper for QTimer callbacks
+
+### Previous: v2.3.8 - Automatic Dark Mode Support & Filter Favorites
 
 - 🎨 **Automatic Dark Mode Detection** - Real-time QGIS theme detection and UI synchronization
 - 🌓 **Icon Inversion for Dark Mode** - PNG icons automatically adapted for dark themes
 - ⭐ **Filter Favorites System** - Save, organize, and reuse complex filter configurations
-  - 💾 SQLite persistence across sessions
-  - 📊 Usage tracking and statistics
-  - 📤 Export/Import via JSON files
-  - 🎯 Multi-layer filter support
-  - 🏷️ Tags and search capabilities
 - 🎯 **New Icon Utilities Module** - Theme-aware icon management with caching
-- ✨ **JsonView Theme Sync** - Config editor updates with main theme
 
 ### Previous: v2.3.7 - Project Change Stability Enhancement
 

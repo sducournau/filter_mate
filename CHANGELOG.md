@@ -2,6 +2,50 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.3.9] - 2025-12-22 - Critical Stability Fix
+
+### 🔥 Critical Bug Fixes
+- **Fixed GEOS Crash during OGR Backend Filtering** - Resolved fatal "access violation" crash
+  - Crash occurred during `native:selectbylocation` with invalid geometries
+  - Some geometries cause C++/GEOS level crashes that cannot be caught by Python
+  - New validation prevents these geometries from reaching GEOS operations
+
+- **Fixed Access Violation on Plugin Reload** - Resolved crash during plugin reload/QGIS close
+  - Lambdas in `QTimer.singleShot` captured references to destroyed objects
+  - Now uses weak references with safe callback wrappers
+
+### 🛡️ New Modules
+- **`modules/geometry_safety.py`** - GEOS-safe geometry operations
+  - `validate_geometry_for_geos()` - Deep validation: NaN/Inf check, isGeosValid(), buffer(0) test
+  - `create_geos_safe_layer()` - Creates memory layer with only valid geometries
+  - Graceful fallbacks: returns original layer if no geometries can be processed
+
+- **`modules/object_safety.py`** - Qt/QGIS object validation utilities
+  - `is_sip_deleted(obj)` - Checks if C++ object is deleted
+  - `is_valid_layer(layer)` - Complete QGIS layer validation
+  - `is_valid_qobject(obj)` - QObject validation
+  - `safe_disconnect(signal)` - Safe signal disconnection
+  - `safe_emit(signal, *args)` - Safe signal emission
+  - `make_safe_callback(obj, method)` - Wrapper for QTimer callbacks
+
+### 🔧 Technical Improvements
+- **Safe `selectbylocation` Wrapper** - `_safe_select_by_location()` in OGR backend
+  - Validates intersect layer before spatial operations
+  - Uses `QgsProcessingContext.GeometrySkipInvalid`
+  - Creates GEOS-safe layers automatically
+
+- **Virtual Layer Support** - Improved handling of QGIS virtual layers
+  - Added `PROVIDER_VIRTUAL` constant
+  - Virtual layers always copied to memory for safety
+
+### 📁 Files Changed
+- `modules/geometry_safety.py` - New file for geometry validation
+- `modules/object_safety.py` - New file for object safety utilities
+- `modules/backends/ogr_backend.py` - Added validation and safe wrappers
+- `modules/tasks/filter_task.py` - Added geometry validation throughout
+- `modules/constants.py` - Added `PROVIDER_VIRTUAL`
+- `filter_mate_app.py` - Uses `object_safety` for layer validation
+
 ## [2.3.8] - 2025-12-19 - Automatic Dark Mode Support
 
 ### ✨ New Features
