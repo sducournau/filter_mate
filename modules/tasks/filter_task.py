@@ -102,6 +102,11 @@ from ..appUtils import (
     sanitize_filename
 )
 
+# Import object safety utilities (v2.3.9 - stability fix)
+from ..object_safety import (
+    is_sip_deleted, is_valid_layer, safe_disconnect
+)
+
 # Import prepared statements manager
 from ..prepared_statements import create_prepared_statements
 
@@ -116,6 +121,20 @@ from .task_utils import (
     SQLITE_TIMEOUT,
     SQLITE_MAX_RETRIES,
     MESSAGE_TASKS_CATEGORIES
+)
+
+# Import geometry safety module (v2.3.9 - stability fix)
+from ..geometry_safety import (
+    validate_geometry,
+    safe_as_geometry_collection,
+    safe_as_polygon,
+    safe_buffer,
+    safe_unary_union,
+    safe_collect_geometry,
+    safe_convert_to_multi_polygon,
+    extract_polygons_from_collection,
+    repair_geometry,
+    get_geometry_type_name
 )
 
 # Import geometry cache (Phase 3a extraction)
@@ -405,9 +424,10 @@ class FilterEngineTask(QgsTask):
                 # PRIORITY 3: Verify provider_type is correct by detecting it from actual layer
                 # This ensures GeoPackage layers are correctly identified as 'spatialite'
                 # even if layer_props had incorrect provider_type from previous operations
+                # STABILITY FIX v2.3.9: Validate layer before access to prevent access violations
                 from ..appUtils import detect_layer_provider_type
                 layer_by_id = self.PROJECT.mapLayer(layer_id)
-                if layer_by_id:
+                if layer_by_id and is_valid_layer(layer_by_id):
                     detected_provider = detect_layer_provider_type(layer_by_id)
                     if detected_provider != provider_type and detected_provider != 'unknown':
                         logger.warning(
@@ -425,21 +445,28 @@ class FilterEngineTask(QgsTask):
             if provider_type not in self.layers:
                 self.layers[provider_type] = []
             
+            # STABILITY FIX v2.3.9: Validate layers before adding to prevent access violations
             # Find layer by name and ID (preferred method)
-            layers = [
-                layer for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"])
-                if layer.id() == layer_props["layer_id"]
-            ]
+            layers = []
+            for layer in self.PROJECT.mapLayersByName(layer_props["layer_name"]):
+                if is_sip_deleted(layer):
+                    continue
+                if layer.id() == layer_props["layer_id"] and is_valid_layer(layer):
+                    layers.append(layer)
             
             # Fallback: If not found by name, try by ID only (layer may have been renamed)
             if not layers:
                 logger.debug(f"    Layer not found by name '{layer_name}', trying by ID...")
                 layer_by_id = self.PROJECT.mapLayer(layer_id)
-                if layer_by_id:
+                if layer_by_id and is_valid_layer(layer_by_id):
                     layers = [layer_by_id]
-                    logger.info(f"    Found layer by ID (name may have changed to '{layer_by_id.name()}')")
-                    # Update layer_props with current name
-                    layer_props["layer_name"] = layer_by_id.name()
+                    try:
+                        logger.info(f"    Found layer by ID (name may have changed to '{layer_by_id.name()}')")
+                        # Update layer_props with current name
+                        layer_props["layer_name"] = layer_by_id.name()
+                    except RuntimeError:
+                        logger.warning(f"    Layer {layer_id} became invalid during access")
+                        layers = []
             
             if layers:
                 self.layers[provider_type].append([layers[0], layer_props])
@@ -1973,109 +2000,101 @@ class FilterEngineTask(QgsTask):
             self.spatialite_source_geom = None
             return
 
-        # Collect all geometries into one
-        collected_geometry = QgsGeometry.collectGeometry(geometries)
+        # STABILITY FIX v2.3.9: Use safe_collect_geometry wrapper
+        # This prevents access violations on certain machines
+        collected_geometry = safe_collect_geometry(geometries)
+        
+        if collected_geometry is None:
+            logger.error("prepare_spatialite_source_geom: safe_collect_geometry returned None")
+            self.spatialite_source_geom = None
+            return
         
         # CRITICAL FIX: Prevent GeometryCollection from causing issues with typed layers
         # GeoPackage and other backends require homogeneous geometry types
-        # collectGeometry can produce GeometryCollection when mixing types or multi-part geometries
-        collected_type = QgsWkbTypes.displayString(collected_geometry.wkbType())
+        collected_type = get_geometry_type_name(collected_geometry)
         logger.debug(f"Initial collected geometry type: {collected_type}")
         
         if 'GeometryCollection' in collected_type:
             logger.warning(f"collectGeometry produced {collected_type} - converting to homogeneous type")
             
-            # Determine the dominant geometry type from input geometries
-            has_polygons = any('Polygon' in QgsWkbTypes.displayString(g.wkbType()) for g in geometries)
-            has_lines = any('Line' in QgsWkbTypes.displayString(g.wkbType()) for g in geometries)
-            has_points = any('Point' in QgsWkbTypes.displayString(g.wkbType()) for g in geometries)
+            # Determine the dominant geometry type from input geometries using safe wrapper
+            has_polygons = any('Polygon' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
+            has_lines = any('Line' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
+            has_points = any('Point' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
             
             logger.debug(f"Geometry analysis - Polygons: {has_polygons}, Lines: {has_lines}, Points: {has_points}")
             
             # Priority: Polygon > Line > Point (spatial filtering typically uses areas/zones)
             if has_polygons:
-                # Extract and collect only polygon parts
-                polygon_parts = []
-                for part in collected_geometry.asGeometryCollection():
-                    part_type = QgsWkbTypes.displayString(part.wkbType())
-                    if 'Polygon' in part_type:
-                        if 'Multi' in part_type:
-                            # MultiPolygon - extract each polygon
-                            for sub_part in part.asGeometryCollection():
-                                polygon_parts.append(sub_part)
-                        else:
-                            polygon_parts.append(part)
-                    else:
-                        logger.debug(f"Skipping non-polygon part: {part_type}")
+                # STABILITY FIX: Use safe wrapper for extraction
+                polygon_parts = extract_polygons_from_collection(collected_geometry)
                 
                 if polygon_parts:
-                    collected_geometry = QgsGeometry.collectGeometry(polygon_parts)
+                    collected_geometry = safe_collect_geometry(polygon_parts)
+                    if collected_geometry is None:
+                        logger.error("Failed to collect polygon parts")
                     # Force conversion to MultiPolygon if still GeometryCollection
-                    if 'GeometryCollection' in QgsWkbTypes.displayString(collected_geometry.wkbType()):
+                    elif 'GeometryCollection' in get_geometry_type_name(collected_geometry):
                         converted = collected_geometry.convertToType(QgsWkbTypes.PolygonGeometry, True)
                         if converted and not converted.isEmpty():
                             collected_geometry = converted
-                            logger.info(f"Converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                            logger.info(f"Converted to {get_geometry_type_name(collected_geometry)}")
                         else:
                             logger.error("Polygon conversion failed - keeping original")
                     else:
-                        logger.info(f"Successfully converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                        logger.info(f"Successfully converted to {get_geometry_type_name(collected_geometry)}")
                 else:
                     logger.warning("No polygon parts found in GeometryCollection")
                     
             elif has_lines:
-                # Extract and collect only line parts
+                # Extract and collect only line parts using safe wrapper
                 line_parts = []
-                for part in collected_geometry.asGeometryCollection():
-                    part_type = QgsWkbTypes.displayString(part.wkbType())
+                for part in safe_as_geometry_collection(collected_geometry):
+                    part_type = get_geometry_type_name(part)
                     if 'Line' in part_type:
                         if 'Multi' in part_type:
-                            for sub_part in part.asGeometryCollection():
+                            for sub_part in safe_as_geometry_collection(part):
                                 line_parts.append(sub_part)
                         else:
                             line_parts.append(part)
-                    else:
-                        logger.debug(f"Skipping non-line part: {part_type}")
                 
                 if line_parts:
-                    collected_geometry = QgsGeometry.collectGeometry(line_parts)
-                    if 'GeometryCollection' in QgsWkbTypes.displayString(collected_geometry.wkbType()):
+                    collected_geometry = safe_collect_geometry(line_parts)
+                    if collected_geometry and 'GeometryCollection' in get_geometry_type_name(collected_geometry):
                         converted = collected_geometry.convertToType(QgsWkbTypes.LineGeometry, True)
                         if converted and not converted.isEmpty():
                             collected_geometry = converted
-                            logger.info(f"Converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                            logger.info(f"Converted to {get_geometry_type_name(collected_geometry)}")
                         else:
                             logger.error("Line conversion failed - keeping original")
                     else:
-                        logger.info(f"Successfully converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                        logger.info(f"Successfully converted to {get_geometry_type_name(collected_geometry)}")
                 else:
                     logger.warning("No line parts found in GeometryCollection")
                     
             elif has_points:
-                # Extract and collect only point parts
+                # Extract and collect only point parts using safe wrapper
                 point_parts = []
-                for part in collected_geometry.asGeometryCollection():
-                    part_type = QgsWkbTypes.displayString(part.wkbType())
+                for part in safe_as_geometry_collection(collected_geometry):
+                    part_type = get_geometry_type_name(part)
                     if 'Point' in part_type:
                         if 'Multi' in part_type:
-                            for sub_part in part.asGeometryCollection():
+                            for sub_part in safe_as_geometry_collection(part):
                                 point_parts.append(sub_part)
                         else:
                             point_parts.append(part)
-                    else:
-                        logger.debug(f"Skipping non-point part: {part_type}")
                 
                 if point_parts:
-                    collected_geometry = QgsGeometry.collectGeometry(point_parts)
-                    if 'GeometryCollection' in QgsWkbTypes.displayString(collected_geometry.wkbType()):
+                    collected_geometry = safe_collect_geometry(point_parts)
+                    if collected_geometry and 'GeometryCollection' in get_geometry_type_name(collected_geometry):
                         converted = collected_geometry.convertToType(QgsWkbTypes.PointGeometry, True)
                         if converted and not converted.isEmpty():
                             collected_geometry = converted
-                            logger.info(f"Converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                            logger.info(f"Converted to {get_geometry_type_name(collected_geometry)}")
                         else:
                             logger.error("Point conversion failed - keeping original")
                     else:
-                        logger.info(f"Successfully converted to {QgsWkbTypes.displayString(collected_geometry.wkbType())}")
+                        logger.info(f"Successfully converted to {get_geometry_type_name(collected_geometry)}")
                 else:
                     logger.warning("No point parts found in GeometryCollection")
         
@@ -2390,6 +2409,9 @@ class FilterEngineTask(QgsTask):
         """
         Convert GeometryCollection geometries in a layer to MultiPolygon.
         
+        STABILITY FIX v2.3.9: Uses geometry_safety module to prevent
+        access violations when handling GeometryCollections.
+        
         CRITICAL FIX for GeoPackage/OGR layers:
         When qgis:buffer processes features with DISSOLVE=True, the result
         can contain GeometryCollection type instead of MultiPolygon.
@@ -2410,8 +2432,8 @@ class FilterEngineTask(QgsTask):
             has_geometry_collection = False
             for feature in layer.getFeatures():
                 geom = feature.geometry()
-                if geom and not geom.isEmpty():
-                    geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                if validate_geometry(geom):
+                    geom_type = get_geometry_type_name(geom)
                     if 'GeometryCollection' in geom_type:
                         has_geometry_collection = True
                         break
@@ -2444,49 +2466,41 @@ class FilterEngineTask(QgsTask):
             
             for feature in layer.getFeatures():
                 geom = feature.geometry()
-                if not geom or geom.isEmpty():
+                if not validate_geometry(geom):
                     continue
                 
-                geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                geom_type = get_geometry_type_name(geom)
                 new_geom = geom
                 
                 if 'GeometryCollection' in geom_type:
-                    # Extract polygon parts from GeometryCollection
-                    polygon_parts = []
-                    
-                    def extract_polygons(g):
-                        """Recursively extract all polygon geometries."""
-                        if g is None or g.isEmpty():
-                            return
-                        gt = QgsWkbTypes.displayString(g.wkbType())
-                        if 'Polygon' in gt and 'Multi' not in gt:
-                            polygon_parts.append(QgsGeometry(g))
-                        elif 'MultiPolygon' in gt or 'GeometryCollection' in gt:
-                            for part in g.asGeometryCollection():
-                                extract_polygons(part)
-                    
-                    extract_polygons(geom)
-                    
-                    if polygon_parts:
-                        # Create MultiPolygon from extracted parts
-                        if len(polygon_parts) == 1:
-                            poly_data = polygon_parts[0].asPolygon()
-                            if poly_data:
-                                new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
-                        else:
-                            multi_poly_parts = [p.asPolygon() for p in polygon_parts if p.asPolygon()]
-                            if multi_poly_parts:
-                                new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
-                        
+                    # STABILITY FIX: Use safe wrapper for conversion
+                    converted = safe_convert_to_multi_polygon(geom)
+                    if converted:
+                        new_geom = converted
                         conversion_count += 1
-                        logger.debug(f"Converted GeometryCollection to {QgsWkbTypes.displayString(new_geom.wkbType())}")
+                        logger.debug(f"Converted GeometryCollection to {get_geometry_type_name(new_geom)}")
                     else:
-                        logger.warning("GeometryCollection contained no polygon parts - skipping feature")
-                        continue
+                        # Fallback: try extracting polygons using safe wrapper
+                        polygon_parts = extract_polygons_from_collection(geom)
+                        if polygon_parts:
+                            # Create MultiPolygon from extracted parts
+                            if len(polygon_parts) == 1:
+                                poly_data = safe_as_polygon(polygon_parts[0])
+                                if poly_data:
+                                    new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                            else:
+                                multi_poly_parts = [safe_as_polygon(p) for p in polygon_parts]
+                                multi_poly_parts = [p for p in multi_poly_parts if p]
+                                if multi_poly_parts:
+                                    new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
+                            conversion_count += 1
+                        else:
+                            logger.warning("GeometryCollection contained no polygon parts - skipping feature")
+                            continue
                 
                 elif 'Polygon' in geom_type and 'Multi' not in geom_type:
                     # Convert single Polygon to MultiPolygon for consistency
-                    poly_data = geom.asPolygon()
+                    poly_data = safe_as_polygon(geom)
                     if poly_data:
                         new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
                 
@@ -2563,6 +2577,9 @@ class FilterEngineTask(QgsTask):
         """
         Buffer all features from layer.
         
+        STABILITY FIX v2.3.9: Uses safe_buffer wrapper to prevent
+        access violations on certain machines.
+        
         Args:
             layer: Source layer
             buffer_dist: Buffer distance
@@ -2578,38 +2595,28 @@ class FilterEngineTask(QgsTask):
         
         for idx, feature in enumerate(layer.getFeatures()):
             geom = feature.geometry()
-            if geom and not geom.isEmpty():
-                try:
-                    logger.debug(f"Feature {idx}: wkbType={geom.wkbType()}, isEmpty={geom.isEmpty()}")
-                    
-                    # DISABLED: Skip all validation, accept geometry as-is
-                    # Only check for null/empty
-                    if geom.isNull() or geom.isEmpty():
-                        logger.warning(f"Feature {idx}: Geometry is null or empty, skipping")
-                        invalid_features += 1
-                        continue
-                    
-                    # Apply buffer WITHOUT pre-validation
-                    try:
-                        buffered_geom = geom.buffer(float(buffer_dist), 5)
-                        logger.debug(f"Feature {idx}: Buffer applied, isEmpty={buffered_geom.isEmpty() if buffered_geom else 'None'}")
-                        
-                        # Accept any non-empty result, even if invalid
-                        if buffered_geom and not buffered_geom.isEmpty():
-                            geometries.append(buffered_geom)
-                            valid_features += 1
-                            logger.debug(f"Feature {idx}: Buffered geometry accepted (validation skipped)")
-                        else:
-                            logger.warning(f"Feature {idx}: Buffer resulted in empty geometry")
-                            invalid_features += 1
-                    except Exception as buffer_error:
-                        logger.warning(f"Feature {idx}: Buffer operation failed: {buffer_error}")
-                        invalid_features += 1
-                except Exception as feat_error:
-                    logger.warning(f"Feature {idx}: Error during buffer: {feat_error}")
+            
+            # STABILITY FIX: Use validate_geometry for proper checking
+            if not validate_geometry(geom):
+                logger.debug(f"Feature {idx}: Invalid or empty geometry, skipping")
+                invalid_features += 1
+                continue
+            
+            try:
+                # STABILITY FIX: Use safe_buffer wrapper instead of direct buffer()
+                # This handles invalid geometries gracefully and prevents GEOS crashes
+                buffered_geom = safe_buffer(geom, buffer_dist, 5)
+                
+                if buffered_geom is not None:
+                    geometries.append(buffered_geom)
+                    valid_features += 1
+                    logger.debug(f"Feature {idx}: Buffered geometry accepted")
+                else:
+                    logger.warning(f"Feature {idx}: safe_buffer returned None")
                     invalid_features += 1
-            else:
-                logger.debug(f"Feature {idx}: Geometry is None or empty")
+                    
+            except Exception as buffer_error:
+                logger.warning(f"Feature {idx}: Buffer operation failed: {buffer_error}")
                 invalid_features += 1
         
         logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
@@ -2619,6 +2626,9 @@ class FilterEngineTask(QgsTask):
         """
         Dissolve geometries and add to memory layer.
         
+        STABILITY FIX v2.3.9: Uses geometry_safety module to prevent
+        access violations when handling GeometryCollections.
+        
         Args:
             geometries: List of buffered geometries
             buffered_layer: Target memory layer
@@ -2626,121 +2636,62 @@ class FilterEngineTask(QgsTask):
         Returns:
             QgsVectorLayer: Layer with dissolved geometry added
         """
-        # Dissolve all geometries into one
-        dissolved_geom = QgsGeometry.unaryUnion(geometries)
+        # Filter out invalid geometries first (STABILITY FIX)
+        valid_geometries = [g for g in geometries if validate_geometry(g)]
         
-        # CRITICAL FIX: Handle GeometryCollection result from unaryUnion
-        # unaryUnion can produce a GeometryCollection when geometries don't overlap
-        # We need to extract polygons and convert to MultiPolygon
-        if dissolved_geom and not dissolved_geom.isEmpty():
-            wkb_type = dissolved_geom.wkbType()
-            type_name = QgsWkbTypes.displayString(wkb_type)
-            
-            if 'GeometryCollection' in type_name:
-                logger.info(f"Buffer result is GeometryCollection - extracting polygons")
-                # Extract all polygon parts from the GeometryCollection
-                polygon_parts = []
-                for part in dissolved_geom.asGeometryCollection():
-                    part_type = QgsWkbTypes.displayString(part.wkbType())
-                    if 'Polygon' in part_type:
-                        # Handle both Polygon and MultiPolygon
-                        if 'Multi' in part_type:
-                            for sub_part in part.asGeometryCollection():
-                                polygon_parts.append(sub_part)
-                        else:
-                            polygon_parts.append(part)
-                    elif 'Line' in part_type or 'Point' in part_type:
-                        # Skip non-polygon geometries (can happen with degenerate buffers)
-                        logger.debug(f"Skipping non-polygon part: {part_type}")
-                
+        if not valid_geometries:
+            logger.warning("_dissolve_and_add_to_layer: No valid geometries to dissolve")
+            return buffered_layer
+        
+        # Dissolve all geometries into one using safe wrapper
+        dissolved_geom = safe_unary_union(valid_geometries)
+        
+        if dissolved_geom is None:
+            logger.error("_dissolve_and_add_to_layer: safe_unary_union returned None")
+            return buffered_layer
+        
+        # STABILITY FIX: Use safe conversion to MultiPolygon
+        final_type = get_geometry_type_name(dissolved_geom)
+        logger.debug(f"Dissolved geometry type: {final_type}")
+        
+        if 'GeometryCollection' in final_type or 'Polygon' not in final_type:
+            logger.info(f"Converting {final_type} to MultiPolygon using safe wrapper")
+            converted = safe_convert_to_multi_polygon(dissolved_geom)
+            if converted:
+                dissolved_geom = converted
+                logger.info(f"Converted to {get_geometry_type_name(dissolved_geom)}")
+            else:
+                # Last resort: extract polygons manually using safe function
+                logger.warning("safe_convert_to_multi_polygon failed, extracting polygons")
+                polygon_parts = extract_polygons_from_collection(dissolved_geom)
                 if polygon_parts:
-                    # Combine all polygon parts into a MultiPolygon
-                    dissolved_geom = QgsGeometry.collectGeometry(polygon_parts)
-                    
-                    # CRITICAL: Force conversion to MultiPolygon if still GeometryCollection
-                    # collectGeometry can still produce GeometryCollection in some cases
-                    new_type_name = QgsWkbTypes.displayString(dissolved_geom.wkbType())
-                    if 'GeometryCollection' in new_type_name:
-                        logger.warning(f"collectGeometry still produced {new_type_name} - forcing MultiPolygon conversion")
-                        # convertToType with destMultipart=True forces MultiPolygon output
-                        converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
-                        if converted and not converted.isEmpty():
-                            dissolved_geom = converted
-                            logger.info(f"Forced conversion to {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
-                        else:
-                            logger.error("convertToType failed - geometry may be incompatible")
-                    else:
-                        logger.info(f"Converted GeometryCollection to {new_type_name}")
+                    collected = safe_collect_geometry(polygon_parts)
+                    if collected:
+                        dissolved_geom = collected
+                        # Force conversion if still not polygon
+                        if 'Polygon' not in get_geometry_type_name(dissolved_geom):
+                            converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
+                            if converted and not converted.isEmpty():
+                                dissolved_geom = converted
                 else:
-                    logger.warning("GeometryCollection contained no polygon parts - buffer may be empty")
-        
-        # FINAL CHECK: Ensure geometry is compatible with MultiPolygon layer
-        if dissolved_geom and not dissolved_geom.isEmpty():
-            final_type = QgsWkbTypes.displayString(dissolved_geom.wkbType())
-            if 'GeometryCollection' in final_type:
-                logger.warning(f"Final geometry is still {final_type} - attempting last-resort conversion")
-                
-                # Method 1: convertToType
-                converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
-                if converted and not converted.isEmpty():
-                    dissolved_geom = converted
-                    logger.info(f"Last-resort conversion succeeded: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
-                else:
-                    # Method 2: Manual extraction of all polygon parts
-                    logger.warning("convertToType failed - extracting polygons manually")
-                    all_polygons = []
-                    
-                    def extract_polygons(geom):
-                        """Recursively extract all polygons from any geometry type."""
-                        if geom is None or geom.isEmpty():
-                            return
-                        geom_type = QgsWkbTypes.displayString(geom.wkbType())
-                        if 'Polygon' in geom_type and 'Multi' not in geom_type:
-                            all_polygons.append(QgsGeometry(geom))
-                        elif 'MultiPolygon' in geom_type or 'GeometryCollection' in geom_type:
-                            for part in geom.asGeometryCollection():
-                                extract_polygons(part)
-                    
-                    extract_polygons(dissolved_geom)
-                    
-                    if all_polygons:
-                        logger.info(f"Extracted {len(all_polygons)} polygon(s) from GeometryCollection")
-                        # Create MultiPolygon from parts
-                        if len(all_polygons) == 1:
-                            dissolved_geom = all_polygons[0]
-                            # Convert single polygon to multipolygon
-                            dissolved_geom = QgsGeometry.fromMultiPolygonXY([dissolved_geom.asPolygon()])
-                        else:
-                            multi_poly_parts = [p.asPolygon() for p in all_polygons if p.asPolygon()]
-                            if multi_poly_parts:
-                                dissolved_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
-                        logger.info(f"Manual extraction result: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
-                    else:
-                        logger.error("Could not extract any polygons from GeometryCollection")
+                    logger.error("Could not extract any polygons from geometry")
+                    return buffered_layer
         
         # FINAL SAFETY CHECK: Ensure geometry is MultiPolygon before adding to layer
-        if dissolved_geom and not dissolved_geom.isEmpty():
-            final_type = QgsWkbTypes.displayString(dissolved_geom.wkbType())
+        if validate_geometry(dissolved_geom):
+            final_type = get_geometry_type_name(dissolved_geom)
             logger.info(f"Final geometry type before adding: {final_type}")
-            
-            # If still not a Polygon type, force conversion
-            if 'Polygon' not in final_type:
-                logger.warning(f"Geometry is {final_type}, not Polygon - attempting final conversion")
-                converted = dissolved_geom.convertToType(QgsWkbTypes.PolygonGeometry, True)
-                if converted and not converted.isEmpty():
-                    dissolved_geom = converted
-                    logger.info(f"Final conversion succeeded: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
-                else:
-                    logger.error(f"Cannot convert {final_type} to Polygon - returning empty layer")
-                    return buffered_layer
             
             # Ensure it's MultiPolygon (not single Polygon)
             if dissolved_geom.wkbType() == QgsWkbTypes.Polygon:
-                # Convert single Polygon to MultiPolygon
-                poly_data = dissolved_geom.asPolygon()
+                # Convert single Polygon to MultiPolygon using safe wrapper
+                poly_data = safe_as_polygon(dissolved_geom)
                 if poly_data:
                     dissolved_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
-                    logger.info("Converted single Polygon to MultiPolygon")
+                    logger.debug("Converted single Polygon to MultiPolygon")
+        else:
+            logger.error("Final dissolved geometry is invalid")
+            return buffered_layer
         
         # Create feature with dissolved geometry
         feat = QgsFeature()
@@ -2749,7 +2700,7 @@ class FilterEngineTask(QgsTask):
         provider = buffered_layer.dataProvider()
         success, _ = provider.addFeatures([feat])
         if not success:
-            logger.error(f"Failed to add feature to buffer layer. Geometry type: {QgsWkbTypes.displayString(dissolved_geom.wkbType())}")
+            logger.error(f"Failed to add feature to buffer layer. Geometry type: {get_geometry_type_name(dissolved_geom)}")
         buffered_layer.updateExtents()
         
         # Create spatial index for improved performance

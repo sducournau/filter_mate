@@ -70,7 +70,44 @@ safe_show_message('info', "FilterMate", "Message")
 
 ---
 
+## 🛡️ Audit de Stabilité Complémentaire (2025-12-22)
+
+### Nouveau module `object_safety.py`
+
+Module centralisé pour la sécurité des objets Qt/QGIS ajouté à `modules/object_safety.py`.
+
+**Fonctions principales :**
+| Fonction | Description |
+|----------|-------------|
+| `is_sip_deleted(obj)` | Vérifie si l'objet C++ sous-jacent est supprimé |
+| `is_valid_layer(layer)` | Validation complète d'une couche QGIS |
+| `is_valid_qobject(obj)` | Validation d'un QObject |
+| `safe_disconnect(signal)` | Déconnexion sécurisée d'un signal |
+| `safe_emit(signal, *args)` | Émission sécurisée d'un signal |
+| `make_safe_callback(obj, method)` | Wrapper pour callbacks QTimer |
+
+### Corrections appliquées
+
+**1. filter_mate_app.py**
+- Import de `sip` et `object_safety`
+- `_filter_usable_layers()` utilise maintenant `is_sip_deleted()` et `is_valid_layer()`
+- Protection contre accès à des layers C++ supprimés
+
+**2. layer_management_task.py**
+- `finished()` utilise `safe_emit()` et `safe_disconnect()`
+- Élimine les try/except RuntimeError manuels
+
+**3. filter_task.py**
+- Import de `object_safety`
+- `_organize_layers_to_filter()` valide chaque layer avant accès
+- Protection contre layers supprimés pendant itération
+
+### Rapport complet
+- 📄 [AUDIT_ACCESS_VIOLATIONS_2025-12-22.md](docs/AUDIT_ACCESS_VIOLATIONS_2025-12-22.md)
+
+---
+
 **Version**: 2.3.9  
-**Date**: 2025-12-19  
+**Date**: 2025-12-22  
 **Priorité**: CRITIQUE  
 **Status**: ✅ Résolu - Tests en attente

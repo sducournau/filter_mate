@@ -8,11 +8,29 @@ complex SQL expressions like PostgreSQL/Spatialite.
 """
 
 from typing import Dict, Optional
-from qgis.core import QgsVectorLayer, QgsProcessingFeedback
+from qgis.core import (
+    QgsVectorLayer, 
+    QgsProcessingFeedback, 
+    QgsWkbTypes,
+    QgsGeometry,
+    QgsFeature,
+    QgsMemoryProviderUtils
+)
 from qgis import processing
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
 from ..appUtils import safe_set_subset_string
+
+# Import geometry safety module (v2.3.9 - stability fix)
+from ..geometry_safety import (
+    validate_geometry,
+    safe_as_geometry_collection,
+    safe_as_polygon,
+    safe_collect_geometry,
+    safe_convert_to_multi_polygon,
+    extract_polygons_from_collection,
+    get_geometry_type_name
+)
 
 logger = get_tasks_logger()
 
@@ -413,8 +431,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             has_geometry_collection = False
             for feature in layer.getFeatures():
                 geom = feature.geometry()
-                if geom and not geom.isEmpty():
-                    geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                if validate_geometry(geom):
+                    geom_type = get_geometry_type_name(geom)
                     if 'GeometryCollection' in geom_type:
                         has_geometry_collection = True
                         break
@@ -447,49 +465,41 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             for feature in layer.getFeatures():
                 geom = feature.geometry()
-                if not geom or geom.isEmpty():
+                if not validate_geometry(geom):
                     continue
                 
-                geom_type = QgsWkbTypes.displayString(geom.wkbType())
+                geom_type = get_geometry_type_name(geom)
                 new_geom = geom
                 
                 if 'GeometryCollection' in geom_type:
-                    # Extract polygon parts from GeometryCollection
-                    polygon_parts = []
-                    
-                    def extract_polygons(g):
-                        """Recursively extract all polygon geometries."""
-                        if g is None or g.isEmpty():
-                            return
-                        gt = QgsWkbTypes.displayString(g.wkbType())
-                        if 'Polygon' in gt and 'Multi' not in gt:
-                            polygon_parts.append(QgsGeometry(g))
-                        elif 'MultiPolygon' in gt or 'GeometryCollection' in gt:
-                            for part in g.asGeometryCollection():
-                                extract_polygons(part)
-                    
-                    extract_polygons(geom)
-                    
-                    if polygon_parts:
-                        # Create MultiPolygon from extracted parts
-                        if len(polygon_parts) == 1:
-                            poly_data = polygon_parts[0].asPolygon()
-                            if poly_data:
-                                new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
-                        else:
-                            multi_poly_parts = [p.asPolygon() for p in polygon_parts if p.asPolygon()]
-                            if multi_poly_parts:
-                                new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
-                        
+                    # STABILITY FIX v2.3.9: Use safe wrapper for conversion
+                    converted = safe_convert_to_multi_polygon(geom)
+                    if converted:
+                        new_geom = converted
                         conversion_count += 1
-                        self.log_debug(f"Converted GeometryCollection to {QgsWkbTypes.displayString(new_geom.wkbType())}")
+                        self.log_debug(f"Converted GeometryCollection to {get_geometry_type_name(new_geom)}")
                     else:
-                        self.log_warning("GeometryCollection contained no polygon parts - skipping feature")
-                        continue
+                        # Fallback: try extracting polygons using safe wrapper
+                        polygon_parts = extract_polygons_from_collection(geom)
+                        if polygon_parts:
+                            # Create MultiPolygon from extracted parts
+                            if len(polygon_parts) == 1:
+                                poly_data = safe_as_polygon(polygon_parts[0])
+                                if poly_data:
+                                    new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
+                            else:
+                                multi_poly_parts = [safe_as_polygon(p) for p in polygon_parts]
+                                multi_poly_parts = [p for p in multi_poly_parts if p]
+                                if multi_poly_parts:
+                                    new_geom = QgsGeometry.fromMultiPolygonXY(multi_poly_parts)
+                            conversion_count += 1
+                        else:
+                            self.log_warning("GeometryCollection contained no polygon parts - skipping feature")
+                            continue
                 
                 elif 'Polygon' in geom_type and 'Multi' not in geom_type:
                     # Convert single Polygon to MultiPolygon for consistency
-                    poly_data = geom.asPolygon()
+                    poly_data = safe_as_polygon(geom)
                     if poly_data:
                         new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
                 

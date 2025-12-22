@@ -64,6 +64,11 @@ from ..appUtils import (
     get_best_display_field
 )
 
+# Import object safety utilities (v2.3.9 - stability fix)
+from ..object_safety import (
+    is_sip_deleted, is_valid_layer, safe_disconnect, safe_emit
+)
+
 # Import task utilities
 from .task_utils import (
     spatialite_connect,
@@ -1470,6 +1475,9 @@ class LayersManagementEngineTask(QgsTask):
         CRITICAL: Signals must be emitted and disconnected BEFORE displaying messages
         to avoid "wrapped C/C++ object has been deleted" errors.
         
+        STABILITY FIX v2.3.9: Uses safe_emit() and safe_disconnect() from object_safety
+        module to prevent access violations on certain machines.
+        
         Args:
             result (bool): Task result
         """
@@ -1479,29 +1487,21 @@ class LayersManagementEngineTask(QgsTask):
 
         if self.exception is None:
             if result is None:
-                # Emit signal before UI operations
-                try:
-                    if self.project_layers is not None:
-                        self.resultingLayers.emit(self.project_layers)
-                except RuntimeError:
-                    pass
-                finally:
-                    try:
-                        self.resultingLayers.disconnect()
-                    except (RuntimeError, TypeError):
-                        pass
+                # STABILITY FIX: Use safe_emit and safe_disconnect
+                if self.project_layers is not None:
+                    safe_emit(self.resultingLayers, self.project_layers)
+                safe_disconnect(self.resultingLayers)
                 
                 # Task was likely canceled by user - log only, no message bar notification
                 logger.info('Task completed with no result (likely canceled by user)')
             else:
-                # CRITICAL: Emit signal BEFORE showing message
-                try:
-                    if self.project_layers is not None:
-                        logger.info(f"Emitting resultingLayers signal with {len(self.project_layers)} layers")
-                        self.resultingLayers.emit(self.project_layers)
+                # CRITICAL: Emit signal BEFORE showing message using safe_emit
+                if self.project_layers is not None:
+                    logger.info(f"Emitting resultingLayers signal with {len(self.project_layers)} layers")
+                    if safe_emit(self.resultingLayers, self.project_layers):
                         logger.info("resultingLayers signal emitted successfully")
-                except RuntimeError as e:
-                    logger.warning(f"RuntimeError when emitting resultingLayers signal: {e}")
+                    else:
+                        logger.warning("resultingLayers signal emission failed (receiver may be deleted)")
                 
                 if message_category == 'ManageLayers':
                     if self.task_action == 'add_layers':
@@ -1519,16 +1519,11 @@ class LayersManagementEngineTask(QgsTask):
                         # Message bar notification removed - internal operation, too verbose for UX
                         logger.info(f'Layers properties updated: {result_action}')
                 
-                # Disconnect signals
-                try:
-                    self.resultingLayers.disconnect()
-                except (RuntimeError, TypeError):
-                    pass
+                # STABILITY FIX: Use safe_disconnect
+                safe_disconnect(self.resultingLayers)
         else:
-            try:
-                self.resultingLayers.disconnect()
-            except (RuntimeError, TypeError):
-                pass
+            # STABILITY FIX: Use safe_disconnect even on error
+            safe_disconnect(self.resultingLayers)
             
             iface.messageBar().pushMessage(
                 f"Exception: {self.exception}",

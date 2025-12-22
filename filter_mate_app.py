@@ -1,5 +1,6 @@
 from qgis.PyQt.QtCore import Qt, QTimer
 import weakref
+import sip
 from qgis.PyQt.QtWidgets import QApplication, QPushButton, QProgressBar
 from qgis.core import (
     Qgis,
@@ -58,6 +59,10 @@ from .modules.feedback_utils import (
 from .modules.filter_history import HistoryManager
 from .modules.filter_favorites import FavoritesManager
 from .modules.ui_config import UIConfig, DisplayProfile
+from .modules.object_safety import (
+    is_sip_deleted, is_valid_layer, is_valid_qobject,
+    safe_disconnect, safe_emit, make_safe_callback
+)
 from .resources import *  # Qt resources must be imported with wildcard
 import uuid
 
@@ -132,6 +137,9 @@ class FilterMateApp:
     def _filter_usable_layers(self, layers):
         """
         Return only layers that are valid vector layers with available sources.
+        
+        STABILITY FIX v2.3.9: Uses is_valid_layer() from object_safety module
+        to prevent access violations from deleted C++ objects.
         """
         try:
             input_count = len(layers or [])
@@ -139,12 +147,28 @@ class FilterMateApp:
             filtered_reasons = []
             
             for l in (layers or []):
+                # CRITICAL: Check if C++ object was deleted before any access
+                if is_sip_deleted(l):
+                    filtered_reasons.append("unknown: C++ object deleted")
+                    continue
+                    
                 if not isinstance(l, QgsVectorLayer):
-                    filtered_reasons.append(f"{l.name() if hasattr(l, 'name') else 'unknown'}: not a vector layer")
+                    try:
+                        name = l.name() if hasattr(l, 'name') else 'unknown'
+                    except RuntimeError:
+                        name = 'unknown'
+                    filtered_reasons.append(f"{name}: not a vector layer")
                     continue
-                if not l.isValid():
-                    filtered_reasons.append(f"{l.name()}: invalid layer")
+                
+                # Use object_safety module for comprehensive validation
+                if not is_valid_layer(l):
+                    try:
+                        name = l.name()
+                    except RuntimeError:
+                        name = 'unknown'
+                    filtered_reasons.append(f"{name}: invalid layer (C++ object may be deleted)")
                     continue
+                    
                 if not is_layer_source_available(l):
                     filtered_reasons.append(f"{l.name()}: source not available")
                     continue
