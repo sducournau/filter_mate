@@ -58,7 +58,10 @@ logger = logging.getLogger('FilterMate')
 # Utilities
 from .appUtils import safe_set_subset_string, is_layer_source_available
 from .feedback_utils import show_warning, show_error
-from .object_safety import is_valid_layer, is_gpkg_file_accessible, refresh_ogr_layer
+from .object_safety import (
+    is_valid_layer, is_gpkg_file_accessible, refresh_ogr_layer,
+    GdalErrorHandler  # v2.3.11: Suppress transient GDAL warnings
+)
 
 
 def safe_iterate_features(layer_or_source, request=None, max_retries=3, retry_delay=0.5):
@@ -66,6 +69,7 @@ def safe_iterate_features(layer_or_source, request=None, max_retries=3, retry_de
     Safely iterate over features from a layer or feature source.
     
     Handles OGR/GeoPackage errors like "unable to open database file" with retry logic.
+    Suppresses transient GDAL/OGR warnings that are handled internally.
     
     Args:
         layer_or_source: QgsVectorLayer, QgsVectorDataProvider, or QgsAbstractFeatureSource
@@ -78,40 +82,42 @@ def safe_iterate_features(layer_or_source, request=None, max_retries=3, retry_de
     """
     import time
     
-    for attempt in range(max_retries):
-        try:
-            if request:
-                iterator = layer_or_source.getFeatures(request)
-            else:
-                iterator = layer_or_source.getFeatures()
-            
-            for feature in iterator:
-                yield feature
-            return  # Successfully completed iteration
-            
-        except Exception as e:
-            error_str = str(e).lower()
-            
-            # Check for known recoverable OGR/SQLite errors
-            is_recoverable = any(x in error_str for x in [
-                'unable to open database file',
-                'database is locked',
-                'disk i/o error',
-                'sqlite3_step',
-            ])
-            
-            if is_recoverable and attempt < max_retries - 1:
-                layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
-                logger.warning(
-                    f"OGR access error on '{layer_name}' (attempt {attempt + 1}/{max_retries}): {e}. "
-                    f"Retrying in {retry_delay}s..."
-                )
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
-                logger.error(f"Failed to iterate features from '{layer_name}': {e}")
-                return  # Stop iteration on unrecoverable error
+    # Use GDAL error handler to suppress transient SQLite warnings during iteration
+    with GdalErrorHandler():
+        for attempt in range(max_retries):
+            try:
+                if request:
+                    iterator = layer_or_source.getFeatures(request)
+                else:
+                    iterator = layer_or_source.getFeatures()
+                
+                for feature in iterator:
+                    yield feature
+                return  # Successfully completed iteration
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check for known recoverable OGR/SQLite errors
+                is_recoverable = any(x in error_str for x in [
+                    'unable to open database file',
+                    'database is locked',
+                    'disk i/o error',
+                    'sqlite3_step',
+                ])
+                
+                if is_recoverable and attempt < max_retries - 1:
+                    layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
+                    logger.warning(
+                        f"OGR access error on '{layer_name}' (attempt {attempt + 1}/{max_retries}): {e}. "
+                        f"Retrying in {retry_delay}s..."
+                    )
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
+                    logger.error(f"Failed to iterate features from '{layer_name}': {e}")
+                    return  # Stop iteration on unrecoverable error
 
 
 def get_feature_attribute(feature, field_name):

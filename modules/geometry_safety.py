@@ -792,6 +792,14 @@ def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Opti
         
         safe_layer.updateExtents()
         
+        # Create spatial index to improve performance
+        try:
+            from qgis.core import QgsSpatialIndex
+            data_provider.createSpatialIndex()
+            logger.debug("create_geos_safe_layer: Spatial index created successfully")
+        except Exception as index_error:
+            logger.debug(f"create_geos_safe_layer: Could not create spatial index: {index_error}")
+        
         if repaired_count > 0 or skipped_count > 0:
             logger.info(f"create_geos_safe_layer: Created layer with {len(all_features)}/{feature_count} features "
                        f"({skipped_count} skipped, {repaired_count} repaired)")

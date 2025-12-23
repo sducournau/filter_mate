@@ -463,6 +463,138 @@ class SafeSignalContext:
 
 
 # =============================================================================
+# GDAL Error Handling (v2.3.11)
+# =============================================================================
+
+# Try to import GDAL for error handling
+try:
+    from osgeo import gdal
+    GDAL_AVAILABLE = True
+except ImportError:
+    GDAL_AVAILABLE = False
+    gdal = None
+
+
+class GdalErrorHandler:
+    """
+    Context manager to suppress known spurious GDAL/OGR warnings.
+    
+    Use this during OGR operations that may trigger transient SQLite
+    file locking warnings like:
+    - "sqlite3_step() : unable to open database file"
+    - "database is locked"
+    
+    These warnings are often harmless and caused by brief file locks
+    during concurrent operations. GDAL/OGR typically retries internally.
+    
+    Example:
+        with GdalErrorHandler(suppress_patterns=['unable to open database file']):
+            features = list(layer.getFeatures())
+    """
+    
+    # Default patterns to suppress (known harmless transient errors)
+    DEFAULT_SUPPRESS_PATTERNS = [
+        'unable to open database file',
+        'database is locked',
+        'disk i/o error',
+        'sqlite3_step',
+        'sqlite3_get_table',
+        'gpkg_metadata',
+    ]
+    
+    def __init__(self, suppress_patterns=None, log_suppressed=False):
+        """
+        Initialize GDAL error handler.
+        
+        Args:
+            suppress_patterns: List of patterns to suppress (case-insensitive).
+                             Uses DEFAULT_SUPPRESS_PATTERNS if None.
+            log_suppressed: If True, log suppressed messages at DEBUG level.
+        """
+        self.suppress_patterns = suppress_patterns or self.DEFAULT_SUPPRESS_PATTERNS
+        self.log_suppressed = log_suppressed
+        self._original_handler = None
+        self._suppressed_count = 0
+    
+    def _custom_error_handler(self, err_class, err_num, err_msg):
+        """Custom GDAL error handler that filters known spurious warnings."""
+        if err_msg:
+            msg_lower = err_msg.lower()
+            for pattern in self.suppress_patterns:
+                if pattern.lower() in msg_lower:
+                    self._suppressed_count += 1
+                    if self.log_suppressed:
+                        logger.debug(f"Suppressed GDAL warning: {err_msg}")
+                    return  # Suppress this warning
+        
+        # For non-suppressed errors, log them appropriately
+        if GDAL_AVAILABLE and gdal:
+            if err_class == gdal.CE_Warning:
+                logger.warning(f"GDAL Warning: {err_msg}")
+            elif err_class >= gdal.CE_Failure:
+                logger.error(f"GDAL Error ({err_class}): {err_msg}")
+            else:
+                logger.debug(f"GDAL Message: {err_msg}")
+    
+    def __enter__(self):
+        """Enter context - install custom error handler."""
+        if not GDAL_AVAILABLE:
+            return self
+        
+        try:
+            # Install custom error handler
+            gdal.PushErrorHandler(self._custom_error_handler)
+            self._suppressed_count = 0
+        except Exception as e:
+            logger.debug(f"Could not install GDAL error handler: {e}")
+        
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context - restore original error handler."""
+        if not GDAL_AVAILABLE:
+            return False
+        
+        try:
+            # Restore original error handler
+            gdal.PopErrorHandler()
+            
+            if self._suppressed_count > 0:
+                logger.debug(
+                    f"Suppressed {self._suppressed_count} transient GDAL/OGR warnings "
+                    f"(SQLite file locking during concurrent access)"
+                )
+        except Exception as e:
+            logger.debug(f"Could not restore GDAL error handler: {e}")
+        
+        return False  # Don't suppress exceptions
+    
+    @property
+    def suppressed_count(self) -> int:
+        """Number of suppressed messages during this context."""
+        return self._suppressed_count
+
+
+def suppress_gdal_warnings():
+    """
+    Decorator to suppress known spurious GDAL warnings for a function.
+    
+    Example:
+        @suppress_gdal_warnings()
+        def my_function():
+            # OGR operations that may trigger transient warnings
+            pass
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with GdalErrorHandler():
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# =============================================================================
 # GeoPackage / OGR Layer Safety Functions (v2.3.10)
 # =============================================================================
 
@@ -538,6 +670,7 @@ def safe_get_features(layer: QgsVectorLayer, request=None, max_retries: int = 3,
     
     This error occurs when the GeoPackage file is temporarily locked by another
     operation. The retry logic allows brief locks to clear.
+    Suppresses transient GDAL/OGR warnings that are handled by retry logic.
     
     Args:
         layer: QGIS vector layer
@@ -561,34 +694,36 @@ def safe_get_features(layer: QgsVectorLayer, request=None, max_retries: int = 3,
     # For non-OGR layers, just get features directly
     is_ogr = layer.providerType() == 'ogr'
     
-    for attempt in range(max_retries):
-        try:
-            if request:
-                features = list(layer.getFeatures(request))
-            else:
-                features = list(layer.getFeatures())
-            return features
-            
-        except Exception as e:
-            error_str = str(e).lower()
-            
-            # Check for known recoverable errors
-            is_recoverable = any(x in error_str for x in [
-                'unable to open database file',
-                'database is locked',
-                'disk i/o error',
-            ])
-            
-            if is_recoverable and attempt < max_retries - 1:
-                logger.warning(
-                    f"OGR/GeoPackage access error (attempt {attempt + 1}/{max_retries}): {e}. "
-                    f"Retrying in {retry_delay}s..."
-                )
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                logger.error(f"Failed to get features from layer '{layer.name()}': {e}")
-                return []
+    # Use GDAL error handler to suppress transient SQLite warnings during feature retrieval
+    with GdalErrorHandler():
+        for attempt in range(max_retries):
+            try:
+                if request:
+                    features = list(layer.getFeatures(request))
+                else:
+                    features = list(layer.getFeatures())
+                return features
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check for known recoverable errors
+                is_recoverable = any(x in error_str for x in [
+                    'unable to open database file',
+                    'database is locked',
+                    'disk i/o error',
+                ])
+                
+                if is_recoverable and attempt < max_retries - 1:
+                    logger.warning(
+                        f"OGR/GeoPackage access error (attempt {attempt + 1}/{max_retries}): {e}. "
+                        f"Retrying in {retry_delay}s..."
+                    )
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"Failed to get features from layer '{layer.name()}': {e}")
+                    return []
     
     return []
 
@@ -655,4 +790,9 @@ __all__ = [
     'is_gpkg_file_accessible',
     'safe_get_features',
     'refresh_ogr_layer',
+    
+    # GDAL error handling (v2.3.11)
+    'GdalErrorHandler',
+    'suppress_gdal_warnings',
+    'GDAL_AVAILABLE',
 ]

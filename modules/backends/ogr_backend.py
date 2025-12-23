@@ -16,6 +16,12 @@ Parallel execution causes "Windows fatal exception: access violation".
 
 The ParallelFilterExecutor automatically detects OGR layers and forces 
 sequential execution to prevent crashes.
+
+GDAL ERROR HANDLING (v2.3.11):
+==============================
+GeoPackage layers may generate transient SQLite warnings during concurrent
+operations. These are handled via GdalErrorHandler which suppresses known
+harmless warnings like "unable to open database file".
 """
 
 import threading
@@ -45,6 +51,9 @@ from ..geometry_safety import (
     get_geometry_type_name,
     create_geos_safe_layer
 )
+
+# Import GDAL error handler for suppressing transient SQLite warnings (v2.3.11)
+from ..object_safety import GdalErrorHandler
 
 logger = get_tasks_logger()
 
@@ -309,61 +318,65 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 )
             _last_operation_thread = current_thread
         
-        try:
-            import json
-            from qgis import processing
-            
-            params = json.loads(expression) if expression else {}
-            predicates = params.get('predicates', [])
-            buffer_value = params.get('buffer_value')
-            
-            # Check if using memory optimization for PostgreSQL
-            use_memory_opt = getattr(self, '_use_memory_optimization', False)
-            memory_layer = getattr(self, '_memory_layer', None)
-            original_layer = getattr(self, '_original_layer', None)
-            
-            if use_memory_opt and memory_layer and original_layer:
-                self.log_info(f"⚡ Using memory optimization for {layer.name()}")
-                return self._apply_filter_with_memory_optimization(
-                    original_layer, memory_layer, predicates, buffer_value,
-                    old_subset, combine_operator
-                )
-            
-            self.log_debug(f"Applying OGR filter to {layer.name()} using QGIS processing")
-            
-            # Get source layer - should be set by build_expression
-            source_layer = getattr(self, 'source_geom', None)
-            if not source_layer:
-                self.log_error("No source layer/geometry provided for geometric filtering")
+        # GDAL ERROR HANDLING (v2.3.11): Suppress transient SQLite warnings
+        # These warnings occur during concurrent GeoPackage access but are handled
+        # internally by GDAL/OGR and don't affect operation success.
+        with GdalErrorHandler():
+            try:
+                import json
+                from qgis import processing
+                
+                params = json.loads(expression) if expression else {}
+                predicates = params.get('predicates', [])
+                buffer_value = params.get('buffer_value')
+                
+                # Check if using memory optimization for PostgreSQL
+                use_memory_opt = getattr(self, '_use_memory_optimization', False)
+                memory_layer = getattr(self, '_memory_layer', None)
+                original_layer = getattr(self, '_original_layer', None)
+                
+                if use_memory_opt and memory_layer and original_layer:
+                    self.log_info(f"⚡ Using memory optimization for {layer.name()}")
+                    return self._apply_filter_with_memory_optimization(
+                        original_layer, memory_layer, predicates, buffer_value,
+                        old_subset, combine_operator
+                    )
+                
+                self.log_debug(f"Applying OGR filter to {layer.name()} using QGIS processing")
+                
+                # Get source layer - should be set by build_expression
+                source_layer = getattr(self, 'source_geom', None)
+                if not source_layer:
+                    self.log_error("No source layer/geometry provided for geometric filtering")
+                    return False
+                
+                # Check feature count and decide on strategy
+                feature_count = layer.featureCount()
+                
+                # Ensure spatial index exists (performance boost)
+                self._ensure_spatial_index(layer)
+                
+                # Only log for large datasets
+                if feature_count >= 100000:
+                    self.log_info(f"Large dataset ({feature_count:,} features)")
+                
+                # Decide which method to use based on dataset size
+                if feature_count >= 10000:
+                    return self._apply_filter_large(
+                        layer, source_layer, predicates, buffer_value,
+                        old_subset, combine_operator
+                    )
+                else:
+                    return self._apply_filter_standard(
+                        layer, source_layer, predicates, buffer_value,
+                        old_subset, combine_operator
+                    )
+                
+            except Exception as e:
+                self.log_error(f"Error applying OGR filter: {str(e)}")
+                import traceback
+                self.log_debug(f"Traceback: {traceback.format_exc()}")
                 return False
-            
-            # Check feature count and decide on strategy
-            feature_count = layer.featureCount()
-            
-            # Ensure spatial index exists (performance boost)
-            self._ensure_spatial_index(layer)
-            
-            # Only log for large datasets
-            if feature_count >= 100000:
-                self.log_info(f"Large dataset ({feature_count:,} features)")
-            
-            # Decide which method to use based on dataset size
-            if feature_count >= 10000:
-                return self._apply_filter_large(
-                    layer, source_layer, predicates, buffer_value,
-                    old_subset, combine_operator
-                )
-            else:
-                return self._apply_filter_standard(
-                    layer, source_layer, predicates, buffer_value,
-                    old_subset, combine_operator
-                )
-            
-        except Exception as e:
-            self.log_error(f"Error applying OGR filter: {str(e)}")
-            import traceback
-            self.log_debug(f"Traceback: {traceback.format_exc()}")
-            return False
     
     def _apply_buffer(self, source_layer, buffer_value):
         """Apply buffer to source layer if specified.
