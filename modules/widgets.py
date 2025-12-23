@@ -170,7 +170,11 @@ class PopulateListEngineTask(QgsTask):
         
         except Exception as e:
             self.exception = e
-            logger.error(f'PopulateListEngineTask failed: {e}', exc_info=True)
+            # ENHANCED LOGGING: Log full exception details for debugging
+            import traceback
+            logger.error(f'PopulateListEngineTask failed for action "{self.action}": {e}')
+            logger.error(f'  Layer: {self.layer.name() if self.layer else "None"}')
+            logger.error(f'  Traceback:\n{traceback.format_exc()}')
             return False
 
     def get_task_action_and_layer(self):
@@ -184,6 +188,12 @@ class PopulateListEngineTask(QgsTask):
         layer_features_source = None
         total_features_list_count = 0
         filter_expression_request = QgsFeatureRequest()
+        
+        # DEBUG: Log entry point
+        logger.debug(f"buildFeaturesList: Starting for layer '{self.layer.name() if self.layer else 'None'}'")
+        logger.debug(f"  → identifier_field_name: {self.identifier_field_name}")
+        logger.debug(f"  → display_expression: {self.display_expression}")
+        logger.debug(f"  → is_field_flag: {self.is_field_flag}")
 
         subset_string_init = self.layer.subsetString()
         if subset_string_init != '':
@@ -376,6 +386,13 @@ class PopulateListEngineTask(QgsTask):
         list_to_load = self.parent.list_widgets[self.layer.id()].getFeaturesList()
 
         total_count = len(list_to_load)
+        
+        # CRITICAL FIX: Prevent division by zero when list is empty
+        if total_count == 0:
+            logger.warning(f"loadFeaturesList: No features to load for layer '{self.layer.name()}'")
+            self.updateFeatures()
+            return
+        
         for index, it in enumerate(list_to_load):
             lwi = QListWidgetItem(str(it[0]))
             lwi.setData(0,str(it[0]))
@@ -588,9 +605,19 @@ class PopulateListEngineTask(QgsTask):
                 # Task was cancelled by user - no need to show message
                 pass
             elif self.exception is None:
-                # Task failed without exception - unexpected
-                show_warning('FilterMate', 'Task failed unexpectedly')
+                # Task failed without exception - log details for debugging
+                layer_name = self.layer.name() if self.layer else 'Unknown'
+                QgsMessageLog.logMessage(
+                    f'Task "{self.action}" failed for layer "{layer_name}" without exception',
+                    'FilterMate', Qgis.Warning)
             else:
+                # Log full exception details to QGIS Message Log
+                import traceback
+                layer_name = self.layer.name() if self.layer else 'Unknown'
+                error_details = f'Task "{self.action}" failed for layer "{layer_name}": {str(self.exception)}'
+                QgsMessageLog.logMessage(error_details, 'FilterMate', Qgis.Critical)
+                QgsMessageLog.logMessage(f'Traceback: {traceback.format_exc()}', 'FilterMate', Qgis.Info)
+                
                 show_error('FilterMate', f'Error occurred: {str(self.exception)}')
                 logger.error(f'Task failed with exception: {self.exception}', exc_info=True)
 

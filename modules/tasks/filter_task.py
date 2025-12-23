@@ -1538,6 +1538,11 @@ class FilterEngineTask(QgsTask):
         
         # DIAGNOSTIC: Summary of filtering results
         self._log_filtering_summary(successful_filters, failed_filters)
+        
+        # CRITICAL FIX: Return False if ANY filter failed to alert user
+        if failed_filters > 0:
+            logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter (parallel mode) - returning False")
+            return False
         return True
     
     def _filter_all_layers_sequential(self):
@@ -1602,6 +1607,11 @@ class FilterEngineTask(QgsTask):
         
         # DIAGNOSTIC: Summary of filtering results
         self._log_filtering_summary(successful_filters, failed_filters)
+        
+        # CRITICAL FIX: Return False if ANY filter failed to alert user
+        if failed_filters > 0:
+            logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter - returning False")
+            return False
         return True
     
     def _log_filtering_summary(self, successful_filters: int, failed_filters: int):
@@ -1663,7 +1673,9 @@ class FilterEngineTask(QgsTask):
             return False
         
         # Filter all layers with progress tracking
+        logger.info("🚀 Starting _filter_all_layers_with_progress()...")
         result = self._filter_all_layers_with_progress()
+        logger.info(f"📊 _filter_all_layers_with_progress() returned: {result}")
         return result
     
     def qgis_expression_to_postgis(self, expression):

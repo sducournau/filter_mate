@@ -5683,7 +5683,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return [], ''
         
 
-    def exploring_zoom_clicked(self, features=[]):
+    def exploring_zoom_clicked(self, features=[], expression=None):
 
         if self.widgets_initialized is True and self.current_layer is not None:
 
@@ -5701,7 +5701,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 features, expression = self.get_current_features()
             
 
-            self.zooming_to_features(features)
+            self.zooming_to_features(features, expression)
 
 
     def get_filtered_layer_extent(self, layer):
@@ -5754,7 +5754,113 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"get_filtered_layer_extent error: {e}, falling back to layer extent")
             return layer.extent()
 
-    def zooming_to_features(self, features):
+    def _compute_zoom_extent_for_mode(self):
+        """
+        Compute the appropriate zoom extent based on the current exploring mode.
+        
+        For single selection: zoom to the selected feature's bounding box
+        For multiple selection: zoom to the combined extent of selected features
+        For custom selection: zoom to the combined extent of features matching the expression
+        
+        Returns:
+            QgsRectangle: The computed extent, or None if no features found
+        """
+        if not self.widgets_initialized or self.current_layer is None:
+            return None
+            
+        try:
+            extent = QgsRectangle()
+            features_found = 0
+            
+            if self.current_exploring_groupbox == "single_selection":
+                # Single selection: get the feature from the picker widget
+                feature_picker = self.widgets.get("EXPLORING", {}).get("SINGLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if feature_picker:
+                    feature = feature_picker.feature()
+                    if feature and feature.isValid():
+                        # Reload feature to ensure geometry is available
+                        try:
+                            reloaded = self.current_layer.getFeature(feature.id())
+                            if reloaded.isValid() and reloaded.hasGeometry() and not reloaded.geometry().isEmpty():
+                                extent = reloaded.geometry().boundingBox()
+                                features_found = 1
+                                logger.debug(f"_compute_zoom_extent_for_mode: Single feature extent computed")
+                        except Exception as e:
+                            logger.warning(f"_compute_zoom_extent_for_mode: Error reloading single feature: {e}")
+                            
+            elif self.current_exploring_groupbox == "multiple_selection":
+                # Multiple selection: get checked items and compute combined extent
+                combo = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+                if combo:
+                    checked_items = combo.checkedItems()
+                    if checked_items:
+                        # Try to get features by their IDs
+                        layer_props = self.PROJECT_LAYERS.get(self.current_layer.id(), {})
+                        pk_name = layer_props.get("infos", {}).get("primary_key_name")
+                        pk_is_numeric = layer_props.get("infos", {}).get("primary_key_is_numeric", True)
+                        
+                        for item in checked_items:
+                            try:
+                                # item format: (display_value, pk_value, ...)
+                                if isinstance(item, (list, tuple)) and len(item) > 1:
+                                    pk_value = item[1]
+                                    # Build expression to fetch this feature
+                                    if pk_name:
+                                        if pk_is_numeric:
+                                            expr = f'"{pk_name}" = {pk_value}'
+                                        else:
+                                            expr = f'"{pk_name}" = \'{pk_value}\''
+                                        qgs_expr = QgsExpression(expr)
+                                        if qgs_expr.isValid():
+                                            for feat in self.current_layer.getFeatures(QgsFeatureRequest(qgs_expr)):
+                                                if feat.hasGeometry() and not feat.geometry().isEmpty():
+                                                    if extent.isEmpty():
+                                                        extent = feat.geometry().boundingBox()
+                                                    else:
+                                                        extent.combineExtentWith(feat.geometry().boundingBox())
+                                                    features_found += 1
+                                                    break  # Only one feature per pk_value
+                            except Exception as e:
+                                logger.debug(f"_compute_zoom_extent_for_mode: Error processing multiple item: {e}")
+                                
+            elif self.current_exploring_groupbox == "custom_selection":
+                # Custom selection: get expression and fetch matching features
+                expr_widget = self.widgets.get("EXPLORING", {}).get("CUSTOM_SELECTION_EXPRESSION", {}).get("WIDGET")
+                if expr_widget:
+                    expression = expr_widget.expression()
+                    if expression:
+                        qgs_expr = QgsExpression(expression)
+                        # Only process if it's a filter expression (not just a field name)
+                        if qgs_expr.isValid() and not qgs_expr.isField():
+                            try:
+                                request = QgsFeatureRequest(qgs_expr)
+                                for feat in self.current_layer.getFeatures(request):
+                                    if feat.hasGeometry() and not feat.geometry().isEmpty():
+                                        if extent.isEmpty():
+                                            extent = feat.geometry().boundingBox()
+                                        else:
+                                            extent.combineExtentWith(feat.geometry().boundingBox())
+                                        features_found += 1
+                            except Exception as e:
+                                logger.warning(f"_compute_zoom_extent_for_mode: Error fetching custom features: {e}")
+            
+            if features_found > 0 and not extent.isEmpty():
+                # Add small padding (10% of extent size, minimum 10 units)
+                width_padding = max(extent.width() * 0.1, 10)
+                height_padding = max(extent.height() * 0.1, 10)
+                extent.grow(max(width_padding, height_padding))
+                logger.debug(f"_compute_zoom_extent_for_mode: Computed extent from {features_found} features for mode '{self.current_exploring_groupbox}'")
+                return extent
+            else:
+                # Fallback to filtered layer extent
+                logger.debug(f"_compute_zoom_extent_for_mode: No features found for mode '{self.current_exploring_groupbox}', using filtered layer extent")
+                return self.get_filtered_layer_extent(self.current_layer)
+                
+        except Exception as e:
+            logger.warning(f"_compute_zoom_extent_for_mode error: {e}")
+            return self.get_filtered_layer_extent(self.current_layer)
+
+    def zooming_to_features(self, features, expression=None):
         
         if self.widgets_initialized is True and self.current_layer is not None:
 
@@ -5771,6 +5877,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # DIAGNOSTIC: Log incoming features
             logger.info(f"🔍 zooming_to_features DIAGNOSTIC:")
             logger.info(f"   features count: {len(features) if features else 0}")
+            logger.info(f"   expression: '{expression}'")
             if features and len(features) > 0:
                 for i, f in enumerate(features[:3]):
                     has_geom = f.hasGeometry() if hasattr(f, 'hasGeometry') else 'N/A'
@@ -5780,11 +5887,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         geom = f.geometry()
                         logger.info(f"      geometry: type={geom.type()}, isEmpty={geom.isEmpty()}")
             
+            # IMPROVED: If features list is empty but we have an expression, try to fetch features
+            if (not features or not isinstance(features, list) or len(features) == 0) and expression:
+                logger.debug(f"zooming_to_features: Empty features list, trying to fetch from expression: {expression}")
+                try:
+                    qgs_expr = QgsExpression(expression)
+                    if qgs_expr.isValid():
+                        request = QgsFeatureRequest(qgs_expr)
+                        features = list(self.current_layer.getFeatures(request))
+                        logger.debug(f"zooming_to_features: Fetched {len(features)} features from expression")
+                except Exception as e:
+                    logger.warning(f"zooming_to_features: Failed to fetch features from expression: {e}")
+            
             # Safety check: ensure features is a list
             if not features or not isinstance(features, list) or len(features) == 0:
-                # IMPROVED: Zoom to filtered extent instead of global layer extent
-                logger.debug("zooming_to_features: No features provided, zooming to filtered layer extent")
-                extent = self.get_filtered_layer_extent(self.current_layer)
+                # IMPROVED: Zoom to extent based on current exploring mode
+                logger.debug("zooming_to_features: No features provided, computing extent based on mode")
+                extent = self._compute_zoom_extent_for_mode()
                 if extent and not extent.isEmpty():
                     self.iface.mapCanvas().zoomToFeatureExtent(extent)
                 else:
@@ -5812,9 +5931,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.info(f"   features_with_geometry count: {len(features_with_geometry)}")
 
                 if len(features_with_geometry) == 0:
-                    # IMPROVED: Zoom to filtered extent instead of global layer extent
-                    logger.debug("zooming_to_features: No features have geometry, zooming to filtered layer extent")
-                    extent = self.get_filtered_layer_extent(self.current_layer)
+                    # IMPROVED: Zoom to extent based on current exploring mode
+                    logger.debug("zooming_to_features: No features have geometry, computing extent based on mode")
+                    extent = self._compute_zoom_extent_for_mode()
                     if extent and not extent.isEmpty():
                         self.iface.mapCanvas().zoomToFeatureExtent(extent)
                     return
@@ -5842,13 +5961,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         work_crs = layer_crs
                     
                     if str(feature.geometry().type()) == 'GeometryType.Point':
-                        # Apply buffer in meters (work_crs is now always metric)
+                        # Points need a buffer since they have no bounding box
                         buffer_distance = 50  # 50 meters for all points
                         box = geom.buffer(buffer_distance, 5).boundingBox()
                     else:
-                        # For polygons/lines, add small buffer for better visibility
+                        # IMPROVED: For polygons/lines, zoom to the actual feature bounding box
+                        # with a small percentage-based padding for better visibility
                         box = geom.boundingBox()
-                        box.grow(10)  # 10 meters expansion in all cases
+                        if not box.isEmpty():
+                            # Add 10% padding based on feature size (minimum 5 meters)
+                            width_padding = max(box.width() * 0.1, 5)
+                            height_padding = max(box.height() * 0.1, 5)
+                            box.grow(max(width_padding, height_padding))
+                        else:
+                            # Fallback for empty bounding box
+                            box.grow(10)
                     
                     # Transform box to canvas CRS if needed
                     if work_crs != canvas_crs:
