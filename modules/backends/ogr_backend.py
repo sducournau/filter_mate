@@ -6,16 +6,22 @@ Fallback backend for OGR-based providers (Shapefiles, GeoPackage, etc.).
 Uses QGIS processing algorithms for filtering since OGR providers don't support
 complex SQL expressions like PostgreSQL/Spatialite.
 
-CRITICAL THREAD SAFETY (v2.3.9):
-================================
-This backend manipulates QGIS layer objects directly (selectedFeatures, 
-startEditing, commitChanges, etc.) which are NOT thread-safe.
+CRITICAL THREAD SAFETY (v2.3.9, v2.3.12):
+=========================================
+This backend manipulates QGIS layer objects directly (selectedFeatures, etc.)
+which are NOT thread-safe when used with signals.
 
-OGR backend operations MUST run on the main thread or sequentially.
-Parallel execution causes "Windows fatal exception: access violation".
+v2.3.12 FIX: Replaced startEditing/commitChanges with direct data provider calls.
+- startEditing/commitChanges trigger layer modification signals
+- Main thread UI (QgsLayerTreeModel) receives these signals
+- This causes "Windows fatal exception: access violation"
+- Using dataProvider().changeAttributeValues() bypasses signals
+
+OGR backend operations still run sequentially for safety, but the direct
+provider approach is more robust and avoids signal-related crashes.
 
 The ParallelFilterExecutor automatically detects OGR layers and forces 
-sequential execution to prevent crashes.
+sequential execution for additional safety.
 
 GDAL ERROR HANDLING (v2.3.11):
 ==============================
@@ -283,10 +289,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         Apply filter using QGIS processing selectbylocation algorithm.
         
-        CRITICAL THREAD SAFETY (v2.3.9):
-        This method manipulates QGIS layer objects (selectedFeatures, startEditing, etc.)
-        which are NOT thread-safe. Must be called sequentially, not in parallel.
-        The ParallelFilterExecutor automatically forces sequential mode for OGR layers.
+        CRITICAL THREAD SAFETY (v2.3.9, v2.3.12):
+        This method manipulates QGIS layer objects (selectedFeatures, etc.)
+        which require careful handling for thread safety.
+        
+        v2.3.12: Uses data provider directly instead of edit mode to avoid
+        layer signals that cause access violations when received by the main thread.
+        The ParallelFilterExecutor still forces sequential mode for OGR layers.
         
         Uses optimized method for large datasets (≥10k features):
         - Ensures spatial index exists
@@ -1287,6 +1296,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"Temp field '{temp_field}' not found after creation")
                 return False
             
+            # STABILITY FIX v2.3.12: Use data provider directly instead of edit mode
+            # startEditing/commitChanges trigger layer signals that cause access violations
+            # when called from background threads (the main thread's UI reacts to these signals)
+            # Using data provider bypasses the signal mechanism and is thread-safe.
+            data_provider = layer.dataProvider()
+            if data_provider is None:
+                self.log_error(f"Layer {layer.name()} has no data provider")
+                return False
+            
             # STABILITY FIX v2.3.9: Use feature IDs list to avoid iterator issues
             # Materializing the feature list first prevents concurrent modification issues
             try:
@@ -1295,24 +1313,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"Failed to get features for initialization: {e}")
                 return False
             
-            if not layer.startEditing():
-                self.log_error(f"Failed to start editing on {layer.name()} for initialization")
-                return False
-            
+            # Initialize all values to 0 using data provider (no edit mode)
             try:
-                for fid in feature_ids:
-                    layer.changeAttributeValue(fid, field_idx, 0)
-                
-                if not layer.commitChanges():
-                    self.log_error(f"Failed to commit initialization changes")
-                    layer.rollBack()
+                # Build attribute changes dict: {fid: {field_idx: value}}
+                attr_changes = {fid: {field_idx: 0} for fid in feature_ids}
+                if not data_provider.changeAttributeValues(attr_changes):
+                    self.log_error(f"Failed to initialize temp field values")
                     return False
             except (RuntimeError, AttributeError) as e:
                 self.log_error(f"Error during initialization: {e}")
-                try:
-                    layer.rollBack()
-                except:
-                    pass
                 return False
             
             # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
@@ -1325,32 +1334,23 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             if selected_count > 0:
                 # Mark selected features in temp field
-                # STABILITY FIX v2.3.9: Use list() to materialize iterator before editing
-                # This prevents access violation if selection changes during iteration
+                # STABILITY FIX v2.3.12: Use data provider directly instead of edit mode
+                # This prevents access violations caused by layer signals from background threads
                 try:
                     selected_features = list(layer.selectedFeatures())
                 except (RuntimeError, AttributeError) as e:
                     self.log_error(f"Failed to get selected features: {e}")
                     return False
                 
-                if not layer.startEditing():
-                    self.log_error(f"Failed to start editing on {layer.name()}")
-                    return False
-                
+                # Use data provider to update attribute values (thread-safe, no signals)
                 try:
-                    for feature in selected_features:
-                        layer.changeAttributeValue(feature.id(), field_idx, 1)
-                    
-                    if not layer.commitChanges():
-                        self.log_error(f"Failed to commit changes on {layer.name()}")
-                        layer.rollBack()
+                    # Build attribute changes dict: {fid: {field_idx: value}}
+                    attr_changes = {f.id(): {field_idx: 1} for f in selected_features}
+                    if not data_provider.changeAttributeValues(attr_changes):
+                        self.log_error(f"Failed to mark selected features")
                         return False
                 except (RuntimeError, AttributeError) as e:
                     self.log_error(f"Error during attribute update: {e}")
-                    try:
-                        layer.rollBack()
-                    except:
-                        pass
                     return False
                 
                 # Clear selection - wrapped in try-except for safety
