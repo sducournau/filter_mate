@@ -6,23 +6,23 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.4.4
+version=2.4.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.4 - Critical Thread Safety Fix
+about=FilterMate v2.4.5 - Processing Parameter Validation Crash Fix
 
- NEW in v2.4.4:
+ NEW in v2.4.5:
+ - 🔥 CRITICAL FIX: Access violation in checkParameterValues during geometric filtering
+ - 🛡️ Pre-flight validation: Tests layer access before calling processing.run()
+ - 🔒 Catches corrupted/invalid layers that crash GEOS at C++ level
+ - 📝 Three-tier validation: input layer → intersect layer → final pre-flight check
+ 
+ Previous (v2.4.4):
  - 🔥 CRITICAL FIX: Parallel filtering access violation crash (Windows fatal exception)
  - 🛡️ Thread Safety: OGR layers now always filter sequentially (QGIS objects not thread-safe)
  - 🔒 Added thread detection to OGR backend with warning on concurrent access
  - 📝 Improved logging for parallel vs sequential execution decisions
- 
- Previous (v2.4.3):
- - 🐛 Fixed export system: Files now export with correct extensions (.shp, .gpkg, .geojson, etc.)
- - 🔧 Fixed driver mapping: Proper QGIS driver names for all export formats
- - 💬 Improved message bar: Better error reporting with correct argument order
- - 🛡️ ValueRelation fallback: Gracefully handles missing referenced layers
  - ⚙️ Fixed expression context: represent_value() now works properly with layer context
  
  Core features:

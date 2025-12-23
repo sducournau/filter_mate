@@ -58,6 +58,60 @@ logger = logging.getLogger('FilterMate')
 # Utilities
 from .appUtils import safe_set_subset_string, is_layer_source_available
 from .feedback_utils import show_warning, show_error
+from .object_safety import is_valid_layer, is_gpkg_file_accessible, refresh_ogr_layer
+
+
+def safe_iterate_features(layer_or_source, request=None, max_retries=3, retry_delay=0.5):
+    """
+    Safely iterate over features from a layer or feature source.
+    
+    Handles OGR/GeoPackage errors like "unable to open database file" with retry logic.
+    
+    Args:
+        layer_or_source: QgsVectorLayer, QgsVectorDataProvider, or QgsAbstractFeatureSource
+        request: Optional QgsFeatureRequest
+        max_retries: Number of retry attempts (default 3)
+        retry_delay: Initial delay between retries in seconds (default 0.5)
+        
+    Yields:
+        Features from the layer/source
+    """
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            if request:
+                iterator = layer_or_source.getFeatures(request)
+            else:
+                iterator = layer_or_source.getFeatures()
+            
+            for feature in iterator:
+                yield feature
+            return  # Successfully completed iteration
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check for known recoverable OGR/SQLite errors
+            is_recoverable = any(x in error_str for x in [
+                'unable to open database file',
+                'database is locked',
+                'disk i/o error',
+                'sqlite3_step',
+            ])
+            
+            if is_recoverable and attempt < max_retries - 1:
+                layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
+                logger.warning(
+                    f"OGR access error on '{layer_name}' (attempt {attempt + 1}/{max_retries}): {e}. "
+                    f"Retrying in {retry_delay}s..."
+                )
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
+                logger.error(f"Failed to iterate features from '{layer_name}': {e}")
+                return  # Stop iteration on unrecoverable error
 
 
 def get_feature_attribute(feature, field_name):
@@ -367,14 +421,14 @@ class PopulateListEngineTask(QgsTask):
                             features_list.append(arr)
                             self.setProgress((index/total_count)*100)
 
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
             self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
 
 
     def loadFeaturesList(self, new_list=True):
         current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[self.layer.id()].getSelectedFeaturesList()]
-        nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+        nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
         
         if new_list is True:
             self.parent.list_widgets[self.layer.id()].clear()
@@ -464,7 +518,7 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             total_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
 
             for index in range(total_count):
                 item = list_widget.item(index)
@@ -480,8 +534,8 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
-            total_count = widget_count - len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            total_count = widget_count - len(nonSubset_features_list)
 
             for index in range(widget_count):
                 item = list_widget.item(index)
@@ -496,8 +550,8 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'Select All (subset)':
 
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
-            total_count = len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            total_count = len(nonSubset_features_list)
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
 
@@ -520,7 +574,7 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             total_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
 
             for index in range(total_count):
                 item = list_widget.item(index)
@@ -535,8 +589,8 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
-            total_count = widget_count - len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            total_count = widget_count - len(nonSubset_features_list)
 
             for index in range(widget_count):
                 item = list_widget.item(index)
@@ -551,8 +605,8 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'De-select All (subset)':
 
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()]
-            total_count = len([get_feature_attribute(feature, self.identifier_field_name) for feature in self.layer.getFeatures()])
+            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            total_count = len(nonSubset_features_list)
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
 
@@ -939,7 +993,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         if event.type() == QEvent.MouseButtonPress and obj == self.list_widgets[self.layer.id()].viewport():
             identifier_field_name = self.list_widgets[self.layer.id()].getIdentifierFieldName()
-            nonSubset_features_list = [feature[identifier_field_name] for feature in self.layer.getFeatures()]
+            nonSubset_features_list = [feature[identifier_field_name] for feature in safe_iterate_features(self.layer)]
             if event.button() == Qt.LeftButton:
                 clicked_item = self.list_widgets[self.layer.id()].itemAt(event.pos())
                 if clicked_item is not None:

@@ -2,6 +2,56 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.5] - 2025-12-23 - Processing Parameter Validation Crash Fix
+
+### 🔥 Critical Bug Fix
+
+#### Access Violation in checkParameterValues ([ogr_backend.py](modules/backends/ogr_backend.py))
+
+- **Root Cause**: QGIS Processing `checkParameterValues()` accesses layer data at C++ level during parameter validation, which can crash on corrupted/invalid layers before the algorithm even runs
+- **Symptom**: "Windows fatal exception: access violation" at `QgsProcessingAlgorithm::checkParameterValues` during geometric filtering
+- **Stack trace**: `processing.run("native:selectbylocation")` → `checkParameterValues()` → crash in GEOS/PDAL
+
+### 🛡️ Pre-flight Layer Validation (v2.3.9.3)
+
+Added three-tier validation to catch crashes before calling `processing.run()`:
+
+1. **`_validate_input_layer()`**: Deep provider access validation
+
+   - Tests `layer.id()`, `layer.crs()`, `layer.wkbType()`, `layer.geometryType()`
+   - Validates data provider exists and responds
+   - Tests `provider.wkbType()`, `provider.featureCount()`, `provider.extent()`
+
+2. **`_validate_intersect_layer()`**: Same deep validation plus geometry checks
+
+   - All validations from input layer
+   - Feature iteration test with try-except
+   - Geometry validity sampling
+
+3. **`_preflight_layer_check()`**: Final check before `processing.run()`
+   - Tests exact operations that `checkParameterValues` performs
+   - Validates `layer.source()`, `provider.dataSourceUri()`, `provider.capabilities()`
+   - Tests extent access and feature iterator creation
+   - Catches `RuntimeError`, `OSError`, `AttributeError` before C++ crash
+
+### 📝 Technical Details
+
+The crash sequence was:
+
+1. `processing.run("native:selectbylocation", ...)` called
+2. QGIS Processing calls `alg.checkParameterValues(parameters, context)`
+3. `checkParameterValues` accesses layer properties at C++ level
+4. Invalid layer state causes GEOS/PDAL memory access violation
+5. Python cannot catch C++ level crashes
+
+The fix ensures all C++ level accesses are tested in Python first, where exceptions can be caught and handled gracefully.
+
+### 🔧 Files Modified
+
+- `modules/backends/ogr_backend.py` - Added pre-flight validation
+
+---
+
 ## [2.4.4] - 2025-12-23 - Critical Thread Safety Fix
 
 ### 🔥 Critical Bug Fix

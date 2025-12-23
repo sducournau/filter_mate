@@ -463,6 +463,170 @@ class SafeSignalContext:
 
 
 # =============================================================================
+# GeoPackage / OGR Layer Safety Functions (v2.3.10)
+# =============================================================================
+
+def is_gpkg_file_accessible(layer: QgsVectorLayer) -> bool:
+    """
+    Check if a GeoPackage layer's underlying file is accessible.
+    
+    OGR/GeoPackage errors like "unable to open database file" often occur when:
+    - File is locked by another process
+    - File was moved/deleted
+    - Concurrent access causes SQLite locking
+    
+    Args:
+        layer: QGIS vector layer to check
+        
+    Returns:
+        True if file is accessible, False otherwise
+    """
+    import os
+    
+    if not is_valid_layer(layer):
+        return False
+    
+    try:
+        # Only applies to OGR provider (includes GeoPackage)
+        if layer.providerType() != 'ogr':
+            return True
+        
+        # Extract file path from layer source
+        source = layer.source()
+        if not source:
+            return False
+        
+        # GeoPackage source format: "/path/to/file.gpkg|layername=layer_name"
+        file_path = source.split('|')[0]
+        
+        # Check if file exists and is readable
+        if not os.path.exists(file_path):
+            logger.warning(f"GeoPackage file not found: {file_path}")
+            return False
+        
+        if not os.access(file_path, os.R_OK):
+            logger.warning(f"GeoPackage file not readable: {file_path}")
+            return False
+        
+        # Try to detect if file is locked by attempting a read
+        # This doesn't guarantee no locking issues but catches obvious cases
+        try:
+            with open(file_path, 'rb') as f:
+                # Just read the SQLite header (first 16 bytes)
+                header = f.read(16)
+                if not header.startswith(b'SQLite format 3'):
+                    logger.warning(f"File is not a valid SQLite/GeoPackage: {file_path}")
+                    return False
+        except IOError as e:
+            logger.warning(f"GeoPackage file locked or inaccessible: {file_path} - {e}")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Error checking GeoPackage accessibility: {e}")
+        return False
+
+
+def safe_get_features(layer: QgsVectorLayer, request=None, max_retries: int = 3, 
+                      retry_delay: float = 0.5) -> list:
+    """
+    Safely get features from a layer with retry logic for OGR/GeoPackage layers.
+    
+    Handles the common OGR error:
+    "sqlite3_step() : unable to open database file"
+    
+    This error occurs when the GeoPackage file is temporarily locked by another
+    operation. The retry logic allows brief locks to clear.
+    
+    Args:
+        layer: QGIS vector layer
+        request: Optional QgsFeatureRequest
+        max_retries: Maximum number of retry attempts (default 3)
+        retry_delay: Delay between retries in seconds (default 0.5)
+        
+    Returns:
+        List of features, or empty list on failure
+        
+    Example:
+        features = safe_get_features(layer, QgsFeatureRequest().setLimit(100))
+    """
+    import time
+    from qgis.core import QgsFeatureRequest
+    
+    if not is_valid_layer(layer):
+        logger.warning("safe_get_features: Invalid layer provided")
+        return []
+    
+    # For non-OGR layers, just get features directly
+    is_ogr = layer.providerType() == 'ogr'
+    
+    for attempt in range(max_retries):
+        try:
+            if request:
+                features = list(layer.getFeatures(request))
+            else:
+                features = list(layer.getFeatures())
+            return features
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check for known recoverable errors
+            is_recoverable = any(x in error_str for x in [
+                'unable to open database file',
+                'database is locked',
+                'disk i/o error',
+            ])
+            
+            if is_recoverable and attempt < max_retries - 1:
+                logger.warning(
+                    f"OGR/GeoPackage access error (attempt {attempt + 1}/{max_retries}): {e}. "
+                    f"Retrying in {retry_delay}s..."
+                )
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error(f"Failed to get features from layer '{layer.name()}': {e}")
+                return []
+    
+    return []
+
+
+def refresh_ogr_layer(layer: QgsVectorLayer) -> bool:
+    """
+    Refresh an OGR layer's data source to clear stale connections.
+    
+    Useful when encountering "unable to open database file" errors
+    due to stale file handles or connection issues.
+    
+    Args:
+        layer: OGR-based vector layer to refresh
+        
+    Returns:
+        True if refresh succeeded, False otherwise
+    """
+    if not is_valid_layer(layer):
+        return False
+    
+    try:
+        if layer.providerType() != 'ogr':
+            return True  # Not an OGR layer, nothing to refresh
+        
+        # Trigger provider refresh
+        layer.dataProvider().reloadData()
+        layer.reload()
+        layer.triggerRepaint()
+        
+        logger.debug(f"Refreshed OGR layer: {layer.name()}")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Failed to refresh OGR layer '{layer.name()}': {e}")
+        return False
+
+
+# =============================================================================
 # Exports
 # =============================================================================
 
@@ -486,4 +650,9 @@ __all__ = [
     # Context managers
     'SafeLayerContext',
     'SafeSignalContext',
+    
+    # GeoPackage/OGR safety (v2.3.10)
+    'is_gpkg_file_accessible',
+    'safe_get_features',
+    'refresh_ogr_layer',
 ]

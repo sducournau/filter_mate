@@ -696,18 +696,97 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         return predicate_codes
     
+    def _preflight_layer_check(self, layer: QgsVectorLayer, param_name: str) -> bool:
+        """
+        Pre-flight check before passing layer to processing.run().
+        
+        CRITICAL STABILITY FIX v2.3.9.3:
+        This method tests the exact operations that QGIS Processing performs
+        during checkParameterValues(). If any of these fail, we abort before
+        calling processing.run() to prevent C++ level crashes.
+        
+        Args:
+            layer: Layer to validate
+            param_name: Parameter name for logging (e.g., "INPUT", "INTERSECT")
+            
+        Returns:
+            True if layer passes all pre-flight checks, False otherwise
+        """
+        if layer is None:
+            self.log_error(f"Pre-flight check: {param_name} layer is None")
+            return False
+        
+        try:
+            # These are the operations that checkParameterValues performs:
+            
+            # 1. Check layer validity
+            if not layer.isValid():
+                self.log_error(f"Pre-flight check: {param_name} layer.isValid() = False")
+                return False
+            
+            # 2. Get layer source (used by Processing to identify the layer)
+            source = layer.source()
+            if not source:
+                self.log_warning(f"Pre-flight check: {param_name} layer has empty source (memory layer)")
+            
+            # 3. Access data provider
+            provider = layer.dataProvider()
+            if provider is None:
+                self.log_error(f"Pre-flight check: {param_name} layer has no data provider")
+                return False
+            
+            # 4. Check provider can be accessed (this is where crashes often occur)
+            try:
+                uri = provider.dataSourceUri()
+                caps = provider.capabilities()
+            except Exception as provider_error:
+                self.log_error(f"Pre-flight check: {param_name} provider access failed: {provider_error}")
+                return False
+            
+            # 5. Verify extent can be computed (required for spatial operations)
+            try:
+                extent = layer.extent()
+                if extent.isNull() or extent.isEmpty():
+                    # Empty extent is OK for layers with no features
+                    if layer.featureCount() > 0:
+                        self.log_warning(f"Pre-flight check: {param_name} layer has null/empty extent despite having features")
+            except Exception as extent_error:
+                self.log_error(f"Pre-flight check: {param_name} extent access failed: {extent_error}")
+                return False
+            
+            # 6. Test that we can start feature iteration (but don't iterate all)
+            try:
+                request = layer.getFeatures()
+                # Just test that we can get the iterator, don't consume it
+                del request
+            except Exception as iter_error:
+                self.log_error(f"Pre-flight check: {param_name} cannot create feature iterator: {iter_error}")
+                return False
+            
+            self.log_debug(f"✓ Pre-flight check passed for {param_name}: {layer.name()}")
+            return True
+            
+        except (RuntimeError, OSError) as access_error:
+            self.log_error(f"Pre-flight check: {param_name} layer access error: {access_error}")
+            return False
+        except Exception as unexpected:
+            self.log_error(f"Pre-flight check: {param_name} unexpected error: {unexpected}")
+            return False
+    
     def _validate_intersect_layer(self, intersect_layer: QgsVectorLayer) -> bool:
         """
         Validate that the intersect layer is safe to use for spatial operations.
         
-        CRITICAL STABILITY FIX v2.3.9:
+        CRITICAL STABILITY FIX v2.3.9.3:
         Prevents access violations when passing invalid layers to native:selectbylocation.
+        Tests the same layer properties that checkParameterValues accesses.
         
         Checks:
         1. Layer is not None and is a QgsVectorLayer
         2. Layer is valid
         3. Layer has at least one feature
         4. Features have valid geometries
+        5. Layer properties can be safely accessed
         
         Args:
             intersect_layer: The layer to validate
@@ -728,6 +807,34 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"Intersect layer is not valid: {intersect_layer.name()}")
             return False
         
+        # STABILITY FIX v2.3.9.3: Deep layer access validation
+        # Test the same properties that checkParameterValues accesses
+        try:
+            # Test basic properties that Processing accesses
+            _ = intersect_layer.id()
+            _ = intersect_layer.name()
+            _ = intersect_layer.crs().isValid()
+            _ = intersect_layer.wkbType()
+            _ = intersect_layer.geometryType()
+            
+            # Test data provider access (critical)
+            provider = intersect_layer.dataProvider()
+            if provider is None:
+                self.log_error(f"Intersect layer data provider is None")
+                return False
+            
+            # Test provider properties
+            _ = provider.wkbType()
+            _ = provider.featureCount()
+            _ = provider.extent()
+            
+        except (RuntimeError, OSError, AttributeError) as access_error:
+            self.log_error(f"Intersect layer access failed: {access_error}")
+            return False
+        except Exception as unexpected_error:
+            self.log_error(f"Unexpected error accessing intersect layer: {unexpected_error}")
+            return False
+        
         # Check feature count
         feature_count = intersect_layer.featureCount()
         if feature_count == 0:
@@ -737,15 +844,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
         # Check that at least one feature has a valid geometry
         has_valid_geometry = False
         invalid_geom_count = 0
-        for feature in intersect_layer.getFeatures():
-            geom = feature.geometry()
-            if validate_geometry(geom):
-                has_valid_geometry = True
-                break
-            else:
-                invalid_geom_count += 1
-                if invalid_geom_count >= 10:  # Check first 10 only for performance
+        try:
+            for feature in intersect_layer.getFeatures():
+                geom = feature.geometry()
+                if validate_geometry(geom):
+                    has_valid_geometry = True
                     break
+                else:
+                    invalid_geom_count += 1
+                    if invalid_geom_count >= 10:  # Check first 10 only for performance
+                        break
+        except (RuntimeError, OSError) as iter_error:
+            self.log_error(f"Failed to iterate intersect layer features: {iter_error}")
+            return False
         
         if not has_valid_geometry:
             self.log_error(f"Intersect layer has no valid geometries (checked {invalid_geom_count} features)")
@@ -758,8 +869,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         Validate that the input layer (to be filtered) is safe for spatial operations.
         
-        CRITICAL STABILITY FIX v2.3.9:
+        CRITICAL STABILITY FIX v2.3.9.3:
         Prevents access violations when passing invalid layers to native:selectbylocation.
+        Tests the same layer properties that checkParameterValues accesses to catch
+        crashes before calling processing.run().
         
         Args:
             layer: The layer to validate
@@ -777,6 +890,35 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         if not layer.isValid():
             self.log_error(f"Input layer is not valid: {layer.name()}")
+            return False
+        
+        # STABILITY FIX v2.3.9.3: Deep layer access validation
+        # Test the same properties that checkParameterValues accesses
+        # This catches crashes before calling processing.run()
+        try:
+            # Test basic properties that Processing accesses
+            _ = layer.id()
+            _ = layer.name()
+            _ = layer.crs().isValid()
+            _ = layer.wkbType()
+            _ = layer.geometryType()
+            
+            # Test data provider access (critical - this is where many crashes occur)
+            provider = layer.dataProvider()
+            if provider is None:
+                self.log_error(f"Input layer data provider is None: {layer.name()}")
+                return False
+            
+            # Test provider properties
+            _ = provider.wkbType()
+            _ = provider.featureCount()
+            _ = provider.extent()
+            
+        except (RuntimeError, OSError, AttributeError) as access_error:
+            self.log_error(f"Input layer access failed (layer may be corrupted or deleted): {access_error}")
+            return False
+        except Exception as unexpected_error:
+            self.log_error(f"Unexpected error accessing input layer: {unexpected_error}")
             return False
         
         # Check feature count - empty layers are OK (will just return no results)
@@ -858,6 +1000,16 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     self.log_debug(f"✓ Safe input layer: {safe_input.featureCount()} features")
             
             self.log_info(f"🔍 Executing selectbylocation with GEOS-safe geometries")
+            
+            # STABILITY FIX v2.3.9.3: Pre-flight validation of layers before processing.run()
+            # This catches issues that would cause checkParameterValues to crash at C++ level
+            actual_input = input_layer if not use_safe_input else safe_input
+            if not self._preflight_layer_check(actual_input, "INPUT"):
+                self.log_error("Pre-flight check failed for INPUT layer")
+                return False
+            if not self._preflight_layer_check(safe_intersect, "INTERSECT"):
+                self.log_error("Pre-flight check failed for INTERSECT layer")
+                return False
             
             # Execute with error handling - use safe layers
             if not use_safe_input:
