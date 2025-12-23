@@ -1974,18 +1974,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.warning(f"Layer not found in project: {layer_name}")
         
         # Zoom to filtered source layer extent (using actual filtered extent, not cached)
-        # Check if is_tracking (auto extent) is enabled for automatic zoom
-        is_tracking_enabled = False
+        # Always zoom when loading a favorite for better UX
         target_layer = source_layer if source_layer else (self.current_layer if hasattr(self, 'current_layer') else None)
-        
-        if target_layer and target_layer.id() in self.PROJECT_LAYERS:
-            layer_props = self.PROJECT_LAYERS[target_layer.id()]
-            is_tracking_enabled = layer_props.get("exploring", {}).get("is_tracking", False)
         
         try:
             from qgis.utils import iface
             
-            if is_tracking_enabled and target_layer and target_layer.featureCount() > 0:
+            if target_layer and target_layer.featureCount() > 0:
                 # Force update extents after filter application
                 target_layer.updateExtents()
                 
@@ -1994,14 +1989,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 if extent and not extent.isEmpty():
                     iface.mapCanvas().zoomToFeatureExtent(extent)
-                    logger.info(f"Zoomed to filtered extent of layer: {target_layer.name()} (is_tracking=True)")
+                    logger.info(f"Zoomed to filtered extent of layer: {target_layer.name()}")
                 else:
                     iface.mapCanvas().refresh()
             else:
-                # Just refresh without zooming if is_tracking is disabled
+                # Just refresh if no features match the filter
                 iface.mapCanvas().refresh()
                 if target_layer:
-                    logger.debug(f"Canvas refreshed without zoom (is_tracking={is_tracking_enabled})")
+                    logger.debug(f"Canvas refreshed (no features match filter)")
         except Exception as e:
             logger.warning(f"Could not zoom to filtered extent: {e}")
             try:

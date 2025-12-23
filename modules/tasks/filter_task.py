@@ -1332,6 +1332,7 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  → Reason: spatialite={'spatialite' in provider_list}, "
                        f"postgresql_wkt={postgresql_needs_wkt}, ogr_spatialite={ogr_needs_spatialite_geom}")
             logger.info(f"  → Features in task: {len(self.task_parameters['task'].get('features', []))}")
+            
             spatialite_success = False
             try:
                 self.prepare_spatialite_source_geom()
@@ -1409,9 +1410,11 @@ class FilterEngineTask(QgsTask):
                             logger.info("✓ Successfully used OGR geometry as fallback")
                     else:
                         logger.error("OGR fallback also failed - no geometry available")
+                        self.message = "Failed to prepare source geometry: OGR fallback also failed - no geometry available"
                         return False
                 except Exception as e2:
                     logger.error(f"OGR fallback failed: {e2}")
+                    self.message = f"Failed to prepare source geometry: OGR fallback failed - {e2}"
                     return False
                 finally:
                     # Reset fallback flag
@@ -1653,6 +1656,10 @@ class FilterEngineTask(QgsTask):
         # Prepare geometries for all provider types
         # NOTE: This will use self.param_buffer_value set above
         if not self._prepare_geometries_by_provider(provider_list):
+            # If self.message wasn't set by _prepare_geometries_by_provider, set a generic one
+            if not hasattr(self, 'message') or not self.message:
+                self.message = "Failed to prepare source geometries for distant layers filtering"
+            logger.error(f"_prepare_geometries_by_provider failed: {self.message}")
             return False
         
         # Filter all layers with progress tracking
@@ -4430,6 +4437,7 @@ class FilterEngineTask(QgsTask):
         else:
             logger.error("✗ No valid selection mode detected!")
             logger.error("  → features_list is empty AND expression is empty")
+            self.message = "No valid selection mode: no features selected and no expression provided"
             return False
         
         # Exécuter le filtrage de la couche source
@@ -4446,6 +4454,9 @@ class FilterEngineTask(QgsTask):
             logger.error("=" * 60)
             logger.error("⛔ ABORTING: Distant layers will NOT be filtered")
             logger.error("   Reason: Source filter must succeed before filtering distant layers")
+            # Set error message for user
+            source_name = self.source_layer.name() if self.source_layer else 'Unknown'
+            self.message = f"Failed to filter source layer '{source_name}'. Check Python console for details."
             return False
         
         # Vérifier le nombre de features après filtrage
@@ -4510,6 +4521,7 @@ class FilterEngineTask(QgsTask):
 
                 if self.isCanceled():
                     logger.warning("⚠ Task canceled during distant layers filtering")
+                    self.message = "Filter task was canceled by user"
                     return False
                 
                 if result is False:
@@ -4518,6 +4530,7 @@ class FilterEngineTask(QgsTask):
                     logger.error("=" * 60)
                     logger.warning("  → Source layer remains filtered")
                     logger.warning("  → Check logs for distant layer errors")
+                    self.message = "Source layer filtered, but some distant layers failed. Check Python console for details."
                     return False
                 
                 logger.info("=" * 60)

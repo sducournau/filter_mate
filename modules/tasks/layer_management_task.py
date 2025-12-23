@@ -788,22 +788,38 @@ class LayersManagementEngineTask(QgsTask):
         
         return True
 
-    def remove_project_layer(self, layer_id):
+    def remove_project_layer(self, layer):
         """
         Remove a layer from project tracking.
         
         Args:
-            layer_id (str): Layer ID to remove
+            layer: QgsVectorLayer object or layer ID string to remove
             
         Returns:
             bool: True if successful, False otherwise
         """
-        if isinstance(layer_id, str):
+        # Handle both QgsVectorLayer and str (layer_id) for backwards compatibility
+        if isinstance(layer, QgsVectorLayer):
+            layer_id = layer.id()
+        elif isinstance(layer, str):
+            layer_id = layer
+        else:
+            logger.warning(f"remove_project_layer: unexpected type {type(layer)}, expected QgsVectorLayer or str")
+            return False
+        
+        if layer_id not in self.project_layers:
+            logger.debug(f"remove_project_layer: layer_id '{layer_id}' not found in project_layers (may already be removed)")
+            return True  # Not an error - layer may have already been removed
+        
+        try:
             self.save_variables_from_layer(layer_id)    
             self.save_style_from_layer_id(layer_id)
             del self.project_layers[layer_id]
+            logger.debug(f"remove_project_layer: successfully removed layer '{layer_id}'")
             return True
-        return False
+        except Exception as e:
+            logger.error(f"remove_project_layer: error removing layer '{layer_id}': {e}")
+            return False
 
     def cleanup_postgresql_virtual_id_layers(self):
         """

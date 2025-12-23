@@ -132,8 +132,26 @@ def safe_set_subset_string(layer, expression):
         result = layer.setSubsetString(expression)
 
         if not result:
-            error_msg = layer.error().message() if layer.error() else 'none'
-            logger.warning(f"setSubsetString() returned False for {layer.name()}: {error_msg}")
+            # Get detailed error information
+            error_msg = 'Unknown error'
+            if layer.error():
+                error_msg = layer.error().message()
+            
+            # Log comprehensive error information
+            logger.warning(f"setSubsetString() returned False for {layer.name()}")
+            logger.warning(f"  → Error: {error_msg}")
+            logger.warning(f"  → Provider: {layer.providerType()}")
+            logger.warning(f"  → Expression length: {len(expression) if expression else 0} chars")
+            if expression:
+                logger.warning(f"  → Expression preview: {expression[:200]}...")
+            
+            # Check for common PostgreSQL errors
+            if 'syntax error' in error_msg.lower():
+                logger.error("  → SQL SYNTAX ERROR detected. Check expression formatting.")
+            elif 'column' in error_msg.lower() and 'does not exist' in error_msg.lower():
+                logger.error("  → COLUMN NOT FOUND. Check field names and case sensitivity.")
+            elif 'permission' in error_msg.lower():
+                logger.error("  → PERMISSION ERROR. Check database user permissions.")
 
         return result
 
@@ -143,7 +161,6 @@ def safe_set_subset_string(layer, expression):
         except (AttributeError, RuntimeError):
             lname = 'Unknown'
         logger.error(f"Failed to apply subset string to {lname}: {e}")
-        return False
         return False
 
 def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
