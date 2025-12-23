@@ -7,21 +7,27 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.4.3 - Streaming Export Fix
+## 🎉 What's New in v2.4.4 - Critical Thread Safety Fix
 
-### 🐛 Bug Fixes
+### 🔥 Critical Bug Fix
 
-- **Fixed Streaming Export Error** - Resolved missing `datatype` argument in `_save_layer_style()` that caused export failures
-- **Improved Message Bar Notifications** - Fixed argument order in all `pushMessage()` calls for better error reporting
-- **Better Partial Export Handling** - Users now see detailed messages when some layers fail during batch export
+- **Fixed Parallel Filtering Crash** - Resolved "Windows fatal exception: access violation" when filtering multiple OGR layers simultaneously
+- **Root Cause**: QGIS `QgsVectorLayer` objects are NOT thread-safe - multiple threads calling `selectedFeatures()`, `startEditing()`, etc. caused crashes
+- **Solution**: OGR layers and geometric filtering now always use sequential execution
 
-### 🔧 Technical Improvements
+### 🛡️ Thread Safety Improvements
 
-- Streaming exports now correctly save layer styles with proper format detection
-- Failed export operations display specific error messages instead of generic failures
-- Layer management tasks use correct message bar API
+- **Auto-detection**: `ParallelFilterExecutor` automatically detects OGR layers and forces sequential mode
+- **Database backends**: PostgreSQL/Spatialite can still run in parallel (database connections are thread-safe)
+- **Defense in depth**: OGR backend now tracks thread access and warns on concurrent calls
 
 ## Previous Updates
+
+### v2.4.3 - Export System Fix (December 22, 2025)
+
+- 🐛 Fixed streaming export error with missing datatype argument
+- 💬 Improved message bar notifications with correct argument order
+- 🔧 Better partial export handling with detailed failure messages
 
 ### v2.4.2 - ValueRelation & Display Enhancement (December 22, 2025)
 

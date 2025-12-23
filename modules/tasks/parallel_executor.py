@@ -5,15 +5,26 @@ Parallel Filter Executor for FilterMate
 Provides multi-threaded execution for filtering multiple layers simultaneously.
 Uses ThreadPoolExecutor for efficient parallel processing on multi-core systems.
 
-Performance Benefits:
-- 2-4× faster on multi-core systems when filtering many layers
-- Respects QGIS thread safety requirements
+CRITICAL THREAD SAFETY (v2.3.9):
+================================
+QGIS layer objects (QgsVectorLayer) are NOT thread-safe and must only be accessed
+from the main thread. Direct parallel execution of QGIS layer operations causes
+"Windows fatal exception: access violation" crashes.
+
+Thread Safety Rules:
+1. OGR backend operations MUST run sequentially (they manipulate layers directly)
+2. PostgreSQL/Spatialite backends CAN run in parallel (database-only operations)
+3. Any operation that calls layer.selectedFeatures(), layer.startEditing(),
+   layer.commitChanges(), or layer.getFeatures() MUST be on main thread
+
+Performance Benefits (when safe):
+- 2-4× faster on multi-core systems for database-backed layers
 - Configurable thread pool size
 
-Safety Considerations:
-- All QGIS UI operations are marshalled to main thread
-- Database connections are per-thread
-- Layer modifications use thread-safe signals
+Safety Implementation:
+- Auto-detects OGR layers and forces sequential execution
+- Database backends use per-thread connections (safe)
+- Parallel mode only enabled for database-backed operations
 
 Usage:
     from modules.tasks.parallel_executor import ParallelFilterExecutor
@@ -115,7 +126,19 @@ class ParallelFilterExecutor:
         cancel_check: Optional[Callable[[], bool]] = None
     ) -> List[FilterResult]:
         """
-        Filter multiple layers in parallel.
+        Filter multiple layers in parallel (when thread-safe) or sequentially.
+        
+        CRITICAL THREAD SAFETY (v2.3.9):
+        ================================
+        QGIS layer objects are NOT thread-safe. Operations like selectedFeatures(),
+        startEditing(), commitChanges(), and getFeatures() cause access violations
+        when called from multiple threads simultaneously.
+        
+        This method automatically detects when parallel execution is unsafe and
+        falls back to sequential execution:
+        - OGR layers: ALWAYS sequential (direct layer manipulation)
+        - PostgreSQL/Spatialite: Parallel OK (database-only operations)
+        - Mixed providers: Sequential (safest approach)
         
         Args:
             layers: List of (layer, layer_props) tuples to filter
@@ -137,7 +160,49 @@ class ParallelFilterExecutor:
             logger.info(f"Only {layer_count} layer(s) - using sequential execution")
             return self._filter_sequential(layers, filter_func, progress_callback, cancel_check)
         
+        # CRITICAL THREAD SAFETY FIX (v2.3.9):
+        # Check if ANY layer uses OGR provider - if so, MUST use sequential execution
+        # OGR operations manipulate QGIS layer objects directly which is NOT thread-safe
+        has_ogr_layers = False
+        provider_types = set()
+        
+        for layer, layer_props in layers:
+            provider_type = layer_props.get('_effective_provider_type', 'ogr')
+            if hasattr(layer, 'providerType'):
+                if layer.providerType() == 'postgres':
+                    provider_type = 'postgresql'
+                elif layer.providerType() == 'spatialite':
+                    provider_type = 'spatialite'
+                elif layer.providerType() == 'ogr':
+                    provider_type = 'ogr'
+            
+            provider_types.add(provider_type)
+            if provider_type == 'ogr':
+                has_ogr_layers = True
+        
+        # Force sequential execution for OGR layers to prevent access violations
+        if has_ogr_layers:
+            logger.warning(
+                f"⚠️ OGR layers detected - using SEQUENTIAL execution for thread safety. "
+                f"Parallel execution of OGR operations causes access violations because "
+                f"QGIS layer objects are not thread-safe. "
+                f"Providers: {provider_types}"
+            )
+            return self._filter_sequential(layers, filter_func, progress_callback, cancel_check)
+        
+        # Also force sequential if geometric filtering is enabled (uses layer operations)
+        filtering_params = task_parameters.get("filtering", {})
+        is_geometric = filtering_params.get("filter_type") == "geometric"
+        
+        if is_geometric:
+            logger.warning(
+                f"⚠️ Geometric filtering detected - using SEQUENTIAL execution for thread safety. "
+                f"Geometric operations use selectByLocation which is not thread-safe."
+            )
+            return self._filter_sequential(layers, filter_func, progress_callback, cancel_check)
+        
         logger.info(f"🚀 Starting parallel filtering of {layer_count} layers with {self._max_workers} workers")
+        logger.info(f"   Providers: {provider_types} (all database-backed, parallel OK)")
         start_time = time.time()
         
         # Track completion

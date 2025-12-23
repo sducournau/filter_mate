@@ -2,11 +2,54 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.4] - 2025-12-23 - Critical Thread Safety Fix
+
+### 🔥 Critical Bug Fix
+
+#### Parallel Filtering Access Violation Crash
+
+- **Root Cause**: Multiple worker threads simultaneously accessed QGIS layer objects (`QgsVectorLayer`) which are NOT thread-safe
+- **Symptom**: "Windows fatal exception: access violation" when filtering multiple OGR layers
+- **Fix**: OGR layers and geometric filtering now always use sequential execution
+
+### 🛡️ Thread Safety Improvements
+
+#### ParallelFilterExecutor Enhanced ([parallel_executor.py](modules/tasks/parallel_executor.py))
+
+- **Auto-detection**: Automatically detects OGR layers and forces sequential execution
+- **Geometric filtering safety**: Detects `filter_type: geometric` and uses sequential mode
+- **Parallel only for database backends**: PostgreSQL/Spatialite can still run in parallel (database connections are per-thread)
+- **Improved logging**: Clear messages about why sequential/parallel mode is chosen
+
+#### OGR Backend Thread Detection ([ogr_backend.py](modules/backends/ogr_backend.py))
+
+- **Thread tracking**: Added `_ogr_operations_lock` and `_last_operation_thread` tracking
+- **Concurrent access warning**: Logs warning if `apply_filter()` called from different threads
+- **Defense in depth**: Provides safety even if parallel execution is somehow triggered
+
+### 📝 Technical Details
+
+QGIS `QgsVectorLayer` objects use non-reentrant C++ code and Qt signals that crash when accessed concurrently:
+
+- `layer.selectedFeatures()` - Iterates internal data structures
+- `layer.startEditing()` / `layer.commitChanges()` - Modifies layer state
+- `layer.getFeatures()` - Creates iterators over internal data
+- `dataProvider.addFeatures()` - Writes to underlying data source
+
+### 🔧 Files Modified
+
+- `modules/tasks/parallel_executor.py` - Core thread safety fix
+- `modules/tasks/filter_task.py` - Pass filtering params for detection
+- `modules/backends/ogr_backend.py` - Thread detection and warnings
+
+---
+
 ## [2.4.3] - 2025-12-22 - Export System Fix & Message Bar Improvements
 
 ### 🐛 Bug Fixes
 
 #### Export System Completely Fixed
+
 - **Fixed missing file extensions**: Exported files now have correct extensions (.shp, .gpkg, .geojson, etc.)
   - `_export_multiple_layers_to_directory()`: Added extension mapping
   - `_export_batch_to_folder()`: Added extension mapping
@@ -15,6 +58,7 @@ All notable changes to FilterMate will be documented in this file.
 - **Streaming export fixed**: Missing `datatype` argument in `_save_layer_style()` now correctly passed
 
 #### Message Bar Notifications Improved
+
 - **Fixed argument order**: All `iface.messageBar().pushMessage()` calls now use correct argument order `(category, message, level)`
 - **Better error reporting**: Failed tasks now display detailed error messages to users
 - **Partial export handling**: When some layers fail during export, users see which layers failed and why
@@ -35,6 +79,7 @@ All notable changes to FilterMate will be documented in this file.
 ### ✨ New Features
 
 #### Smart Display Expression Detection for Exploring Widgets
+
 - **ValueRelation Support**: Automatically detects fields with ValueRelation widget configuration and uses `represent_value("field_name")` to display human-readable values instead of raw foreign keys
 - **Layer Display Expression**: Uses the layer's configured display expression (from Layer Properties > Display) when available
 - **Intelligent Field Selection**: Enhanced priority order for display field selection:

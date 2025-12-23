@@ -5,8 +5,20 @@ OGR Backend for FilterMate
 Fallback backend for OGR-based providers (Shapefiles, GeoPackage, etc.).
 Uses QGIS processing algorithms for filtering since OGR providers don't support
 complex SQL expressions like PostgreSQL/Spatialite.
+
+CRITICAL THREAD SAFETY (v2.3.9):
+================================
+This backend manipulates QGIS layer objects directly (selectedFeatures, 
+startEditing, commitChanges, etc.) which are NOT thread-safe.
+
+OGR backend operations MUST run on the main thread or sequentially.
+Parallel execution causes "Windows fatal exception: access violation".
+
+The ParallelFilterExecutor automatically detects OGR layers and forces 
+sequential execution to prevent crashes.
 """
 
+import threading
 from typing import Dict, Optional
 from qgis.core import (
     QgsVectorLayer, 
@@ -35,6 +47,10 @@ from ..geometry_safety import (
 )
 
 logger = get_tasks_logger()
+
+# Thread safety tracking (v2.3.9)
+_ogr_operations_lock = threading.Lock()
+_last_operation_thread = None
 
 
 def escape_ogr_identifier(identifier: str) -> str:
@@ -258,6 +274,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         Apply filter using QGIS processing selectbylocation algorithm.
         
+        CRITICAL THREAD SAFETY (v2.3.9):
+        This method manipulates QGIS layer objects (selectedFeatures, startEditing, etc.)
+        which are NOT thread-safe. Must be called sequentially, not in parallel.
+        The ParallelFilterExecutor automatically forces sequential mode for OGR layers.
+        
         Uses optimized method for large datasets (≥10k features):
         - Ensures spatial index exists
         - Uses attribute-based filtering after spatial selection
@@ -275,6 +296,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             True if filter applied successfully
         """
+        global _last_operation_thread, _ogr_operations_lock
+        
+        # THREAD SAFETY CHECK (v2.3.9): Detect concurrent access
+        current_thread = threading.current_thread().ident
+        with _ogr_operations_lock:
+            if _last_operation_thread is not None and _last_operation_thread != current_thread:
+                self.log_warning(
+                    f"⚠️ OGR apply_filter called from different thread! "
+                    f"Previous: {_last_operation_thread}, Current: {current_thread}. "
+                    f"This may cause access violations. OGR operations are NOT thread-safe."
+                )
+            _last_operation_thread = current_thread
+        
         try:
             import json
             from qgis import processing

@@ -1503,9 +1503,13 @@ class FilterEngineTask(QgsTask):
         executor = ParallelFilterExecutor(config.max_workers)
         
         # Execute parallel filtering with required task_parameters
+        # THREAD SAFETY FIX v2.3.9: Include filtering params for OGR detection
         task_parameters = {
             'task': self,
-            'filter_type': getattr(self, 'filter_type', 'geometric')
+            'filter_type': getattr(self, 'filter_type', 'geometric'),
+            'filtering': {
+                'filter_type': getattr(self, 'filter_type', 'geometric')
+            }
         }
         results = executor.filter_layers_parallel(
             all_layers, 

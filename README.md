@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.4.3** | December 2025 | **Production-Ready**
+**Version 2.4.4** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,22 +27,23 @@
 
 ## 📋 Recent Changes
 
-### v2.4.3 - Streaming Export Fix
+### v2.4.4 - Critical Thread Safety Fix
+
+- 🔥 **CRITICAL FIX**: Parallel filtering crash (Windows fatal exception: access violation)
+- 🛡️ **Thread Safety**: OGR layers now always filter sequentially
+- 🔒 QGIS layer objects (selectedFeatures, startEditing) are NOT thread-safe
+- 📝 ParallelFilterExecutor auto-detects OGR/geometric ops → sequential mode
+
+### v2.4.3 - Export System Fix
 
 - 🐛 **Fixed streaming export error** - Missing datatype argument in style saving
 - 💬 **Improved message bar** - Better error reporting with correct argument order
-- 🔧 **Better partial export handling** - Detailed failure messages
 
 ### v2.4.2 - ValueRelation & Display Enhancement
 
 - ✨ **Smart display detection** - Auto-detects ValueRelation fields
 - 🔗 Uses layer's display expression from Layer Properties
 - 🎯 Better exploring UX with meaningful labels
-
-### v2.4.1 - International Edition Extended
-
-- 🌍 **21 Languages** - Added Slovenian, Filipino/Tagalog, Amharic
-- 🔤 Fixed hardcoded French strings - all UI now translatable
 
 > 📖 See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 

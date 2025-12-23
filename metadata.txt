@@ -6,23 +6,24 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.4.3
+version=2.4.4
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.3 - Export System Fix & Stability Improvements
+about=FilterMate v2.4.4 - Critical Thread Safety Fix
 
- NEW in v2.4.3:
+ NEW in v2.4.4:
+ - 🔥 CRITICAL FIX: Parallel filtering access violation crash (Windows fatal exception)
+ - 🛡️ Thread Safety: OGR layers now always filter sequentially (QGIS objects not thread-safe)
+ - 🔒 Added thread detection to OGR backend with warning on concurrent access
+ - 📝 Improved logging for parallel vs sequential execution decisions
+ 
+ Previous (v2.4.3):
  - 🐛 Fixed export system: Files now export with correct extensions (.shp, .gpkg, .geojson, etc.)
  - 🔧 Fixed driver mapping: Proper QGIS driver names for all export formats
  - 💬 Improved message bar: Better error reporting with correct argument order
  - 🛡️ ValueRelation fallback: Gracefully handles missing referenced layers
  - ⚙️ Fixed expression context: represent_value() now works properly with layer context
- 
- Previous (v2.4.2):
- - ✨ Smart display detection: Auto-detects ValueRelation fields and shows human-readable values
- - 🔗 Uses layer's display expression from Layer Properties when available
- - 🎯 Better exploring UX: See meaningful labels instead of cryptic IDs
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
@@ -48,6 +49,13 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
+    Version 2.4.4 (December 2025) - Critical Thread Safety Fix
+    🔥 CRITICAL: Fixed parallel filtering crash (Windows fatal exception: access violation)
+    🛡️ Thread Safety: OGR layers now always filter sequentially
+    🔒 QGIS layer objects (selectedFeatures, startEditing, etc.) are NOT thread-safe
+    📝 ParallelFilterExecutor auto-detects OGR/geometric ops and uses sequential mode
+    ⚠️ Added thread detection warnings to OGR backend
+    
     Version 2.3.9 (December 2025) - Critical Stability Fix
     🔥 CRITICAL: Fixed GEOS crash during OGR backend filtering
     🛡️ NEW: geometry_safety.py module for GEOS-safe operations
