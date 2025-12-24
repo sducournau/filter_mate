@@ -6,17 +6,17 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.4.9
+version=2.4.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.9 - Definitive Layer Variable Access Violation Fix
+about=FilterMate v2.4.6 - Layer Variable Access Violation Crash Fix
 
- NEW in v2.4.9:
- - 🔥 CRITICAL FIX: Windows fatal access violation in setLayerVariable definitively resolved
- - 🛡️ QTimer.singleShot(0) deferral for layer variable operations
- - 🔒 Direct setCustomProperty() with try/except for RuntimeError handling
- - 📝 Defense-in-depth: 4 layers of protection against race conditions
+ NEW in v2.4.6:
+ - 🔥 CRITICAL FIX: Access violation in setLayerVariable race condition resolved
+ - 🛡️ Safe layer variable wrappers with fresh layer fetch before C++ calls
+ - 🔒 Re-fetches layer from project registry immediately before operation
+ - 📝 Validates sip deletion status and layer validity right before access
  
  Previous (v2.4.5):
  - 🔥 CRITICAL FIX: Access violation in checkParameterValues during geometric filtering

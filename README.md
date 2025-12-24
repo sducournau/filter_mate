@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.4.4** | December 2025 | **Production-Ready**
+**Version 2.4.6** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,23 +27,23 @@
 
 ## 📋 Recent Changes
 
+### v2.4.6 - Layer Variable Access Violation Crash Fix
+
+- 🔥 **CRITICAL FIX**: Access violation in setLayerVariable race condition resolved
+- 🛡️ **Safe Wrappers**: Re-fetches layer from project registry before C++ calls
+- 🔒 Validates sip deletion status and layer validity right before access
+- 📝 Returns `False` gracefully instead of crashing
+
+### v2.4.5 - Processing Parameter Validation Fix
+
+- 🔥 **CRITICAL FIX**: Access violation in checkParameterValues during geometric filtering
+- 🛡️ Pre-flight validation tests layer access before calling processing.run()
+- 🔒 Three-tier validation: input layer → intersect layer → final pre-flight check
+
 ### v2.4.4 - Critical Thread Safety Fix
 
-- 🔥 **CRITICAL FIX**: Parallel filtering crash (Windows fatal exception: access violation)
-- 🛡️ **Thread Safety**: OGR layers now always filter sequentially
-- 🔒 QGIS layer objects (selectedFeatures, startEditing) are NOT thread-safe
-- 📝 ParallelFilterExecutor auto-detects OGR/geometric ops → sequential mode
-
-### v2.4.3 - Export System Fix
-
-- 🐛 **Fixed streaming export error** - Missing datatype argument in style saving
-- 💬 **Improved message bar** - Better error reporting with correct argument order
-
-### v2.4.2 - ValueRelation & Display Enhancement
-
-- ✨ **Smart display detection** - Auto-detects ValueRelation fields
-- 🔗 Uses layer's display expression from Layer Properties
-- 🎯 Better exploring UX with meaningful labels
+- 🔥 **CRITICAL FIX**: Parallel filtering crash (Windows fatal exception)
+- 🛡️ OGR layers now always filter sequentially (QGIS layer objects NOT thread-safe)
 
 > 📖 See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 

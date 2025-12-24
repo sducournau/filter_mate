@@ -7,21 +7,33 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.4.4 - Critical Thread Safety Fix
+## 🎉 What's New in v2.4.6 - Layer Variable Access Violation Crash Fix
 
 ### 🔥 Critical Bug Fix
 
-- **Fixed Parallel Filtering Crash** - Resolved "Windows fatal exception: access violation" when filtering multiple OGR layers simultaneously
-- **Root Cause**: QGIS `QgsVectorLayer` objects are NOT thread-safe - multiple threads calling `selectedFeatures()`, `startEditing()`, etc. caused crashes
-- **Solution**: OGR layers and geometric filtering now always use sequential execution
+- **Fixed setLayerVariable Crash** - Resolved "Windows fatal exception: access violation" in race condition between layer validation and C++ setLayerVariable call
+- **Root Cause**: Layer deleted between validation check and `QgsExpressionContextUtils.setLayerVariable()` call
+- **Solution**: Safe wrapper functions re-fetch layer from project registry immediately before operation
 
-### 🛡️ Thread Safety Improvements
+### 🛡️ Safe Layer Variable Wrappers
 
-- **Auto-detection**: `ParallelFilterExecutor` automatically detects OGR layers and forces sequential mode
-- **Database backends**: PostgreSQL/Spatialite can still run in parallel (database connections are thread-safe)
-- **Defense in depth**: OGR backend now tracks thread access and warns on concurrent calls
+- **`safe_set_layer_variable()`**: Re-fetches layer fresh, validates sip deletion, performs operation
+- **Minimal race window**: Validation happens right before C++ call
+- **Graceful failure**: Returns `False` instead of crashing
 
 ## Previous Updates
+
+### v2.4.5 - Processing Parameter Validation Fix (December 23, 2025)
+
+- 🔥 **CRITICAL FIX**: Access violation in checkParameterValues during geometric filtering
+- 🛡️ Pre-flight validation tests layer access before calling processing.run()
+- 🔒 Three-tier validation: input layer → intersect layer → final pre-flight check
+
+### v2.4.4 - Critical Thread Safety Fix (December 22, 2025)
+
+- 🔥 **Fixed Parallel Filtering Crash** - Windows fatal exception: access violation
+- 🛡️ OGR layers now always filter sequentially (QGIS layer objects NOT thread-safe)
+- 🔒 ParallelFilterExecutor auto-detects OGR/geometric ops → sequential mode
 
 ### v2.4.3 - Export System Fix (December 22, 2025)
 
