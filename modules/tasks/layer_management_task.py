@@ -295,13 +295,16 @@ class LayersManagementEngineTask(QgsTask):
                 if isinstance(layer, QgsVectorLayer):
                     if layer.id() not in self.project_layers.keys():
                         result = self.add_project_layer(layer)
+                        # FIX: Don't stop on False - just skip non-spatial layers
+                        # add_project_layer returns False for non-spatial layers, which is OK
+                        if self.isCanceled():
+                            return False
             elif self.task_action == 'remove_layers':
                 if isinstance(layer, QgsVectorLayer):
                     if layer.id() in self.project_layers.keys():
                         result = self.remove_project_layer(layer)
-
-            if self.isCanceled() or result is False:
-                return False
+                        if self.isCanceled() or result is False:
+                            return False
 
         # Sort layers once after all operations (performance optimization)
         self.project_layers = dict(OrderedDict(sorted(
@@ -729,6 +732,9 @@ class LayersManagementEngineTask(QgsTask):
             bool: True if successful, False otherwise
         """
         if not isinstance(layer, QgsVectorLayer) or not layer.isSpatial():
+            # Log skipped non-spatial layers
+            layer_name = layer.name() if hasattr(layer, 'name') else 'unknown'
+            logger.debug(f"add_project_layer: Skipping non-spatial layer '{layer_name}'")
             return False
         
         # Try to load existing properties from database

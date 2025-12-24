@@ -17,6 +17,24 @@ PROVIDER_SPATIALITE = 'spatialite'
 PROVIDER_OGR = 'ogr'
 PROVIDER_MEMORY = 'memory'
 PROVIDER_VIRTUAL = 'virtual'
+PROVIDER_WFS = 'WFS'
+PROVIDER_ARCGIS = 'arcgisfeatureserver'
+PROVIDER_DELIMITEDTEXT = 'delimitedtext'
+PROVIDER_GPKG = 'gpkg'
+PROVIDER_MSSQL = 'mssql'
+PROVIDER_HANA = 'hana'
+PROVIDER_ORACLE = 'oracle'
+
+# Remote/distant providers that should be treated as available if layer is valid
+REMOTE_PROVIDERS = {
+    'WFS',                    # OGC Web Feature Service
+    'wfs',                    # Lowercase variant
+    'arcgisfeatureserver',    # ArcGIS Feature Service
+    'arcgismapserver',        # ArcGIS Map Service
+    'oapif',                  # OGC API Features
+    'wcs',                    # Web Coverage Service (raster, but listed for completeness)
+    'vectortile',             # Vector tiles
+}
 
 # Provider type mapping from QGIS internal names
 PROVIDER_TYPE_MAPPING = {
@@ -25,6 +43,16 @@ PROVIDER_TYPE_MAPPING = {
     'ogr': PROVIDER_OGR,
     'memory': PROVIDER_MEMORY,
     'virtual': PROVIDER_OGR,  # Virtual layers use OGR backend (fallback)
+    'WFS': PROVIDER_OGR,      # WFS uses OGR backend for filtering
+    'wfs': PROVIDER_OGR,      # Lowercase variant
+    'arcgisfeatureserver': PROVIDER_OGR,  # ArcGIS uses OGR backend
+    'arcgismapserver': PROVIDER_OGR,      # ArcGIS Map Server
+    'delimitedtext': PROVIDER_OGR,        # CSV/delimited text
+    'gpkg': PROVIDER_SPATIALITE,          # GeoPackage (direct)
+    'mssql': PROVIDER_POSTGRES,           # MSSQL uses similar SQL syntax
+    'hana': PROVIDER_POSTGRES,            # SAP HANA
+    'oracle': PROVIDER_POSTGRES,          # Oracle uses similar SQL syntax
+    'oapif': PROVIDER_OGR,                # OGC API Features
 }
 
 # ============================================================================

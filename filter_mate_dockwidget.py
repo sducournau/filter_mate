@@ -4351,7 +4351,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
 
-
         if self.widgets_initialized is True:
 
             if layer is None:
@@ -4365,7 +4364,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # CRITICAL: Check if layer exists in PROJECT_LAYERS before accessing
                 if layer.id() not in self.PROJECT_LAYERS:
-                    logger.debug(f"Layer {layer.name()} not in PROJECT_LAYERS yet, skipping")
+                    logger.info(f"Layer {layer.name()} not in PROJECT_LAYERS yet, skipping")
                     return
                 
                 layer_props = self.PROJECT_LAYERS[layer.id()]
@@ -4396,7 +4395,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         layer_obj = self.PROJECT.mapLayer(layer_id)
                         if (key != layer.id()
                             and layer_obj and isinstance(layer_obj, QgsVectorLayer)
-                            and is_layer_source_available(layer_obj)):
+                            and is_layer_source_available(layer_obj, require_psycopg2=False)):
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             if len(layer_props["filtering"]["layers_to_filter"]) > 0:
@@ -4429,7 +4428,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         layer_obj = self.PROJECT.mapLayer(layer_id)
                         if (key != layer.id()
                             and layer_obj and isinstance(layer_obj, QgsVectorLayer)
-                            and is_layer_source_available(layer_obj)):
+                            and is_layer_source_available(layer_obj, require_psycopg2=False)):
                             self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].addItem(layer_icon, layer_name + ' [%s]' % (layer_crs_authid), {"layer_id": key, "layer_geometry_type": layer_info["layer_geometry_type"]})
                             item = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].model().item(i)
                             item.setCheckState(Qt.Unchecked)
@@ -4465,18 +4464,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.project_props['EXPORTING']['HAS_DATATYPE_TO_EXPORT'] is True:
                 datatype_to_export = self.project_props['EXPORTING']['DATATYPE_TO_EXPORT']
 
+            # Import REMOTE_PROVIDERS constant for detecting remote layers
+            from .modules.constants import REMOTE_PROVIDERS
+            
             # Debug: Log PROJECT_LAYERS count vs QGIS project layers count
             qgis_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
             postgres_layers = [l for l in qgis_layers if l.providerType() == 'postgres']
+            # Remote layers: WFS, ArcGIS Feature Service, etc.
+            remote_layers = [l for l in qgis_layers if l.providerType() in REMOTE_PROVIDERS]
             postgres_in_project_layers = sum(1 for lid in self.PROJECT_LAYERS.keys() 
                                              if self.PROJECT.mapLayer(lid) and 
                                              self.PROJECT.mapLayer(lid).providerType() == 'postgres')
-            logger.info(f"exporting_populate_combobox: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} entries ({postgres_in_project_layers} PostgreSQL), QGIS project has {len(qgis_layers)} vector layers ({len(postgres_layers)} PostgreSQL)")
+            logger.info(f"exporting_populate_combobox: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} entries ({postgres_in_project_layers} PostgreSQL), QGIS project has {len(qgis_layers)} vector layers ({len(postgres_layers)} PostgreSQL, {len(remote_layers)} remote)")
             
             # Check for PostgreSQL layers missing from PROJECT_LAYERS
             missing_postgres = [l for l in postgres_layers if l.id() not in self.PROJECT_LAYERS]
             if missing_postgres:
                 logger.warning(f"exporting_populate_combobox: {len(missing_postgres)} PostgreSQL layer(s) in QGIS project but NOT in PROJECT_LAYERS: {[l.name() for l in missing_postgres]}")
+            
+            # Check for remote layers (WFS, ArcGIS, etc.) missing from PROJECT_LAYERS
+            missing_remote = [l for l in remote_layers if l.id() not in self.PROJECT_LAYERS]
+            if missing_remote:
+                logger.warning(f"exporting_populate_combobox: {len(missing_remote)} remote layer(s) in QGIS project but NOT in PROJECT_LAYERS: {[l.name() for l in missing_remote]}")
 
             self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].clear()
             item_index = 0  # Track actual item position in widget
@@ -4543,6 +4552,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         item.setCheckState(Qt.Unchecked)
                     item_index += 1
                     logger.info(f"exporting_populate_combobox: Added missing PostgreSQL layer '{postgres_layer.name()}' to export list")
+            
+            # FIX v2.3.13: Add remote layers (WFS, ArcGIS, etc.) that are in QGIS project but missing from PROJECT_LAYERS
+            for remote_layer in missing_remote:
+                if remote_layer.isValid() and is_layer_source_available(remote_layer, require_psycopg2=False):
+                    layer_name_display = f"{remote_layer.name()} [{remote_layer.crs().authid()}]"
+                    # Convert geometry type integer to legacy string format for icon_per_geometry_type
+                    geom_type_str = get_geometry_type_string(remote_layer.geometryType(), legacy_format=True)
+                    layer_icon = self.icon_per_geometry_type(geom_type_str)
+                    self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].addItem(layer_icon, layer_name_display, remote_layer.id())
+                    item = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].model().item(item_index)
+                    if remote_layer.id() in layers_to_export:
+                        item.setCheckState(Qt.Checked)
+                    else:
+                        item.setCheckState(Qt.Unchecked)
+                    item_index += 1
+                    logger.info(f"exporting_populate_combobox: Added missing remote layer '{remote_layer.name()}' (provider={remote_layer.providerType()}) to export list")
             
             logger.info(f"exporting_populate_combobox: Added {item_index} layers to export combobox")
             if skipped_postgres_count > 0:

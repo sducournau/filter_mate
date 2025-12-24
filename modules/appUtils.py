@@ -41,7 +41,7 @@ from qgis.PyQt.QtCore import QThread
 # Import constants
 from .constants import (
     PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
-    get_provider_name
+    REMOTE_PROVIDERS, get_provider_name
 )
 
 
@@ -202,6 +202,15 @@ def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
             logger.debug(f"is_layer_source_available: layer '{layer.name()}' isValid=False (provider={layer.providerType()})")
             return False
 
+        # Get raw QGIS provider type (not normalized)
+        raw_provider = layer.providerType()
+        
+        # REMOTE PROVIDERS: WFS, ArcGIS Feature Service, OGC API Features, etc.
+        # If QGIS reports the layer as valid, trust it for remote providers
+        if raw_provider in REMOTE_PROVIDERS:
+            logger.debug(f"is_layer_source_available: remote provider '{raw_provider}' layer '{layer.name()}' - trusting QGIS validity")
+            return True
+
         provider = detect_layer_provider_type(layer)
 
         # Memory layers are always available while project is open
@@ -209,22 +218,44 @@ def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
             return True
 
         source = layer.source() or ''
+        # GeoPackage/Spatialite sources can have format: /path/to/file.gpkg|layername=xxx
+        # or /path/to/file.gpkg|layerid=0, so we need to extract just the file path
         base = source.split('|')[0] if '|' in source else source
+        
+        # Clean up the path (remove any trailing whitespace, quotes, etc.)
+        base = base.strip().strip('"').strip("'")
 
         # Spatialite/OGR: typically filesystem-backed
         if provider in ('spatialite', 'ogr'):
             # Quick heuristics for non-file based OGR sources (e.g., WFS/WMS/HTTP)
             lower = (base or '').lower()
-            if lower.startswith(('http://', 'https://', 'wfs:', 'wms:', 'wcs:')):
-                # Can't synchronously verify remote availability here
+            if lower.startswith(('http://', 'https://', 'wfs:', 'wms:', 'wcs:', 'ftp://')):
+                # Remote source - can't synchronously verify availability, trust QGIS validity
+                logger.debug(f"is_layer_source_available: remote URL detected for layer '{layer.name()}'")
+                return True
+            
+            # Check for service URLs in source that may not start with protocol
+            # Some OGR sources use 'url=' or contain service identifiers
+            if any(marker in lower for marker in ['url=', 'service=', 'srsname=', 'typename=']):
+                logger.debug(f"is_layer_source_available: service URL markers detected for layer '{layer.name()}'")
                 return True
 
             # If we have a filesystem path, verify it exists
             if base:
+                # For GeoPackage files - check if file exists (skip deep validation for performance)
+                # Deep validation can cause issues with multiple layers from same GPKG
+                if lower.endswith('.gpkg'):
+                    if os.path.isfile(base):
+                        # Skip is_valid_geopackage() to avoid SQLite locking issues
+                        # QGIS already validated the layer when loading it
+                        logger.debug(f"is_layer_source_available: GeoPackage file exists for layer '{layer.name()}'")
+                        return True
+                    else:
+                        logger.debug(f"is_layer_source_available: GeoPackage file not found: {base}, trusting layer.isValid()={layer.isValid()}")
+                        # Trust QGIS validity - file might be accessible through different path
+                        return layer.isValid()
+                
                 if os.path.isfile(base):
-                    # For GeoPackage, perform extra validation
-                    if lower.endswith('.gpkg'):
-                        return is_valid_geopackage(base)
                     return True
                 # Shapefile main file check (.shp)
                 if lower.endswith('.shp') and os.path.isfile(base):
@@ -232,7 +263,26 @@ def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
                 # SQLite databases (often Spatialite)
                 if lower.endswith('.sqlite') and os.path.isfile(base):
                     return True
-            # If base is empty or not a file, we cannot confirm; treat as unavailable
+                # CSV and other delimited text files
+                if lower.endswith(('.csv', '.txt', '.tsv')):
+                    return os.path.isfile(base)
+                # GeoJSON files
+                if lower.endswith(('.geojson', '.json')):
+                    return os.path.isfile(base)
+                    
+            # If base is empty but layer is valid, it might be a virtual or computed layer
+            # Trust QGIS validity in this case
+            if not base and layer.isValid():
+                logger.debug(f"is_layer_source_available: empty source but valid layer '{layer.name()}' - trusting QGIS")
+                return True
+                
+            # If base is not empty but doesn't match known file types, 
+            # it might be a remote source or special format - trust QGIS validity
+            if base and not os.path.exists(base) and layer.isValid():
+                # Could be a virtual path, memory layer, or remote source
+                logger.debug(f"is_layer_source_available: source '{base}' not a local file but layer is valid - trusting QGIS for '{layer.name()}'")
+                return True
+            
             return False
 
         # PostgreSQL: verify connectivity
@@ -251,7 +301,8 @@ def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
             # for operations that use QGIS API (like export) without direct DB connection
             return True
 
-        # Fallback to QGIS validity
+        # Fallback: trust QGIS validity for unknown provider types
+        logger.debug(f"is_layer_source_available: unknown provider '{provider}' for layer '{layer.name()}' - trusting QGIS validity")
         return True
 
     except Exception as e:
@@ -364,10 +415,13 @@ def detect_layer_provider_type(layer):
     Detect the provider type of a QGIS vector layer.
     
     For filtering purposes, this function returns the logical backend type:
-    - 'postgresql': PostgreSQL/PostGIS layers
+    - 'postgresql': PostgreSQL/PostGIS layers (and similar SQL databases like MSSQL, Oracle, HANA)
     - 'spatialite': Native Spatialite AND GeoPackage/SQLite via OGR
-    - 'ogr': Shapefiles and other OGR formats (not GPKG/SQLite)
+    - 'ogr': Shapefiles, GeoJSON, and other OGR formats (not GPKG/SQLite)
     - 'memory': Memory layers
+    
+    Remote providers (WFS, ArcGIS Feature Service, etc.) return 'ogr' as they use
+    QGIS expressions for filtering rather than SQL.
     
     GeoPackage and SQLite files return 'spatialite' because they support
     Spatialite SQL functions in setSubsetString (ST_Intersects, GeomFromText, etc.)
@@ -383,6 +437,10 @@ def detect_layer_provider_type(layer):
     
     provider_type = layer.providerType()
     
+    # Remote providers (WFS, ArcGIS, etc.) use OGR-style filtering
+    if provider_type in REMOTE_PROVIDERS:
+        return 'ogr'
+    
     # Use helper to convert QGIS provider type to FilterMate constant
     normalized_type = get_provider_name(provider_type)
     
@@ -392,19 +450,25 @@ def detect_layer_provider_type(layer):
         return 'spatialite'
     elif normalized_type == PROVIDER_MEMORY:
         return 'memory'
-    elif provider_type == PROVIDER_OGR:
+    elif provider_type == PROVIDER_OGR or normalized_type == PROVIDER_OGR:
         # Check if it's a GeoPackage or SQLite file - these support Spatialite SQL
         source = layer.source()
         source_path = source.split('|')[0] if '|' in source else source
+        lower_path = source_path.lower()
         
-        if source_path.lower().endswith('.gpkg'):
+        if lower_path.endswith('.gpkg'):
             return 'spatialite'
-        if source_path.lower().endswith('.sqlite'):
+        if lower_path.endswith('.sqlite'):
             return 'spatialite'
+        
+        # Check for remote URLs - these use OGR filtering
+        if any(lower_path.startswith(proto) for proto in ('http://', 'https://', 'ftp://')):
+            return 'ogr'
         
         # Other OGR formats (Shapefile, GeoJSON, etc.)
         return 'ogr'
     else:
+        # Unknown provider - default to OGR for safety
         return 'ogr'
 
 
