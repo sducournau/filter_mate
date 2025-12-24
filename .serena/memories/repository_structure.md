@@ -1,6 +1,6 @@
-# Repository Structure - FilterMate v2.3.0
+# Repository Structure - FilterMate v2.4.10
 
-**Last Updated:** December 16, 2025
+**Last Updated:** December 23, 2025
 
 ## Overview
 
@@ -180,16 +180,31 @@ docs/
 ```
 
 ### i18n/
-Translations (7 languages):
+Translations (21 languages):
 ```
 i18n/
+├── FilterMate_am.ts/.qm    # Amharic (NEW v2.4.1)
+├── FilterMate_da.ts/.qm    # Danish
 ├── FilterMate_de.ts/.qm    # German
 ├── FilterMate_en.ts/.qm    # English
 ├── FilterMate_es.ts/.qm    # Spanish
+├── FilterMate_fi.ts/.qm    # Finnish
 ├── FilterMate_fr.ts/.qm    # French
+├── FilterMate_hi.ts/.qm    # Hindi
+├── FilterMate_id.ts/.qm    # Indonesian
 ├── FilterMate_it.ts/.qm    # Italian
+├── FilterMate_nb.ts/.qm    # Norwegian Bokmål
 ├── FilterMate_nl.ts/.qm    # Dutch
-└── FilterMate_pt.ts/.qm    # Portuguese
+├── FilterMate_pl.ts/.qm    # Polish
+├── FilterMate_pt.ts/.qm    # Portuguese
+├── FilterMate_ru.ts/.qm    # Russian
+├── FilterMate_sl.ts/.qm    # Slovenian (NEW v2.4.1)
+├── FilterMate_sv.ts/.qm    # Swedish
+├── FilterMate_tl.ts/.qm    # Filipino/Tagalog (NEW v2.4.1)
+├── FilterMate_tr.ts/.qm    # Turkish
+├── FilterMate_uz.ts/.qm    # Uzbek
+├── FilterMate_vi.ts/.qm    # Vietnamese
+└── FilterMate_zh.ts/.qm    # Chinese
 ```
 
 ### resources/
@@ -239,11 +254,11 @@ Serena MCP configuration:
 | Category | File Count | Description |
 |----------|------------|-------------|
 | Core Plugin | ~10 | Runtime Python files |
-| Modules | ~30 | Application modules |
-| Tests | ~35 | Test files |
+| Modules | ~35 | Application modules (including object_safety.py) |
+| Tests | ~20 | Test files |
 | Tools | ~15 | Development utilities |
 | Documentation | ~20 | Markdown files |
-| Translations | 14 | .ts and .qm files |
+| Translations | 42 | .ts and .qm files (21 languages × 2) |
 | Resources | ~10 | QSS and icons |
 
 ## Gitignore Patterns

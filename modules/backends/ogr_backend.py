@@ -28,6 +28,11 @@ GDAL ERROR HANDLING (v2.3.11):
 GeoPackage layers may generate transient SQLite warnings during concurrent
 operations. These are handled via GdalErrorHandler which suppresses known
 harmless warnings like "unable to open database file".
+
+v2.4.0 Improvements:
+====================
+- Automatic spatial index creation for file-based formats
+- Improved index detection and management
 """
 
 import threading
@@ -61,12 +66,20 @@ from ..geometry_safety import (
 # Import GDAL error handler for suppressing transient SQLite warnings (v2.3.11)
 from ..object_safety import GdalErrorHandler
 
+# Import Spatial Index Manager for automatic index creation (v2.4.0)
+try:
+    from .spatial_index_manager import get_spatial_index_manager, SpatialIndexManager
+    SPATIAL_INDEX_MANAGER_AVAILABLE = True
+except ImportError:
+    SPATIAL_INDEX_MANAGER_AVAILABLE = False
+    get_spatial_index_manager = None
+    SpatialIndexManager = None
+
 logger = get_tasks_logger()
 
 # Thread safety tracking (v2.3.9)
 _ogr_operations_lock = threading.Lock()
 _last_operation_thread = None
-
 
 def escape_ogr_identifier(identifier: str) -> str:
     """
@@ -130,6 +143,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Creates spatial index if not present. For shapefiles, this creates a .qix file.
         For other formats, may create internal index.
         
+        v2.4.0: Uses SpatialIndexManager for improved index handling.
+        
         Performance: O(n log n) creation time, but O(log n) queries afterward.
         Gain: 4-100× faster spatial queries depending on dataset size.
         
@@ -139,6 +154,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             True if index exists or was created successfully
         """
+        # v2.4.0: Use SpatialIndexManager if available
+        if SPATIAL_INDEX_MANAGER_AVAILABLE:
+            try:
+                manager = get_spatial_index_manager()
+                return manager.ensure_index(layer)
+            except Exception as e:
+                self.log_warning(f"SpatialIndexManager error: {e}, falling back to legacy method")
+        
+        # Legacy fallback
         try:
             # Check if spatial index already exists
             if layer.hasSpatialIndex():
@@ -369,17 +393,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 if feature_count >= 100000:
                     self.log_info(f"Large dataset ({feature_count:,} features)")
                 
-                # Decide which method to use based on dataset size
-                if feature_count >= 10000:
-                    return self._apply_filter_large(
-                        layer, source_layer, predicates, buffer_value,
-                        old_subset, combine_operator
-                    )
-                else:
-                    return self._apply_filter_standard(
-                        layer, source_layer, predicates, buffer_value,
-                        old_subset, combine_operator
-                    )
+                # FIX v2.4.6: Always use standard method for OGR layers
+                # The large dataset optimization (using _fm_match_ temp field) causes
+                # SQLite "unable to open database file" errors when:
+                # - Multiple layers from the same GeoPackage are filtered simultaneously
+                # - The database file is on a network drive or has access issues
+                # - The database is opened read-only by another process
+                # The standard method is reliable and performs well with spatial indexes.
+                return self._apply_filter_standard(
+                    layer, source_layer, predicates, buffer_value,
+                    old_subset, combine_operator
+                )
                 
             except Exception as e:
                 self.log_error(f"Error applying OGR filter: {str(e)}")
@@ -1103,11 +1127,22 @@ class OGRGeometricFilter(GeometricFilterBackend):
         # STABILITY FIX v2.3.9: Validate layers before any operations
         if layer is None or not layer.isValid():
             self.log_error("Target layer is None or invalid - cannot proceed with standard filtering")
+            if layer is None:
+                self.log_error("  → layer is None")
+            else:
+                self.log_error(f"  → layer.isValid() = {layer.isValid()}")
             return False
         
         if source_layer is None or not source_layer.isValid():
             self.log_error("Source layer is None or invalid - cannot proceed with standard filtering")
+            if source_layer is None:
+                self.log_error("  → source_layer is None")
+            else:
+                self.log_error(f"  → source_layer.isValid() = {source_layer.isValid()}")
+                self.log_error(f"  → source_layer.featureCount() = {source_layer.featureCount()}")
             return False
+        
+        self.log_debug(f"OGR standard filter: target={layer.name()} ({layer.featureCount()} features), source={source_layer.name()} ({source_layer.featureCount()} features)")
         
         # Apply buffer
         intersect_layer = self._apply_buffer(source_layer, buffer_value)
@@ -1286,9 +1321,66 @@ class OGRGeometricFilter(GeometricFilterBackend):
             else:
                 from qgis.core import QgsField
                 from qgis.PyQt.QtCore import QMetaType
+                import time
                 
-                layer.dataProvider().addAttributes([QgsField(temp_field, QMetaType.Type.Int)])
-                layer.updateFields()
+                # STABILITY FIX v2.4.2: Enhanced retry logic for SQLite concurrent access
+                # When multiple layers from the same GeoPackage/Spatialite are filtered,
+                # SQLite can throw "unable to open database file" errors due to file locking.
+                # Use longer delays and more retries for reliable operation.
+                max_retries = 8  # Increased from 5
+                retry_delay = 1.0  # Increased from 0.5s - SQLite needs more time to release locks
+                add_field_success = False
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Use GDAL error handler to suppress transient SQLite warnings
+                        with GdalErrorHandler():
+                            result = layer.dataProvider().addAttributes([QgsField(temp_field, QMetaType.Type.Int)])
+                            if result:
+                                layer.updateFields()
+                                add_field_success = True
+                                self.log_debug(f"Added temp field '{temp_field}' to '{layer.name()}' on attempt {attempt + 1}")
+                                break
+                            else:
+                                # addAttributes returned False - likely database lock
+                                if attempt < max_retries - 1:
+                                    self.log_info(
+                                        f"⏳ SQLite lock on '{layer.name()}' (attempt {attempt + 1}/{max_retries}). "
+                                        f"Waiting {retry_delay:.1f}s for lock release..."
+                                    )
+                                    time.sleep(retry_delay)
+                                    retry_delay = min(retry_delay * 1.5, 8.0)  # Gentler backoff, max 8s
+                    except Exception as add_attr_error:
+                        error_str = str(add_attr_error).lower()
+                        is_recoverable = any(x in error_str for x in [
+                            'unable to open database file',
+                            'database is locked',
+                            'disk i/o error',
+                            'sqlite3_exec',
+                            'busy',
+                        ])
+                        
+                        if is_recoverable and attempt < max_retries - 1:
+                            self.log_info(
+                                f"⏳ SQLite error for '{layer.name()}' (attempt {attempt + 1}/{max_retries}): "
+                                f"{add_attr_error}. Waiting {retry_delay:.1f}s..."
+                            )
+                            time.sleep(retry_delay)
+                            retry_delay = min(retry_delay * 1.5, 8.0)  # Same backoff as above
+                        else:
+                            self.log_error(f"Failed to add temp field to '{layer.name()}' after {max_retries} attempts: {add_attr_error}")
+                            # Fall back to standard method which doesn't need attribute editing
+                            return self._apply_filter_standard(
+                                layer, source_layer, predicates, buffer_value,
+                                old_subset, combine_operator
+                            )
+                
+                if not add_field_success:
+                    self.log_warning(f"Could not add temp field to '{layer.name()}' - falling back to standard method")
+                    return self._apply_filter_standard(
+                        layer, source_layer, predicates, buffer_value,
+                        old_subset, combine_operator
+                    )
             
             # Initialize all to 0 (no match)
             field_idx = layer.fields().indexFromName(temp_field)
@@ -1308,21 +1400,54 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # STABILITY FIX v2.3.9: Use feature IDs list to avoid iterator issues
             # Materializing the feature list first prevents concurrent modification issues
             try:
-                feature_ids = [f.id() for f in layer.getFeatures()]
+                with GdalErrorHandler():
+                    feature_ids = [f.id() for f in layer.getFeatures()]
             except (RuntimeError, AttributeError) as e:
                 self.log_error(f"Failed to get features for initialization: {e}")
                 return False
             
             # Initialize all values to 0 using data provider (no edit mode)
-            try:
-                # Build attribute changes dict: {fid: {field_idx: value}}
-                attr_changes = {fid: {field_idx: 0} for fid in feature_ids}
-                if not data_provider.changeAttributeValues(attr_changes):
-                    self.log_error(f"Failed to initialize temp field values")
-                    return False
-            except (RuntimeError, AttributeError) as e:
-                self.log_error(f"Error during initialization: {e}")
-                return False
+            # STABILITY FIX v2.4.2: Enhanced retry logic for concurrent SQLite access
+            import time
+            max_retries = 8  # Increased from 5
+            retry_delay = 1.0  # Increased from 0.5s
+            init_success = False
+            
+            for attempt in range(max_retries):
+                try:
+                    # Build attribute changes dict: {fid: {field_idx: value}}
+                    attr_changes = {fid: {field_idx: 0} for fid in feature_ids}
+                    with GdalErrorHandler():
+                        if data_provider.changeAttributeValues(attr_changes):
+                            init_success = True
+                            break
+                        else:
+                            if attempt < max_retries - 1:
+                                self.log_info(f"⏳ SQLite lock during init for '{layer.name()}' (attempt {attempt + 1}/{max_retries}). Waiting {retry_delay:.1f}s...")
+                                time.sleep(retry_delay)
+                                retry_delay = min(retry_delay * 1.5, 8.0)
+                except (RuntimeError, AttributeError) as e:
+                    error_str = str(e).lower()
+                    is_recoverable = any(x in error_str for x in [
+                        'unable to open database file', 'database is locked', 'sqlite3_exec', 'busy',
+                    ])
+                    if is_recoverable and attempt < max_retries - 1:
+                        self.log_info(f"⏳ SQLite error during init for '{layer.name()}' (attempt {attempt + 1}/{max_retries}): {e}. Waiting {retry_delay:.1f}s...")
+                        time.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 1.5, 8.0)
+                    else:
+                        self.log_error(f"Error during initialization: {e}")
+                        return self._apply_filter_standard(
+                            layer, source_layer, predicates, buffer_value,
+                            old_subset, combine_operator
+                        )
+            
+            if not init_success:
+                self.log_warning(f"Could not initialize temp field values - falling back to standard method")
+                return self._apply_filter_standard(
+                    layer, source_layer, predicates, buffer_value,
+                    old_subset, combine_operator
+                )
             
             # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
             if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
@@ -1337,20 +1462,45 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # STABILITY FIX v2.3.12: Use data provider directly instead of edit mode
                 # This prevents access violations caused by layer signals from background threads
                 try:
-                    selected_features = list(layer.selectedFeatures())
+                    with GdalErrorHandler():
+                        selected_features = list(layer.selectedFeatures())
                 except (RuntimeError, AttributeError) as e:
                     self.log_error(f"Failed to get selected features: {e}")
                     return False
                 
                 # Use data provider to update attribute values (thread-safe, no signals)
-                try:
-                    # Build attribute changes dict: {fid: {field_idx: value}}
-                    attr_changes = {f.id(): {field_idx: 1} for f in selected_features}
-                    if not data_provider.changeAttributeValues(attr_changes):
-                        self.log_error(f"Failed to mark selected features")
-                        return False
-                except (RuntimeError, AttributeError) as e:
-                    self.log_error(f"Error during attribute update: {e}")
+                # STABILITY FIX v2.4.2: Enhanced retry logic for concurrent SQLite access
+                mark_success = False
+                retry_delay = 1.0  # Increased from 0.5s
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Build attribute changes dict: {fid: {field_idx: value}}
+                        attr_changes = {f.id(): {field_idx: 1} for f in selected_features}
+                        with GdalErrorHandler():
+                            if data_provider.changeAttributeValues(attr_changes):
+                                mark_success = True
+                                break
+                            else:
+                                if attempt < max_retries - 1:
+                                    self.log_info(f"⏳ SQLite lock during mark for '{layer.name()}' (attempt {attempt + 1}/{max_retries}). Waiting {retry_delay:.1f}s...")
+                                    time.sleep(retry_delay)
+                                    retry_delay = min(retry_delay * 1.5, 8.0)
+                    except (RuntimeError, AttributeError) as e:
+                        error_str = str(e).lower()
+                        is_recoverable = any(x in error_str for x in [
+                            'unable to open database file', 'database is locked', 'sqlite3_exec', 'busy',
+                        ])
+                        if is_recoverable and attempt < max_retries - 1:
+                            self.log_info(f"⏳ SQLite error during mark for '{layer.name()}' (attempt {attempt + 1}/{max_retries}): {e}. Waiting {retry_delay:.1f}s...")
+                            time.sleep(retry_delay)
+                            retry_delay = min(retry_delay * 1.5, 8.0)
+                        else:
+                            self.log_error(f"Error during attribute update: {e}")
+                            return False
+                
+                if not mark_success:
+                    self.log_error(f"Failed to mark selected features after {max_retries} attempts")
                     return False
                 
                 # Clear selection - wrapped in try-except for safety

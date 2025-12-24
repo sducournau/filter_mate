@@ -18,50 +18,102 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
 ## Current Status
-- **Version**: 2.3.8 (December 18, 2025)
-- **Status**: Production - Stable with project change stability enhancements
+- **Version**: 2.4.10 (December 23, 2025)
+- **Status**: Production - Stable with critical Windows access violation fixes
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
-- **Recent Additions**: 
-  - Enhanced project change handling with forced cleanup
-  - New `cleared` signal handler for project close/clear events
-  - F5 shortcut to force reload layers when project change fails
-  - Fixed signal timing issue (root cause: layersAdded before projectRead completion)
-  - Updated timing constants for better PostgreSQL stability
+- **Recent Focus (v2.4.x)**: Windows crash fixes, thread safety, layer validation
+- **Languages Supported**: 21 languages (including Slovenian, Filipino, Amharic)
 
-## Recent Development (December 18, 2025)
+## Recent Development (December 23, 2025)
 
-### v2.3.7 - Project Change Stability Enhancement (✅ Complete)
-**Date**: December 18, 2025
+### v2.4.10 - Backend Change Access Violation Fix (✅ Complete)
+**Date**: December 23, 2025
 
 **Problem Solved:**
-- Plugin required manual reload when switching between projects
-- Dockwidget didn't properly refresh layers after project change
-- **ROOT CAUSE IDENTIFIED**: QGIS emits `layersAdded` signal BEFORE `projectRead` handler completes
-- Old code was waiting for a signal that had already passed
+- Windows fatal exception during backend change to Spatialite
+- Race condition in `setLayerVariableEvent()` signal emission
 
 **Solutions Implemented:**
-1. **Rewrote `_handle_project_change()`** - Forces complete cleanup before reinitializing
-2. **Added `cleared` signal handler** - `_handle_project_cleared()` for project close/clear
-3. **Fixed signal timing** - Now manually calls `add_layers` after cleanup
-4. **Added F5 shortcut** - Force reload layers when automatic detection fails
-5. **Updated timing constants** - Better stability with PostgreSQL
-
-**Files Changed:**
-- `filter_mate.py`: `_handle_project_change()`, `_handle_project_cleared()`, signal connections
-- `filter_mate_app.py`: `force_reload_layers()`, `STABILITY_CONSTANTS`, `reload_layers` task
-- `filter_mate_dockwidget.py`: F5 shortcut via `_setup_keyboard_shortcuts()`
+1. **Robust Layer Validation** - `is_valid_layer()` check in `_save_single_property()`
+2. **Pre-emit Validation** - Layer validation before signal emission
+3. **Entry Point Validation** - Full C++ deletion detection
 
 ---
 
-### v2.3.6 - Project & Layer Loading Stability (✅ Complete)
-**Date**: December 18, 2025
+### v2.4.9 - Definitive Layer Variable Access Violation Fix (✅ Complete)
+**Date**: December 23, 2025
+
+**Problem Solved:**
+- Race condition between layer validation and C++ call
+- Windows access violations are FATAL (cannot be caught by Python)
+
+**Solutions Implemented:**
+1. **QTimer.singleShot(0) Deferral** - Complete event loop separation
+2. **Direct setCustomProperty()** - Wrapped C++ calls with try/except
+3. **Defense-in-depth**: 4 layers of protection against race conditions
+
+---
+
+### v2.4.5 - Processing Parameter Validation Crash Fix (✅ Complete)
+**Date**: December 23, 2025
+
+**Problem Solved:**
+- Access violation in `checkParameterValues` during geometric filtering
+- Corrupted/invalid layers causing GEOS/PDAL crashes
+
+**Solutions Implemented:**
+1. **Pre-flight Layer Validation** - Three-tier validation before `processing.run()`
+2. **Deep Provider Access Validation** - Tests all layer properties before C++ access
+
+---
+
+### v2.4.4 - Critical Thread Safety Fix (✅ Complete)
+**Date**: December 23, 2025
+
+**Problem Solved:**
+- Parallel filtering access violation crash
+- QGIS `QgsVectorLayer` objects are NOT thread-safe
+
+**Solutions Implemented:**
+1. **Sequential Execution for OGR** - Auto-detection forces sequential for unsafe operations
+2. **Thread Tracking** - Logs warnings for concurrent access attempts
+
+---
+
+### v2.4.3 - Export System Fix & Message Bar Improvements (✅ Complete)
+**Date**: December 22, 2025
+
+**Fixes:**
+- Missing file extensions in exports
+- Driver name mapping for all formats
+- Correct message bar argument order
+
+---
+
+### v2.4.2 - Exploring ValueRelation & Display Enhancement (✅ Complete)
+**Date**: December 22, 2025
 
 **Features:**
-- Centralized timing constants (`STABILITY_CONSTANTS` dict)
-- Timestamp-tracked flags with automatic stale detection (30s timeout)
-- Layer validation (`_is_layer_valid()` for C++ object checks)
-- Signal debouncing for rapid layer changes
-- Queue management with FIFO trimming
+- Smart display expression detection for exploring widgets
+- ValueRelation support with `represent_value()` display
+- Intelligent field selection priority order
+
+---
+
+### v2.4.1 - International Edition Extended (✅ Complete)
+**Date**: December 22, 2025
+
+**Features:**
+- 3 new languages: Slovenian, Filipino/Tagalog, Amharic
+- Total: 21 languages supported
+- Fixed hardcoded French strings
+
+---
+
+### v2.4.0 - Major Refactoring Release
+**Date**: December 20-21, 2025
+
+Consolidated all v2.3.x stability improvements into production release.
 
 ---
 
@@ -320,7 +372,7 @@ pytest --cov=modules --cov-report=html
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.3.8
+- **Current Plugin Version**: 2.4.10
 
 ## BMAD Documentation
 

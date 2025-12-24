@@ -60,8 +60,9 @@ from .modules.filter_history import HistoryManager
 from .modules.filter_favorites import FavoritesManager
 from .modules.ui_config import UIConfig, DisplayProfile
 from .modules.object_safety import (
-    is_sip_deleted, is_valid_layer, is_valid_qobject,
-    safe_disconnect, safe_emit, make_safe_callback
+    is_sip_deleted, is_valid_layer, is_valid_qobject, is_qgis_alive,
+    safe_disconnect, safe_emit, make_safe_callback,
+    GdalErrorHandler  # v2.3.12: Suppress transient GDAL warnings during refresh
 )
 from .resources import *  # Qt resources must be imported with wildcard
 import uuid
@@ -128,6 +129,7 @@ STABILITY_CONSTANTS = {
     'MAX_RETRIES': 10,                     # Maximum retry count for deferred operations
     'SIGNAL_DEBOUNCE_MS': 150,             # Debounce delay for rapid signal calls (increased from 100)
     'POSTGRESQL_EXTRA_DELAY_MS': 1000,     # Extra delay for PostgreSQL layers
+    'SPATIALITE_STABILIZATION_MS': 200,    # Delay before refreshing Spatialite layers (v2.3.12)
 }
 
 class FilterMateApp:
@@ -1078,14 +1080,78 @@ class FilterMateApp:
             self.dockwidget.launchingTask.connect(lambda x: self.manage_task(x))
             self.dockwidget.currentLayerChanged.connect(self.update_undo_redo_buttons)
 
-            self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
-            self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self.save_variables_from_layer(layer, properties))
-            self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self.remove_variables_from_layer(layer, properties))
+            self.dockwidget.resettingLayerVariableOnError.connect(lambda layer, properties: self._safe_layer_operation(layer, properties, self.remove_variables_from_layer))
+            self.dockwidget.settingLayerVariable.connect(lambda layer, properties: self._safe_layer_operation(layer, properties, self.save_variables_from_layer))
+            self.dockwidget.resettingLayerVariable.connect(lambda layer, properties: self._safe_layer_operation(layer, properties, self.remove_variables_from_layer))
 
             self.dockwidget.settingProjectVariables.connect(self.save_project_variables)
             self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
             self._dockwidget_signals_connected = True
         
+
+    def _safe_layer_operation(self, layer, properties, operation):
+        """
+        Safely execute a layer operation by deferring to Qt event loop and re-fetching layer.
+        
+        CRASH FIX (v2.3.18): Signal handlers receive layer objects that may become
+        invalid (C++ deleted) between signal emission and handling. This wrapper:
+        1. Extracts the layer ID immediately (before it becomes invalid)
+        2. Defers execution with QTimer.singleShot(0, ...) to let Qt stabilize
+        3. Re-fetches fresh layer reference from QgsProject in the deferred callback
+        
+        This approach prevents Windows access violations that cannot be caught by try/except.
+        
+        Args:
+            layer: Layer object from signal (may be stale)
+            properties: Properties to pass to operation
+            operation: Function to call with (fresh_layer, properties)
+        """
+        from qgis.PyQt.QtCore import QTimer
+        
+        # Extract layer ID before it potentially becomes invalid
+        try:
+            if layer is None:
+                logger.debug("_safe_layer_operation: layer is None, skipping")
+                return
+            if sip.isdeleted(layer):
+                logger.debug("_safe_layer_operation: layer already sip deleted, skipping")
+                return
+            layer_id = layer.id()
+            if not layer_id:
+                logger.debug("_safe_layer_operation: layer has no ID, skipping")
+                return
+        except (RuntimeError, OSError, SystemError) as e:
+            logger.debug(f"_safe_layer_operation: failed to get layer ID: {e}")
+            return
+        
+        # CRASH FIX (v2.3.18): Defer the operation to next Qt event loop iteration
+        # This ensures Qt internal state is stable and layer deletion is complete
+        # (if it was going to be deleted). Using singleShot(0, ...) queues the
+        # callback to run as soon as control returns to the event loop.
+        def deferred_operation():
+            # CRASH FIX (v2.3.18): Check if QGIS is still alive before any operations
+            if not is_qgis_alive():
+                logger.debug(f"_safe_layer_operation: QGIS is shutting down, skipping")
+                return
+            
+            # Re-fetch fresh layer reference from project in the deferred context
+            fresh_layer = QgsProject.instance().mapLayer(layer_id)
+            if fresh_layer is None:
+                logger.debug(f"_safe_layer_operation: layer {layer_id} no longer in project, skipping")
+                return
+            
+            # Final validation before calling operation
+            if not is_valid_layer(fresh_layer):
+                logger.debug(f"_safe_layer_operation: fresh layer is invalid, skipping")
+                return
+            
+            # Execute the operation with the fresh layer reference
+            try:
+                operation(fresh_layer, properties)
+            except (RuntimeError, OSError, SystemError) as e:
+                logger.warning(f"_safe_layer_operation: operation failed: {e}")
+        
+        QTimer.singleShot(0, deferred_operation)
 
     def get_spatialite_connection(self):
         """
@@ -1661,6 +1727,34 @@ class FilterMateApp:
                     
         except Exception as e:
             logger.warning(f"Could not cancel tasks: {e}")
+
+    def _cancel_layer_tasks(self, layer_id):
+        """Cancel all running tasks for a specific layer to prevent access violations.
+        
+        CRASH FIX (v2.3.20): This method must be called before modifying layer variables
+        (setLayerVariable) to prevent the race condition where background tasks are
+        iterating features while the main thread modifies layer state.
+        
+        Args:
+            layer_id: The ID of the layer whose tasks should be cancelled
+        """
+        try:
+            # Cancel tasks in exploring widgets
+            if hasattr(self, 'dockwidget') and self.dockwidget:
+                exploring_widget = self.dockwidget.widgets.get("EXPLORING", {})
+                for widget_key in ["SINGLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_FEATURES"]:
+                    widget_data = exploring_widget.get(widget_key, {})
+                    widget = widget_data.get("WIDGET")
+                    if widget and hasattr(widget, 'tasks'):
+                        for task_type in widget.tasks:
+                            if layer_id in widget.tasks[task_type]:
+                                task = widget.tasks[task_type][layer_id]
+                                if isinstance(task, QgsTask) and not sip.isdeleted(task):
+                                    if task.status() in [QgsTask.Running, QgsTask.Queued]:
+                                        logger.debug(f"Cancelling {task_type} task for layer {layer_id} before variable update")
+                                        task.cancel()
+        except Exception as e:
+            logger.debug(f"_cancel_layer_tasks: Error cancelling tasks: {e}")
 
     def _handle_layer_task_terminated(self, task_name):
         """Handle layer management task termination (failure or cancellation).
@@ -2302,15 +2396,34 @@ class FilterMateApp:
 
     def _refresh_layers_and_canvas(self, source_layer):
         """
-        Refresh source layer and map canvas.
+        Refresh source layer and map canvas with stabilization for Spatialite.
+        
+        For Spatialite/OGR layers, adds a brief stabilization delay before refresh
+        to allow SQLite connections to fully close. This prevents transient 
+        "unable to open database file" errors during concurrent access.
+        
+        Uses GdalErrorHandler to suppress transient GDAL warnings during refresh.
         
         Args:
             source_layer (QgsVectorLayer): Layer to refresh
         """
-        source_layer.updateExtents()
-        source_layer.triggerRepaint()
-        self.iface.mapCanvas().refreshAllLayers()
-        self.iface.mapCanvas().refresh()
+        # Check if layer is Spatialite or OGR (local file-based SQLite)
+        provider_type = source_layer.providerType() if source_layer else None
+        needs_stabilization = provider_type in ('spatialite', 'ogr')
+        
+        if needs_stabilization:
+            # Brief stabilization delay to let SQLite connections settle
+            # This helps prevent "unable to open database file" errors
+            import time
+            stabilization_ms = STABILITY_CONSTANTS.get('SPATIALITE_STABILIZATION_MS', 200)
+            time.sleep(stabilization_ms / 1000.0)
+        
+        # Use GDAL error handler to suppress transient SQLite warnings during refresh
+        with GdalErrorHandler():
+            source_layer.updateExtents()
+            source_layer.triggerRepaint()
+            self.iface.mapCanvas().refreshAllLayers()
+            self.iface.mapCanvas().refresh()
     
     def _push_filter_to_history(self, source_layer, task_parameters, feature_count, provider_type, layer_count):
         """
@@ -2863,17 +2976,94 @@ class FilterMateApp:
             key (str): Property key name
             value: Property value to save
         """
+        # CRASH FIX (v2.3.18): Check if QGIS is still alive before any operations
+        if not is_qgis_alive():
+            logger.debug(f"_save_single_property: QGIS is shutting down, skipping save for {key_group}.{key}")
+            return
+        
+        # CRASH FIX (v2.4.11): Check if dockwidget is in the middle of a layer change
+        # When setCollapsed() processes Qt events, deferred operations run during
+        # _reconnect_layer_signals which can cause access violations if we try to
+        # call setLayerVariable during this unstable state.
+        skip_qgis_variable = False
+        if hasattr(self, 'dockwidget') and self.dockwidget is not None:
+            if getattr(self.dockwidget, '_updating_current_layer', False):
+                logger.debug(f"_save_single_property: layer change in progress, deferring QGIS variable for {key_group}.{key}")
+                skip_qgis_variable = True
+        
+        # CRASH FIX (v2.3.15): Use is_valid_layer() for robust validation
+        # This prevents Windows access violations when layer's C++ object is deleted
+        # during signal processing (e.g., backend change, layer switch, project unload)
+        if not is_valid_layer(layer):
+            logger.debug(f"_save_single_property: layer is invalid or deleted, skipping save for {key_group}.{key}")
+            return
+        
+        # Double-check layer ID is accessible (defensive programming)
+        try:
+            layer_id = layer.id()
+            if not layer_id:
+                return
+        except (RuntimeError, OSError, SystemError):
+            logger.debug(f"_save_single_property: layer.id() failed, C++ object likely deleted")
+            return
+        
+        # CRASH FIX (v2.3.16): Re-fetch fresh layer reference from QGIS project
+        # This is CRITICAL for preventing Windows access violations. The original layer
+        # reference may be stale (C++ object deleted) even if previous checks passed.
+        # Windows access violations CANNOT be caught by try/except - they crash the app.
+        # By re-fetching from QgsProject, we get a valid reference or None.
+        fresh_layer = QgsProject.instance().mapLayer(layer_id)
+        if fresh_layer is None:
+            logger.debug(f"_save_single_property: layer {layer_id} no longer in project, skipping {key_group}.{key}")
+            return
+        
+        # Final validation of the fresh layer reference
+        if not is_valid_layer(fresh_layer):
+            logger.debug(f"_save_single_property: fresh layer reference is invalid, skipping {key_group}.{key}")
+            return
+        
         value_typped, type_returned = self.return_typped_value(value, 'save')
         if type_returned in (list, dict):
             value_typped = json.dumps(value_typped)
         
         variable_key = f"filterMate_{key_group}_{key}"
-        QgsExpressionContextUtils.setLayerVariable(layer, f"{key_group}_{key}", value_typped)
         
+        # CRASH FIX (v2.3.18): Check if layer is still in project - most reliable check
+        # If layer was removed from project, QgsProject.mapLayer() returns None.
+        # This is more reliable than sip.isdeleted() for detecting deleted layers.
+        project_layer = QgsProject.instance().mapLayer(layer_id)
+        if project_layer is None:
+            logger.debug(f"_save_single_property: layer {layer_id} removed from project, skipping QGIS variable for {key_group}.{key}")
+            # Still save to database below (layer_id is valid even if layer is gone)
+        elif skip_qgis_variable:
+            # CRASH FIX (v2.4.11): Layer change is in progress, skip QGIS variable update
+            # but still save to database below
+            pass
+        else:
+            # CRASH FIX (v2.3.18): Triple-check with sip.isdeleted() IMMEDIATELY before Qt call
+            # This is the last line of defense against Windows access violations.
+            if sip.isdeleted(project_layer):
+                logger.debug(f"_save_single_property: project_layer sip deleted just before setLayerVariable, skipping {key_group}.{key}")
+                # Still save to database below
+            else:
+                # CRASH FIX (v2.3.20): Cancel running tasks for this layer before modifying variables
+                # This prevents the race condition where background tasks iterate features
+                # while setLayerVariable modifies the layer state, causing access violations.
+                self._cancel_layer_tasks(layer_id)
+                
+                # CRASH FIX (v2.3.18): Use project_layer (the latest reference from QgsProject)
+                # instead of fresh_layer which may have gone stale since we fetched it
+                try:
+                    QgsExpressionContextUtils.setLayerVariable(project_layer, f"{key_group}_{key}", value_typped)
+                except (RuntimeError, OSError, SystemError) as e:
+                    logger.warning(f"_save_single_property: setLayerVariable failed (layer likely deleted): {e}")
+                    # Continue to database save - don't return
+        
+        # CRASH FIX (v2.3.16): Use layer_id instead of layer.id() to avoid accessing stale reference
         cursor.execute(
             """INSERT INTO fm_project_layers_properties 
                VALUES(?, datetime(), ?, ?, ?, ?, ?)""",
-            (str(uuid.uuid4()), str(self.project_uuid), layer.id(), 
+            (str(uuid.uuid4()), str(self.project_uuid), layer_id, 
              key_group, key, str(value_typped))
         )
 
@@ -2884,6 +3074,9 @@ class FilterMateApp:
         Stores layer properties in two locations:
         1. QGIS layer variables (for runtime access)
         2. Spatialite database (for persistence across sessions)
+        
+        CRASH FIX (v2.3.15): Added is_valid_layer() check to prevent Windows access
+        violations when layer's C++ object is deleted during signal processing.
         
         Args:
             layer (QgsVectorLayer): Layer to save properties for
@@ -2904,26 +3097,32 @@ class FilterMateApp:
         
         layer_all_properties_flag = False
 
-        # CRITICAL: Validate layer type instead of assert to prevent crashes
-        if not isinstance(layer, QgsVectorLayer):
-            logger.error(f"save_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+        # CRASH FIX (v2.3.15): Use is_valid_layer() for robust validation
+        # This catches deleted C++ objects that would cause access violations
+        if not is_valid_layer(layer):
+            logger.debug(f"save_variables_from_layer: layer is invalid or deleted, skipping save")
             return
 
         if len(layer_properties) == 0:
             layer_all_properties_flag = True
         
         # Debug logging for persistence tracking
-        if layer_all_properties_flag:
-            logger.debug(f"💾 Saving ALL properties for layer '{layer.name()}' ({layer.id()})")
-        else:
-            logger.debug(f"💾 Saving {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
-            for prop in layer_properties[:3]:  # Log first 3 properties
-                # Handle both tuple formats: (key_group, key) or (key_group, key, value, type)
-                if len(prop) >= 3:
-                    value_str = str(prop[2])[:50] + "..." if len(str(prop[2])) > 50 else str(prop[2])
-                    logger.debug(f"  - {prop[0]}.{prop[1]} = {value_str}")
-                else:
-                    logger.debug(f"  - {prop[0]}.{prop[1]}")
+        # CRASH FIX (v2.3.15): Wrap layer access in try/except for extra safety
+        try:
+            if layer_all_properties_flag:
+                logger.debug(f"💾 Saving ALL properties for layer '{layer.name()}' ({layer.id()})")
+            else:
+                logger.debug(f"💾 Saving {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
+                for prop in layer_properties[:3]:  # Log first 3 properties
+                    # Handle both tuple formats: (key_group, key) or (key_group, key, value, type)
+                    if len(prop) >= 3:
+                        value_str = str(prop[2])[:50] + "..." if len(str(prop[2])) > 50 else str(prop[2])
+                        logger.debug(f"  - {prop[0]}.{prop[1]} = {value_str}")
+                    else:
+                        logger.debug(f"  - {prop[0]}.{prop[1]}")
+        except (RuntimeError, OSError, SystemError) as e:
+            logger.debug(f"save_variables_from_layer: layer access failed during logging: {e}")
+            return
 
         if layer.id() not in self.PROJECT_LAYERS.keys():
             logger.warning(f"Layer {layer.name()} not in PROJECT_LAYERS, cannot save properties")
@@ -2960,6 +3159,9 @@ class FilterMateApp:
         Clears stored properties from both runtime variables and persistent storage.
         Used when resetting filters or cleaning up removed layers.
         
+        CRASH FIX (v2.3.17): Added sip.isdeleted() and is_valid_layer() checks
+        to prevent Windows access violations when layer C++ object is deleted.
+        
         Args:
             layer (QgsVectorLayer): Layer to remove properties from
             layer_properties (list): List of tuples (key_group, key, value, type)
@@ -2978,20 +3180,45 @@ class FilterMateApp:
         
         layer_all_properties_flag = False
 
-        # CRITICAL: Validate layer type instead of assert to prevent crashes
-        if not isinstance(layer, QgsVectorLayer):
-            logger.error(f"remove_variables_from_layer: Expected QgsVectorLayer, got {type(layer).__name__}")
+        # CRASH FIX (v2.3.17): Use is_valid_layer() for robust validation
+        if not is_valid_layer(layer):
+            logger.debug("remove_variables_from_layer: layer is invalid or deleted, skipping")
+            return
+        
+        # Extract layer_id early and re-fetch layer for safety
+        try:
+            layer_id = layer.id()
+            if not layer_id:
+                return
+        except (RuntimeError, OSError, SystemError):
+            logger.debug("remove_variables_from_layer: layer.id() failed, C++ object likely deleted")
+            return
+        
+        # Re-fetch fresh layer reference from project
+        fresh_layer = QgsProject.instance().mapLayer(layer_id)
+        if fresh_layer is None:
+            logger.debug(f"remove_variables_from_layer: layer {layer_id} no longer in project, skipping")
+            return
+        
+        # Final validation of fresh layer
+        if not is_valid_layer(fresh_layer):
+            logger.debug("remove_variables_from_layer: fresh layer reference is invalid, skipping")
             return
         
         # Debug logging for deletion tracking
-        if len(layer_properties) == 0:
-            layer_all_properties_flag = True
-            logger.debug(f"🗑️ Removing ALL properties for layer '{layer.name()}' ({layer.id()})")
-        else:
-            logger.debug(f"🗑️ Removing {len(layer_properties)} specific properties for layer '{layer.name()}' ({layer.id()})")
+        try:
+            layer_name = fresh_layer.name()
+            if len(layer_properties) == 0:
+                layer_all_properties_flag = True
+                logger.debug(f"🗑️ Removing ALL properties for layer '{layer_name}' ({layer_id})")
+            else:
+                logger.debug(f"🗑️ Removing {len(layer_properties)} specific properties for layer '{layer_name}' ({layer_id})")
+        except (RuntimeError, OSError, SystemError) as e:
+            logger.debug(f"remove_variables_from_layer: layer access failed during logging: {e}")
+            return
         
-        if layer.id() not in self.PROJECT_LAYERS.keys():
-            logger.warning(f"Layer {layer.name()} not in PROJECT_LAYERS, cannot remove properties")
+        if layer_id not in self.PROJECT_LAYERS.keys():
+            logger.warning(f"Layer {layer_id} not in PROJECT_LAYERS, cannot remove properties")
             return
         
         conn = self.get_spatialite_connection()
@@ -3006,9 +3233,14 @@ class FilterMateApp:
                 cur.execute(
                     """DELETE FROM fm_project_layers_properties 
                        WHERE fk_project = ? and layer_id = ?""",
-                    (str(self.project_uuid), layer.id())
+                    (str(self.project_uuid), layer_id)
                 )
-                QgsExpressionContextUtils.setLayerVariables(layer, {})
+                # CRASH FIX (v2.3.17): Final sip check before Qt call
+                if not sip.isdeleted(fresh_layer):
+                    try:
+                        QgsExpressionContextUtils.setLayerVariables(fresh_layer, {})
+                    except (RuntimeError, OSError, SystemError) as e:
+                        logger.warning(f"remove_variables_from_layer: setLayerVariables failed: {e}")
             else:
                 # Remove specific properties
                 for layer_property in layer_properties:
@@ -3016,16 +3248,22 @@ class FilterMateApp:
                     if key_group not in ("infos", "exploring", "filtering"):
                         continue
                     
-                    if (key_group in self.PROJECT_LAYERS[layer.id()] and 
-                        key in self.PROJECT_LAYERS[layer.id()][key_group]):
+                    if (key_group in self.PROJECT_LAYERS[layer_id] and 
+                        key in self.PROJECT_LAYERS[layer_id][key_group]):
                         cur.execute(
                             """DELETE FROM fm_project_layers_properties  
                                WHERE fk_project = ? and layer_id = ? 
                                and meta_type = ? and meta_key = ?""",
-                            (str(self.project_uuid), layer.id(), key_group, key)
+                            (str(self.project_uuid), layer_id, key_group, key)
                         )
                         variable_key = f"filterMate_{key_group}_{key}"
-                        QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
+                        # CRASH FIX (v2.3.17): Final sip check before Qt call
+                        if not sip.isdeleted(fresh_layer):
+                            try:
+                                QgsExpressionContextUtils.setLayerVariable(fresh_layer, variable_key, '')
+                            except (RuntimeError, OSError, SystemError) as e:
+                                logger.warning(f"remove_variables_from_layer: setLayerVariable failed for {key}: {e}")
+
 
       
 

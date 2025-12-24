@@ -8,8 +8,14 @@ based on layer provider type.
 Includes optimization for small PostgreSQL datasets: when a PostgreSQL layer
 has fewer features than SMALL_DATASET_THRESHOLD, use OGR memory backend
 to avoid network overhead and achieve faster filtering.
+
+v2.4.0 Improvements:
+- Cache invalidation for modified layers
+- Cache age tracking with TTL
+- Improved memory management
 """
 
+import time
 from typing import Dict, Optional, Tuple
 from qgis.core import QgsVectorLayer, QgsFeature, QgsFields, QgsWkbTypes, QgsMemoryProviderUtils
 from .base_backend import GeometricFilterBackend
@@ -19,7 +25,8 @@ from .ogr_backend import OGRGeometricFilter
 from ..logging_config import get_tasks_logger
 from ..constants import (
     PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR,
-    SMALL_DATASET_THRESHOLD, DEFAULT_SMALL_DATASET_OPTIMIZATION
+    SMALL_DATASET_THRESHOLD, DEFAULT_SMALL_DATASET_OPTIMIZATION,
+    FACTORY_CACHE_MAX_AGE
 )
 
 logger = get_tasks_logger()
@@ -175,16 +182,87 @@ class BackendFactory:
         the factory returns OGR backend with a pre-loaded memory layer.
         This avoids network overhead and is typically 2-10× faster for
         small datasets.
+    
+    v2.4.0 Cache Improvements:
+        - Cache entries now track creation time and feature count
+        - Automatic invalidation for stale entries (> FACTORY_CACHE_MAX_AGE)
+        - Invalidation when layer feature count changes
     """
     
-    # Cache for memory layers (layer_id -> memory_layer)
-    _memory_layer_cache: Dict[str, QgsVectorLayer] = {}
+    # Cache for memory layers (layer_id -> (memory_layer, creation_time, feature_count))
+    _memory_layer_cache: Dict[str, Tuple[QgsVectorLayer, float, int]] = {}
     
     @classmethod
     def clear_memory_cache(cls):
         """Clear the memory layer cache."""
         cls._memory_layer_cache.clear()
         logger.debug("Memory layer cache cleared")
+    
+    @classmethod
+    def invalidate_layer_cache(cls, layer_id: str) -> bool:
+        """
+        Invalidate cache for a specific layer.
+        
+        Args:
+            layer_id: ID of the layer to invalidate
+            
+        Returns:
+            True if entry was found and removed
+        """
+        if layer_id in cls._memory_layer_cache:
+            del cls._memory_layer_cache[layer_id]
+            logger.debug(f"Cache invalidated for layer {layer_id}")
+            return True
+        return False
+    
+    @classmethod
+    def _is_cache_valid(cls, layer: QgsVectorLayer) -> bool:
+        """
+        Check if cached memory layer is still valid.
+        
+        Validates:
+        - Cache entry exists
+        - Memory layer is valid
+        - Cache age is within TTL
+        - Feature count hasn't changed
+        
+        Args:
+            layer: Source layer to check
+            
+        Returns:
+            True if cache is valid
+        """
+        layer_id = layer.id()
+        
+        if layer_id not in cls._memory_layer_cache:
+            return False
+        
+        cached_layer, creation_time, cached_count = cls._memory_layer_cache[layer_id]
+        
+        # Check if memory layer is still valid
+        if not cached_layer or not cached_layer.isValid():
+            logger.debug(f"Cache invalid: memory layer not valid for {layer.name()}")
+            del cls._memory_layer_cache[layer_id]
+            return False
+        
+        # Check cache age
+        age = time.time() - creation_time
+        if age > FACTORY_CACHE_MAX_AGE:
+            logger.debug(f"Cache expired: {age:.0f}s > {FACTORY_CACHE_MAX_AGE}s for {layer.name()}")
+            del cls._memory_layer_cache[layer_id]
+            return False
+        
+        # Check if feature count changed (layer was modified)
+        current_count = layer.featureCount()
+        if current_count != cached_count:
+            logger.debug(
+                f"Cache invalid: feature count changed {cached_count} → {current_count} "
+                f"for {layer.name()}"
+            )
+            del cls._memory_layer_cache[layer_id]
+            return False
+        
+        return True
     
     @classmethod
     def get_memory_layer(cls, layer: QgsVectorLayer) -> Optional[QgsVectorLayer]:
@@ -199,20 +277,21 @@ class BackendFactory:
         """
         layer_id = layer.id()
         
-        # Check cache first
-        if layer_id in cls._memory_layer_cache:
-            cached = cls._memory_layer_cache[layer_id]
-            if cached and cached.isValid():
-                logger.debug(f"Using cached memory layer for {layer.name()}")
-                return cached
-            else:
-                # Remove invalid cached layer
-                del cls._memory_layer_cache[layer_id]
+        # Check cache with validation
+        if cls._is_cache_valid(layer):
+            cached_layer, _, _ = cls._memory_layer_cache[layer_id]
+            logger.debug(f"Using cached memory layer for {layer.name()}")
+            return cached_layer
         
         # Create new memory layer
         memory_layer = load_postgresql_to_memory(layer)
         if memory_layer:
-            cls._memory_layer_cache[layer_id] = memory_layer
+            # Store with creation time and feature count for validation
+            cls._memory_layer_cache[layer_id] = (
+                memory_layer,
+                time.time(),
+                layer.featureCount()
+            )
         
         return memory_layer
     

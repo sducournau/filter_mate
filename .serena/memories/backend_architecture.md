@@ -1,8 +1,25 @@
 # Backend Architecture - FilterMate
 
+**Last Updated:** December 23, 2025
+**Current Version:** 2.4.10
+
 ## Multi-Backend System
 
 FilterMate v2.1+ implements a **factory pattern** for automatic backend selection based on data source and available dependencies.
+
+## Thread Safety (v2.4.4+)
+
+**CRITICAL**: QGIS `QgsVectorLayer` objects are NOT thread-safe.
+
+### Parallel Execution Rules
+- **PostgreSQL/Spatialite**: Can run in parallel (database connections are per-thread)
+- **OGR (Shapefiles, GeoPackage)**: MUST use sequential execution
+- **Geometric filtering**: Auto-detects and forces sequential mode
+
+### ParallelFilterExecutor (modules/tasks/parallel_executor.py)
+- Auto-detects OGR layers and forces sequential execution
+- Thread tracking with concurrent access warnings
+- Clear logging about execution mode chosen
 
 ## Backend Structure
 
@@ -284,11 +301,22 @@ class FilterEngineTask(QgsTask):
         return result
 ```
 
+## Pre-flight Validation (v2.4.5+)
+
+Before calling `processing.run()`, OGR backend performs three-tier validation:
+
+1. **`_validate_input_layer()`**: Tests layer.id(), layer.crs(), layer.wkbType(), provider methods
+2. **`_validate_intersect_layer()`**: Same + geometry validity sampling
+3. **`_preflight_layer_check()`**: Tests exact operations that checkParameterValues performs
+
+This prevents C++ level crashes that Python cannot catch.
+
 ## Future Enhancements
 
-### Planned (Phase 3-5)
+### Planned
 - Caching layer for repeated queries
 - Query plan optimization
-- Parallel execution for multi-layer filtering
 - Result streaming for very large datasets
 - Custom backend plugins support
+
+**Note:** Parallel execution for OGR is NOT planned due to thread safety constraints.

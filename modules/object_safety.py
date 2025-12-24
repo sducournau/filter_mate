@@ -40,8 +40,48 @@ except ImportError:
 
 from qgis.core import QgsVectorLayer, QgsProject, QgsMapLayer
 from qgis.PyQt.QtCore import QObject
+from qgis.PyQt.QtWidgets import QApplication
+import platform
 
 logger = logging.getLogger('FilterMate.ObjectSafety')
+
+# Flag to track if we're on Windows (where access violations are fatal)
+IS_WINDOWS = platform.system() == 'Windows'
+
+
+def is_qgis_alive() -> bool:
+    """
+    Check if QGIS application is still alive and safe to access.
+    
+    CRASH FIX (v2.3.14): This function checks if the QApplication instance exists
+    and is not deleted. This is a pre-check before accessing QgsProject.instance()
+    which can cause a Windows fatal exception (access violation) if called during
+    QGIS shutdown or when the application is in an unstable state.
+    
+    The access violation at QgsProject.instance() cannot be caught by Python's
+    try/except because it's an OS-level signal. This canary check prevents the
+    crash by detecting when QGIS is shutting down.
+    
+    Returns:
+        True if QGIS is alive and safe to access, False otherwise
+    """
+    try:
+        app = QApplication.instance()
+        if app is None:
+            return False
+        
+        # Check if the app object is deleted (sip check)
+        if sip is not None:
+            try:
+                if sip.isdeleted(app):
+                    return False
+            except (TypeError, AttributeError):
+                # If sip check fails, assume not safe
+                return False
+        
+        return True
+    except Exception:
+        return False
 
 
 # =============================================================================
@@ -53,6 +93,8 @@ def is_sip_deleted(obj: Any) -> bool:
     Check if a Qt/PyQt object's underlying C++ object has been deleted.
     
     This is the primary check to prevent "wrapped C/C++ object has been deleted" errors.
+    
+    CRASH FIX (v2.3.13): Added OSError/SystemError handling for Windows access violations.
     
     Args:
         obj: Any PyQt/Qt object to check
@@ -77,6 +119,10 @@ def is_sip_deleted(obj: Any) -> bool:
     except (TypeError, AttributeError):
         # Object doesn't support sip.isdeleted check
         return False
+    except (RuntimeError, OSError, SystemError) as e:
+        # CRASH FIX (v2.3.13): These can occur on Windows when accessing corrupted objects
+        logger.debug(f"sip.isdeleted raised system error: {e}")
+        return True  # Assume deleted if we can't check
 
 
 def is_valid_qobject(obj: Any) -> bool:
@@ -120,6 +166,9 @@ def is_valid_layer(layer: Any) -> bool:
     """
     Check if a QGIS layer is valid and safe to use for operations.
     
+    CRASH FIX (v2.3.13): Enhanced protection against access violations by
+    wrapping validity checks in individual try/except blocks.
+    
     Combines multiple checks:
     - Not None
     - Not sip deleted
@@ -140,8 +189,13 @@ def is_valid_layer(layer: Any) -> bool:
     if layer is None:
         return False
     
-    if is_sip_deleted(layer):
-        logger.debug(f"Layer is sip deleted")
+    # CRASH FIX (v2.3.13): Check sip deletion with try/except wrapper
+    try:
+        if is_sip_deleted(layer):
+            logger.debug(f"Layer is sip deleted")
+            return False
+    except (RuntimeError, OSError, SystemError) as e:
+        logger.debug(f"sip deletion check failed: {e}")
         return False
     
     if not isinstance(layer, QgsVectorLayer):
@@ -149,6 +203,7 @@ def is_valid_layer(layer: Any) -> bool:
     
     try:
         # These calls will raise RuntimeError if C++ object deleted
+        # CRASH FIX (v2.3.13): Can also raise OSError/SystemError on Windows
         if not layer.isValid():
             return False
         
@@ -158,6 +213,10 @@ def is_valid_layer(layer: Any) -> bool:
         
     except RuntimeError:
         logger.debug(f"Layer access raised RuntimeError (C++ object deleted)")
+        return False
+    except (OSError, SystemError) as e:
+        # CRASH FIX (v2.3.13): Windows access violations may surface as these
+        logger.debug(f"Layer access raised system error: {e}")
         return False
     except Exception as e:
         logger.debug(f"Layer validation failed: {e}")
@@ -171,6 +230,9 @@ def is_layer_in_project(layer: Any, project: Optional[QgsProject] = None) -> boo
     This prevents access violations when a layer was removed between
     getting a reference and using it.
     
+    CRASH FIX (v2.3.14): Added is_qgis_alive() check before QgsProject.instance()
+    to prevent Windows access violations during QGIS shutdown.
+    
     Args:
         layer: Layer to check
         project: Optional project to check in. Uses QgsProject.instance() if None
@@ -182,7 +244,10 @@ def is_layer_in_project(layer: Any, project: Optional[QgsProject] = None) -> boo
         return False
     
     try:
+        # CRASH FIX (v2.3.14): Check if QGIS is alive before accessing project
         if project is None:
+            if not is_qgis_alive():
+                return False
             project = QgsProject.instance()
         
         if project is None:
@@ -294,6 +359,376 @@ def safe_emit(signal: Any, *args) -> bool:
         return False
     except Exception as e:
         logger.warning(f"Unexpected error emitting signal: {e}")
+        return False
+
+
+def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, project: Optional[QgsProject] = None) -> bool:
+    """
+    Safely set a layer variable, preventing access violations.
+    
+    CRASH FIX (v2.3.14): Enhanced protection against access violations by:
+    1. Checking if QGIS is alive BEFORE calling QgsProject.instance()
+    2. Checking sip deletion status BEFORE any layer method calls
+    3. Using multiple validation gates to catch race conditions
+    4. Wrapping all layer access in try/except for RuntimeError
+    
+    The Windows access violation on QgsProject.instance() was caused by QGIS
+    being in an unstable state (shutdown, task manager cleanup, etc.).
+    Python's try/except cannot catch OS-level access violations, so we use
+    a QApplication.instance() canary check before accessing QgsProject.
+    
+    Args:
+        layer_id: Layer ID to set variable on
+        variable_key: Variable key to set
+        value: Value to set
+        project: Optional project to use. Uses QgsProject.instance() if None.
+        
+    Returns:
+        True if the variable was set successfully
+    """
+    try:
+        # CRASH FIX (v2.3.14): Check if QGIS is alive BEFORE QgsProject.instance()
+        # Windows access violations cannot be caught by try/except
+        if not is_qgis_alive():
+            logger.debug("QGIS is not alive, skipping safe_set_layer_variable")
+            return False
+        
+        if project is None:
+            project = QgsProject.instance()
+        
+        if project is None:
+            logger.debug("No project available for safe_set_layer_variable")
+            return False
+        
+        # CRASH FIX (v2.3.13): Check if project itself is still valid
+        if sip is not None:
+            try:
+                if sip.isdeleted(project):
+                    logger.debug("Project C++ object is deleted")
+                    return False
+            except (TypeError, AttributeError):
+                pass
+        
+        # Re-fetch layer fresh from project registry
+        # This is the safest way - let QGIS give us the current layer object
+        layer = project.mapLayer(layer_id)
+        
+        if layer is None:
+            logger.debug(f"Layer {layer_id} not found in project")
+            return False
+        
+        # CRASH FIX (v2.3.13): Immediate sip deletion check FIRST
+        # This must happen before ANY method call on the layer object
+        if sip is not None:
+            try:
+                if sip.isdeleted(layer):
+                    logger.debug(f"Layer {layer_id} C++ object is deleted")
+                    return False
+            except (TypeError, AttributeError) as e:
+                # If sip.isdeleted() itself fails, layer is likely corrupted
+                logger.debug(f"sip.isdeleted check failed for {layer_id}: {e}")
+                return False
+        
+        # CRASH FIX (v2.3.13): Wrap isValid() call in its own try/except
+        # layer.isValid() can cause access violation if layer is partially deleted
+        try:
+            is_valid = layer.isValid()
+        except (RuntimeError, OSError, SystemError) as e:
+            logger.debug(f"Layer {layer_id} validity check failed: {e}")
+            return False
+        
+        if not is_valid:
+            logger.debug(f"Layer {layer_id} is invalid")
+            return False
+        
+        # CRASH FIX (v2.3.13): Final sip check immediately before C++ call
+        # Minimizes race condition window
+        if sip is not None:
+            try:
+                if sip.isdeleted(layer):
+                    logger.debug(f"Layer {layer_id} deleted before setLayerVariable")
+                    return False
+            except (TypeError, AttributeError):
+                return False
+        
+        # CRASH FIX (v2.4.7): Flush pending Qt events BEFORE the C++ call
+        # This allows any pending layer deletions to complete, reducing the race window.
+        # Critical for Windows where access violations are fatal and cannot be caught.
+        if IS_WINDOWS:
+            try:
+                app = QApplication.instance()
+                if app is not None:
+                    # Process pending events that might include layer deletions
+                    app.processEvents()
+                    
+                    # Re-verify layer after processing events
+                    if sip is not None:
+                        try:
+                            if sip.isdeleted(layer):
+                                logger.debug(f"Layer {layer_id} deleted after processEvents")
+                                return False
+                        except (TypeError, AttributeError):
+                            return False
+                    
+                    # Re-fetch layer one more time to be absolutely sure
+                    layer = project.mapLayer(layer_id)
+                    if layer is None:
+                        logger.debug(f"Layer {layer_id} no longer in project after processEvents")
+                        return False
+            except Exception as e:
+                logger.debug(f"Error during pre-operation event flush: {e}")
+                return False
+        
+        # CRASH FIX (v2.4.8): Atomic-style final validation before C++ call
+        # Re-fetch the layer immediately before the call to minimize race window
+        # This is the absolute last defense before the C++ operation
+        fresh_layer = project.mapLayer(layer_id)
+        if fresh_layer is None:
+            logger.debug(f"Layer {layer_id} not found in final fetch before setLayerVariable")
+            return False
+        
+        # Immediate sip check on the fresh layer reference
+        if sip is not None:
+            try:
+                if sip.isdeleted(fresh_layer):
+                    logger.debug(f"Fresh layer {layer_id} is sip-deleted before setLayerVariable")
+                    return False
+            except (TypeError, AttributeError):
+                logger.debug(f"sip check failed on fresh layer {layer_id}")
+                return False
+        
+        # Final validity check on the fresh layer
+        try:
+            if not fresh_layer.isValid():
+                logger.debug(f"Fresh layer {layer_id} is invalid before setLayerVariable")
+                return False
+        except (RuntimeError, OSError, SystemError):
+            logger.debug(f"Fresh layer {layer_id} validity check crashed")
+            return False
+        
+        # CRASH FIX (v2.4.9): Use direct setCustomProperty instead of 
+        # QgsExpressionContextUtils.setLayerVariable. This allows us to wrap the
+        # actual C++ call in a try/except that can catch RuntimeError.
+        # QgsExpressionContextUtils.setLayerVariable internally calls setCustomProperty
+        # with key format "variableValues/<variable_name>" for the value and
+        # "variableNames" for tracking variable names.
+        try:
+            # Format variable key as QGIS expects for layer variables
+            prop_key = f"variableValues/{variable_key}"
+            
+            # Get existing variable names list
+            existing_names = fresh_layer.customProperty('variableNames', [])
+            if not isinstance(existing_names, list):
+                existing_names = [existing_names] if existing_names else []
+            
+            # Add variable name if not already tracked
+            if variable_key not in existing_names:
+                existing_names.append(variable_key)
+                fresh_layer.setCustomProperty('variableNames', existing_names)
+            
+            # Set the variable value
+            fresh_layer.setCustomProperty(prop_key, value)
+            
+            logger.debug(f"Successfully set layer variable {variable_key} for {layer_id}")
+            return True
+            
+        except (RuntimeError, OSError, SystemError) as e:
+            # These errors indicate the layer C++ object was deleted during the operation
+            logger.debug(f"Layer {layer_id} was deleted during setCustomProperty: {e}")
+            return False
+        
+    except RuntimeError as e:
+        logger.debug(f"RuntimeError in safe_set_layer_variable for {layer_id}: {e}")
+        return False
+    except (OSError, SystemError) as e:
+        # CRASH FIX (v2.3.13): These can occur on Windows when accessing deleted objects
+        logger.debug(f"System error in safe_set_layer_variable for {layer_id}: {e}")
+        return False
+    except Exception as e:
+        logger.warning(f"Error in safe_set_layer_variable for {layer_id}: {e}")
+        return False
+
+
+def safe_set_layer_variables(layer_id: str, variables: dict, project: Optional[QgsProject] = None) -> bool:
+    """
+    Safely set/clear all layer variables, preventing access violations.
+    
+    CRASH FIX (v2.3.14): Enhanced protection against access violations by:
+    1. Checking if QGIS is alive BEFORE calling QgsProject.instance()
+    2. Checking sip deletion status BEFORE any layer method calls
+    3. Using multiple validation gates to catch race conditions
+    4. Wrapping all layer access in try/except for RuntimeError
+    
+    Args:
+        layer_id: Layer ID to set variables on
+        variables: Dictionary of variables to set (empty dict clears all)
+        project: Optional project to use. Uses QgsProject.instance() if None.
+        
+    Returns:
+        True if the variables were set successfully
+    """
+    try:
+        # CRASH FIX (v2.3.14): Check if QGIS is alive BEFORE QgsProject.instance()
+        # Windows access violations cannot be caught by try/except
+        if not is_qgis_alive():
+            logger.debug("QGIS is not alive, skipping safe_set_layer_variables")
+            return False
+        
+        if project is None:
+            project = QgsProject.instance()
+        
+        if project is None:
+            logger.debug("No project available for safe_set_layer_variables")
+            return False
+        
+        # CRASH FIX (v2.3.13): Check if project itself is still valid
+        if sip is not None:
+            try:
+                if sip.isdeleted(project):
+                    logger.debug("Project C++ object is deleted")
+                    return False
+            except (TypeError, AttributeError):
+                pass
+        
+        # Re-fetch layer fresh from project registry
+        layer = project.mapLayer(layer_id)
+        
+        if layer is None:
+            logger.debug(f"Layer {layer_id} not found in project")
+            return False
+        
+        # CRASH FIX (v2.3.13): Immediate sip deletion check FIRST
+        if sip is not None:
+            try:
+                if sip.isdeleted(layer):
+                    logger.debug(f"Layer {layer_id} C++ object is deleted")
+                    return False
+            except (TypeError, AttributeError) as e:
+                logger.debug(f"sip.isdeleted check failed for {layer_id}: {e}")
+                return False
+        
+        # CRASH FIX (v2.3.13): Wrap isValid() call in its own try/except
+        try:
+            is_valid = layer.isValid()
+        except (RuntimeError, OSError, SystemError) as e:
+            logger.debug(f"Layer {layer_id} validity check failed: {e}")
+            return False
+        
+        if not is_valid:
+            logger.debug(f"Layer {layer_id} is invalid")
+            return False
+        
+        # CRASH FIX (v2.3.13): Final sip check immediately before C++ call
+        if sip is not None:
+            try:
+                if sip.isdeleted(layer):
+                    logger.debug(f"Layer {layer_id} deleted before setLayerVariables")
+                    return False
+            except (TypeError, AttributeError):
+                return False
+        
+        # CRASH FIX (v2.4.7): Flush pending Qt events BEFORE the C++ call
+        # This allows any pending layer deletions to complete, reducing the race window.
+        # Critical for Windows where access violations are fatal and cannot be caught.
+        if IS_WINDOWS:
+            try:
+                app = QApplication.instance()
+                if app is not None:
+                    # Process pending events that might include layer deletions
+                    app.processEvents()
+                    
+                    # Re-verify layer after processing events
+                    if sip is not None:
+                        try:
+                            if sip.isdeleted(layer):
+                                logger.debug(f"Layer {layer_id} deleted after processEvents")
+                                return False
+                        except (TypeError, AttributeError):
+                            return False
+                    
+                    # Re-fetch layer one more time to be absolutely sure
+                    layer = project.mapLayer(layer_id)
+                    if layer is None:
+                        logger.debug(f"Layer {layer_id} no longer in project after processEvents")
+                        return False
+            except Exception as e:
+                logger.debug(f"Error during pre-operation event flush: {e}")
+                return False
+        
+        # CRASH FIX (v2.4.8): Atomic-style final validation before C++ call
+        # Re-fetch the layer immediately before the call to minimize race window
+        # This is the absolute last defense before the C++ operation
+        fresh_layer = project.mapLayer(layer_id)
+        if fresh_layer is None:
+            logger.debug(f"Layer {layer_id} not found in final fetch before setLayerVariables")
+            return False
+        
+        # Immediate sip check on the fresh layer reference
+        if sip is not None:
+            try:
+                if sip.isdeleted(fresh_layer):
+                    logger.debug(f"Fresh layer {layer_id} is sip-deleted before setLayerVariables")
+                    return False
+            except (TypeError, AttributeError):
+                logger.debug(f"sip check failed on fresh layer {layer_id}")
+                return False
+        
+        # Final validity check on the fresh layer
+        try:
+            if not fresh_layer.isValid():
+                logger.debug(f"Fresh layer {layer_id} is invalid before setLayerVariables")
+                return False
+        except (RuntimeError, OSError, SystemError):
+            logger.debug(f"Fresh layer {layer_id} validity check crashed")
+            return False
+        
+        # CRASH FIX (v2.4.9): Use direct setCustomProperty instead of
+        # QgsExpressionContextUtils.setLayerVariables. This allows us to wrap
+        # the actual C++ calls in try/except that can catch RuntimeError.
+        try:
+            if not variables:
+                # Clear all variables - remove all variableValues/* properties
+                existing_names = fresh_layer.customProperty('variableNames', [])
+                if not isinstance(existing_names, list):
+                    existing_names = [existing_names] if existing_names else []
+                
+                for var_name in existing_names:
+                    try:
+                        fresh_layer.removeCustomProperty(f'variableValues/{var_name}')
+                    except (RuntimeError, OSError, SystemError):
+                        logger.debug(f"Failed to remove variable {var_name} for {layer_id}")
+                
+                # Clear the names list
+                try:
+                    fresh_layer.removeCustomProperty('variableNames')
+                except (RuntimeError, OSError, SystemError):
+                    pass
+            else:
+                # Set all variables
+                for var_key, var_value in variables.items():
+                    prop_key = f"variableValues/{var_key}"
+                    fresh_layer.setCustomProperty(prop_key, var_value)
+                
+                # Update variable names list
+                fresh_layer.setCustomProperty('variableNames', list(variables.keys()))
+            
+            logger.debug(f"Successfully set layer variables for {layer_id}")
+            return True
+            
+        except (RuntimeError, OSError, SystemError) as e:
+            # These errors indicate the layer C++ object was deleted during the operation
+            logger.debug(f"Layer {layer_id} was deleted during setCustomProperty: {e}")
+            return False
+        
+    except RuntimeError as e:
+        logger.debug(f"RuntimeError in safe_set_layer_variables for {layer_id}: {e}")
+        return False
+    except (OSError, SystemError) as e:
+        # CRASH FIX (v2.3.13): These can occur on Windows when accessing deleted objects
+        logger.debug(f"System error in safe_set_layer_variables for {layer_id}: {e}")
+        return False
+    except Exception as e:
+        logger.warning(f"Error in safe_set_layer_variables for {layer_id}: {e}")
         return False
 
 
@@ -728,37 +1163,64 @@ def safe_get_features(layer: QgsVectorLayer, request=None, max_retries: int = 3,
     return []
 
 
-def refresh_ogr_layer(layer: QgsVectorLayer) -> bool:
+def refresh_ogr_layer(layer: QgsVectorLayer, max_retries: int = 3, retry_delay: float = 0.3) -> bool:
     """
     Refresh an OGR layer's data source to clear stale connections.
     
     Useful when encountering "unable to open database file" errors
-    due to stale file handles or connection issues.
+    due to stale file handles or connection issues. Uses GDAL error
+    suppression to handle transient SQLite warnings during refresh.
     
     Args:
         layer: OGR-based vector layer to refresh
+        max_retries: Maximum refresh attempts (default 3)
+        retry_delay: Initial delay between retries in seconds (default 0.3)
         
     Returns:
         True if refresh succeeded, False otherwise
     """
+    import time
+    
     if not is_valid_layer(layer):
         return False
     
-    try:
-        if layer.providerType() != 'ogr':
-            return True  # Not an OGR layer, nothing to refresh
-        
-        # Trigger provider refresh
-        layer.dataProvider().reloadData()
-        layer.reload()
-        layer.triggerRepaint()
-        
-        logger.debug(f"Refreshed OGR layer: {layer.name()}")
-        return True
-        
-    except Exception as e:
-        logger.warning(f"Failed to refresh OGR layer '{layer.name()}': {e}")
-        return False
+    if layer.providerType() != 'ogr':
+        return True  # Not an OGR layer, nothing to refresh
+    
+    for attempt in range(max_retries):
+        try:
+            # Use GDAL error handler to suppress transient SQLite warnings
+            with GdalErrorHandler():
+                # Trigger provider refresh
+                layer.dataProvider().reloadData()
+                layer.reload()
+                layer.triggerRepaint()
+            
+            logger.debug(f"Refreshed OGR layer: {layer.name()}")
+            return True
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # Check for recoverable SQLite errors
+            is_recoverable = any(x in error_str for x in [
+                'unable to open database file',
+                'database is locked',
+                'sqlite3_step',
+            ])
+            
+            if is_recoverable and attempt < max_retries - 1:
+                logger.debug(
+                    f"OGR layer refresh retry for '{layer.name()}' "
+                    f"(attempt {attempt + 1}/{max_retries}): {e}"
+                )
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 2.0)  # Cap at 2 seconds
+            else:
+                logger.warning(f"Failed to refresh OGR layer '{layer.name()}': {e}")
+                return False
+    
+    return False
 
 
 # =============================================================================
@@ -767,6 +1229,7 @@ def refresh_ogr_layer(layer: QgsVectorLayer) -> bool:
 
 __all__ = [
     # Core checks
+    'is_qgis_alive',
     'is_sip_deleted',
     'is_valid_qobject', 
     'is_valid_layer',
@@ -777,6 +1240,10 @@ __all__ = [
     'safe_disconnect',
     'safe_emit',
     'safe_block_signals',
+    
+    # Safe layer variable operations (v2.3.14)
+    'safe_set_layer_variable',
+    'safe_set_layer_variables',
     
     # Callback safety
     'make_safe_callback',

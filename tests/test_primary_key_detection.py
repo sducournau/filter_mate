@@ -127,13 +127,15 @@ class TestPrimaryKeyDetection(unittest.TestCase):
         mock_fields.__getitem__ = Mock(return_value=mock_field)
         mock_layer.fields.return_value = mock_fields
         
-        # For non-PostgreSQL with known count, uniqueValues is checked
-        mock_layer.uniqueValues.return_value = list(range(100))  # 100 unique values
+        # CRITICAL FIX: uniqueValues() is NOT called anymore (thread-safety)
+        # Declared primary key is trusted without verification
         
         result = self.task.search_primary_key_from_layer(mock_layer)
         
         self.assertEqual(result[0], "fid")
         self.assertTrue(result[3])  # is numeric
+        # Verify uniqueValues was NOT called (thread-safety fix)
+        mock_layer.uniqueValues.assert_not_called()
     
     def test_ogr_shapefile_finds_fid(self):
         """OGR/Shapefile layer should find FID field."""
@@ -152,43 +154,52 @@ class TestPrimaryKeyDetection(unittest.TestCase):
         mock_fields.__getitem__ = Mock(return_value=mock_field)
         mock_layer.fields.return_value = mock_fields
         
-        mock_layer.uniqueValues.return_value = list(range(50))
+        # CRITICAL FIX: uniqueValues() is NOT called anymore (thread-safety)
+        # Declared primary key is trusted without verification
         
         result = self.task.search_primary_key_from_layer(mock_layer)
         
         self.assertEqual(result[0], "fid")
         self.assertTrue(result[3])
+        # Verify uniqueValues was NOT called (thread-safety fix)
+        mock_layer.uniqueValues.assert_not_called()
     
-    def test_memory_layer_creates_virtual_id(self):
-        """Memory layer without unique field should create virtual_id."""
+    def test_memory_layer_uses_first_field(self):
+        """Memory layer without PK should use first field (thread-safety fix).
+        
+        CRITICAL FIX: Previously, uniqueValues() was called to verify uniqueness.
+        This caused access violations when run from QgsTask background thread.
+        Now we trust the first field without verification.
+        """
         mock_layer = Mock()
         mock_layer.providerType.return_value = 'memory'
         mock_layer.name.return_value = "memory_layer"
         mock_layer.featureCount.return_value = 10
         mock_layer.primaryKeyAttributes.return_value = []
         
-        # Non-unique fields
+        # First field (may or may not be unique - we don't check anymore)
         mock_field = Mock()
         mock_field.name.return_value = "category"
+        mock_field.typeName.return_value = "String"
+        mock_field.isNumeric.return_value = False
         
         mock_fields = Mock()
         mock_fields.__iter__ = Mock(return_value=iter([mock_field]))
+        mock_fields.__getitem__ = Mock(return_value=mock_field)
         mock_fields.count.return_value = 1
         mock_fields.indexFromName = Mock(return_value=0)
         mock_fields.indexOf = Mock(return_value=0)
         mock_layer.fields.return_value = mock_fields
         
-        # Only 3 unique values for 10 features (not unique)
-        mock_layer.uniqueValues.return_value = ["A", "B", "C"]
-        
-        # Mock addExpressionField
-        mock_layer.addExpressionField = Mock()
-        
         result = self.task.search_primary_key_from_layer(mock_layer)
         
-        # Should create virtual_id
-        self.assertEqual(result[0], "virtual_id")
-        mock_layer.addExpressionField.assert_called_once()
+        # CRITICAL FIX: Should use first field instead of creating virtual_id
+        # This avoids thread-unsafe uniqueValues() call
+        self.assertEqual(result[0], "category")
+        # Verify uniqueValues was NOT called (thread-safety fix)
+        mock_layer.uniqueValues.assert_not_called()
+        # Verify addExpressionField was NOT called (no virtual_id needed)
+        mock_layer.addExpressionField.assert_not_called()
     
     def test_large_postgresql_layer_no_uniqueness_check(self):
         """Large PostgreSQL layer should skip uniqueness check (performance)."""

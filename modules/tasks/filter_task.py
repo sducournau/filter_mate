@@ -1520,6 +1520,7 @@ class FilterEngineTask(QgsTask):
         # Process results and update progress
         successful_filters = 0
         failed_filters = 0
+        failed_layer_names = []  # Track names of failed layers for error message
         
         for i, (layer_tuple, result) in enumerate(zip(all_layers, results), 1):
             layer, layer_props = layer_tuple
@@ -1530,6 +1531,7 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"✅ {layer.name()} has been filtered → {layer.featureCount()} features")
             else:
                 failed_filters += 1
+                failed_layer_names.append(layer.name())
                 error_msg = result.error_message if hasattr(result, 'error_message') else getattr(result, 'error', 'Unknown error')
                 logger.error(f"❌ {layer.name()} - errors occurred during filtering: {error_msg}")
             
@@ -1541,11 +1543,14 @@ class FilterEngineTask(QgsTask):
                 return False
         
         # DIAGNOSTIC: Summary of filtering results
-        self._log_filtering_summary(successful_filters, failed_filters)
+        self._log_filtering_summary(successful_filters, failed_filters, failed_layer_names)
         
         # CRITICAL FIX: Return False if ANY filter failed to alert user
+        # Store failed layer names for error message in finished()
         if failed_filters > 0:
+            self._failed_layer_names = failed_layer_names
             logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter (parallel mode) - returning False")
+            logger.warning(f"   Failed layers: {', '.join(failed_layer_names[:5])}{'...' if len(failed_layer_names) > 5 else ''}")
             return False
         return True
     
@@ -1561,6 +1566,7 @@ class FilterEngineTask(QgsTask):
         i = 1
         successful_filters = 0
         failed_filters = 0
+        failed_layer_names = []  # Track names of failed layers for error message
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
@@ -1570,6 +1576,7 @@ class FilterEngineTask(QgsTask):
                     if not is_valid_layer(layer):
                         logger.warning(f"⚠️ Layer {i}/{self.layers_count} is invalid - skipping")
                         failed_filters += 1
+                        failed_layer_names.append(f"Layer_{i} (invalid)")
                         i += 1
                         continue
                     
@@ -1578,6 +1585,7 @@ class FilterEngineTask(QgsTask):
                 except (RuntimeError, AttributeError) as access_error:
                     logger.error(f"❌ Layer {i}/{self.layers_count} access error (C++ object deleted): {access_error}")
                     failed_filters += 1
+                    failed_layer_names.append(f"Layer_{i} (deleted)")
                     i += 1
                     continue
                 
@@ -1599,6 +1607,7 @@ class FilterEngineTask(QgsTask):
                         logger.info(f"✅ {layer_name} has been filtered (count unavailable)")
                 else:
                     failed_filters += 1
+                    failed_layer_names.append(layer_name)
                     logger.error(f"❌ {layer_name} - errors occurred during filtering")
                 
                 i += 1
@@ -1610,16 +1619,27 @@ class FilterEngineTask(QgsTask):
                     return False
         
         # DIAGNOSTIC: Summary of filtering results
-        self._log_filtering_summary(successful_filters, failed_filters)
+        self._log_filtering_summary(successful_filters, failed_filters, failed_layer_names)
         
         # CRITICAL FIX: Return False if ANY filter failed to alert user
+        # Store failed layer names for error message in finished()
         if failed_filters > 0:
+            self._failed_layer_names = failed_layer_names
             logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter - returning False")
+            logger.warning(f"   Failed layers: {', '.join(failed_layer_names[:5])}{'...' if len(failed_layer_names) > 5 else ''}")
             return False
         return True
     
-    def _log_filtering_summary(self, successful_filters: int, failed_filters: int):
-        """Log summary of filtering results."""
+    def _log_filtering_summary(self, successful_filters: int, failed_filters: int, failed_layer_names=None):
+        """Log summary of filtering results.
+        
+        Args:
+            successful_filters: Number of layers that filtered successfully
+            failed_filters: Number of layers that failed to filter
+            failed_layer_names: Optional list of names of layers that failed
+        """
+        if failed_layer_names is None:
+            failed_layer_names = []
         logger.info("")
         logger.info("=" * 70)
         logger.info("📊 RÉSUMÉ DU FILTRAGE GÉOMÉTRIQUE")
@@ -1627,6 +1647,19 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  Total couches: {self.layers_count}")
         logger.info(f"  ✅ Succès: {successful_filters}")
         logger.info(f"  ❌ Échecs: {failed_filters}")
+        if failed_filters > 0:
+            logger.info("")
+            if failed_layer_names:
+                logger.info("  ❌ COUCHES EN ÉCHEC:")
+                for name in failed_layer_names[:10]:  # Show first 10
+                    logger.info(f"     • {name}")
+                if len(failed_layer_names) > 10:
+                    logger.info(f"     ... et {len(failed_layer_names) - 10} autre(s)")
+            logger.info("")
+            logger.info("  💡 CONSEIL: Si des couches échouent avec le backend Spatialite:")
+            logger.info("     → Vérifiez que les couches sont des GeoPackage/SQLite")
+            logger.info("     → Les Shapefiles ne supportent pas les fonctions Spatialite")
+            logger.info("     → Essayez le backend OGR (QGIS processing) pour ces couches")
         logger.info("=" * 70)
 
     def manage_distant_layers_geometric_filtering(self):
@@ -1663,9 +1696,20 @@ class FilterEngineTask(QgsTask):
         # This sets self.param_buffer_value which is needed by prepare_*_source_geom()
         self._initialize_source_subset_and_buffer()
         
-        # Build unique provider list including source layer provider
+        # Build unique provider list including source layer provider AND forced backends
+        # CRITICAL FIX v2.4.1: Include forced backends in provider_list
+        # Without this, forced backends won't have their source geometry prepared
         provider_list = self.provider_list + [self.param_source_provider_type]
+        
+        # Add any forced backends to ensure their geometry is prepared
+        forced_backends = self.task_parameters.get('forced_backends', {})
+        for layer_id, forced_backend in forced_backends.items():
+            if forced_backend and forced_backend not in provider_list:
+                logger.info(f"  → Adding forced backend '{forced_backend}' to provider_list")
+                provider_list.append(forced_backend)
+        
         provider_list = list(dict.fromkeys(provider_list))
+        logger.info(f"  → Provider list for geometry preparation: {provider_list}")
         
         # Prepare geometries for all provider types
         # NOTE: This will use self.param_buffer_value set above
@@ -4235,6 +4279,55 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"  → backend type: {type(backend).__name__}")
                 logger.warning(f"  → current_predicates: {self.current_predicates}")
                 logger.warning(f"  → source_geom type: {type(source_geom).__name__}")
+                
+                # FALLBACK v2.4.10: Try OGR backend when Spatialite expression building fails
+                # This happens when Spatialite source geometry is not available (e.g., GDAL without Spatialite)
+                if backend_name == 'spatialite':
+                    logger.warning(f"⚠️ Spatialite expression building failed for {layer.name()}")
+                    logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
+                    
+                    try:
+                        ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters)
+                        
+                        # Prepare OGR source geometry if not already done
+                        if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
+                            logger.info(f"  → Preparing OGR source geometry for fallback...")
+                            self.prepare_ogr_source_geom()
+                        
+                        ogr_source_geom = self._prepare_source_geometry(PROVIDER_OGR)
+                        
+                        if ogr_source_geom:
+                            if isinstance(ogr_source_geom, QgsVectorLayer):
+                                logger.info(f"  → OGR source geometry: {ogr_source_geom.name()} ({ogr_source_geom.featureCount()} features)")
+                            
+                            ogr_expression = self._build_backend_expression(ogr_backend, layer_props, ogr_source_geom)
+                            
+                            if ogr_expression:
+                                logger.info(f"  → OGR expression built: {ogr_expression[:100]}...")
+                                
+                                # Get old subset and combine operator
+                                old_subset = layer.subsetString() if layer.subsetString() != '' else None
+                                combine_operator = self._get_combine_operator()
+                                
+                                result = ogr_backend.apply_filter(layer, ogr_expression, old_subset, combine_operator)
+                                
+                                if result:
+                                    logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")
+                                    if 'actual_backends' not in self.task_parameters:
+                                        self.task_parameters['actual_backends'] = {}
+                                    self.task_parameters['actual_backends'][layer.id()] = 'ogr'
+                                    return True
+                                else:
+                                    logger.error(f"✗ OGR fallback also FAILED for {layer.name()}")
+                            else:
+                                logger.error(f"✗ Could not build OGR expression for fallback")
+                        else:
+                            logger.error(f"✗ Could not prepare OGR source geometry for fallback")
+                    except Exception as fallback_error:
+                        logger.error(f"✗ OGR fallback exception: {fallback_error}")
+                        import traceback
+                        logger.error(f"Fallback traceback: {traceback.format_exc()}")
+                
                 return False
             logger.info(f"  ✓ Expression built: {len(expression)} chars")
             logger.info(f"  → Expression preview: {expression[:200]}...")
@@ -4295,6 +4388,78 @@ class FilterEngineTask(QgsTask):
             
             # Apply filter using backend (delegates to appropriate method for each provider type)
             result = backend.apply_filter(layer, expression, old_subset, combine_operator)
+            
+            # FALLBACK MECHANISM v2.4.1: If Spatialite or PostgreSQL backend fails on a forced layer,
+            # try OGR backend as fallback. This handles cases where user forces a backend
+            # on layers that don't support that backend (e.g., Shapefiles with Spatialite).
+            # Also trigger fallback when Spatialite functions are not available (e.g., GDAL without Spatialite)
+            if not result and backend_name in ('spatialite', 'postgresql'):
+                forced_backends = self.task_parameters.get('forced_backends', {})
+                was_forced = layer.id() in forced_backends
+                
+                # Always try OGR fallback for Spatialite failures, not just forced layers
+                # This handles GeoPackages where Spatialite functions are unavailable
+                should_fallback = was_forced or (backend_name == 'spatialite')
+                
+                if should_fallback:
+                    if was_forced:
+                        logger.warning(f"⚠️ {backend_name.upper()} backend FAILED for forced layer {layer.name()}")
+                        logger.warning(f"  → Layer may not support {backend_name.upper()} SQL functions")
+                    else:
+                        logger.warning(f"⚠️ {backend_name.upper()} backend FAILED for {layer.name()}")
+                        logger.warning(f"  → Spatialite functions may not be available (GDAL without Spatialite)")
+                    logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
+                    
+                    # Try OGR backend as fallback
+                    try:
+                        ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters)
+                        
+                        # Prepare OGR source geometry if not already done
+                        if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
+                            logger.info(f"  → Preparing OGR source geometry for fallback...")
+                            self.prepare_ogr_source_geom()
+                        
+                        ogr_source_geom = self._prepare_source_geometry(PROVIDER_OGR)
+                        
+                        # Enhanced diagnostic logging for OGR fallback
+                        if ogr_source_geom:
+                            if isinstance(ogr_source_geom, QgsVectorLayer):
+                                logger.info(f"  → OGR source geometry: {ogr_source_geom.name()} ({ogr_source_geom.featureCount()} features)")
+                            else:
+                                logger.info(f"  → OGR source geometry type: {type(ogr_source_geom).__name__}")
+                            
+                            # Build OGR expression
+                            ogr_expression = self._build_backend_expression(ogr_backend, layer_props, ogr_source_geom)
+                            
+                            if ogr_expression:
+                                logger.info(f"  → OGR expression built: {ogr_expression[:100]}...")
+                                
+                                # Apply OGR filter
+                                result = ogr_backend.apply_filter(layer, ogr_expression, old_subset, combine_operator)
+                                
+                                if result:
+                                    logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")
+                                    # Update actual backend used
+                                    self.task_parameters['actual_backends'][layer.id()] = 'ogr'
+                                    # Return success since fallback worked
+                                    return True
+                                else:
+                                    logger.error(f"✗ OGR fallback also FAILED for {layer.name()}")
+                                    logger.error(f"  → Check Python console for detailed errors")
+                            else:
+                                logger.error(f"✗ Could not build OGR expression for fallback")
+                                logger.error(f"  → predicates: {self.current_predicates}")
+                        else:
+                            logger.error(f"✗ Could not prepare OGR source geometry for fallback")
+                            logger.error(f"  → ogr_source_geom is None")
+                            if hasattr(self, 'ogr_source_geom'):
+                                logger.error(f"  → self.ogr_source_geom exists but is {self.ogr_source_geom}")
+                            else:
+                                logger.error(f"  → self.ogr_source_geom was never set")
+                    except Exception as fallback_error:
+                        logger.error(f"✗ OGR fallback exception: {fallback_error}")
+                        import traceback
+                        logger.error(f"Fallback traceback: {traceback.format_exc()}")
             
             if result:
                 # For backends that use setSubsetString, get the actual applied expression
@@ -4393,6 +4558,10 @@ class FilterEngineTask(QgsTask):
         """
         Prepare source geometry expression based on provider type.
         
+        CRITICAL FIX v2.4.1: Added fallback logic to handle cases where
+        the requested geometry type is not available. This commonly happens
+        when a backend is forced but the corresponding geometry wasn't prepared.
+        
         Args:
             layer_provider_type: Target layer provider type
         
@@ -4402,23 +4571,54 @@ class FilterEngineTask(QgsTask):
             - Spatialite: WKT string  
             - OGR: QgsVectorLayer
         """
+        # PostgreSQL backend needs SQL expression
         if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
-            if hasattr(self, 'postgresql_source_geom'):
+            if hasattr(self, 'postgresql_source_geom') and self.postgresql_source_geom:
                 return self.postgresql_source_geom
-        
-        # For Spatialite, return WKT string
-        if layer_provider_type == PROVIDER_SPATIALITE:
-            if hasattr(self, 'spatialite_source_geom'):
+            # Fallback: try WKT for PostgreSQL (works with ST_GeomFromText)
+            if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom:
+                logger.warning(f"PostgreSQL source geom not available, using WKT fallback")
                 return self.spatialite_source_geom
         
-        # For OGR, return the source layer
-        if hasattr(self, 'ogr_source_geom'):
+        # Spatialite backend needs WKT string
+        if layer_provider_type == PROVIDER_SPATIALITE:
+            if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom:
+                return self.spatialite_source_geom
+            # CRITICAL FIX v2.4.1: Generate WKT from OGR source if available
+            if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
+                logger.warning(f"Spatialite source geom not available, generating WKT from OGR layer")
+                try:
+                    if isinstance(self.ogr_source_geom, QgsVectorLayer):
+                        all_geoms = []
+                        for feature in self.ogr_source_geom.getFeatures():
+                            geom = feature.geometry()
+                            if geom and not geom.isEmpty():
+                                all_geoms.append(geom)
+                        if all_geoms:
+                            combined = QgsGeometry.collectGeometry(all_geoms)
+                            wkt = combined.asWkt()
+                            self.spatialite_source_geom = wkt.replace("'", "''")
+                            logger.info(f"✓ Generated WKT from OGR layer ({len(self.spatialite_source_geom)} chars)")
+                            return self.spatialite_source_geom
+                except Exception as e:
+                    logger.error(f"Failed to generate WKT from OGR layer: {e}")
+        
+        # OGR backend needs QgsVectorLayer
+        if layer_provider_type == PROVIDER_OGR:
+            if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
+                return self.ogr_source_geom
+        
+        # Generic fallback for any provider: try OGR geometry
+        if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
+            logger.warning(f"Using OGR source geom as fallback for provider '{layer_provider_type}'")
             return self.ogr_source_geom
         
-        # Fallback: return source layer
-        if hasattr(self, 'source_layer'):
+        # Last resort: return source layer
+        if hasattr(self, 'source_layer') and self.source_layer:
+            logger.warning(f"Using source layer as last resort fallback")
             return self.source_layer
         
+        logger.error(f"No source geometry available for provider '{layer_provider_type}'")
         return None
 
     def execute_filtering(self):
@@ -4546,7 +4746,21 @@ class FilterEngineTask(QgsTask):
                     logger.error("=" * 60)
                     logger.warning("  → Source layer remains filtered")
                     logger.warning("  → Check logs for distant layer errors")
-                    self.message = "Source layer filtered, but some distant layers failed. Check Python console for details."
+                    logger.warning("  → Common causes:")
+                    logger.warning("     1. Forced Spatialite backend on non-Spatialite layers (e.g., Shapefiles)")
+                    logger.warning("     2. GDAL not compiled with Spatialite extension")
+                    logger.warning("     3. CRS mismatch between source and distant layers")
+                    
+                    # Build informative error message with failed layer names
+                    failed_names = getattr(self, '_failed_layer_names', [])
+                    if failed_names:
+                        if len(failed_names) <= 3:
+                            layers_str = ', '.join(failed_names)
+                        else:
+                            layers_str = f"{', '.join(failed_names[:3])} (+{len(failed_names)-3} others)"
+                        self.message = f"Failed layers: {layers_str}. Try OGR backend or check Python console."
+                    else:
+                        self.message = "Source layer filtered, but some distant layers failed. Try using OGR backend for failing layers or check Python console."
                     return False
                 
                 logger.info("=" * 60)

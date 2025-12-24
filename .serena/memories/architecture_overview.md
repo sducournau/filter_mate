@@ -1,8 +1,8 @@
-# Architecture Overview - FilterMate v2.2.5
+# Architecture Overview - FilterMate v2.4.10
 
-**Last Updated:** December 12, 2025
-**Current Version:** 2.2.5 (Production) / 2.3.0-alpha (Development)
-**Key Feature:** Global Undo/Redo with Intelligent Context Detection
+**Last Updated:** December 23, 2025
+**Current Version:** 2.4.10 (Production)
+**Key Features:** Multi-backend filtering, Windows crash protection, Thread safety
 
 ## System Architecture
 
@@ -64,7 +64,7 @@ FilterMate follows a layered architecture with clear separation of concerns:
 
 ### 2. Application Orchestrator
 **File:** `filter_mate_app.py`
-**Lines:** ~2048 (after Phase 5d + Undo/Redo - was ~1376)
+**Lines:** ~3000+ (after v2.4.x safety enhancements)
 **Purpose:** Central coordinator between UI and backend
 
 **Key Responsibilities:**

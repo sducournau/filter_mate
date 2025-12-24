@@ -111,10 +111,24 @@ def get_primary_key_name(layer):
 
 def safe_set_subset_string(layer, expression):
     """
-    Thread-safe wrapper for layer.setSubsetString().
+    Apply a subset filter to a layer.
     
-    CRITICAL: setSubsetString() MUST be called from the main Qt thread.
-    This function always executes directly - QgsTask.run() is ALREADY in main thread context.
+    CRITICAL THREAD SAFETY WARNING (v2.3.12):
+    ==========================================
+    layer.setSubsetString() is NOT thread-safe and MUST be called from the main Qt thread.
+    
+    DO NOT call this function from QgsTask.run() or any background thread!
+    Doing so causes "Windows fatal exception: access violation" crashes when multiple
+    threads access the same layer simultaneously.
+    
+    For background tasks that need to work with layer features:
+    - Use layer.dataProvider().featureSource() to get a thread-safe snapshot
+    - The featureSource contains ALL features and can be safely iterated from any thread
+    
+    This function should only be called from:
+    - QgsTask.finished() callback (runs on main thread)
+    - UI event handlers (main thread)
+    - Direct main thread code
     
     Args:
         layer: QgsVectorLayer to filter

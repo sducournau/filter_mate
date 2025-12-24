@@ -120,6 +120,7 @@ import webbrowser
 from .modules.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 from .modules.qt_json_view.model import JsonModel
 from .modules.qt_json_view.view import JsonView
+from .modules.object_safety import is_valid_layer, is_sip_deleted
 from .modules.appUtils import (
     get_datasource_connexion_from_layer,
     get_primary_key_name,
@@ -2575,8 +2576,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Force a specific backend for all layers in the project.
         
-        Only forces backend if it can truly support the layer (tests with backend.supports_layer()).
-        Skips layers where the backend is not compatible.
+        For Spatialite backend on GeoPackage/OGR layers: forces even if support test fails,
+        because user explicitly requested this backend.
         
         Args:
             backend_type: Backend type to force ('postgresql', 'spatialite', 'ogr', or None)
@@ -2598,6 +2599,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         forced_count = 0
         skipped_count = 0
+        warned_count = 0  # Layers forced with warning
         incompatible_layers = []
         
         project = QgsProject.instance()
@@ -2636,28 +2638,59 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.info(f"\nProcessing layer: {layer_name}")
             logger.info(f"  Provider: {layer.providerType()}, Features: {layer.featureCount():,}")
             
-            # CRITICAL: Test if backend truly supports this layer
-            # This checks provider type AND connection/functionality availability
-            if backend.supports_layer(layer):
+            # Check if backend supports this layer
+            supports = backend.supports_layer(layer)
+            
+            if supports:
                 self._set_forced_backend(layer.id(), backend_type)
                 forced_count += 1
                 logger.info(f"  ✓ Forced backend to: {backend_type.upper()}")
             else:
-                incompatible_layers.append(layer_name)
-                skipped_count += 1
-                logger.info(f"  ⚠ Backend {backend_type.upper()} not compatible with this layer - skipping")
+                # SPECIAL CASE: For Spatialite backend on GeoPackage/OGR layers,
+                # force anyway because user explicitly requested it
+                # The support test may fail due to geometry column detection issues
+                source = layer.source()
+                source_path = source.split('|')[0] if '|' in source else source
+                is_gpkg_or_sqlite = (
+                    source_path.lower().endswith('.gpkg') or 
+                    source_path.lower().endswith('.sqlite')
+                )
+                is_ogr = layer.providerType() == 'ogr'
+                
+                if backend_type == 'spatialite' and (is_gpkg_or_sqlite or is_ogr):
+                    # Force Spatialite anyway for GeoPackage/SQLite/OGR layers
+                    self._set_forced_backend(layer.id(), backend_type)
+                    warned_count += 1
+                    logger.warning(
+                        f"  ⚠️ Forcing {backend_type.upper()} for {layer_name} despite support test failure. "
+                        f"GeoPackage/SQLite files should support Spatialite SQL functions."
+                    )
+                elif backend_type == 'ogr':
+                    # OGR is universal fallback - force for all vector layers
+                    self._set_forced_backend(layer.id(), backend_type)
+                    forced_count += 1
+                    logger.info(f"  ✓ Forced backend to: {backend_type.upper()} (universal fallback)")
+                else:
+                    incompatible_layers.append(layer_name)
+                    skipped_count += 1
+                    logger.info(f"  ⚠ Backend {backend_type.upper()} not compatible with this layer - skipping")
         
+        total_forced = forced_count + warned_count
         logger.info("\n" + "=" * 60)
         logger.info("FORCE BACKEND COMPLETE")
         logger.info(f"Forced: {forced_count} layers to {backend_type.upper()}")
+        if warned_count > 0:
+            logger.info(f"Forced with warning: {warned_count} layers (support test failed but forced anyway)")
         logger.info(f"Skipped: {skipped_count} layers (incompatible or invalid)")
         if incompatible_layers:
             logger.info(f"Incompatible layers: {', '.join(incompatible_layers)}")
         logger.info("=" * 60)
         
         # Show summary message with details
-        if forced_count > 0:
-            msg = f"Forced {forced_count} layer(s) to use {backend_type.upper()} backend"
+        if total_forced > 0:
+            msg = f"Forced {total_forced} layer(s) to use {backend_type.upper()} backend"
+            if warned_count > 0:
+                msg += f" ({warned_count} with warnings)"
             if skipped_count > 0:
                 msg += f" ({skipped_count} incompatible layer(s) skipped)"
             show_success("FilterMate", msg)
@@ -6866,9 +6899,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     elif widget_type == 'ComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
                     elif widget_type == 'QgsFieldExpressionWidget':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setLayer(self.current_layer)
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setFilters(QgsFieldProxyModel.AllTypes)
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setExpression(layer_props[property_tuple[0]][property_tuple[1]])
+                        # CRITICAL: Block signals during setLayer/setExpression to prevent
+                        # circular signal loop (fieldChanged -> layer_property_changed ->
+                        # setLayerVariable) that causes access violation crash
+                        widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
+                        widget.blockSignals(True)
+                        widget.setLayer(self.current_layer)
+                        widget.setFilters(QgsFieldProxyModel.AllTypes)
+                        widget.setExpression(layer_props[property_tuple[0]][property_tuple[1]])
+                        widget.blockSignals(False)
                     elif widget_type == 'QgsDoubleSpinBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'LineEdit':
@@ -6935,15 +6974,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Save updated expressions to SQLite if any were auto-initialized
                     if expressions_updated:
                         logger.debug(f"Auto-initialized exploring expressions with field '{best_field}' for layer {layer.name()}")
-                        # Emit signal to save the updated expressions
-                        properties_to_save = []
-                        if not single_expr:
-                            properties_to_save.append(("exploring", "single_selection_expression"))
-                        if not multiple_expr:
-                            properties_to_save.append(("exploring", "multiple_selection_expression"))
-                        if not custom_expr:
-                            properties_to_save.append(("exploring", "custom_selection_expression"))
-                        self.settingLayerVariable.emit(layer, properties_to_save)
+                        # CRASH FIX (v2.3.16): Re-validate layer before emitting signal
+                        # Layer may have become invalid during the exploration widget reload
+                        if is_valid_layer(layer):
+                            # Emit signal to save the updated expressions
+                            properties_to_save = []
+                            if not single_expr:
+                                properties_to_save.append(("exploring", "single_selection_expression"))
+                            if not multiple_expr:
+                                properties_to_save.append(("exploring", "multiple_selection_expression"))
+                            if not custom_expr:
+                                properties_to_save.append(("exploring", "custom_selection_expression"))
+                            self.settingLayerVariable.emit(layer, properties_to_save)
+                        else:
+                            logger.debug(f"_reload_exploration_widgets: layer became invalid, skipping signal emit")
             
             # Update expressions after potential auto-initialization
             single_expr = layer_props["exploring"]["single_selection_expression"]
@@ -7193,14 +7237,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # STABILITY FIX: If plugin is busy (loading project, etc.), defer the layer change
         if self._plugin_busy:
             from qgis.PyQt.QtCore import QTimer
+            from qgis.core import QgsProject
             logger.debug(f"Plugin is busy, deferring layer change for: {layer.name() if layer else 'None'}")
             # STABILITY FIX: Use weakref to prevent access violations
             weak_self = weakref.ref(self)
-            captured_layer = layer
+            # CRASH FIX (v2.3.16): Store layer ID, not layer object reference
+            # The layer object may become invalid (C++ deleted) by the time timer fires.
+            # Re-fetch from QgsProject to get a fresh, valid reference.
+            try:
+                captured_layer_id = layer.id() if layer else None
+            except (RuntimeError, OSError, SystemError):
+                captured_layer_id = None
+            
             def safe_layer_change():
                 strong_self = weak_self()
                 if strong_self is not None:
-                    strong_self.current_layer_changed(captured_layer)
+                    # CRASH FIX (v2.3.16): Re-fetch layer from project using ID
+                    if captured_layer_id:
+                        fresh_layer = QgsProject.instance().mapLayer(captured_layer_id)
+                        if fresh_layer is not None:
+                            strong_self.current_layer_changed(fresh_layer)
+                        else:
+                            logger.debug(f"safe_layer_change: layer {captured_layer_id} no longer exists, skipping")
+                    else:
+                        strong_self.current_layer_changed(None)
             QTimer.singleShot(150, safe_layer_change)
             return
         
@@ -8339,6 +8399,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Emit signal to set layer variables.
         
+        CRASH FIX (v2.3.15): Added is_valid_layer() check before emitting signal
+        to prevent Windows access violations when layer's C++ object is deleted
+        during signal processing (e.g., backend change, layer switch, project unload).
+        
         Args:
             layer: QgsVectorLayer to set, or None to use current_layer
             properties: List of properties (default: empty list)
@@ -8349,6 +8413,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True:
             if layer is None:
                 layer = self.current_layer
+            
+            # CRASH FIX (v2.3.15): Validate layer before emitting signal
+            # This prevents access violations when layer becomes invalid during signal cascade
+            if not is_valid_layer(layer):
+                logger.debug(f"setLayerVariableEvent: layer is invalid or deleted, skipping emit")
+                return
             
             # Ensure properties is a list type for PyQt signal
             if not isinstance(properties, list):

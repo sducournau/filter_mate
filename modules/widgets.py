@@ -4,6 +4,7 @@ from qgis.PyQt.QtCore import (
     QRect,
     QSize,
     Qt,
+    QTimer,
     pyqtSignal
 )
 from qgis.PyQt.QtGui import (
@@ -64,18 +65,22 @@ from .object_safety import (
 )
 
 
-def safe_iterate_features(layer_or_source, request=None, max_retries=3, retry_delay=0.5):
+def safe_iterate_features(layer_or_source, request=None, max_retries=5, retry_delay=0.3):
     """
     Safely iterate over features from a layer or feature source.
     
     Handles OGR/GeoPackage errors like "unable to open database file" with retry logic.
     Suppresses transient GDAL/OGR warnings that are handled internally.
     
+    IMPORTANT: For multi-layer filtering with Spatialite/GeoPackage, concurrent database
+    access can cause transient "unable to open database file" errors. This function uses
+    exponential backoff to wait for database locks to clear.
+    
     Args:
         layer_or_source: QgsVectorLayer, QgsVectorDataProvider, or QgsAbstractFeatureSource
         request: Optional QgsFeatureRequest
-        max_retries: Number of retry attempts (default 3)
-        retry_delay: Initial delay between retries in seconds (default 0.5)
+        max_retries: Number of retry attempts (default 5, increased for concurrent access)
+        retry_delay: Initial delay between retries in seconds (default 0.3)
         
     Yields:
         Features from the layer/source
@@ -104,19 +109,20 @@ def safe_iterate_features(layer_or_source, request=None, max_retries=3, retry_de
                     'database is locked',
                     'disk i/o error',
                     'sqlite3_step',
+                    'busy',
                 ])
                 
                 if is_recoverable and attempt < max_retries - 1:
                     layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
-                    logger.warning(
-                        f"OGR access error on '{layer_name}' (attempt {attempt + 1}/{max_retries}): {e}. "
-                        f"Retrying in {retry_delay}s..."
+                    logger.debug(
+                        f"OGR access retry on '{layer_name}' (attempt {attempt + 1}/{max_retries}): {e}. "
+                        f"Waiting {retry_delay:.2f}s..."
                     )
                     time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+                    retry_delay = min(retry_delay * 2, 5.0)  # Exponential backoff, max 5 seconds
                 else:
                     layer_name = getattr(layer_or_source, 'name', lambda: 'unknown')()
-                    logger.error(f"Failed to iterate features from '{layer_name}': {e}")
+                    logger.error(f"Failed to iterate features from '{layer_name}' after {max_retries} attempts: {e}")
                     return  # Stop iteration on unrecoverable error
 
 
@@ -193,15 +199,34 @@ class PopulateListEngineTask(QgsTask):
             self.identifier_field_name = self.parent.list_widgets[self.layer.id()].getIdentifierFieldName()
             self.display_expression = self.parent.list_widgets[self.layer.id()].getDisplayExpression()
             self.is_field_flag = self.parent.list_widgets[self.layer.id()].getExpressionFieldFlag()
+        
+        # THREAD SAFETY FIX (v2.3.19): Pre-create expression context in main thread
+        # Calling layer.createExpressionContext() from a background thread while the main thread
+        # modifies layer variables (via setLayerVariable) causes "Windows fatal exception: access violation".
+        # The expression context is NOT thread-safe, so we must create it here in the main thread.
+        self._cached_expression_context = None
+        if self.layer is not None:
+            try:
+                self._cached_expression_context = self.layer.createExpressionContext()
+            except (RuntimeError, OSError, SystemError) as e:
+                logger.debug(f"Could not pre-create expression context for layer '{self.layer.name()}': {e}")
+                self._cached_expression_context = None
 
 
     def run(self):
-        """Main function that run the right method from init parameters"""
+        """Main function that run the right method from init parameters.
+        
+        Includes enhanced error handling for OGR/SQLite database access errors
+        that can occur during concurrent Spatialite/GeoPackage operations.
+        """
+        import time
+        
         try:
             # Vérifier que le layer et les widgets existent toujours
             if self.layer is None or self.layer.id() not in self.parent.list_widgets:
-                logger.warning(f'Layer no longer exists in list_widgets, skipping task: {self.action}')
-                return False
+                logger.debug(f'Layer no longer exists in list_widgets, skipping task: {self.action}')
+                # Return True for graceful skip (not an error, layer was just removed)
+                return True
             
             # CRITICAL: Check if the parent's current layer has changed since task creation
             # This prevents race conditions where task was created for layer A but parent now has layer B
@@ -210,8 +235,15 @@ class PopulateListEngineTask(QgsTask):
                     # Get layer names for more informative message
                     old_layer_name = self.layer.name() if self.layer else "Unknown"
                     new_layer_name = self.parent.layer.name() if self.parent.layer else "Unknown"
-                    logger.info(f'Layer changed since task creation (was {old_layer_name}_{self._created_layer_id[:8]}, now {new_layer_name}_{self.parent.layer.id()[:8]}), skipping task: {self.action}')
-                    return False
+                    logger.debug(f'Layer changed since task creation (was {old_layer_name}_{self._created_layer_id[:8]}, now {new_layer_name}_{self.parent.layer.id()[:8]}), skipping task: {self.action}')
+                    # Return True for graceful skip (not an error, user just switched layers)
+                    return True
+            
+            # For Spatialite/OGR layers, add a brief stabilization delay to reduce
+            # database lock contention with recently completed filter operations
+            provider_type = self.layer.providerType() if self.layer else None
+            if provider_type in ('spatialite', 'ogr') and self.action in ('loadFeaturesList', 'buildFeaturesList'):
+                time.sleep(0.1)  # Brief delay to let filter connections fully close
                 
             if self.action == 'buildFeaturesList':
                 self.buildFeaturesList()
@@ -230,11 +262,49 @@ class PopulateListEngineTask(QgsTask):
         
         except Exception as e:
             self.exception = e
-            # ENHANCED LOGGING: Log full exception details for debugging
+            error_str = str(e).lower()
+            
+            # Check for known OGR/SQLite transient errors
+            is_sqlite_error = any(x in error_str for x in [
+                'unable to open database file',
+                'database is locked',
+                'sqlite3_step',
+                'disk i/o error',
+            ])
+            
+            # Check for layer invalidation errors (C++ object deleted)
+            is_layer_deleted = any(x in error_str for x in [
+                'deleted',
+                'underlying c/c++',
+                'c++ object',
+                'null pointer',
+            ])
+            
+            # ENHANCED LOGGING: Differentiate between transient and permanent errors
             import traceback
-            logger.error(f'PopulateListEngineTask failed for action "{self.action}": {e}')
-            logger.error(f'  Layer: {self.layer.name() if self.layer else "None"}')
-            logger.error(f'  Traceback:\n{traceback.format_exc()}')
+            if is_sqlite_error:
+                # SQLite concurrent access error - log at DEBUG level (expected during high concurrency)
+                logger.debug(
+                    f'PopulateListEngineTask: SQLite access error during "{self.action}" for '
+                    f'layer "{self.layer.name() if self.layer else "None"}". '
+                    f'This is typically transient during multi-layer filtering. Error: {e}'
+                )
+                # Return True for transient errors to avoid "Task failed" message in QGIS
+                # The task will be retried on next user interaction anyway
+                return True
+            elif is_layer_deleted:
+                # Layer was deleted during task execution - this is normal during project changes
+                logger.debug(
+                    f'PopulateListEngineTask: Layer deleted during "{self.action}". '
+                    f'This is expected when switching projects or removing layers.'
+                )
+                return True
+            else:
+                # Other unexpected errors - log fully
+                logger.error(f'PopulateListEngineTask failed for action "{self.action}": {e}')
+                logger.error(f'  Layer: {self.layer.name() if self.layer else "None"}')
+                logger.error(f'  Traceback:\n{traceback.format_exc()}')
+            
             return False
 
     def get_task_action_and_layer(self):
@@ -255,21 +325,14 @@ class PopulateListEngineTask(QgsTask):
         logger.debug(f"  → display_expression: {self.display_expression}")
         logger.debug(f"  → is_field_flag: {self.is_field_flag}")
 
-        subset_string_init = self.layer.subsetString()
-        if subset_string_init != '':
-            if not is_layer_source_available(self.layer):
-                logger.warning("buildFeaturesList: layer invalid or source missing; aborting list build.")
-                return
-            safe_set_subset_string(self.layer, '')
-
+        # THREAD SAFETY FIX (v2.3.12): Get featureSource from dataProvider BEFORE any filtering.
+        # featureSource() returns a thread-safe snapshot that can be iterated from background threads.
+        # CRITICAL: Do NOT call layer.setSubsetString() from background thread - causes access violation!
+        # The featureSource already contains ALL features regardless of any subset filter.
         data_provider_layer = self.layer.dataProvider()
         if data_provider_layer:
             total_features_list_count = data_provider_layer.featureCount()
             layer_features_source = data_provider_layer.featureSource()
-
-        if subset_string_init != '':
-            if is_layer_source_available(self.layer):
-                safe_set_subset_string(self.layer, subset_string_init)
 
         if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
             self.parent.list_widgets[self.layer.id()].setTotalFeaturesListCount(total_features_list_count)
@@ -338,8 +401,19 @@ class PopulateListEngineTask(QgsTask):
 
                     total_count = sum(1 for _ in layer_features_source.getFeatures(filter_expression_request))
 
+                    # Prevent division by zero when no features match
+                    if total_count == 0:
+                        logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self.layer.name()}'")
+                        self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                        return
+
                     if self.is_field_flag is True:
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                            # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+                            # when main thread modifies layer variables during setLayerVariable()
+                            if self.isCanceled():
+                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                return
                             arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                             features_list.append(arr)
                             self.setProgress((index/total_count)*100)
@@ -347,11 +421,20 @@ class PopulateListEngineTask(QgsTask):
                         display_expression = QgsExpression(self.display_expression)
 
                         if display_expression.isValid():
-                            # Use layer's expression context for represent_value() and other
-                            # expressions that need layer/project context (e.g., ValueRelation)
-                            context = self.layer.createExpressionContext()
+                            # THREAD SAFETY FIX (v2.3.19): Use pre-cached expression context
+                            # instead of calling layer.createExpressionContext() from background thread.
+                            # This prevents access violations when main thread modifies layer variables.
+                            context = self._cached_expression_context
+                            if context is None:
+                                # Fallback: create minimal context without layer (less feature-rich but thread-safe)
+                                context = QgsExpressionContext()
+                                logger.debug(f"Using minimal expression context for layer '{self.layer.name()}'")
 
                             for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                                # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+                                if self.isCanceled():
+                                    logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                    return
                                 context.setFeature(feature)
                                 result = display_expression.evaluate(context)
                                 # Check for evaluation errors (e.g., missing referenced layers)
@@ -368,6 +451,10 @@ class PopulateListEngineTask(QgsTask):
                             expr_display = repr(self.display_expression) if self.display_expression else '<empty>'
                             logger.debug(f"Invalid/empty display expression {expr_display} for layer '{self.layer.name()}', using identifier field")
                             for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                                # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+                                if self.isCanceled():
+                                    logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                    return
                                 id_value = get_feature_attribute(feature, self.identifier_field_name)
                                 arr = [id_value, id_value]
                                 features_list.append(arr)
@@ -392,8 +479,18 @@ class PopulateListEngineTask(QgsTask):
                     
                 total_count = sum(1 for _ in layer_features_source.getFeatures(filter_expression_request))
 
+                # Prevent division by zero when no features available
+                if total_count == 0:
+                    logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                    self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                    return
+
                 if self.is_field_flag is True:
                     for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                        # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+                        if self.isCanceled():
+                            logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                            return
                         arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                         features_list.append(arr)
                         self.setProgress((index/total_count)*100)
@@ -401,11 +498,20 @@ class PopulateListEngineTask(QgsTask):
                     display_expression = QgsExpression(self.display_expression)
 
                     if display_expression.isValid():
-                        # Use layer's expression context for represent_value() and other
-                        # expressions that need layer/project context (e.g., ValueRelation)
-                        context = self.layer.createExpressionContext()
+                        # THREAD SAFETY FIX (v2.3.19): Use pre-cached expression context
+                        # instead of calling layer.createExpressionContext() from background thread.
+                        # This prevents access violations when main thread modifies layer variables.
+                        context = self._cached_expression_context
+                        if context is None:
+                            # Fallback: create minimal context without layer (less feature-rich but thread-safe)
+                            context = QgsExpressionContext()
+                            logger.debug(f"Using minimal expression context for layer '{self.layer.name()}'")
 
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                            # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+                            if self.isCanceled():
+                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                return
                             context.setFeature(feature)
                             result = display_expression.evaluate(context)
                             # Check for evaluation errors (e.g., missing referenced layers)
@@ -422,19 +528,64 @@ class PopulateListEngineTask(QgsTask):
                         expr_display = repr(self.display_expression) if self.display_expression else '<empty>'
                         logger.debug(f"Invalid/empty display expression {expr_display} for layer '{self.layer.name()}', using identifier field")
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+                            # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+                            if self.isCanceled():
+                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                return
                             id_value = get_feature_attribute(feature, self.identifier_field_name)
                             arr = [id_value, id_value]
                             features_list.append(arr)
                             self.setProgress((index/total_count)*100)
 
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            # CRASH FIX (v2.3.20): Final cancellation check before widget updates
+            if self.isCanceled():
+                logger.debug(f"buildFeaturesList: Task cancelled before final updates for layer '{self.layer.name()}'")
+                return
+            
+            # THREAD SAFETY FIX (v2.3.12): Use thread-safe layer_features_source instead of iterating layer.
+            # safe_iterate_features(self.layer) calls layer.getFeatures() which is NOT thread-safe
+            # and causes "Windows fatal exception: access violation" when multiple threads access same layer.
+            # The layer_features_source snapshot is thread-safe and contains all features.
+            # CRASH FIX (v2.3.20): Build list with cancellation checks instead of list comprehension
+            nonSubset_features_list = []
+            for feature in safe_iterate_features(layer_features_source):
+                if self.isCanceled():
+                    logger.debug(f"buildFeaturesList: Task cancelled during nonSubset iteration for layer '{self.layer.name()}'")
+                    return
+                nonSubset_features_list.append(get_feature_attribute(feature, self.identifier_field_name))
+            
+            # CRASH FIX (v2.3.20): Final validity check before widget updates
+            if self.isCanceled() or self.layer is None or self.layer.id() not in self.parent.list_widgets:
+                logger.debug(f"buildFeaturesList: Task cancelled or layer removed before widget update")
+                return
+                
             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
             self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
 
 
     def loadFeaturesList(self, new_list=True):
         current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[self.layer.id()].getSelectedFeaturesList()]
-        nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+        
+        # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of iterating layer.
+        # layer.getFeatures() is NOT thread-safe and causes access violations in multi-threaded context.
+        data_provider = self.layer.dataProvider()
+        if data_provider:
+            layer_features_source = data_provider.featureSource()
+            # CRASH FIX (v2.3.20): Build list with cancellation checks
+            nonSubset_features_list = []
+            for feature in safe_iterate_features(layer_features_source):
+                if self.isCanceled():
+                    logger.debug(f"loadFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                    return
+                nonSubset_features_list.append(get_feature_attribute(feature, self.identifier_field_name))
+        else:
+            logger.warning(f"loadFeaturesList: No data provider for layer '{self.layer.name()}'")
+            nonSubset_features_list = []
+        
+        # CRASH FIX (v2.3.20): Check cancellation before UI operations
+        if self.isCanceled():
+            logger.debug(f"loadFeaturesList: Task cancelled before UI operations for layer '{self.layer.name()}'")
+            return
         
         if new_list is True:
             self.parent.list_widgets[self.layer.id()].clear()
@@ -454,6 +605,10 @@ class PopulateListEngineTask(QgsTask):
             return
         
         for index, it in enumerate(list_to_load):
+            # CRASH FIX (v2.3.20): Check for task cancellation during list iteration
+            if self.isCanceled():
+                logger.debug(f"loadFeaturesList: Task cancelled during list loading for layer '{self.layer.name()}'")
+                return
             lwi = QListWidgetItem(str(it[0]))
             lwi.setData(0,str(it[0]))
             lwi.setData(3,it[1])
@@ -518,13 +673,18 @@ class PopulateListEngineTask(QgsTask):
 
 
     def selectAllFeatures(self):
-
+        # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of layer
+        data_provider = self.layer.dataProvider()
+        layer_features_source = data_provider.featureSource() if data_provider else None
 
         if self.sub_action == 'Select All':
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             total_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            if layer_features_source:
+                nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
+            else:
+                nonSubset_features_list = []
 
             for index in range(total_count):
                 item = list_widget.item(index)
@@ -540,7 +700,10 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            if layer_features_source:
+                nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
+            else:
+                nonSubset_features_list = []
             total_count = widget_count - len(nonSubset_features_list)
 
             for index in range(widget_count):
@@ -556,7 +719,10 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'Select All (subset)':
 
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            if layer_features_source:
+                nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
+            else:
+                nonSubset_features_list = []
             total_count = len(nonSubset_features_list)
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
@@ -575,12 +741,18 @@ class PopulateListEngineTask(QgsTask):
 
 
     def deselectAllFeatures(self):
+        # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of layer
+        data_provider = self.layer.dataProvider()
+        layer_features_source = data_provider.featureSource() if data_provider else None
 
         if self.sub_action == 'De-select All':
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             total_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            if layer_features_source:
+                nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
+            else:
+                nonSubset_features_list = []
 
             for index in range(total_count):
                 item = list_widget.item(index)
@@ -595,7 +767,10 @@ class PopulateListEngineTask(QgsTask):
 
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            if layer_features_source:
+                nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
+            else:
+                nonSubset_features_list = []
             total_count = widget_count - len(nonSubset_features_list)
 
             for index in range(widget_count):
@@ -611,7 +786,10 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'De-select All (subset)':
 
-            nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(self.layer)]
+            if layer_features_source:
+                nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
+            else:
+                nonSubset_features_list = []
             total_count = len(nonSubset_features_list)
             list_widget = self.parent.list_widgets[self.layer.id()]
             widget_count = list_widget.count()
@@ -780,6 +958,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.last_layer = None
         self.layer = None
         self.is_field_flag = None
+        
+        # Debounce timer for filter text input to prevent launching many tasks
+        # when user types quickly - waits 300ms after last keystroke before filtering
+        self._filter_debounce_timer = QTimer(self)
+        self._filter_debounce_timer.setSingleShot(True)
+        self._filter_debounce_timer.setInterval(300)  # 300ms debounce delay
+        self._filter_debounce_timer.timeout.connect(self._execute_filter)
 
     def checkedItems(self):
         selection = []
@@ -834,6 +1019,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 # Cancel all tasks for the OLD layer BEFORE changing to new layer
                 if self.layer is not None:
                     old_layer_id = self.layer.id()
+                    # Stop any pending debounce filter to prevent filtering on wrong layer
+                    self._filter_debounce_timer.stop()
                     # Cancel all pending tasks for the old layer
                     for task_type in self.tasks:
                         if old_layer_id in self.tasks[task_type]:
@@ -1047,7 +1234,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     except TypeError:
                         # Signal not connected
                         pass
-                    self.filter_le.textChanged.connect(self.filter_items)
+                    # Use debounced filtering to prevent launching many tasks on each keystroke
+                    self.filter_le.textChanged.connect(self._on_filter_text_changed)
                 else:
                     try:
                         self.filter_le.textChanged.disconnect()
@@ -1055,6 +1243,26 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                         # Signal not connected
                         pass
                     self.filter_le.editingFinished.connect(self.filter_items)
+    
+    def _on_filter_text_changed(self, text):
+        """Handle filter text changes with debouncing.
+        
+        Restarts the debounce timer on each keystroke. The actual filtering
+        will only execute 300ms after the user stops typing, preventing
+        task accumulation and QGIS freezes.
+        """
+        # Store the current text for when the timer fires
+        self._pending_filter_text = text
+        # Restart the debounce timer
+        self._filter_debounce_timer.start()
+    
+    def _execute_filter(self):
+        """Execute the filter after debounce delay.
+        
+        Called by the debounce timer when user has stopped typing.
+        """
+        if hasattr(self, '_pending_filter_text'):
+            self.filter_items(self._pending_filter_text)
 
 
 
@@ -1083,6 +1291,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 pass
 
     def reset(self):
+        # Stop any pending debounce filter
+        self._filter_debounce_timer.stop()
         self.layer = None
         self.tasks = {}
         self.tasks['buildFeaturesList'] = {}

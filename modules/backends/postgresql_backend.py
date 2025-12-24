@@ -26,6 +26,15 @@ import uuid
 
 logger = get_tasks_logger()
 
+# Import MV Registry for cleanup management (v2.4.0)
+try:
+    from .mv_registry import get_mv_registry, MVRegistry
+    MV_REGISTRY_AVAILABLE = True
+except ImportError:
+    MV_REGISTRY_AVAILABLE = False
+    get_mv_registry = None
+    MVRegistry = None
+
 # Import connection pooling for optimized PostgreSQL operations
 try:
     from ..connection_pool import (
@@ -1122,6 +1131,21 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Setting subset string: {layer_subset[:200]}...")
             
             result = safe_set_subset_string(layer, layer_subset)
+            
+            # Register MV for cleanup tracking (v2.4.0)
+            if MV_REGISTRY_AVAILABLE and result:
+                try:
+                    registry = get_mv_registry()
+                    registry.register(
+                        mv_name=mv_name,
+                        schema=schema,
+                        layer_id=layer.id(),
+                        layer_name=layer.name(),
+                        feature_count=feature_count
+                    )
+                    self.log_debug(f"📝 MV registered for cleanup: {mv_name}")
+                except Exception as reg_error:
+                    self.log_warning(f"Failed to register MV for cleanup: {reg_error}")
             
             cursor.close()
             conn.close()

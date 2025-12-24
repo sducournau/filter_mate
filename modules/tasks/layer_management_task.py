@@ -27,7 +27,7 @@ from qgis.core import (
     QgsTask,
     QgsVectorLayer
 )
-from qgis.PyQt.QtCore import pyqtSignal, QMetaType
+from qgis.PyQt.QtCore import pyqtSignal, QMetaType, QTimer
 from qgis.utils import iface
 from qgis import processing
 import logging
@@ -66,8 +66,15 @@ from ..appUtils import (
 
 # Import object safety utilities (v2.3.9 - stability fix)
 from ..object_safety import (
-    is_sip_deleted, is_valid_layer, safe_disconnect, safe_emit
+    is_sip_deleted, is_valid_layer, is_layer_in_project, safe_disconnect, safe_emit,
+    safe_set_layer_variable, safe_set_layer_variables, is_qgis_alive
 )
+
+# Import sip for direct C++ object deletion check (v2.3.11 - crash fix)
+try:
+    import sip
+except ImportError:
+    sip = None
 
 # Import task utilities
 from .task_utils import (
@@ -163,6 +170,12 @@ class LayersManagementEngineTask(QgsTask):
         # PERFORMANCE: Cache PostgreSQL connection availability per datasource URI
         # This avoids opening/closing connections for each layer during init
         self._postgresql_connection_cache = {}
+
+        # THREAD SAFETY (v2.3.10): Queue for layer variable operations
+        # QgsExpressionContextUtils calls must happen in main thread (finished() method)
+        # This queue stores: (layer_id, variable_key, value) tuples for setLayerVariable
+        # or (layer_id, None, None) for setLayerVariables({}) to clear all
+        self._deferred_layer_variables = []
 
         # JSON templates for layer properties
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_table_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
@@ -332,9 +345,9 @@ class LayersManagementEngineTask(QgsTask):
                 )
                 existing_layer_variables[property[0]][property[1]] = value_typped
                 
-                # Set as QGIS layer variable
+                # THREAD SAFETY (v2.3.10): Queue for main thread execution
                 variable_key = f"filterMate_{property[0]}_{property[1]}"
-                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
         
         # If property count has changed, update it
         actual_count = (
@@ -460,8 +473,8 @@ class LayersManagementEngineTask(QgsTask):
             except Exception as e:
                 logger.warning(f"Could not add layer_provider_type to database: {e}")
             
-            # Set as QGIS layer variable
-            QgsExpressionContextUtils.setLayerVariable(layer, "filterMate_infos_layer_table_name", infos.get("layer_table_name", ""))
+            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+            self._deferred_layer_variables.append((layer.id(), "filterMate_infos_layer_table_name", infos.get("layer_table_name", "")))
         
         # Add layer_geometry_type if missing
         if "layer_geometry_type" not in infos:
@@ -643,7 +656,11 @@ class LayersManagementEngineTask(QgsTask):
 
     def _set_layer_variables(self, layer, layer_variables):
         """
-        Set QGIS layer variables from property dictionary.
+        Queue QGIS layer variables for setting in main thread.
+        
+        THREAD SAFETY (v2.3.10): This method queues variable operations
+        instead of calling QgsExpressionContextUtils directly, as those
+        calls must happen in the main GUI thread (finished() method).
         
         Args:
             layer (QgsVectorLayer): Layer to set variables on
@@ -658,7 +675,8 @@ class LayersManagementEngineTask(QgsTask):
                 )
                 if type_returned in (list, dict):
                     value_typped = json.dumps(value_typped)
-                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                # THREAD SAFETY: Queue for main thread execution
+                self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
 
     def _create_spatial_index(self, layer, layer_props):
         """
@@ -929,9 +947,12 @@ class LayersManagementEngineTask(QgsTask):
                     logger.debug(f"Using declared primary key: {field.name()}")
                     return (field.name(), field_id, field.typeName(), field.isNumeric())
                 
-                # For other providers with known count, verify uniqueness (safe for small datasets)
-                if len(layer.uniqueValues(field_id)) == feature_count:
-                    return (field.name(), field_id, field.typeName(), field.isNumeric())
+                # CRITICAL FIX: Trust declared primary key without uniqueValues() verification
+                # uniqueValues() is NOT thread-safe and causes access violations in QgsTask
+                # See: https://github.com/qgis/QGIS/issues - layer operations from background threads
+                # If a field is declared as primary key by the provider, trust it
+                logger.debug(f"Trusting declared primary key '{field.name()}' (avoiding thread-unsafe uniqueValues)")
+                return (field.name(), field_id, field.typeName(), field.isNumeric())
         
         # If no declared primary key, try to find one
         # For PostgreSQL or unknown feature count, use first 'id' field without verification
@@ -955,9 +976,11 @@ class LayersManagementEngineTask(QgsTask):
                     logger.debug(f"Using field with 'id' in name: {field.name()}")
                     return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 
-                # Only verify uniqueness for non-PostgreSQL layers
-                if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
-                    return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+                # CRITICAL FIX: Trust 'id' field without uniqueValues() verification
+                # uniqueValues() is NOT thread-safe and causes access violations in QgsTask
+                # Field with 'id' in name is a strong indicator of uniqueness
+                logger.debug(f"Trusting field '{field.name()}' as primary key (avoiding thread-unsafe uniqueValues)")
+                return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
                 
         # For PostgreSQL without declared PK or 'id' field, use ctid immediately
         # Don't iterate all fields (would freeze on large tables)
@@ -979,12 +1002,14 @@ class LayersManagementEngineTask(QgsTask):
             logger.debug(f"Using first field as fallback: {field.name()}")
             return (field.name(), 0, field.typeName(), field.isNumeric())
         
-        # For non-PostgreSQL layers, check uniqueness (safe for small datasets)
-        for field in layer.fields():
-            if self.isCanceled():
-                return False
-            if len(layer.uniqueValues(layer.fields().indexOf(field.name()))) == feature_count:
-                return (field.name(), layer.fields().indexFromName(field.name()), field.typeName(), field.isNumeric())
+        # CRITICAL FIX: For non-PostgreSQL layers without declared PK or 'id' field,
+        # use the first field rather than calling uniqueValues() which is NOT thread-safe
+        # and causes access violations when called from QgsTask background thread.
+        # This is a safe fallback - the first field is often a suitable identifier.
+        if layer.fields().count() > 0:
+            field = layer.fields()[0]
+            logger.debug(f"Using first field as fallback (avoiding thread-unsafe uniqueValues): {field.name()}")
+            return (field.name(), 0, field.typeName(), field.isNumeric())
         
         # Should not reach here for PostgreSQL (already handled above)
         # But keep as safety fallback
@@ -1229,7 +1254,8 @@ class LayersManagementEngineTask(QgsTask):
                             if type_returned in (list, dict):
                                 value_typped = json.dumps(value_typped)
                             variable_key = f"filterMate_{key_group}_{key}"
-                            QgsExpressionContextUtils.setLayerVariable(layer, key_group + '_' + key, value_typped)
+                            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                            self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
                             self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                             cur.execute(
                                 """INSERT INTO fm_project_layers_properties 
@@ -1252,8 +1278,9 @@ class LayersManagementEngineTask(QgsTask):
                                 value_typped, type_returned = self.return_typped_value(value, 'save')
                                 if type_returned in (list, dict):
                                     value_typped = json.dumps(value_typped)
-                                variable_key = f"filterMate_{key_group}_{key}"
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, value_typped)
+                                variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
+                                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
                                 self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                                 cur.execute(
                                     """INSERT INTO fm_project_layers_properties 
@@ -1307,7 +1334,8 @@ class LayersManagementEngineTask(QgsTask):
                         (str(self.project_uuid), layer.id())
                     )
                     conn.commit()
-                    QgsExpressionContextUtils.setLayerVariables(layer, {})
+                    # THREAD SAFETY (v2.3.10): Queue for main thread execution (clear all)
+                    self._deferred_layer_variables.append((layer.id(), None, None))
                 else:
                     for layer_property in layer_properties:
                         if layer_property[0] in ("infos", "exploring", "filtering"):
@@ -1319,7 +1347,8 @@ class LayersManagementEngineTask(QgsTask):
                                 )
                                 conn.commit()
                                 variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
-                                QgsExpressionContextUtils.setLayerVariable(layer, variable_key, '')
+                                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                self._deferred_layer_variables.append((layer.id(), variable_key, ''))
                                 self.removingLayerVariable.emit(layer, variable_key)
             finally:
                 # STABILITY FIX: Ensure DB connection is always closed
@@ -1382,7 +1411,8 @@ class LayersManagementEngineTask(QgsTask):
                     result_layers = [result_layer for result_layer in self.PROJECT.mapLayersByName(layer.name())]
                     if len(result_layers) > 0:
                         for result_layer in result_layers:
-                            QgsExpressionContextUtils.setLayerVariables(result_layer, {})
+                            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                            self._deferred_layer_variables.append((result_layer.id(), None, None))
                             if self.isCanceled():
                                 return False
                     if self.isCanceled():
@@ -1399,7 +1429,8 @@ class LayersManagementEngineTask(QgsTask):
                 result_layers = [layer for layer in self.PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
                 if len(result_layers) > 0:
                     result_layer = result_layers[0]
-                    QgsExpressionContextUtils.setLayerVariables(result_layer, {})
+                    # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                    self._deferred_layer_variables.append((result_layer.id(), None, None))
 
                 if self.isCanceled():
                     return False
@@ -1547,10 +1578,72 @@ class LayersManagementEngineTask(QgsTask):
         STABILITY FIX v2.3.9: Uses safe_emit() and safe_disconnect() from object_safety
         module to prevent access violations on certain machines.
         
+        THREAD SAFETY FIX v2.3.10: Applies deferred layer variable operations that were
+        queued during run() execution. QgsExpressionContextUtils must be called from
+        the main GUI thread to avoid access violations.
+        
         Args:
             result (bool): Task result
         """
         logger.info(f"LayersManagementEngineTask.finished(): task_action={self.task_action}, result={result}, project_layers count={len(self.project_layers) if self.project_layers else 0}")
+        
+        # THREAD SAFETY (v2.3.10): Apply deferred layer variable operations
+        # These operations MUST happen in the main thread (finished() runs in main thread)
+        # CRASH FIX (v2.3.12): Use safe wrapper functions that re-fetch and validate
+        # the layer immediately before C++ operations to prevent access violations
+        # CRASH FIX (v2.4.7): Process events BEFORE applying layer variables to
+        # allow any pending layer deletions to complete, reducing race condition window
+        # CRASH FIX (v2.4.8): Check if QGIS is alive before any layer operations
+        # CRASH FIX (v2.4.9): Use QTimer.singleShot(0) to defer layer variable operations
+        # to the next event loop iteration. This ensures all pending layer deletions
+        # are fully processed before we access the layers, preventing access violations.
+        if self._deferred_layer_variables:
+            # Early exit if QGIS is shutting down - prevents access violations
+            if not is_qgis_alive():
+                logger.debug("QGIS is not alive, skipping deferred layer variable operations")
+                self._deferred_layer_variables.clear()
+            else:
+                logger.debug(f"Scheduling {len(self._deferred_layer_variables)} deferred layer variable operations")
+                
+                # Copy the list to avoid modification during iteration
+                # and clear immediately so task can be fully cleaned up
+                operations_to_apply = list(self._deferred_layer_variables)
+                self._deferred_layer_variables.clear()
+                
+                # CRASH FIX (v2.4.9): Use QTimer.singleShot(0) to defer operations
+                # to the next event loop cycle. This provides a complete "round-trip"
+                # through Qt's event loop, ensuring all pending layer deletions
+                # are fully processed before we touch any layers.
+                # On Windows, access violations from deleted C++ objects are FATAL
+                # and cannot be caught by Python's try/except.
+                def apply_deferred_layer_variables():
+                    """Apply layer variables in next event loop iteration."""
+                    try:
+                        # Final QGIS alive check before operations
+                        if not is_qgis_alive():
+                            logger.debug("QGIS not alive in deferred callback, skipping layer variables")
+                            return
+                        
+                        for layer_id, variable_key, value in operations_to_apply:
+                            # Re-check QGIS alive status for each operation
+                            if not is_qgis_alive():
+                                logger.debug("QGIS became unavailable during layer variable loop")
+                                break
+                            
+                            if variable_key is None:
+                                # Clear all layer variables using safe wrapper
+                                if not safe_set_layer_variables(layer_id, {}):
+                                    logger.debug(f"Could not clear layer variables for {layer_id} (layer may be deleted)")
+                            else:
+                                # Set individual variable using safe wrapper
+                                if not safe_set_layer_variable(layer_id, variable_key, value):
+                                    logger.debug(f"Could not set layer variable {variable_key} for {layer_id} (layer may be deleted)")
+                    except Exception as e:
+                        logger.warning(f"Error in deferred layer variable callback: {e}")
+                
+                # Schedule for next event loop iteration (0ms timeout)
+                QTimer.singleShot(0, apply_deferred_layer_variables)
+        
         result_action = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
 

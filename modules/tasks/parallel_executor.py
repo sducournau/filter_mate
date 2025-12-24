@@ -166,6 +166,12 @@ class ParallelFilterExecutor:
         has_ogr_layers = False
         provider_types = set()
         
+        # CRITICAL SQLITE LOCKING FIX (v2.4.2):
+        # Track layers by their source database file. Layers sharing the same SQLite/GeoPackage
+        # file MUST be filtered sequentially to prevent "unable to open database file" errors.
+        # SQLite has single-writer limitation - parallel writes to same DB cause locking issues.
+        database_file_counts = {}  # file_path -> count of layers using it
+        
         for layer, layer_props in layers:
             provider_type = layer_props.get('_effective_provider_type', 'ogr')
             if hasattr(layer, 'providerType'):
@@ -179,6 +185,30 @@ class ParallelFilterExecutor:
             provider_types.add(provider_type)
             if provider_type == 'ogr':
                 has_ogr_layers = True
+            
+            # Track database files for Spatialite/OGR layers
+            if provider_type in ('spatialite', 'ogr') and hasattr(layer, 'source'):
+                try:
+                    source = layer.source()
+                    if source:
+                        # Extract file path from source (format: /path/to/file.gpkg|layername=...)
+                        file_path = source.split('|')[0].lower()
+                        if file_path.endswith(('.gpkg', '.sqlite', '.db', '.spatialite')):
+                            database_file_counts[file_path] = database_file_counts.get(file_path, 0) + 1
+                except Exception:
+                    pass
+        
+        # Check if any database file has multiple layers - force sequential for shared databases
+        shared_database_files = [f for f, count in database_file_counts.items() if count > 1]
+        if shared_database_files:
+            max_layers = max(database_file_counts.values())
+            logger.warning(
+                f"⚠️ Multiple layers share the same SQLite database - using SEQUENTIAL execution. "
+                f"SQLite has single-writer limitation. "
+                f"{len(shared_database_files)} shared database(s), max {max_layers} layers/db. "
+                f"Providers: {provider_types}"
+            )
+            return self._filter_sequential(layers, filter_func, progress_callback, cancel_check)
         
         # Force sequential execution for OGR layers to prevent access violations
         if has_ogr_layers:
@@ -393,6 +423,13 @@ class ParallelFilterExecutor:
         """
         Filter layers sequentially (fallback for small layer counts).
         
+        STABILITY FIX v2.3.13: Adds inter-layer delay for GeoPackage layers
+        to allow SQLite file locks to release between operations.
+        
+        STABILITY FIX v2.4.2: Extended to handle Spatialite and all SQLite-based
+        databases (.gpkg, .sqlite, .db, .spatialite). Increased delay and added
+        retry logic for persistent locking issues.
+        
         Args:
             layers: List of (layer, layer_props) tuples
             filter_func: Filter function to call
@@ -402,22 +439,112 @@ class ParallelFilterExecutor:
         Returns:
             List[FilterResult]: Results
         """
+        import time
+        
         results = []
         layer_count = len(layers)
+        
+        # STABILITY FIX v2.4.2: Track SQLite database file paths for inter-layer delay
+        # When multiple layers from the same SQLite database are processed sequentially,
+        # add a delay between operations to allow SQLite locks to release.
+        # This applies to: GeoPackage (.gpkg), Spatialite (.sqlite, .spatialite, .db)
+        last_db_path = None
+        
+        # Count layers per database for adaptive delay calculation
+        db_layer_counts = {}
+        for layer, layer_props in layers:
+            db_path = self._get_layer_database_path(layer)
+            if db_path:
+                db_layer_counts[db_path] = db_layer_counts.get(db_path, 0) + 1
         
         for i, (layer, layer_props) in enumerate(layers):
             if cancel_check and cancel_check():
                 break
             
             provider_type = layer_props.get('_effective_provider_type', 'ogr')
+            
+            # Get current layer's database path
+            current_db_path = self._get_layer_database_path(layer)
+            
+            # STABILITY FIX v2.4.2: Add inter-layer delay for same SQLite database
+            # Delay is adaptive based on number of layers sharing the database
+            if current_db_path and current_db_path == last_db_path:
+                # Calculate adaptive delay: more layers = longer delay
+                layer_count_in_db = db_layer_counts.get(current_db_path, 1)
+                if layer_count_in_db > 10:
+                    delay = 0.5  # 500ms for large number of layers
+                elif layer_count_in_db > 5:
+                    delay = 0.3  # 300ms for medium number of layers
+                else:
+                    delay = 0.2  # 200ms for small number of layers
+                
+                time.sleep(delay)
+            
             result = self._filter_single_layer(filter_func, provider_type, layer, layer_props)
             results.append(result)
+            
+            # Track last database path for next iteration
+            if current_db_path:
+                last_db_path = current_db_path
             
             if progress_callback:
                 layer_name = layer.name() if hasattr(layer, 'name') else str(layer)
                 progress_callback(i + 1, layer_count, layer_name)
         
         return results
+    
+    def _get_layer_database_path(self, layer) -> Optional[str]:
+        """
+        Extract the database file path from a layer's source.
+        
+        Works with:
+        - GeoPackage (.gpkg)
+        - Spatialite (.sqlite, .spatialite, .db)
+        - Native spatialite provider layers
+        - OGR provider layers
+        
+        Args:
+            layer: QgsVectorLayer to check
+            
+        Returns:
+            Lowercase database file path or None if not SQLite-based
+        """
+        try:
+            if not hasattr(layer, 'source'):
+                return None
+            
+            source = layer.source()
+            if not source:
+                return None
+            
+            # Extract file path (format: /path/to/file.gpkg|layername=... or dbname='/path/...')
+            file_path = None
+            
+            if '|' in source:
+                # OGR format: /path/to/file.gpkg|layername=xxx
+                file_path = source.split('|')[0]
+            elif "dbname='" in source:
+                # Spatialite format: dbname='/path/to/file.sqlite' ...
+                import re
+                match = re.search(r"dbname='([^']+)'", source)
+                if match:
+                    file_path = match.group(1)
+            elif "dbname=\"" in source:
+                import re
+                match = re.search(r'dbname="([^"]+)"', source)
+                if match:
+                    file_path = match.group(1)
+            else:
+                file_path = source
+            
+            if file_path:
+                file_path_lower = file_path.lower()
+                if file_path_lower.endswith(('.gpkg', '.sqlite', '.db', '.spatialite')):
+                    return file_path_lower
+            
+            return None
+        except Exception:
+            return None
     
     def get_results(self) -> List[FilterResult]:
         """Get results from last parallel operation."""

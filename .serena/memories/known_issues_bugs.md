@@ -1,49 +1,170 @@
-# Known Issues & Bug Fixes - FilterMate\n\n## Critical Bug Fix (v2.3.9 - December 19, 2025)
+# Known Issues & Bug Fixes - FilterMate
 
-### Access Violation Crash (Windows)
-**Status:** ✅ FIXED
+**Last Updated:** December 23, 2025
 
-**Problem:**
-- QGIS crashed with "Windows fatal exception: access violation"
-- Occurred during plugin reload or QGIS shutdown
-- Stack trace showed crash in Qt notification system
+## Critical Bug Fixes (v2.4.x Series - December 2025)
 
-**Root Cause:**
-- Lambdas in `QTimer.singleShot` captured `self` reference
-- When plugin was unloaded, `self` was destroyed
-- Timer callbacks tried to access destroyed objects → **Access Violation**
+### Overview
+The v2.4.x series focused heavily on fixing Windows access violation crashes that were occurring during:
+- Layer variable operations (setLayerVariable)
+- Backend changes (especially to Spatialite)
+- Geometric filtering with corrupted/invalid layers
+- Parallel execution of OGR operations
 
-**Solution Implemented:**
-1. **Weak References for all QTimer callbacks**
-   - Used `weakref.ref(self)` in all timer lambdas
-   - Callbacks check if object still exists before execution
-   - Allows garbage collector to free objects safely
-
-2. **Safety checks in callbacks**
-   - Added `try/except RuntimeError` blocks
-   - Check `hasattr(self, 'attribute')` before access
-   - Graceful degradation when objects destroyed
-
-3. **Safe message display utility**
-   - Created `safe_show_message()` function
-   - Catches RuntimeError when iface destroyed
-   - Prevents crashes when showing messages after unload
-
-**Files Modified:**
-- `filter_mate_app.py`: Added weakref, secured 8+ timer callbacks
-- Documentation: `docs/fixes/FIX_ACCESS_VIOLATION_CRASH_2025-12-19.md`
-
-**Impact:**
-- ✅ No more crashes on plugin reload
-- ✅ Clean QGIS shutdown even with active timers
-- ✅ Stable under rapid project switching
-
-**Testing Required:**
-- Rapid plugin reload (10x)
-- Close QGIS during layer loading
-- Reload plugin during active filtering
-- Quick project switching
+All crashes are now resolved with multi-layer defense-in-depth protection.
 
 ---
 
-## Latest Improvements (v2.3.8 - December 18, 2025)\n\n### New Test Coverage\n**Status:** ✅ IMPLEMENTED\n\n**New Tests Added:**\n- `tests/test_project_change.py`: 15 test classes for project change stability\n- `tests/test_geographic_crs.py`: 12 test classes for geographic CRS handling\n\n**Coverage Improvement:**\n- Before: ~70%\n- After: ~75%\n- Tests cover v2.3.6-2.3.7 stability improvements\n\n### Dock Position Configuration\n**Status:** ✅ IMPLEMENTED\n\n**Feature:**\n- Users can now choose dock position via `config.json`\n- Options: left, right, top, bottom (default: right)\n\n**Implementation:**\n- Added `DOCK_POSITION` to `config/config.default.json`\n- Added `_get_dock_position()` method to `FilterMateApp`\n- Updated `run()` to use configurable position\n\n**Configuration:**\n```json\n\"DOCK_POSITION\": {\n    \"value\": \"right\",\n    \"choices\": [\"left\", \"right\", \"top\", \"bottom\"],\n    \"description\": \"Position of the FilterMate dockwidget in QGIS\"\n}\n```\n\n---
+## v2.4.10 - Backend Change Access Violation Fix (December 23, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Windows fatal exception during backend change to Spatialite
+- `setLayerVariableEvent()` signal emission during widget synchronization
+
+**Root Cause:**
+- Despite `blockSignals(True)`, Qt `fieldChanged` signal cascades through event queue
+- Layer becomes invalid during signal cascade → CRASH
+
+**Solution:**
+1. Robust Layer Validation in `_save_single_property()` with `is_valid_layer()`
+2. Pre-emit Validation in `setLayerVariableEvent()` before signal emission
+3. Entry Point Validation in `save_variables_from_layer()`
+
+---
+
+## v2.4.9 - Definitive Layer Variable Access Violation Fix (December 23, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Race condition between layer validation and C++ call
+- Windows access violations are FATAL (cannot be caught by Python try/except)
+
+**Solution - Two-Pronged Fix:**
+1. **QTimer.singleShot(0) Deferral** - Schedules callback for next complete event loop iteration
+2. **Direct setCustomProperty()** - Wraps C++ calls in try/except that CAN catch RuntimeError
+
+**Defense-in-depth (4 layers):**
+1. Task level: QTimer.singleShot(0) defers operations
+2. Callback level: is_qgis_alive() check before and during loop
+3. Function level: Fresh layer lookup + sip deletion check
+4. Operation level: Try/except around direct setCustomProperty() call
+
+---
+
+## v2.4.7 - Layer Variable Race Condition Fix (December 23, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Race condition persisted between sip.isdeleted() validation and C++ call
+
+**Solution:**
+1. `QApplication.processEvents()` flush before critical C++ operations
+2. Post-flush re-validation of layer status
+3. Windows-specific stricter validation
+
+---
+
+## v2.4.5 - Processing Parameter Validation Crash Fix (December 23, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Access violation in `checkParameterValues` during geometric filtering
+- QGIS Processing accesses layer data at C++ level during parameter validation
+
+**Solution - Three-tier Validation:**
+1. `_validate_input_layer()` - Deep provider access validation
+2. `_validate_intersect_layer()` - Same + geometry checks
+3. `_preflight_layer_check()` - Final check before processing.run()
+
+---
+
+## v2.4.4 - Critical Thread Safety Fix (December 23, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Parallel filtering access violation crash
+- QGIS `QgsVectorLayer` objects are NOT thread-safe
+
+**Solution:**
+1. Auto-detection of OGR layers → forces sequential execution
+2. Geometric filtering safety detection → sequential mode
+3. Thread tracking with concurrent access warnings
+
+---
+
+## v2.4.3 - Export System Fix (December 22, 2025)
+**Status:** ✅ FIXED
+
+**Fixes:**
+- Missing file extensions in exports (.shp, .gpkg, etc.)
+- Driver name mapping for all formats
+- Streaming export datatype argument
+- Message bar argument order
+
+---
+
+## v2.3.9 - Access Violation Crash on Plugin Reload (December 19, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- QGIS crashed during plugin reload or shutdown
+- Lambdas in QTimer.singleShot captured self reference
+
+**Solution:**
+1. Weak References for all QTimer callbacks
+2. Safety checks in callbacks (try/except RuntimeError)
+3. Safe message display utility
+
+---
+
+## Modules for Safety Operations
+
+### modules/object_safety.py
+New module (v2.4.x) providing safe wrappers for C++ operations:
+- `is_qgis_alive()` - Check if QGIS application is running
+- `is_sip_deleted()` - Check if SIP object was deleted
+- `is_valid_qobject()` - Validate QObject
+- `is_valid_layer()` - Full layer validation (C++ object + project)
+- `is_layer_in_project()` - Check layer still in project
+- `safe_layer_access()` - Context manager for safe layer access
+- `safe_disconnect()` - Safe signal disconnection
+- `safe_emit()` - Safe signal emission
+- `safe_set_layer_variable()` - Safe layer variable setting
+- `safe_set_layer_variables()` - Safe multiple variables
+- `safe_block_signals()` - Safe signal blocking
+- `make_safe_callback()` / `make_safe_lambda()` - Safe callback creation
+- `SafeLayerContext` / `SafeSignalContext` - Context managers
+
+---
+
+## Known Remaining Issues
+
+### Low Priority
+1. **TODO: User-configurable settings** (filter_mate.py:97) - Future feature
+2. **TODO: Dock location choice** (filter_mate_app.py:355) - Now implemented via config
+
+### Performance Considerations
+- Large OGR datasets (> 50k features) may be slow without PostgreSQL
+- Parallel execution disabled for OGR backends (thread safety)
+
+---
+
+## Testing Recommendations
+
+For any new crash fixes, test:
+1. Rapid plugin reload (10x)
+2. Close QGIS during layer loading
+3. Reload plugin during active filtering
+4. Quick project switching
+5. Backend change to Spatialite/OGR
+6. Geometric filtering with invalid layers
+7. Export with large datasets
+
+---
+
+## Documentation
+
+Crash fix documentation in `docs/fixes/`:
+- `FIX_ACCESS_VIOLATION_CRASH_2025-12-19.md`
+- Various other fix documentation files

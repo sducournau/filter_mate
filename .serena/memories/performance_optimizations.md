@@ -1,6 +1,6 @@
-# Performance Optimizations - FilterMate v2.4.2
+# Performance Optimizations - FilterMate v2.4.10
 
-**Last Updated:** December 18, 2025
+**Last Updated:** December 23, 2025
 
 ## Overview
 
@@ -458,6 +458,19 @@ from modules.prepared_statements import create_prepared_statements
 ps_manager = create_prepared_statements(connection, 'postgresql')
 ps_manager.insert_subset_history(...)
 ```
+
+---
+
+## Thread Safety Considerations (v2.4.4+) ⚠️ CRITICAL
+
+### OGR Backend Sequential Execution
+QGIS `QgsVectorLayer` objects are NOT thread-safe. Starting from v2.4.4:
+
+1. **OGR layers** automatically use sequential execution (not parallel)
+2. **Geometric filtering** forces sequential mode for safety
+3. **PostgreSQL/Spatialite** can still use parallel execution (database connections are per-thread)
+
+**Impact:** Parallel execution speedup only applies to database backends.
 
 ---
 

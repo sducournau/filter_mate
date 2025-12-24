@@ -4,6 +4,10 @@ Spatialite Backend for FilterMate
 
 Backend for Spatialite databases.
 Uses Spatialite spatial functions which are largely compatible with PostGIS.
+
+v2.4.0 Improvements:
+- WKT caching for repeated filter operations
+- Improved CRS handling
 """
 
 from typing import Dict, Optional, Tuple
@@ -18,6 +22,15 @@ from ..appUtils import safe_set_subset_string
 
 logger = get_tasks_logger()
 
+# Import WKT Cache for performance optimization (v2.4.0)
+try:
+    from .wkt_cache import get_wkt_cache, WKTCache
+    WKT_CACHE_AVAILABLE = True
+except ImportError:
+    WKT_CACHE_AVAILABLE = False
+    get_wkt_cache = None
+    WKTCache = None
+
 
 class SpatialiteGeometricFilter(GeometricFilterBackend):
     """
@@ -27,7 +40,37 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     - Spatialite spatial functions (similar to PostGIS)
     - SQL-based filtering
     - Good performance for small to medium datasets
+    
+    v2.4.0: Added WKT caching for repeated filter operations
+    v2.4.1: Improved GeoPackage detection with file-level caching
     """
+    
+    # Class-level caches for Spatialite support testing
+    _spatialite_support_cache: Dict[str, bool] = {}  # layer_id -> supports
+    _spatialite_file_cache: Dict[str, bool] = {}  # file_path -> supports
+    
+    @classmethod
+    def clear_support_cache(cls):
+        """
+        Clear the Spatialite support test cache.
+        
+        Call this when reloading layers or when support status may have changed.
+        """
+        cls._spatialite_support_cache.clear()
+        cls._spatialite_file_cache.clear()
+        logger.debug("Spatialite support cache cleared")
+    
+    @classmethod
+    def invalidate_layer_cache(cls, layer_id: str):
+        """
+        Invalidate the cache for a specific layer.
+        
+        Args:
+            layer_id: ID of the layer to invalidate
+        """
+        if layer_id in cls._spatialite_support_cache:
+            del cls._spatialite_support_cache[layer_id]
+            logger.debug(f"Spatialite support cache invalidated for layer {layer_id}")
     
     def __init__(self, task_params: Dict):
         """
@@ -46,6 +89,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         # When we create a TEMP table in our connection, QGIS cannot see it.
         # Solution: Always use inline WKT in GeomFromText() for subset strings.
         self._use_temp_table = False  # DISABLED: doesn't work with setSubsetString
+        
+        # WKT cache reference (v2.4.0)
+        self._wkt_cache = get_wkt_cache() if WKT_CACHE_AVAILABLE else None
 
     def _get_buffer_endcap_style(self) -> str:
         """
@@ -152,7 +198,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         Tests by trying a simple GeomFromText expression in setSubsetString.
         If it fails, Spatialite functions are not available.
         
-        Uses a cached result per layer ID to avoid repeated testing.
+        Uses a cached result per layer ID AND per source file to avoid repeated testing.
+        For GeoPackage with 40+ layers, testing one layer is enough to know
+        if Spatialite functions work for the whole file.
+        
+        IMPROVED v2.4.1: Better detection of geometry column for GeoPackage layers
+        - Tries layer.geometryColumn() first
+        - Falls back to common column names (geometry, geom)
+        - Uses simpler test expressions that are more likely to succeed
+        - Cache by source file for multi-layer GeoPackages
         
         Args:
             layer: Layer to test
@@ -160,44 +214,104 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         Returns:
             True if Spatialite functions work, False otherwise
         """
-        # Use class-level cache to avoid repeated tests
-        if not hasattr(self.__class__, '_spatialite_support_cache'):
-            self.__class__._spatialite_support_cache = {}
-        
+        # Use class-level cache (defined as class attributes)
         layer_id = layer.id()
         if layer_id in self.__class__._spatialite_support_cache:
             cached = self.__class__._spatialite_support_cache[layer_id]
             self.log_debug(f"Using cached Spatialite support result for {layer.name()}: {cached}")
             return cached
         
+        # OPTIMIZATION: Check if we already tested this source file (e.g., GeoPackage)
+        # For multi-layer GeoPackages, we only need to test once per file
+        source = layer.source()
+        source_path = source.split('|')[0] if '|' in source else source
+        if source_path.lower().endswith('.gpkg') or source_path.lower().endswith('.sqlite'):
+            if source_path in self.__class__._spatialite_file_cache:
+                cached = self.__class__._spatialite_file_cache[source_path]
+                self.log_debug(f"Using cached Spatialite support for file {source_path}: {cached}")
+                self.__class__._spatialite_support_cache[layer_id] = cached
+                return cached
+        
         try:
-            # Get geometry column name
-            geom_col = layer.geometryColumn()
-            if not geom_col:
-                geom_col = "geom"  # Default fallback
-            
             # Save current subset string
             original_subset = layer.subsetString()
             
-            # Try a simple Spatialite function test
-            # Use a simple GeomFromText that should return no features (false condition)
-            # This tests if GeomFromText is recognized as a function
-            test_expr = f"ST_Intersects(\"{geom_col}\", GeomFromText('POINT(0 0)', 4326)) = 1 AND 1 = 0"
+            # Get geometry column name - try multiple methods
+            geom_col = layer.geometryColumn()
             
-            # Try to apply the test expression
-            result = layer.setSubsetString(test_expr)
+            # Build list of candidate geometry column names
+            candidates = []
+            if geom_col:
+                candidates.append(geom_col)
+            # Common GeoPackage/Spatialite column names
+            candidates.extend(['geometry', 'geom', 'GEOMETRY', 'GEOM', 'the_geom'])
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_candidates = []
+            for c in candidates:
+                if c.lower() not in seen:
+                    seen.add(c.lower())
+                    unique_candidates.append(c)
             
-            # Restore original subset immediately
-            layer.setSubsetString(original_subset if original_subset else "")
+            # Try each candidate geometry column
+            result = False
+            for test_geom_col in unique_candidates:
+                # Use a simple Spatialite function test
+                # GeomFromText is a core Spatialite/GPKG function that should work
+                # Use "AND 1=0" to ensure no features are returned (faster test)
+                test_expr = f"ST_Intersects(\"{test_geom_col}\", GeomFromText('POINT(0 0)', 4326)) = 1 AND 1 = 0"
+                
+                # Try to apply the test expression
+                try:
+                    result = layer.setSubsetString(test_expr)
+                except Exception:
+                    result = False
+                
+                # Restore original subset immediately
+                try:
+                    layer.setSubsetString(original_subset if original_subset else "")
+                except Exception:
+                    pass
+                
+                if result:
+                    self.log_debug(f"✓ Spatialite test PASSED for {layer.name()} with column '{test_geom_col}'")
+                    break
+                else:
+                    self.log_debug(f"  Spatialite test failed with column '{test_geom_col}', trying next...")
             
-            # Cache the result
+            # Cache the result by layer ID
             self.__class__._spatialite_support_cache[layer_id] = result
+            
+            # Also cache by source file for multi-layer sources
+            if source_path.lower().endswith('.gpkg') or source_path.lower().endswith('.sqlite'):
+                self.__class__._spatialite_file_cache[source_path] = result
+                if result:
+                    self.log_info(f"✓ Spatialite support verified for file: {source_path}")
             
             if result:
                 self.log_debug(f"✓ Spatialite function test PASSED for {layer.name()}")
                 return True
             else:
-                self.log_debug(f"✗ Spatialite function test FAILED for {layer.name()}")
+                # Log more informatively for user troubleshooting
+                provider_type = layer.providerType()
+                source = layer.source()
+                source_path = source.split('|')[0] if '|' in source else source
+                file_ext = source_path.split('.')[-1].lower() if '.' in source_path else 'unknown'
+                
+                if file_ext in ('shp', 'geojson', 'json', 'kml'):
+                    self.log_warning(
+                        f"✗ Spatialite functions NOT supported for {layer.name()} ({file_ext}). "
+                        f"Only GeoPackage (.gpkg) and SQLite (.sqlite) support Spatialite SQL. "
+                        f"Using OGR backend (QGIS processing) as fallback."
+                    )
+                elif file_ext in ('gpkg', 'sqlite'):
+                    self.log_warning(
+                        f"✗ Spatialite functions unavailable for {layer.name()}. "
+                        f"GDAL may not be compiled with Spatialite extension. "
+                        f"Using OGR backend (QGIS processing) as fallback."
+                    )
+                else:
+                    self.log_debug(f"✗ Spatialite function test FAILED for {layer.name()} - tried all column candidates")
                 return False
                 
         except Exception as e:
@@ -527,7 +641,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         if table and '.' in str(table):
             geom_expr = f'"{table}"."{geom_field}"'
         
-        self.log_debug(f"Geometry expression: {geom_expr}")
+        self.log_info(f"Geometry column detected: '{geom_field}' for layer {layer_props.get('layer_name', 'unknown')}")
         
         # Get target layer SRID for comparison
         target_srid = 4326  # Default fallback
@@ -808,6 +922,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     self.log_warning(f"Slow operation - consider PostgreSQL for large datasets")
             else:
                 self.log_error(f"✗ Filter failed for {layer.name()}")
+                self.log_error(f"  → Provider: {layer.providerType()}")
+                self.log_error(f"  → Geometry column: {layer.geometryColumn()}")
+                self.log_error(f"  → Expression length: {len(final_expression)} chars")
+                self.log_error(f"  → Expression preview: {final_expression[:300]}...")
+                
+                # Try to get the actual error from the layer
+                if layer.error() and layer.error().message():
+                    self.log_error(f"  → Layer error: {layer.error().message()}")
+                
                 self.log_error("Check: spatial functions available, geometry column, SQL syntax")
                 
                 # Check if expression references a temp table (common mistake)

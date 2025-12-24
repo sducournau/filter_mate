@@ -2,6 +2,273 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.11] - 2025-12-24 - Multi-Thread & Qt Event Loop Access Violation Fixes
+
+### 🔥 Critical Bug Fixes
+
+#### Bug Fix 1: Multi-Thread Feature Iteration Race Condition
+
+- **Root Cause**: Multiple background threads (`PopulateListEngineTask`) iterating over layer features while main thread calls `setLayerVariable()` during UI state restoration
+- **Symptom**: "Windows fatal exception: access violation" at `layer_features_source.getFeatures()` (line 493 in widgets.py)
+- **Trigger**: Layer change causes UI groupbox collapse/expand which triggers deferred layer variable saves
+
+#### Bug Fix 2: Qt Event Loop Deferred Operation Crash (NEW)
+
+- **Root Cause**: `setCollapsed()` triggers Qt event processing (`sendPostedEvents`) which executes deferred `save_variables_from_layer` operations during `_restore_groupbox_ui_state`
+- **Symptom**: "Windows fatal exception: access violation" at `QgsExpressionContextUtils.setLayerVariable()` during layer change
+- **Trigger**: Single-thread crash where `QTimer.singleShot(0, ...)` deferred operation runs inside Qt event processing
+- **Stack Trace Path**:
+  1. `current_layer_changed` → `_reconnect_layer_signals` → `_restore_groupbox_ui_state`
+  2. `setCollapsed(False)` → Qt `sendPostedEvents` → deferred `save_variables_from_layer`
+  3. `_save_single_property` → `setLayerVariable` → **CRASH**
+
+### 🛡️ Multi-Thread Protection (v2.4.11)
+
+#### 1. Task Cancellation Checks During Feature Iteration ([widgets.py](modules/widgets.py))
+
+Added `isCanceled()` checks in all feature iteration loops in `buildFeaturesList()` and `loadFeaturesList()`:
+
+```python
+for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
+    # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
+    if self.isCanceled():
+        logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+        return
+    # ... process feature
+```
+
+#### 2. Layer-Specific Task Cancellation Before Variable Updates ([filter_mate_app.py](filter_mate_app.py))
+
+New method `_cancel_layer_tasks(layer_id)` cancels running feature iteration tasks for a specific layer before modifying its variables.
+
+#### 3. Skip QGIS Variable Updates During Layer Change
+
+Added check for `_updating_current_layer` flag to skip `setLayerVariable()` calls during layer change (database save still proceeds):
+
+```python
+# CRASH FIX (v2.4.11): Check if dockwidget is in the middle of a layer change
+skip_qgis_variable = False
+if hasattr(self, 'dockwidget') and self.dockwidget is not None:
+    if getattr(self.dockwidget, '_updating_current_layer', False):
+        logger.debug(f"_save_single_property: layer change in progress, deferring QGIS variable")
+        skip_qgis_variable = True
+```
+
+### 📝 Files Modified
+
+- `modules/widgets.py`: Added `isCanceled()` checks in 10+ feature iteration loops
+- `filter_mate_app.py`: Added `_cancel_layer_tasks()` method, layer change detection, and skip logic
+
+---
+
+## [2.4.10] - 2025-12-23 - Backend Change Access Violation Fix
+
+### 🔥 Critical Bug Fix
+
+#### Windows Fatal Exception: Access Violation during Backend Change to Spatialite
+
+- **Root Cause**: `setLayerVariableEvent()` signal emission during widget synchronization when layer's C++ object becomes invalid
+- **Symptom**: "Windows fatal exception: access violation" at `QgsExpressionContextUtils.setLayerVariable()` when forcing backend change to Spatialite
+- **Stack Trace Path**:
+  1. `_synchronize_layer_widgets` calls `setExpression()` on QgsFieldExpressionWidget
+  2. Despite `blockSignals(True)`, `fieldChanged` signal cascades through Qt event queue
+  3. `on_single_field_changed` → `layer_property_changed` → `setLayerVariableEvent`
+  4. Layer becomes invalid during signal cascade → **CRASH**
+
+### 🛡️ Multi-Layer Protection (v2.4.10)
+
+#### 1. Robust Layer Validation in `_save_single_property()` ([filter_mate_app.py](filter_mate_app.py#L2890))
+
+Replaced basic null check with comprehensive `is_valid_layer()` validation:
+
+```python
+# OLD - Insufficient check
+if layer is None or not hasattr(layer, 'id') or not layer.id():
+    return
+
+# NEW - Full C++ object validation
+if not is_valid_layer(layer):
+    logger.debug(f"_save_single_property: layer is invalid or deleted, skipping")
+    return
+```
+
+Also wrapped `setLayerVariable()` in try/except to catch `RuntimeError/OSError/SystemError`.
+
+#### 2. Pre-emit Validation in `setLayerVariableEvent()` ([filter_mate_dockwidget.py](filter_mate_dockwidget.py#L8376))
+
+Added `is_valid_layer()` check before emitting signal:
+
+```python
+# CRASH FIX: Validate before signal emission
+if not is_valid_layer(layer):
+    logger.debug("setLayerVariableEvent: layer is invalid, skipping emit")
+    return
+self.settingLayerVariable.emit(layer, properties)
+```
+
+#### 3. Entry Point Validation in `save_variables_from_layer()` ([filter_mate_app.py](filter_mate_app.py#L2940))
+
+Replaced `isinstance()` check with `is_valid_layer()` for full C++ deletion detection.
+
+### 📝 Files Modified
+
+- `filter_mate_app.py`: Enhanced `_save_single_property()` and `save_variables_from_layer()`
+- `filter_mate_dockwidget.py`: Added `is_valid_layer` import and validation in `setLayerVariableEvent()`
+
+---
+
+## [2.4.9] - 2025-12-23 - Definitive Layer Variable Access Violation Fix
+
+### 🔥 Critical Bug Fix
+
+#### Windows Fatal Exception: Access Violation in setLayerVariable
+
+- **Root Cause**: Race condition between layer validation and C++ call persisted despite processEvents() flush
+- **Symptom**: "Windows fatal exception: access violation" at `QgsExpressionContextUtils::setLayerVariable` during task completion
+- **Key Insight**: On Windows, C++ access violations are **FATAL** and cannot be caught by Python's try/except
+
+### 🛡️ Two-Pronged Fix Strategy (v2.4.9)
+
+#### 1. QTimer.singleShot(0) Deferral ([layer_management_task.py](modules/tasks/layer_management_task.py))
+
+Replaced immediate layer variable operations with QTimer.singleShot(0) scheduling:
+
+- **Why it works**: `QTimer.singleShot(0)` schedules the callback for the next complete event loop iteration
+- **Effect**: All pending layer deletion events are fully processed before we touch any layers
+- **Contrast with processEvents()**: `processEvents()` only processes currently pending events, but new deletion events can arrive immediately after
+
+```python
+# OLD (v2.4.8) - Still had race condition
+app.processEvents()  # Flush events
+# Layer could still be deleted HERE before next line
+safe_set_layer_variable(layer_id, key, value)  # CRASH
+
+# NEW (v2.4.9) - Complete event loop separation
+def apply_deferred():
+    # Runs in completely new event loop iteration
+    safe_set_layer_variable(layer_id, key, value)
+QTimer.singleShot(0, apply_deferred)  # Schedule for later
+```
+
+#### 2. Direct setCustomProperty() Call ([object_safety.py](modules/object_safety.py))
+
+Replaced `QgsExpressionContextUtils.setLayerVariable()` with direct `setCustomProperty()` calls:
+
+- **Why it helps**: Wraps the actual C++ call in try/except that CAN catch RuntimeError
+- **Layer variable format**: QGIS stores layer variables as `variableValues/<name>` custom properties
+- **Additional benefit**: More granular error handling per-variable
+
+### 📝 Technical Details
+
+The fix provides defense-in-depth:
+
+1. **Layer 1** (task level): `QTimer.singleShot(0)` defers operations to next event loop
+2. **Layer 2** (callback level): `is_qgis_alive()` check before and during loop
+3. **Layer 3** (function level): Fresh layer lookup + sip deletion check
+4. **Layer 4** (operation level): Try/except around direct `setCustomProperty()` call
+
+### 🔧 Files Modified
+
+- [modules/tasks/layer_management_task.py](modules/tasks/layer_management_task.py) - QTimer.singleShot(0) deferral pattern
+- [modules/object_safety.py](modules/object_safety.py) - Direct setCustomProperty() with try/except
+
+---
+
+## [2.4.7] - 2025-12-23 - Layer Variable Race Condition Fix
+
+### 🔥 Critical Bug Fix
+
+#### Persistent Access Violation in setLayerVariable ([object_safety.py](modules/object_safety.py#L451))
+
+- **Root Cause**: Despite existing safety checks, a race condition persisted between `sip.isdeleted()` validation and the actual `QgsExpressionContextUtils.setLayerVariable()` C++ call
+- **Symptom**: "Windows fatal exception: access violation" at `QgsExpressionContextUtils::setLayerVariable` during task completion
+- **Stack trace**: Final sip check passes → layer deleted in another thread → C++ call dereferences deleted object → access violation
+
+### 🛡️ Enhanced Race Condition Protection (v2.4.7)
+
+Added `QApplication.processEvents()` flush before critical C++ operations:
+
+1. **Event Queue Flushing**
+
+   - Calls `QApplication.processEvents()` immediately before layer variable operations
+   - Allows any pending layer deletion events to complete before accessing the layer
+   - Significantly reduces the race condition window
+
+2. **Post-Flush Re-validation**
+
+   - After processing events, re-checks `sip.isdeleted()` status
+   - Re-fetches layer from project registry to ensure it's still valid
+   - Only proceeds if layer passes all checks after event flush
+
+3. **Windows-Specific Protection**
+   - Uses `platform.system()` to detect Windows where access violations are fatal
+   - Applies stricter validation on Windows since these crashes cannot be caught
+
+### 📝 Technical Details
+
+The fix adds a two-phase approach:
+
+1. **In `finished()` method**: Process events BEFORE iterating through deferred layer variables
+2. **In safe wrapper functions**: Process events BEFORE each individual C++ call
+
+This multi-layer approach ensures that even if a layer is deleted between the start of the loop and the individual operation, the crash will be prevented.
+
+### 🔧 Files Modified
+
+- [modules/object_safety.py](modules/object_safety.py) - Added event flush and re-validation in `safe_set_layer_variable()` and `safe_set_layer_variables()`
+- [modules/tasks/layer_management_task.py](modules/tasks/layer_management_task.py) - Added event flush before layer variable loop
+
+---
+
+## [2.4.6] - 2025-12-23 - Layer Variable Access Violation Crash Fix
+
+### 🔥 Critical Bug Fix
+
+#### Access Violation in setLayerVariable ([layer_management_task.py](modules/tasks/layer_management_task.py#L1618))
+
+- **Root Cause**: Race condition between layer validation and `QgsExpressionContextUtils.setLayerVariable()` C++ call in task `finished()` method
+- **Symptom**: "Windows fatal exception: access violation" at `QgsExpressionContextUtils::setLayerVariable` during task completion
+- **Stack trace**: Task finishes → applies deferred layer variables → layer deleted between validation and C++ call → access violation
+
+### 🛡️ Safe Layer Variable Wrappers (v2.3.12)
+
+Added new safe wrapper functions in [object_safety.py](modules/object_safety.py):
+
+1. **`safe_set_layer_variable(layer_id, variable_key, value)`**
+
+   - Re-fetches layer fresh from project registry immediately before operation
+   - Validates sip deletion status and layer validity right before C++ call
+   - Minimizes race condition window between validation and access
+   - Returns `False` gracefully instead of crashing
+
+2. **`safe_set_layer_variables(layer_id, variables)`**
+   - Same pattern for setting/clearing multiple variables
+   - Used when clearing all layer variables with empty dict
+
+### 📝 Technical Details
+
+The crash sequence was:
+
+1. `LayersManagementEngineTask.run()` queues deferred layer variable operations
+2. Task completes, `finished()` runs in main thread
+3. Multiple validation checks pass (layer exists, sip not deleted, layer valid)
+4. Between final validation and `setLayerVariable()` call, layer gets deleted
+5. C++ function dereferences invalid pointer → access violation
+
+The fix:
+
+- Moves validation into dedicated safe wrapper functions
+- Re-fetches layer from project registry at the last moment
+- Performs sip deletion check immediately before C++ operation
+- Wraps everything in try-except to catch any RuntimeError
+
+### 🔧 Files Modified
+
+- [modules/object_safety.py](modules/object_safety.py) - Added `safe_set_layer_variable()` and `safe_set_layer_variables()` functions
+- [modules/tasks/layer_management_task.py](modules/tasks/layer_management_task.py) - Use safe wrappers instead of direct calls
+
+---
+
 ## [2.4.5] - 2025-12-23 - Processing Parameter Validation Crash Fix
 
 ### 🔥 Critical Bug Fix

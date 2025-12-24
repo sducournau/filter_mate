@@ -156,6 +156,28 @@ SMALL_DATASET_THRESHOLD = 5000           # < 5k: Use OGR memory instead of Postg
 DEFAULT_SMALL_DATASET_OPTIMIZATION = True  # Enable small dataset optimization by default
 
 # ============================================================================
+# Backend Optimization Constants (v2.4.0)
+# ============================================================================
+
+# PostgreSQL Materialized View settings
+MV_MAX_AGE_SECONDS = 3600               # Max age before auto-cleanup (1 hour)
+MV_CLEANUP_INTERVAL = 600               # Check for old MVs every 10 minutes
+MV_PREFIX = 'filtermate_mv_'            # Prefix for MV names
+
+# Spatialite WKT Cache settings
+WKT_CACHE_MAX_SIZE = 10                 # Max number of WKT geometries to cache
+WKT_CACHE_MAX_LENGTH = 500000           # Max WKT length to cache (500KB)
+WKT_CACHE_TTL_SECONDS = 300             # Cache TTL (5 minutes)
+
+# OGR Spatial Index settings
+SPATIAL_INDEX_AUTO_CREATE = True        # Auto-create spatial indexes
+SPATIAL_INDEX_MIN_FEATURES = 1000       # Min features to trigger auto-index
+
+# Factory Cache settings
+FACTORY_CACHE_MAX_AGE = 300             # Max cache age (5 minutes)
+FACTORY_CACHE_CHECK_INTERVAL = 60       # Check cache validity every minute
+
+# ============================================================================
 # Database Defaults
 # ============================================================================
 
