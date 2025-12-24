@@ -260,9 +260,21 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Get geometry column name - try multiple methods
             geom_col = layer.geometryColumn()
             
+            # EARLY CHECK: Detect layers without geometry
+            # These layers can still use Spatialite for attribute filtering
+            has_geometry = layer.geometryType() != 4  # 4 = QgsWkbTypes.NullGeometry
+            if not has_geometry and not geom_col:
+                self.log_info(f"⚠️ Layer {layer.name()} has no geometry - using attribute-only Spatialite mode")
+                # For non-spatial layers, we still support Spatialite for attribute filtering
+                # Cache only by layer ID, NOT by file (to avoid affecting spatial layers)
+                with self.__class__._cache_lock:
+                    self.__class__._spatialite_support_cache[layer_id] = True
+                return True
+            
             self.log_info(f"🔍 Testing Spatialite support for {layer.name()}")
             self.log_info(f"  → Geometry column from layer: '{geom_col}'")
             self.log_info(f"  → Provider: {layer.providerType()}")
+            self.log_info(f"  → Has geometry: {has_geometry}")
             self.log_info(f"  → Source: {source_path[:80]}...")
             
             # Build list of candidate geometry column names
@@ -290,9 +302,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     self.log_error(f"  ✗ Basic subset test failed for {layer.name()} - layer may not support subset strings")
                     with self.__class__._cache_lock:
                         self.__class__._spatialite_support_cache[layer_id] = False
-                        # Also cache by file to avoid retesting other layers in same file
-                        if source_path_normalized.endswith('.gpkg') or source_path_normalized.endswith('.sqlite'):
-                            self.__class__._spatialite_file_cache[source_path_normalized] = False
+                        # Do NOT cache by file - other layers may work fine
                     return False
                 else:
                     self.log_debug(f"  ✓ Basic subset test passed")
@@ -300,9 +310,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"  ✗ Basic subset test exception: {e}")
                 with self.__class__._cache_lock:
                     self.__class__._spatialite_support_cache[layer_id] = False
-                    # Also cache by file to avoid retesting other layers in same file
-                    if source_path_normalized.endswith('.gpkg') or source_path_normalized.endswith('.sqlite'):
-                        self.__class__._spatialite_file_cache[source_path_normalized] = False
+                    # Do NOT cache by file - other layers may work fine
                 return False
             
             # STEP 2: Try each candidate geometry column with progressively simpler tests
@@ -360,13 +368,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             with self.__class__._cache_lock:
                 self.__class__._spatialite_support_cache[layer_id] = result
                 
-                # Also cache by source file for multi-layer sources (use normalized path)
-                if source_path_normalized.endswith('.gpkg') or source_path_normalized.endswith('.sqlite'):
-                    self.__class__._spatialite_file_cache[source_path_normalized] = result
-                    if result:
-                        self.log_info(f"✓ Spatialite support verified for file: {source_path}")
-                    else:
-                        self.log_warning(f"✗ Spatialite NOT supported for file: {source_path}")
+                # IMPORTANT FIX: Only cache POSITIVE results by file
+                # A layer may fail the test due to missing geometry column, but other layers
+                # in the same file may have geometry and support Spatialite functions.
+                # Caching negative results by file would cause false negatives.
+                if result and (source_path_normalized.endswith('.gpkg') or source_path_normalized.endswith('.sqlite')):
+                    self.__class__._spatialite_file_cache[source_path_normalized] = True
+                    self.log_info(f"✓ Spatialite support verified for file: {source_path}")
             
             if result:
                 self.log_debug(f"✓ Spatialite function test PASSED for {layer.name()}")
@@ -398,11 +406,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_error(f"✗ Spatialite function test ERROR for {layer.name()}: {e}")
             import traceback
             self.log_debug(f"Traceback: {traceback.format_exc()}")
-            # Cache as False on error - both by layer ID and by file (with lock)
+            # IMPORTANT FIX: Only cache by layer ID, NOT by file
+            # An error for one layer shouldn't affect other layers in the same file
             with self.__class__._cache_lock:
                 self.__class__._spatialite_support_cache[layer_id] = False
-                if source_path_normalized.endswith('.gpkg') or source_path_normalized.endswith('.sqlite'):
-                    self.__class__._spatialite_file_cache[source_path_normalized] = False
+                # Do NOT cache by file on error - other layers may work fine
             return False
     
     def _get_spatialite_db_path(self, layer: QgsVectorLayer) -> Optional[str]:
@@ -648,62 +656,81 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         # CRITICAL FIX: Get actual geometry column name from layer's data source
         # Use QGIS APIs in the safest order to avoid bad guesses that break subset strings
+        # FIX v2.4.13: Only use fallback methods if previous method returned nothing
+        detected_geom_field = None
         if layer:
             try:
                 # METHOD 0: Directly ask the layer (most reliable and cheap)
                 geom_col_from_layer = layer.geometryColumn()
-                if geom_col_from_layer:
-                    geom_field = geom_col_from_layer
-                    self.log_debug(f"Geometry column from layer: {geom_field}")
+                if geom_col_from_layer and geom_col_from_layer.strip():
+                    detected_geom_field = geom_col_from_layer
+                    self.log_debug(f"Geometry column from layer.geometryColumn(): '{detected_geom_field}'")
                 
-                # METHOD 1: QGIS provider URI parsing
-                provider = layer.dataProvider()
-                from qgis.core import QgsDataSourceUri
-                uri_string = provider.dataSourceUri()
-                uri_obj = QgsDataSourceUri(uri_string)
-                uri_geom_col = uri_obj.geometryColumn()
-                if uri_geom_col:
-                    geom_field = uri_geom_col
-                else:
-                    # METHOD 2: Manual URI inspection
-                    if '|' in uri_string:
-                        parts = uri_string.split('|')
-                        for part in parts:
-                            if part.startswith('geometryname='):
-                                geom_field = part.split('=')[1]
-                                break
+                # METHOD 1: QGIS provider URI parsing (only if METHOD 0 failed)
+                if not detected_geom_field:
+                    provider = layer.dataProvider()
+                    from qgis.core import QgsDataSourceUri
+                    uri_string = provider.dataSourceUri()
+                    uri_obj = QgsDataSourceUri(uri_string)
+                    uri_geom_col = uri_obj.geometryColumn()
+                    if uri_geom_col and uri_geom_col.strip():
+                        detected_geom_field = uri_geom_col
+                        self.log_debug(f"Geometry column from URI: '{detected_geom_field}'")
+                    else:
+                        # METHOD 2: Manual URI inspection (only if METHOD 1 failed)
+                        if '|' in uri_string:
+                            parts = uri_string.split('|')
+                            for part in parts:
+                                if part.startswith('geometryname='):
+                                    detected_geom_field = part.split('=')[1]
+                                    self.log_debug(f"Geometry column from URI part: '{detected_geom_field}'")
+                                    break
+                
+                # METHOD 3: Query database metadata as last resort (only if previous methods failed)
+                if not detected_geom_field:
+                    db_path = self._get_spatialite_db_path(layer)
                     
-                    # METHOD 3: Query database metadata as last resort
-                    if geom_field == layer_props.get("layer_geometry_field", "geom"):
-                        db_path = self._get_spatialite_db_path(layer)
-                        
-                        if db_path:
-                            import sqlite3
-                            try:
-                                conn = sqlite3.connect(db_path)
-                                cursor = conn.cursor()
-                                
-                                # Extract actual table name from URI (without layer name prefix)
-                                actual_table = uri_obj.table()
-                                if not actual_table:
-                                    # Fallback: extract from URI string
-                                    for part in uri_string.split('|'):
-                                        if part.startswith('layername='):
-                                            actual_table = part.split('=')[1]
-                                            break
-                                
+                    if db_path:
+                        import sqlite3
+                        try:
+                            conn = sqlite3.connect(db_path)
+                            cursor = conn.cursor()
+                            
+                            # Extract actual table name from URI (without layer name prefix)
+                            from qgis.core import QgsDataSourceUri
+                            provider = layer.dataProvider()
+                            uri_string = provider.dataSourceUri()
+                            uri_obj = QgsDataSourceUri(uri_string)
+                            actual_table = uri_obj.table()
+                            if not actual_table:
+                                # Fallback: extract from URI string
+                                for part in uri_string.split('|'):
+                                    if part.startswith('layername='):
+                                        actual_table = part.split('=')[1]
+                                        break
+                            
+                            if actual_table:
                                 # Query GeoPackage geometry_columns table
                                 cursor.execute(
                                     "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
                                     (actual_table,)
                                 )
                                 result = cursor.fetchone()
-                                if result:
-                                    geom_field = result[0]
-                                
-                                conn.close()
-                            except Exception as e:
-                                self.log_warning(f"Database query error: {e}")
+                                if result and result[0]:
+                                    detected_geom_field = result[0]
+                                    self.log_debug(f"Geometry column from gpkg_geometry_columns: '{detected_geom_field}'")
+                            
+                            conn.close()
+                        except Exception as e:
+                            self.log_warning(f"Database query error: {e}")
+                
+                # Apply detected geometry field
+                if detected_geom_field:
+                    geom_field = detected_geom_field
+                    self.log_info(f"✓ Detected geometry column: '{geom_field}'")
+                else:
+                    self.log_warning(f"Could not detect geometry column, using default: '{geom_field}'")
+                    
             except Exception as e:
                 self.log_warning(f"Error detecting geometry column name: {e}")
         
@@ -1008,13 +1035,23 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_error(f"✗ Filter failed for {layer.name()}")
                 self.log_error(f"  → Provider: {layer.providerType()}")
-                self.log_error(f"  → Geometry column: {layer.geometryColumn()}")
+                self.log_error(f"  → Geometry column from layer: '{layer.geometryColumn()}'")
                 self.log_error(f"  → Expression length: {len(final_expression)} chars")
-                self.log_error(f"  → Expression preview: {final_expression[:300]}...")
+                self.log_error(f"  → Expression preview: {final_expression[:500]}...")
                 
                 # Try to get the actual error from the layer
                 if layer.error() and layer.error().message():
                     self.log_error(f"  → Layer error: {layer.error().message()}")
+                
+                # DIAGNOSTIC v2.4.13: More detailed diagnostics for troubleshooting
+                try:
+                    from qgis.core import QgsDataSourceUri
+                    uri_obj = QgsDataSourceUri(layer.dataProvider().dataSourceUri())
+                    self.log_error(f"  → URI geometry column: '{uri_obj.geometryColumn()}'")
+                    self.log_error(f"  → URI table: '{uri_obj.table()}'")
+                    self.log_error(f"  → Source: {layer.source()[:150]}...")
+                except Exception as uri_err:
+                    self.log_error(f"  → Could not parse URI: {uri_err}")
                 
                 self.log_error("Check: spatial functions available, geometry column, SQL syntax")
                 
@@ -1022,21 +1059,48 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 if '_fm_temp_geom_' in final_expression:
                     self.log_error("⚠️ Expression references temp table - this doesn't work with QGIS!")
                 
-                # Try a simple test to see if spatial functions work
+                # DIAGNOSTIC v2.4.13: Test both geometry column access AND spatial functions
                 try:
                     from ..appUtils import is_layer_source_available, safe_set_subset_string
                     if not is_layer_source_available(layer):
                         self.log_warning("Layer invalid or source missing; skipping test expression")
                     else:
-                        test_expr = f'"{layer.geometryColumn()}" IS NOT NULL'
-                        self.log_debug(f"Testing simple expression: {test_expr}")
-                        test_result = safe_set_subset_string(layer, test_expr)
-                        if test_result:
-                            self.log_info("Simple geometry test passed - issue is with spatial expression")
-                            # Restore no filter
+                        geom_col = layer.geometryColumn()
+                        
+                        # Test 1: Simple geometry not null
+                        if geom_col:
+                            test_expr = f'"{geom_col}" IS NOT NULL AND 1=0'
+                            self.log_debug(f"Testing geometry column access: {test_expr}")
+                            test_result = safe_set_subset_string(layer, test_expr)
+                            if test_result:
+                                self.log_info("✓ Geometry column access OK")
+                            else:
+                                self.log_error(f"✗ Cannot access geometry column '{geom_col}'")
                             safe_set_subset_string(layer, "")
+                        
+                        # Test 2: GeomFromText function
+                        test_expr_geom = "GeomFromText('POINT(0 0)', 4326) IS NOT NULL AND 1=0"
+                        self.log_debug(f"Testing GeomFromText: {test_expr_geom}")
+                        test_result2 = safe_set_subset_string(layer, test_expr_geom)
+                        if test_result2:
+                            self.log_info("✓ GeomFromText function available")
                         else:
-                            self.log_error("Even simple geometry expression failed - layer may not support subset strings")
+                            self.log_error("✗ GeomFromText function NOT available")
+                            self.log_error("   → GDAL may not be compiled with Spatialite extension")
+                            self.log_error("   → Try using OGR backend for this layer")
+                        safe_set_subset_string(layer, "")
+                        
+                        # Test 3: ST_Intersects function
+                        if geom_col:
+                            test_expr_intersects = f"ST_Intersects(\"{geom_col}\", GeomFromText('POINT(0 0)', 4326)) = 1 AND 1=0"
+                            self.log_debug(f"Testing ST_Intersects: {test_expr_intersects}")
+                            test_result3 = safe_set_subset_string(layer, test_expr_intersects)
+                            if test_result3:
+                                self.log_info("✓ ST_Intersects function available")
+                                self.log_error("   → Problem is with the SOURCE GEOMETRY (WKT too long or invalid?)")
+                            else:
+                                self.log_error("✗ ST_Intersects function NOT available")
+                            safe_set_subset_string(layer, "")
                 except Exception as test_error:
                     self.log_debug(f"Test expression error: {test_error}")
             

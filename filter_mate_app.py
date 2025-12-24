@@ -62,6 +62,7 @@ from .modules.ui_config import UIConfig, DisplayProfile
 from .modules.object_safety import (
     is_sip_deleted, is_valid_layer, is_valid_qobject, is_qgis_alive,
     safe_disconnect, safe_emit, make_safe_callback,
+    safe_set_layer_variable,  # CRASH FIX v2.4.14: Use safe wrapper instead of direct call
     GdalErrorHandler  # v2.3.12: Suppress transient GDAL warnings during refresh
 )
 from .resources import *  # Qt resources must be imported with wildcard
@@ -1134,10 +1135,25 @@ class FilterMateApp:
                 logger.debug(f"_safe_layer_operation: QGIS is shutting down, skipping")
                 return
             
+            # CRASH FIX (v2.4.13): Check if dockwidget is in the middle of a layer change
+            # This prevents access violations when setLayerVariable is called during
+            # _reconnect_layer_signals which can process Qt events and cause instability.
+            if hasattr(self, 'dockwidget') and self.dockwidget is not None:
+                if getattr(self.dockwidget, '_updating_current_layer', False):
+                    logger.debug(f"_safe_layer_operation: layer change in progress, re-deferring operation for {layer_id}")
+                    # Re-schedule with a small delay to allow layer change to complete
+                    QTimer.singleShot(50, deferred_operation)
+                    return
+            
             # Re-fetch fresh layer reference from project in the deferred context
             fresh_layer = QgsProject.instance().mapLayer(layer_id)
             if fresh_layer is None:
                 logger.debug(f"_safe_layer_operation: layer {layer_id} no longer in project, skipping")
+                return
+            
+            # CRASH FIX (v2.4.13): Additional sip check before validation
+            if sip.isdeleted(fresh_layer):
+                logger.debug(f"_safe_layer_operation: fresh layer is sip deleted, skipping")
                 return
             
             # Final validation before calling operation
@@ -3051,12 +3067,16 @@ class FilterMateApp:
                 # while setLayerVariable modifies the layer state, causing access violations.
                 self._cancel_layer_tasks(layer_id)
                 
-                # CRASH FIX (v2.3.18): Use project_layer (the latest reference from QgsProject)
-                # instead of fresh_layer which may have gone stale since we fetched it
-                try:
-                    QgsExpressionContextUtils.setLayerVariable(project_layer, f"{key_group}_{key}", value_typped)
-                except (RuntimeError, OSError, SystemError) as e:
-                    logger.warning(f"_save_single_property: setLayerVariable failed (layer likely deleted): {e}")
+                # CRASH FIX (v2.4.14): Use safe_set_layer_variable from object_safety module
+                # This function handles ALL the complexity of Windows access violation prevention:
+                # - Re-fetches layer from project registry
+                # - Checks sip deletion status multiple times
+                # - Flushes pending Qt events on Windows before C++ call
+                # - Uses setCustomProperty instead of setLayerVariable (safer)
+                # - Returns False on failure instead of crashing
+                variable_name = f"{key_group}_{key}"
+                if not safe_set_layer_variable(layer_id, variable_name, value_typped):
+                    logger.debug(f"_save_single_property: safe_set_layer_variable returned False for {layer_id}.{variable_name}")
                     # Continue to database save - don't return
         
         # CRASH FIX (v2.3.16): Use layer_id instead of layer.id() to avoid accessing stale reference

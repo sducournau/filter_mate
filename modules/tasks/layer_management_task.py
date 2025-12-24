@@ -557,14 +557,74 @@ class LayersManagementEngineTask(QgsTask):
                     geometry_field = regexp_match_geom.group()
         
         elif layer_provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR]:
+            # FIX v2.4.13: Improved geometry column detection for GeoPackage/Spatialite
+            # Try multiple methods in order of reliability
+            detected_geom_field = None
+            
+            # METHOD 0: Directly ask the layer (most reliable)
             try:
-                geom_col = layer.dataProvider().geometryColumn()
-                if geom_col:
-                    geometry_field = geom_col
-                else:
-                    geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
-            except AttributeError:
+                geom_col = layer.geometryColumn()
+                if geom_col and geom_col.strip():
+                    detected_geom_field = geom_col
+                    logger.debug(f"Geometry column from layer.geometryColumn(): '{detected_geom_field}'")
+            except Exception:
+                pass
+            
+            # METHOD 1: From data provider (fallback)
+            if not detected_geom_field:
+                try:
+                    geom_col = layer.dataProvider().geometryColumn()
+                    if geom_col and geom_col.strip():
+                        detected_geom_field = geom_col
+                        logger.debug(f"Geometry column from dataProvider(): '{detected_geom_field}'")
+                except (AttributeError, RuntimeError):
+                    pass
+            
+            # METHOD 2: Query GeoPackage metadata (for .gpkg files)
+            if not detected_geom_field:
+                try:
+                    source = layer.source()
+                    source_path = source.split('|')[0] if '|' in source else source
+                    
+                    if source_path.lower().endswith('.gpkg'):
+                        import sqlite3
+                        import os
+                        
+                        if os.path.isfile(source_path):
+                            # Extract table name from source
+                            from qgis.core import QgsDataSourceUri
+                            uri_obj = QgsDataSourceUri(layer.dataProvider().dataSourceUri())
+                            table_name = uri_obj.table()
+                            
+                            if not table_name:
+                                # Fallback: extract from source string
+                                for part in source.split('|'):
+                                    if part.startswith('layername='):
+                                        table_name = part.split('=')[1]
+                                        break
+                            
+                            if table_name:
+                                conn = sqlite3.connect(source_path)
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
+                                    (table_name,)
+                                )
+                                result = cursor.fetchone()
+                                if result and result[0]:
+                                    detected_geom_field = result[0]
+                                    logger.debug(f"Geometry column from gpkg_geometry_columns: '{detected_geom_field}'")
+                                conn.close()
+                except Exception as e:
+                    logger.debug(f"Could not query GeoPackage metadata: {e}")
+            
+            # Final assignment with fallback
+            if detected_geom_field:
+                geometry_field = detected_geom_field
+            else:
+                # Default fallback based on common conventions
                 geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
+                logger.debug(f"Using default geometry field: '{geometry_field}'")
         
         return source_schema, geometry_field
 
