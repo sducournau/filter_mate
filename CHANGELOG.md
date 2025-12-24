@@ -2,6 +2,54 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.7] - 2025-12-24 - GeoPackage Geometry Detection & Stability Fix
+
+### 🔧 Bug Fixes
+
+#### Improved Geometry Column Detection for GeoPackage/Spatialite
+
+- **Root Cause**: Geometry column detection was failing for some GeoPackage layers, causing spatial filters to fail
+- **Solution**: Multi-method detection approach:
+  1. `layer.geometryColumn()` - Most reliable, used first
+  2. `dataProvider().geometryColumn()` - Fallback
+  3. `gpkg_geometry_columns` table query - Last resort for .gpkg files
+- **Files**: `spatialite_backend.py`, `layer_management_task.py`
+
+#### Safe Layer Variable Operations (v2.4.14)
+
+- **Issue**: Access violations during layer change when `setLayerVariable()` called concurrently
+- **Fix**: Use `safe_set_layer_variable()` wrapper that:
+  - Re-fetches layer from project registry immediately before operation
+  - Checks sip deletion status multiple times
+  - Defers operation if layer change is in progress (`_updating_current_layer` flag)
+- **File**: `filter_mate_app.py`
+
+### 🛡️ Stability Improvements
+
+- **Spatialite Cache**: Only cache POSITIVE support test results by file
+  - Prevents false negatives when one layer in a file fails but others work
+  - Each layer still tested individually if file cache is empty
+
+- **Non-Spatial Layers**: Layers without geometry now supported in attribute-only mode
+  - Detected via `layer.geometryType() == NullGeometry`
+  - Returns `True` for Spatialite support (attribute filtering works)
+
+### 📝 Better Diagnostics
+
+- Enhanced failure diagnostics for spatial filter issues:
+  - Tests geometry column access separately from spatial functions
+  - Tests `GeomFromText()` availability
+  - Tests `ST_Intersects()` function
+  - Provides actionable error messages for troubleshooting
+
+### 📁 Files Modified
+
+- `filter_mate_app.py`: Safe layer variable wrapper, deferred operation during layer change
+- `modules/backends/spatialite_backend.py`: Multi-method geometry detection, improved caching
+- `modules/tasks/layer_management_task.py`: GeoPackage metadata query for geometry column
+
+---
+
 ## [2.4.11] - 2025-12-24 - Multi-Thread & Qt Event Loop Access Violation Fixes
 
 ### 🔥 Critical Bug Fixes
