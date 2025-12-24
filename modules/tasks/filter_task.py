@@ -1434,6 +1434,39 @@ class FilterEngineTask(QgsTask):
         if needs_ogr_geom:
             logger.info("Preparing OGR/Spatialite source geometry...")
             self.prepare_ogr_source_geom()
+            
+            # DIAGNOSTIC v2.4.11: Log status of all source geometries after preparation
+            logger.info("=" * 60)
+            logger.info("📊 SOURCE GEOMETRY STATUS AFTER PREPARATION")
+            logger.info("=" * 60)
+            
+            spatialite_status = "✓ READY" if (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) else "✗ NOT AVAILABLE"
+            spatialite_len = len(self.spatialite_source_geom) if (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) else 0
+            logger.info(f"  Spatialite (WKT): {spatialite_status} ({spatialite_len} chars)")
+            
+            ogr_status = "✓ READY" if (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom) else "✗ NOT AVAILABLE"
+            ogr_features = self.ogr_source_geom.featureCount() if (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom and isinstance(self.ogr_source_geom, QgsVectorLayer)) else 0
+            logger.info(f"  OGR (Layer):      {ogr_status} ({ogr_features} features)")
+            
+            postgresql_status = "✓ READY" if (hasattr(self, 'postgresql_source_geom') and self.postgresql_source_geom) else "✗ NOT AVAILABLE"
+            logger.info(f"  PostgreSQL (SQL): {postgresql_status}")
+            
+            # CRITICAL: If both Spatialite and OGR are not available, filtering will fail
+            if not (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) and \
+               not (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom):
+                logger.error("=" * 60)
+                logger.error("❌ CRITICAL: NO SOURCE GEOMETRY AVAILABLE!")
+                logger.error("=" * 60)
+                logger.error("  → Both Spatialite (WKT) and OGR (Layer) geometries are None")
+                logger.error("  → This will cause ALL layer filtering to FAIL")
+                logger.error("  → Possible causes:")
+                logger.error("    1. Source layer has no features")
+                logger.error("    2. Source layer has no valid geometries")
+                logger.error("    3. No features selected/filtered in source layer")
+                logger.error("    4. Geometry preparation failed")
+                logger.error("=" * 60)
+            
+            logger.info("=" * 60)
 
         return True
 
@@ -1980,12 +2013,24 @@ class FilterEngineTask(QgsTask):
         else:
             # Get features from task parameters (single selection or expression mode)
             features = self.task_parameters["task"]["features"]
-            logger.debug(f"=== prepare_spatialite_source_geom START ===")
-            logger.debug(f"  Features: {len(features)} features")
+            logger.info(f"=== prepare_spatialite_source_geom (TASK PARAMS MODE) ===")
+            logger.info(f"  Features from task_parameters: {len(features)} features")
+            # DIAGNOSTIC v2.4.12: Log feature types
+            if features:
+                first_feat = features[0]
+                logger.info(f"  First feature type: {type(first_feat).__name__}")
+                if hasattr(first_feat, 'hasGeometry'):
+                    logger.info(f"  First feature hasGeometry: {first_feat.hasGeometry()}")
+                    if first_feat.hasGeometry():
+                        geom = first_feat.geometry()
+                        logger.info(f"  First feature geometry type: {geom.wkbType()}")
         
         # FALLBACK: If features list is empty, use all visible features from source layer
         if not features or len(features) == 0:
             logger.warning(f"  ⚠️ No features provided! Falling back to source layer's visible features")
+            logger.info(f"  → Source layer: {self.source_layer.name()}")
+            logger.info(f"  → Source layer feature count: {self.source_layer.featureCount()}")
+            logger.info(f"  → Source layer subset: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else ''}'")
             features = list(self.source_layer.getFeatures())
             logger.info(f"  → Fallback: Using {len(features)} features from source layer")
         
@@ -2402,6 +2447,99 @@ class FilterEngineTask(QgsTask):
             logger.warning(f"  ⚠️ No valid features to copy from selection (all {selected_count} had invalid geometries)")
         
         logger.debug(f"  ✓ Copied {len(features_to_copy)} selected features to memory layer (skipped {skipped_invalid} invalid)")
+        return memory_layer
+
+    def _create_memory_layer_from_features(self, features, crs, layer_name="from_features"):
+        """
+        Create memory layer from a list of QgsFeature objects.
+        
+        This is used when task_parameters contains features but the source layer
+        has no visible features (e.g., after filtering).
+        
+        Args:
+            features: List of QgsFeature objects
+            crs: QgsCoordinateReferenceSystem for the memory layer
+            layer_name: Name for the memory layer
+            
+        Returns:
+            QgsVectorLayer: Memory layer containing the features, or None on failure
+        """
+        if not features or len(features) == 0:
+            logger.warning(f"_create_memory_layer_from_features: No features provided")
+            return None
+        
+        # Find first feature with valid geometry to determine type
+        geom_type = None
+        for feat in features:
+            if feat.hasGeometry() and not feat.geometry().isEmpty():
+                geom_type = QgsWkbTypes.displayString(feat.geometry().wkbType())
+                break
+        
+        if not geom_type:
+            logger.error(f"_create_memory_layer_from_features: No features with valid geometry")
+            return None
+        
+        # Get CRS auth ID
+        crs_authid = crs.authid() if hasattr(crs, 'authid') else str(crs)
+        
+        logger.info(f"_create_memory_layer_from_features: Creating {geom_type} layer with {len(features)} features")
+        
+        # Create memory layer
+        memory_layer = QgsVectorLayer(f"{geom_type}?crs={crs_authid}", layer_name, "memory")
+        
+        if not memory_layer.isValid():
+            logger.error(f"_create_memory_layer_from_features: Failed to create memory layer")
+            return None
+        
+        # Copy fields from first feature if available
+        first_valid = features[0]
+        if first_valid.fields().count() > 0:
+            memory_layer.dataProvider().addAttributes(first_valid.fields())
+            memory_layer.updateFields()
+        
+        # Add features with geometry validation
+        features_to_add = []
+        skipped = 0
+        
+        for feat in features:
+            if not feat.hasGeometry() or feat.geometry().isEmpty():
+                skipped += 1
+                continue
+            
+            geom = feat.geometry()
+            
+            # Try to repair geometry
+            try:
+                repaired = geom.makeValid()
+                if repaired and not repaired.isEmpty():
+                    new_feat = QgsFeature(feat)
+                    new_feat.setGeometry(repaired)
+                    features_to_add.append(new_feat)
+                elif validate_geometry(geom):
+                    features_to_add.append(QgsFeature(feat))
+                else:
+                    skipped += 1
+            except Exception:
+                if validate_geometry(geom):
+                    features_to_add.append(QgsFeature(feat))
+                else:
+                    skipped += 1
+        
+        if not features_to_add:
+            logger.error(f"_create_memory_layer_from_features: All {len(features)} features had invalid geometries")
+            return None
+        
+        memory_layer.dataProvider().addFeatures(features_to_add)
+        memory_layer.updateExtents()
+        
+        if skipped > 0:
+            logger.warning(f"  ⚠️ Skipped {skipped} features with invalid geometries")
+        
+        logger.info(f"  ✓ Created memory layer with {memory_layer.featureCount()} features")
+        
+        # Create spatial index
+        self._verify_and_create_spatial_index(memory_layer, layer_name)
+        
         return memory_layer
 
     def _fix_invalid_geometries(self, layer, output_key):
@@ -3213,6 +3351,26 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  Using ALL {layer.featureCount()} filtered features for geometric intersection")
             # Copy all visible features to memory for consistent processing
             layer = self._copy_filtered_layer_to_memory(layer, "source_field_based")
+        else:
+            # NO MODE DETECTED: Log and use source layer with its visible features
+            logger.info(f"=== prepare_ogr_source_geom (DIRECT MODE) ===")
+            logger.info(f"  No subset, selection, or field-based mode detected")
+            logger.info(f"  Source layer: {layer.name()}")
+            logger.info(f"  Source layer feature count: {layer.featureCount()}")
+            logger.info(f"  Source layer valid: {layer.isValid()}")
+            
+            # If source layer has no visible features, try to use task_parameters features
+            if layer.featureCount() == 0:
+                task_features = self.task_parameters.get("task", {}).get("features", [])
+                logger.warning(f"  ⚠️ Source layer has no features! Task features: {len(task_features)}")
+                if task_features:
+                    # Create memory layer from task features
+                    logger.info(f"  → Creating memory layer from {len(task_features)} task features")
+                    layer = self._create_memory_layer_from_features(task_features, layer.crs(), "source_from_features")
+                    if layer:
+                        logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
+                    else:
+                        logger.error(f"  ✗ Failed to create memory layer from task features")
         
         # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
         logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
@@ -4280,6 +4438,12 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"  → current_predicates: {self.current_predicates}")
                 logger.warning(f"  → source_geom type: {type(source_geom).__name__}")
                 
+                # DIAGNOSTIC v2.4.11: Log all available source geometries
+                logger.warning("  → Available source geometries:")
+                logger.warning(f"     - spatialite_source_geom: {'YES' if (hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom) else 'NO'}")
+                logger.warning(f"     - ogr_source_geom: {'YES' if (hasattr(self, 'ogr_source_geom') and self.ogr_source_geom) else 'NO'}")
+                logger.warning(f"     - postgresql_source_geom: {'YES' if (hasattr(self, 'postgresql_source_geom') and self.postgresql_source_geom) else 'NO'}")
+                
                 # FALLBACK v2.4.10: Try OGR backend when Spatialite expression building fails
                 # This happens when Spatialite source geometry is not available (e.g., GDAL without Spatialite)
                 if backend_name == 'spatialite':
@@ -4293,6 +4457,13 @@ class FilterEngineTask(QgsTask):
                         if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
                             logger.info(f"  → Preparing OGR source geometry for fallback...")
                             self.prepare_ogr_source_geom()
+                            
+                            # Check if preparation succeeded
+                            if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
+                                logger.error(f"  ✗ OGR source geometry preparation FAILED")
+                                logger.error(f"    → Source layer: {self.source_layer.name() if self.source_layer else 'None'}")
+                                logger.error(f"    → Source features: {self.source_layer.featureCount() if self.source_layer else 0}")
+                                return False
                         
                         ogr_source_geom = self._prepare_source_geometry(PROVIDER_OGR)
                         

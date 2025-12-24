@@ -8573,6 +8573,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Import optimization logic
             from .modules.backends.factory import should_use_memory_optimization
+            from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
             
             # PostgreSQL layers
             if provider_type == 'postgresql' and postgresql_usable:
@@ -8583,16 +8584,30 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     backend_type = 'postgresql'
             elif provider_type == 'postgresql' and not postgresql_usable:
                 backend_type = 'ogr_fallback'
-            # Spatialite layers
+            # Spatialite layers (native spatialite provider)
             elif provider_type == 'spatialite':
-                # Same threshold as in _get_optimal_backend_for_layer
-                if feature_count > 0 and feature_count <= 5000:
-                    backend_type = 'ogr'  # Small Spatialite → OGR sufficient
-                else:
-                    backend_type = 'spatialite'
-            # OGR layers
+                backend_type = 'spatialite'
+            # OGR layers - check if GeoPackage/SQLite with Spatialite support
             elif provider_type == 'ogr':
-                backend_type = 'ogr'
+                # Check if this is a GeoPackage/SQLite that supports Spatialite
+                if current_layer:
+                    source = current_layer.source()
+                    source_path = source.split('|')[0] if '|' in source else source
+                    is_gpkg_or_sqlite = (
+                        source_path.lower().endswith('.gpkg') or 
+                        source_path.lower().endswith('.sqlite')
+                    )
+                    if is_gpkg_or_sqlite:
+                        # Test if Spatialite backend supports this layer
+                        spatialite_backend = SpatialiteGeometricFilter({})
+                        if spatialite_backend.supports_layer(current_layer):
+                            backend_type = 'spatialite'
+                        else:
+                            backend_type = 'ogr'
+                    else:
+                        backend_type = 'ogr'
+                else:
+                    backend_type = 'ogr'
             else:
                 backend_type = 'unknown'
         
