@@ -159,7 +159,8 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
         layer_count (int): Number of layers being processed
         operation (str): Operation type ('filter', 'export', 'reset')
         duration (int): Message duration in seconds (default: 3)
-        is_fallback (bool): True if using OGR as fallback for PostgreSQL layer
+        is_fallback (bool): True if using OGR as fallback (for PostgreSQL without connection
+                           or Spatialite without Spatialite extension in GDAL)
     
     Example:
         >>> show_backend_info(iface, 'postgresql', layer_count=5)
@@ -174,9 +175,9 @@ def show_backend_info(iface, provider_type, layer_count=1, operation='filter', d
         'export': f"Exporting {layer_count} layer(s)"
     }.get(operation, f"Processing {layer_count} layer(s)")
     
-    # Add fallback indicator for PostgreSQL layers using OGR
+    # Add fallback indicator for layers using OGR
     if is_fallback:
-        message = f"💾 OGR (fallback for PostgreSQL): {operation_text}..."
+        message = f"📦 OGR (fallback): {operation_text}..."
     else:
         message = f"{backend_name}: {operation_text}..."
     
@@ -208,7 +209,7 @@ def show_progress_message(iface, operation, current=None, total=None, duration=2
         iface.messageBar().pushInfo("FilterMate", message)
 
 
-def show_success_with_backend(iface, provider_type, operation='filter', layer_count=1, duration=3):
+def show_success_with_backend(iface, provider_type, operation='filter', layer_count=1, duration=3, is_fallback=False):
     """
     Show success message with backend information.
     
@@ -218,10 +219,14 @@ def show_success_with_backend(iface, provider_type, operation='filter', layer_co
         operation (str): Operation type
         layer_count (int): Number of layers processed
         duration (int): Message duration in seconds (default: 3)
+        is_fallback (bool): True if using OGR as fallback (for PostgreSQL without connection
+                           or Spatialite without Spatialite extension in GDAL)
     
     Example:
         >>> show_success_with_backend(iface, 'postgresql', 'filter', layer_count=5)
         # Shows: "FilterMate - 🐘 PostgreSQL: Successfully filtered 5 layer(s)"
+        >>> show_success_with_backend(iface, 'ogr', 'filter', layer_count=5, is_fallback=True)
+        # Shows: "FilterMate - 📦 OGR (fallback): Successfully filtered 5 layer(s)"
     """
     backend_name = get_backend_display_name(provider_type)
     
@@ -232,7 +237,11 @@ def show_success_with_backend(iface, provider_type, operation='filter', layer_co
         'export': f"Successfully exported {layer_count} layer(s)"
     }.get(operation, f"Successfully processed {layer_count} layer(s)")
     
-    message = f"{backend_name}: {operation_text}"
+    # Add fallback indicator for layers using OGR as fallback
+    if is_fallback:
+        message = f"📦 OGR (fallback): {operation_text}"
+    else:
+        message = f"{backend_name}: {operation_text}"
     
     iface.messageBar().pushSuccess("FilterMate", message)
 

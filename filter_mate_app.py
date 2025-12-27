@@ -50,6 +50,7 @@ from .modules.appUtils import (
     is_layer_source_available,
     safe_set_subset_string,
     detect_layer_provider_type,
+    cleanup_corrupted_layer_filters,
 )
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
@@ -289,16 +290,27 @@ class FilterMateApp:
         Called when plugin is disabled or QGIS is closing.
         
         Cleanup steps:
-        1. Clear list_widgets from multiple selection widget
-        2. Reset async tasks
-        3. Clear PROJECT_LAYERS dictionary
-        4. Clear datasource connections
+        1. Clean up PostgreSQL materialized views for this session
+        2. Clear list_widgets from multiple selection widget
+        3. Reset async tasks
+        4. Clear PROJECT_LAYERS dictionary
+        5. Clear datasource connections
         
         Notes:
             - Uses try/except to handle already-deleted widgets
             - Safe to call multiple times
             - Prevents KeyError on plugin reload
         """
+        # Clean up PostgreSQL materialized views for this session (if auto-cleanup is enabled)
+        auto_cleanup_enabled = True  # Default to enabled
+        if self.dockwidget and hasattr(self.dockwidget, '_pg_auto_cleanup_enabled'):
+            auto_cleanup_enabled = self.dockwidget._pg_auto_cleanup_enabled
+        
+        if auto_cleanup_enabled:
+            self._cleanup_postgresql_session_views()
+        else:
+            logger.info("PostgreSQL auto-cleanup disabled - session views not cleaned")
+        
         if self.dockwidget is not None:
             # Nettoyer tous les widgets list_widgets pour éviter les KeyError
             if hasattr(self.dockwidget, 'widgets'):
@@ -321,6 +333,76 @@ class FilterMateApp:
         # Réinitialiser les structures de données de l'app
         self.PROJECT_LAYERS.clear()
         self.project_datasources.clear()
+
+
+    def _cleanup_postgresql_session_views(self):
+        """
+        Clean up all PostgreSQL materialized views created by this session.
+        
+        Drops all materialized views and indexes prefixed with the session_id
+        to prevent accumulation of orphaned views in the database.
+        
+        This is called during cleanup() when the plugin is unloaded.
+        """
+        if not POSTGRESQL_AVAILABLE:
+            return
+        
+        if not hasattr(self, 'session_id') or not self.session_id:
+            return
+        
+        schema = self.app_postgresql_temp_schema
+        
+        # Try to get a PostgreSQL connection from any loaded layer
+        try:
+            from .modules.appUtils import get_datasource_connexion_from_layer
+            
+            # Find a PostgreSQL layer to get connection
+            connexion = None
+            for layer_id, layer_info in self.PROJECT_LAYERS.items():
+                layer = layer_info.get('layer')
+                if layer and layer.isValid() and layer.providerType() == 'postgres':
+                    connexion, _ = get_datasource_connexion_from_layer(layer)
+                    if connexion:
+                        break
+            
+            if not connexion:
+                logger.debug("No PostgreSQL connection available for session cleanup")
+                return
+            
+            try:
+                with connexion.cursor() as cursor:
+                    # Find all materialized views for this session
+                    cursor.execute("""
+                        SELECT matviewname FROM pg_matviews 
+                        WHERE schemaname = %s AND matviewname LIKE %s
+                    """, (schema, f"mv_{self.session_id}_%"))
+                    views = cursor.fetchall()
+                    
+                    if views:
+                        count = 0
+                        for (view_name,) in views:
+                            try:
+                                # Drop associated index first
+                                index_name = f"{schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix
+                                cursor.execute(f'DROP INDEX IF EXISTS "{index_name}" CASCADE;')
+                                # Drop the view
+                                cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
+                                count += 1
+                            except Exception as e:
+                                logger.debug(f"Error dropping view {view_name}: {e}")
+                        
+                        connexion.commit()
+                        if count > 0:
+                            logger.info(f"Cleaned up {count} materialized view(s) for session {self.session_id}")
+            finally:
+                try:
+                    connexion.close()
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.debug(f"Error during PostgreSQL session cleanup: {e}")
+
 
     def __init__(self, plugin_dir):
         """
@@ -404,7 +486,15 @@ class FilterMateApp:
         self.project_uuid = ''
 
         self.project_datasources = {}
+        self.app_postgresql_temp_schema = 'filter_mate_temp'  # PostgreSQL temp schema name
         self.app_postgresql_temp_schema_setted = False
+        
+        # Session ID for multi-client materialized view isolation
+        # Format: short hex string (8 chars) unique per QGIS session
+        import time
+        import hashlib
+        session_seed = f"{time.time()}_{os.getpid()}_{id(self)}"
+        self.session_id = hashlib.md5(session_seed.encode()).hexdigest()[:8]
         self._signals_connected = False
         self._dockwidget_signals_connected = False  # Flag for dockwidget signal connections
         self._loading_new_project = False  # Flag to track when loading a new project
@@ -750,7 +840,18 @@ class FilterMateApp:
             self.CONFIG_DATA = ENV_VARS["CONFIG_DATA"]
             self.PROJECT = ENV_VARS["PROJECT"]
 
-            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')    
+            QgsExpressionContextUtils.setProjectVariable(self.PROJECT, 'filterMate_db_project_uuid', '')
+            
+            # CRITICAL FIX v2.3.13: Clean up any corrupted filters saved in project
+            # This prevents SQL errors from filters containing __source without EXISTS wrapper
+            # or with unbalanced parentheses that were incorrectly persisted
+            cleared_layers = cleanup_corrupted_layer_filters(self.PROJECT)
+            if cleared_layers:
+                from qgis.utils import iface
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    self.tr(f"Cleared corrupted filters from {len(cleared_layers)} layer(s). Please re-apply your filters.")
+                )
 
             init_layers = self._filter_usable_layers(list(self.PROJECT.mapLayers().values()))
             logger.info(f"FilterMate App.run(): Found {len(init_layers)} layers in project")
@@ -806,6 +907,9 @@ class FilterMateApp:
             logger.info("FilterMate App.run(): Creating FilterMateDockWidget")
             self.dockwidget = FilterMateDockWidget(self.PROJECT_LAYERS, self.plugin_dir, self.CONFIG_DATA, self.PROJECT)
             logger.info("FilterMate App.run(): FilterMateDockWidget created")
+            
+            # Store reference to app in dockwidget for session management
+            self.dockwidget._app_ref = self
             
             # Pass favorites manager to dockwidget for indicator updates
             self.dockwidget._favorites_manager = self.favorites_manager
@@ -1656,13 +1760,50 @@ class FilterMateApp:
             
             # Show informational message with backend awareness
             layer_count = len(layers) + 1  # +1 for current layer
-            provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
+            source_provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
+            
+            # Determine the dominant backend for distant layers (what will actually be used)
+            # The distant layers determine filtering backend, not the source layer
+            distant_provider_types = []
+            for layer_props in layers_props:
+                layer_type = layer_props.get("layer_provider_type", "unknown")
+                distant_provider_types.append(layer_type)
+            
+            # DEBUG: Log what we found
+            logger.info(f"Backend detection: source={source_provider_type}, distant_types={distant_provider_types}")
+            
+            # Use the most common distant layer type for the message
+            # Priority: spatialite > postgresql > ogr (since spatialite includes GPKG)
+            if 'spatialite' in distant_provider_types:
+                provider_type = 'spatialite'
+            elif 'postgresql' in distant_provider_types:
+                provider_type = 'postgresql'
+            elif distant_provider_types:
+                provider_type = distant_provider_types[0]
+            else:
+                provider_type = source_provider_type
+            
+            logger.info(f"Backend detection: selected provider_type={provider_type}")
             
             # Check if PostgreSQL layer is using OGR fallback (no connection available)
             is_fallback = (
                 provider_type == 'postgresql' and 
                 not task_parameters["infos"].get("postgresql_connection_available", False)
             )
+            
+            # Check if Spatialite functions are available for the distant layers
+            # If not, OGR fallback will be used
+            spatialite_fallback = False
+            if provider_type == 'spatialite' and layers:
+                from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
+                spatialite_backend = SpatialiteGeometricFilter({})
+                # Test first layer to see if Spatialite functions work
+                test_layer = layers[0] if layers else current_layer
+                if test_layer and not spatialite_backend.supports_layer(test_layer):
+                    spatialite_fallback = True
+                    is_fallback = True
+                    provider_type = 'ogr'  # Update to show actual backend
+                    logger.warning(f"Spatialite functions not available - using OGR fallback")
             
             if task_name == 'filter':
                 show_backend_info(iface, provider_type, layer_count, operation='filter', is_fallback=is_fallback)
@@ -2076,20 +2217,38 @@ class FilterMateApp:
                             layer_info['layer_provider_type'] = detected_type
                             logger.info(f"Auto-filled layer_provider_type='{detected_type}' for layer {layer.name()}")
                         
-                        # Fill layer_schema (NULL for non-PostgreSQL layers)
-                        if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
-                            if layer_info.get('layer_provider_type') == 'postgresql':
-                                # Try to extract schema from source
-                                import re
-                                source = layer.source()
-                                match = re.search(r'table="([^"]+)"\.', source)
-                                if match:
-                                    layer_info['layer_schema'] = match.group(1)
-                                else:
+                        # Fill/validate layer_schema (NULL for non-PostgreSQL layers)
+                        # CRITICAL FIX v2.3.15: Always re-validate schema from layer source for PostgreSQL
+                        # The stored layer_schema can be corrupted or incorrect (e.g., literal "schema" string)
+                        if layer_info.get('layer_provider_type') == 'postgresql':
+                            try:
+                                from qgis.core import QgsDataSourceUri
+                                source_uri = QgsDataSourceUri(layer.source())
+                                detected_schema = source_uri.schema()
+                                stored_schema = layer_info.get('layer_schema')
+                                
+                                if detected_schema:
+                                    if stored_schema and stored_schema != detected_schema and stored_schema != 'NULL':
+                                        logger.warning(f"Schema mismatch for {layer.name()}: stored='{stored_schema}', actual='{detected_schema}'")
+                                    layer_info['layer_schema'] = detected_schema
+                                    logger.debug(f"Validated layer_schema='{detected_schema}' for layer {layer.name()}")
+                                elif not stored_schema or stored_schema == 'NULL':
                                     layer_info['layer_schema'] = 'public'
-                                logger.info(f"Auto-filled layer_schema='{layer_info['layer_schema']}' for layer {layer.name()}")
-                            else:
-                                layer_info['layer_schema'] = 'NULL'
+                                    logger.info(f"Auto-filled layer_schema='public' (default) for layer {layer.name()}")
+                            except Exception as e:
+                                logger.warning(f"Could not detect schema for {layer.name()}: {e}")
+                                if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
+                                    # Fallback to regex if QgsDataSourceUri fails
+                                    import re
+                                    source = layer.source()
+                                    match = re.search(r'table="([^"]+)"\.', source)
+                                    if match:
+                                        layer_info['layer_schema'] = match.group(1)
+                                    else:
+                                        layer_info['layer_schema'] = 'public'
+                                    logger.info(f"Auto-filled layer_schema='{layer_info['layer_schema']}' (regex fallback) for layer {layer.name()}")
+                        elif 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
+                            layer_info['layer_schema'] = 'NULL'
                         
                         # Fill primary_key_name by searching for a unique field
                         if 'primary_key_name' not in layer_info or layer_info['primary_key_name'] is None:
@@ -2215,13 +2374,30 @@ class FilterMateApp:
         Returns:
             dict: Common task parameters
         """
+        # CRITICAL FIX: Validate that expression is a boolean filter expression, not a display expression
+        # Display expressions like coalesce("field",'<NULL>') return values, not boolean
+        # They cannot be used in SQL WHERE clauses
+        validated_expression = expression
+        if expression:
+            # Check if expression contains comparison operators (required for boolean filter)
+            comparison_operators = ['=', '>', '<', '!=', '<>', ' IN ', ' LIKE ', ' ILIKE ', 
+                                   ' IS NULL', ' IS NOT NULL', ' BETWEEN ', ' NOT ', '~']
+            has_comparison = any(op in expression.upper() for op in comparison_operators)
+            
+            if not has_comparison:
+                # Expression doesn't contain comparison operators - likely a display expression
+                # Don't use it as a filter expression
+                logger.debug(f"_build_common_task_params: Rejecting display expression '{expression}' - no comparison operators")
+                validated_expression = ''
+        
         params = {
             "features": features,
-            "expression": expression,
+            "expression": validated_expression,
             "options": self.dockwidget.project_props["OPTIONS"],
             "layers": layers_to_filter,
             "db_file_path": self.db_file_path,
-            "project_uuid": self.project_uuid
+            "project_uuid": self.project_uuid,
+            "session_id": self.session_id  # For multi-client materialized view isolation
         }
         if include_history:
             params["history_manager"] = self.history_manager
@@ -2250,7 +2426,8 @@ class FilterMateApp:
                 "reset_all_layers_variables_flag": reset_flag,
                 "config_data": self.CONFIG_DATA,
                 "db_file_path": self.db_file_path,
-                "project_uuid": self.project_uuid
+                "project_uuid": self.project_uuid,
+                "session_id": self.session_id  # For multi-client materialized view isolation
             }
         }
 
@@ -2394,6 +2571,7 @@ class FilterMateApp:
                 
                 task_parameters["task"] = self.dockwidget.project_props
                 task_parameters["task"]["layers"] = layers_to_export
+                task_parameters["task"]["session_id"] = self.session_id  # For multi-client isolation
                 return task_parameters
             
         else:
@@ -2782,7 +2960,7 @@ class FilterMateApp:
                         assoc_history.clear()
                         logger.info(f"FilterMate: Cleared filter history for layer {assoc_layer.name()}")
     
-    def _show_task_completion_message(self, task_name, source_layer, provider_type, layer_count):
+    def _show_task_completion_message(self, task_name, source_layer, provider_type, layer_count, is_fallback=False):
         """
         Show success message with backend info and feature counts.
         
@@ -2791,11 +2969,12 @@ class FilterMateApp:
             source_layer (QgsVectorLayer): Source layer with results
             provider_type (str): Backend provider type
             layer_count (int): Number of layers affected
+            is_fallback (bool): True if OGR was used as fallback
         """
         from .config.feedback_config import should_show_message
         
         feature_count = source_layer.featureCount()
-        show_success_with_backend(iface, provider_type, task_name, layer_count)
+        show_success_with_backend(iface, provider_type, task_name, layer_count, is_fallback=is_fallback)
         
         # Only show feature count if configured to do so
         if should_show_message('filter_count'):
@@ -2846,6 +3025,24 @@ class FilterMateApp:
         provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
         layer_count = len(task_parameters.get("task", {}).get("layers", [])) + 1
         
+        # v2.4.13: Use actual backend for success message (not just requested provider type)
+        # This ensures the message reflects what backend was really used (e.g., OGR fallback)
+        actual_backends = task_parameters.get('actual_backends', {})
+        
+        # Determine display_backend from actual_backends dictionary
+        # Priority: if any layer used 'ogr', show 'ogr' (it means fallback was used)
+        if actual_backends:
+            backends_used = set(actual_backends.values())
+            if 'ogr' in backends_used:
+                # OGR fallback was used for at least one layer
+                display_backend = 'ogr'
+            else:
+                # Use the first backend found (they should all be the same)
+                display_backend = next(iter(actual_backends.values()))
+        else:
+            # No actual_backends recorded, fallback to requested provider_type
+            display_backend = provider_type
+        
         # Handle filter history based on task type
         if task_name == 'filter':
             self._push_filter_to_history(source_layer, task_parameters, feature_count, provider_type, layer_count)
@@ -2855,17 +3052,17 @@ class FilterMateApp:
         # Update undo/redo button states
         self.update_undo_redo_buttons()
         
-        # Show success message
-        self._show_task_completion_message(task_name, source_layer, provider_type, layer_count)
+        # Show success message with actual backend used
+        # Check if OGR was used as fallback (provider requested spatialite/postgresql but got ogr)
+        is_fallback = (display_backend == 'ogr' and provider_type != 'ogr')
+        self._show_task_completion_message(task_name, source_layer, display_backend, layer_count, is_fallback=is_fallback)
         
         # Update backend indicator with actual backend used
         if hasattr(self.dockwidget, '_update_backend_indicator'):
-            actual_backends = task_parameters.get('actual_backends', {})
-            actual_backend = actual_backends.get(source_layer.id())
-            if actual_backend:
+            if actual_backends:
                 # Get PostgreSQL connection status
                 postgresql_conn = task_parameters.get('infos', {}).get('postgresql_connection_available')
-                self.dockwidget._update_backend_indicator(provider_type, postgresql_conn, actual_backend)
+                self.dockwidget._update_backend_indicator(provider_type, postgresql_conn, display_backend)
         
         # Zoom to filtered extent only if is_tracking (auto extent) is enabled in exploring
         # Check if is_tracking is enabled for this layer
@@ -4065,9 +4262,22 @@ class FilterMateApp:
             list(self.project_datasources['postgresql'].keys())
             if len(self.project_datasources['postgresql']) >= 1:
                 postgresql_connexions = list(self.project_datasources['postgresql'].keys())
-                if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] == "":
+                # FIXED: Check if ACTIVE_POSTGRESQL is a valid connection object, not just empty string
+                # The config may have been loaded from JSON with a string value (connection info)
+                # We need to ensure ACTIVE_POSTGRESQL is an actual psycopg2 connection object
+                current_connection = self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"]
+                is_valid_connection = (
+                    current_connection is not None 
+                    and not isinstance(current_connection, str)
+                    and hasattr(current_connection, 'cursor')
+                    and callable(getattr(current_connection, 'cursor', None))
+                    and not getattr(current_connection, 'closed', True)
+                )
+                if not is_valid_connection:
+                    # Assign fresh connection object from project_datasources
                     self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = self.project_datasources['postgresql'][postgresql_connexions[0]]
                     self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = True
+                    logger.debug("Assigned fresh PostgreSQL connection object to ACTIVE_POSTGRESQL")
             else:
                 self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"] = ""
                 self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] = False
@@ -4120,8 +4330,15 @@ class FilterMateApp:
 
         if self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["IS_ACTIVE_POSTGRESQL"] is True:
             connexion = self.CONFIG_DATA["CURRENT_PROJECT"]["OPTIONS"]["ACTIVE_POSTGRESQL"]
-            with connexion.cursor() as cursor:
-                cursor.execute(sql_request)
+            # Validate that connexion is actually a connection object, not a string
+            if connexion is None or isinstance(connexion, str):
+                logger.warning("ACTIVE_POSTGRESQL is not a valid connection object, skipping foreign data wrapper creation")
+                return
+            try:
+                with connexion.cursor() as cursor:
+                    cursor.execute(sql_request)
+            except Exception as e:
+                logger.error(f"Failed to create foreign data wrapper: {e}")
 
             
         

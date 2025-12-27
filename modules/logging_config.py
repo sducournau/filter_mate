@@ -88,7 +88,8 @@ def setup_logger(name, log_file, level=logging.INFO):
             log_file,
             maxBytes=10*1024*1024,  # 10 MB
             backupCount=5,
-            encoding='utf-8'
+            encoding='utf-8',
+            delay=True
         )
         file_handler.setFormatter(formatter)
         file_handler.setLevel(level)

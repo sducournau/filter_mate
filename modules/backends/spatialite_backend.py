@@ -8,12 +8,18 @@ Uses Spatialite spatial functions which are largely compatible with PostGIS.
 v2.4.0 Improvements:
 - WKT caching for repeated filter operations
 - Improved CRS handling
+
+v2.4.14 Improvements:
+- Direct mod_spatialite loading for GeoPackage (bypasses GDAL limitations)
+- Fallback to FID-based filtering when setSubsetString doesn't support Spatialite SQL
+- Improved GeoPackage spatial query performance
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import sqlite3
 import time
 import re
+import os
 from qgis.core import QgsVectorLayer, QgsDataSourceUri
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
@@ -32,6 +38,58 @@ except ImportError:
     WKTCache = None
 
 
+# Cache for mod_spatialite availability (tested once per session)
+_MOD_SPATIALITE_AVAILABLE: Optional[bool] = None
+_MOD_SPATIALITE_EXTENSION_NAME: Optional[str] = None
+
+
+def _test_mod_spatialite_available() -> Tuple[bool, Optional[str]]:
+    """
+    Test if mod_spatialite extension can be loaded directly via sqlite3.
+    
+    This is different from testing via GDAL/OGR - even if GDAL's GeoPackage
+    driver doesn't support Spatialite SQL in setSubsetString, we may still
+    be able to load mod_spatialite directly for SQL queries.
+    
+    Returns:
+        Tuple of (available: bool, extension_name: str or None)
+    """
+    global _MOD_SPATIALITE_AVAILABLE, _MOD_SPATIALITE_EXTENSION_NAME
+    
+    if _MOD_SPATIALITE_AVAILABLE is not None:
+        return (_MOD_SPATIALITE_AVAILABLE, _MOD_SPATIALITE_EXTENSION_NAME)
+    
+    # Test extensions in order of preference
+    extension_names = ['mod_spatialite', 'mod_spatialite.dll', 'libspatialite.so']
+    
+    for ext_name in extension_names:
+        try:
+            conn = sqlite3.connect(':memory:')
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            
+            # Verify spatial functions work
+            cursor = conn.cursor()
+            cursor.execute("SELECT ST_GeomFromText('POINT(0 0)', 4326) IS NOT NULL")
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result and result[0]:
+                logger.info(f"✓ mod_spatialite available via extension: {ext_name}")
+                _MOD_SPATIALITE_AVAILABLE = True
+                _MOD_SPATIALITE_EXTENSION_NAME = ext_name
+                return (True, ext_name)
+                
+        except Exception as e:
+            logger.debug(f"mod_spatialite extension '{ext_name}' not available: {e}")
+            continue
+    
+    logger.warning("mod_spatialite extension not available - direct SQL queries not possible")
+    _MOD_SPATIALITE_AVAILABLE = False
+    _MOD_SPATIALITE_EXTENSION_NAME = None
+    return (False, None)
+
+
 class SpatialiteGeometricFilter(GeometricFilterBackend):
     """
     Spatialite backend for geometric filtering.
@@ -44,11 +102,16 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     v2.4.0: Added WKT caching for repeated filter operations
     v2.4.1: Improved GeoPackage detection with file-level caching
     v2.4.12: Added thread-safe cache access with lock
+    v2.4.14: Added direct SQL mode for GeoPackage when setSubsetString doesn't support Spatialite
     """
     
     # Class-level caches for Spatialite support testing
     _spatialite_support_cache: Dict[str, bool] = {}  # layer_id -> supports
     _spatialite_file_cache: Dict[str, bool] = {}  # file_path -> supports
+    
+    # Cache for direct SQL mode (GeoPackage with mod_spatialite but without setSubsetString support)
+    # layer_id -> True means use direct SQL mode (query FIDs via mod_spatialite, then simple IN filter)
+    _direct_sql_mode_cache: Dict[str, bool] = {}
     
     # Thread lock for cache access (thread-safety for large GeoPackage with 50+ layers)
     import threading
@@ -64,6 +127,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         with cls._cache_lock:
             cls._spatialite_support_cache.clear()
             cls._spatialite_file_cache.clear()
+            cls._direct_sql_mode_cache.clear()
         logger.debug("Spatialite support cache cleared")
     
     @classmethod
@@ -77,7 +141,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         with cls._cache_lock:
             if layer_id in cls._spatialite_support_cache:
                 del cls._spatialite_support_cache[layer_id]
-                logger.debug(f"Spatialite support cache invalidated for layer {layer_id}")
+            if layer_id in cls._direct_sql_mode_cache:
+                del cls._direct_sql_mode_cache[layer_id]
+                logger.debug(f"Spatialite cache invalidated for layer {layer_id}")
     
     def __init__(self, task_params: Dict):
         """
@@ -160,9 +226,14 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         - Native Spatialite layers (providerType == 'spatialite')
         - GeoPackage files via OGR IF Spatialite functions are available
         - SQLite files via OGR IF Spatialite functions are available
+        - GeoPackage/SQLite via DIRECT SQL mode if mod_spatialite is available
+          (even when GDAL's OGR driver doesn't support Spatialite in setSubsetString)
         
         CRITICAL: GeoPackage/SQLite support depends on GDAL being compiled with Spatialite.
         This method now tests if spatial functions actually work before returning True.
+        
+        v2.4.14: Added direct SQL mode fallback for GeoPackage when setSubsetString
+        doesn't support Spatialite but mod_spatialite is available.
         
         Args:
             layer: QGIS vector layer to check
@@ -171,6 +242,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             True if layer supports Spatialite spatial functions
         """
         provider_type = layer.providerType()
+        layer_id = layer.id()
         
         # Native Spatialite provider - fully supported
         if provider_type == PROVIDER_SPATIALITE:
@@ -183,20 +255,113 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             source_path = source.split('|')[0] if '|' in source else source
             
             if source_path.lower().endswith('.gpkg') or source_path.lower().endswith('.sqlite'):
-                # Test if Spatialite functions are available via setSubsetString
-                if self._test_spatialite_functions(layer):
-                    file_type = "GeoPackage" if source_path.lower().endswith('.gpkg') else "SQLite"
-                    self.log_info(f"✓ {file_type} layer: {layer.name()} - Spatialite functions available")
+                file_type = "GeoPackage" if source_path.lower().endswith('.gpkg') else "SQLite"
+                
+                self.log_info(f"🔍 Testing Spatialite support for {file_type} layer: {layer.name()}")
+                
+                # Check cache first for this layer - only use cache if we have a POSITIVE result
+                # Negative results need to be retested in case direct SQL mode is now available
+                with self.__class__._cache_lock:
+                    if layer_id in self.__class__._spatialite_support_cache:
+                        cached = self.__class__._spatialite_support_cache[layer_id]
+                        if cached:  # Only use cached positive results
+                            use_direct = self.__class__._direct_sql_mode_cache.get(layer_id, False)
+                            mode = "direct SQL" if use_direct else "native"
+                            self.log_info(f"  → CACHE HIT (True): mode={mode}")
+                            return True
+                        else:
+                            # Cached negative result - need to retest with direct SQL
+                            self.log_info(f"  → CACHE HIT (False) - retesting with direct SQL mode...")
+                            # Remove from cache to force retest
+                            del self.__class__._spatialite_support_cache[layer_id]
+                
+                # Test 1: Try native setSubsetString with Spatialite SQL
+                # Use _test_spatialite_functions_no_cache to avoid double-caching
+                native_works = self._test_spatialite_functions_no_cache(layer)
+                if native_works:
+                    self.log_info(f"✓ {file_type} layer: {layer.name()} - Spatialite native mode works")
+                    with self.__class__._cache_lock:
+                        self.__class__._spatialite_support_cache[layer_id] = True
+                        self.__class__._direct_sql_mode_cache[layer_id] = False  # Use native mode
                     return True
                 else:
-                    self.log_warning(
-                        f"⚠️ {layer.name()}: GeoPackage/SQLite detected but Spatialite functions NOT available.\n"
-                        f"   This happens when GDAL was not compiled with Spatialite support.\n"
-                        f"   Falling back to OGR backend (QGIS processing)."
-                    )
-                    return False
+                    self.log_info(f"  → Native mode failed, trying direct SQL mode...")
+                
+                # Test 2: Try direct SQL mode (mod_spatialite via sqlite3)
+                # This works even when GDAL's OGR driver doesn't support Spatialite SQL
+                mod_available, ext_name = _test_mod_spatialite_available()
+                self.log_info(f"  → mod_spatialite available: {mod_available}")
+                if mod_available:
+                    # Verify we can connect to this specific file with mod_spatialite
+                    direct_works = self._test_direct_spatialite_connection(source_path)
+                    self.log_info(f"  → Direct connection test: {direct_works}")
+                    if direct_works:
+                        self.log_info(
+                            f"✓ {file_type} layer: {layer.name()} - Using DIRECT SQL mode "
+                            f"(mod_spatialite bypassing GDAL)"
+                        )
+                        with self.__class__._cache_lock:
+                            self.__class__._direct_sql_mode_cache[layer_id] = True  # Use direct SQL mode
+                            self.__class__._spatialite_support_cache[layer_id] = True
+                        return True
+                
+                # Both methods failed - cache negative result
+                with self.__class__._cache_lock:
+                    self.__class__._spatialite_support_cache[layer_id] = False
+                
+                self.log_warning(
+                    f"⚠️ {layer.name()}: GeoPackage/SQLite detected but Spatialite NOT available.\n"
+                    f"   • setSubsetString test: FAILED (GDAL not compiled with Spatialite)\n"
+                    f"   • Direct SQL test: FAILED (mod_spatialite extension not loadable)\n"
+                    f"   Falling back to OGR backend (QGIS processing)."
+                )
+                return False
+            else:
+                # OGR layer but not GeoPackage/SQLite - not supported by Spatialite backend
+                self.log_debug(
+                    f"⚠️ {layer.name()}: OGR layer but not GeoPackage/SQLite "
+                    f"(source ends with: ...{source_path[-30:] if len(source_path) > 30 else source_path})"
+                )
+                return False
         
+        # Provider is neither 'spatialite' nor 'ogr' - not supported
+        self.log_debug(f"⚠️ {layer.name()}: Provider '{provider_type}' not supported by Spatialite backend")
         return False
+    
+    def _test_direct_spatialite_connection(self, file_path: str) -> bool:
+        """
+        Test if we can open a GeoPackage/SQLite file with mod_spatialite directly.
+        
+        Args:
+            file_path: Path to the GeoPackage or SQLite file
+            
+        Returns:
+            True if connection with mod_spatialite works
+        """
+        try:
+            mod_available, ext_name = _test_mod_spatialite_available()
+            if not mod_available or not ext_name:
+                return False
+            
+            if not os.path.isfile(file_path):
+                self.log_warning(f"File not found: {file_path}")
+                return False
+            
+            conn = sqlite3.connect(file_path)
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            
+            # Test spatial function works
+            cursor = conn.cursor()
+            cursor.execute("SELECT ST_GeomFromText('POINT(0 0)', 4326) IS NOT NULL")
+            result = cursor.fetchone()
+            conn.close()
+            
+            return result and result[0]
+            
+        except Exception as e:
+            self.log_debug(f"Direct Spatialite connection test failed for {file_path}: {e}")
+            return False
     
     def _test_spatialite_functions(self, layer: QgsVectorLayer) -> bool:
         """
@@ -233,7 +398,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         with self.__class__._cache_lock:
             if layer_id in self.__class__._spatialite_support_cache:
                 cached = self.__class__._spatialite_support_cache[layer_id]
-                self.log_debug(f"Using cached Spatialite support result for {layer.name()}: {cached}")
+                # v2.4.13: Log at INFO level if cache returns False (helps diagnose fallback issues)
+                if cached:
+                    self.log_debug(f"Using cached Spatialite support result for {layer.name()}: {cached}")
+                else:
+                    self.log_info(f"⚠️ CACHE HIT (False) for {layer.name()} - Spatialite test previously failed, using OGR fallback")
                 return cached
         
         # OPTIMIZATION: Check if we already tested this source file (e.g., GeoPackage)
@@ -249,7 +418,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             if source_path_normalized.endswith('.gpkg') or source_path_normalized.endswith('.sqlite'):
                 if source_path_normalized in self.__class__._spatialite_file_cache:
                     cached = self.__class__._spatialite_file_cache[source_path_normalized]
-                    self.log_debug(f"Using cached Spatialite support for file {source_path}: {cached}")
+                    # v2.4.13: Log at INFO level for positive file cache (helps confirm Spatialite works for file)
+                    if cached:
+                        self.log_info(f"✓ FILE CACHE HIT for {layer.name()} - Spatialite verified for this GeoPackage")
+                    else:
+                        self.log_info(f"⚠️ FILE CACHE HIT (False) for {layer.name()} - Spatialite unavailable for this file")
                     self.__class__._spatialite_support_cache[layer_id] = cached
                     return cached
         
@@ -411,6 +584,95 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             with self.__class__._cache_lock:
                 self.__class__._spatialite_support_cache[layer_id] = False
                 # Do NOT cache by file on error - other layers may work fine
+            return False
+    
+    def _test_spatialite_functions_no_cache(self, layer: QgsVectorLayer) -> bool:
+        """
+        Test if Spatialite spatial functions work on this layer WITHOUT using cache.
+        
+        This is a lighter version of _test_spatialite_functions that:
+        - Does NOT check or update the cache
+        - Only tests the basic Spatialite functionality
+        - Used by supports_layer() for retesting when cache has negative results
+        
+        Args:
+            layer: Layer to test
+            
+        Returns:
+            True if Spatialite functions work via setSubsetString, False otherwise
+        """
+        try:
+            # Save current subset string
+            original_subset = layer.subsetString()
+            
+            # Get geometry column name
+            geom_col = layer.geometryColumn()
+            
+            # Check for non-geometry layers
+            has_geometry = layer.geometryType() != 4  # 4 = QgsWkbTypes.NullGeometry
+            if not has_geometry and not geom_col:
+                self.log_debug(f"Layer {layer.name()} has no geometry - attribute-only mode")
+                return True  # Non-spatial layers work fine
+            
+            # Build list of candidate geometry column names
+            candidates = []
+            if geom_col:
+                candidates.append(geom_col)
+            candidates.extend(['geometry', 'geom', 'GEOMETRY', 'GEOM', 'the_geom'])
+            # Remove duplicates
+            seen = set()
+            unique_candidates = []
+            for c in candidates:
+                if c.lower() not in seen:
+                    seen.add(c.lower())
+                    unique_candidates.append(c)
+            
+            # Test 1: Basic subset string
+            basic_test = "1 = 0"
+            try:
+                basic_result = layer.setSubsetString(basic_test)
+                layer.setSubsetString(original_subset if original_subset else "")
+                if not basic_result:
+                    return False
+            except Exception:
+                return False
+            
+            # Test 2: GeomFromText and ST_Intersects
+            for test_geom_col in unique_candidates:
+                # Check column exists
+                test_expr_simple = f"\"{test_geom_col}\" IS NOT NULL AND 1 = 0"
+                try:
+                    result_simple = layer.setSubsetString(test_expr_simple)
+                    layer.setSubsetString(original_subset if original_subset else "")
+                    if not result_simple:
+                        continue
+                except Exception:
+                    continue
+                
+                # Test GeomFromText
+                test_expr_geom = f"GeomFromText('POINT(0 0)', 4326) IS NOT NULL AND 1 = 0"
+                try:
+                    result_geom = layer.setSubsetString(test_expr_geom)
+                    layer.setSubsetString(original_subset if original_subset else "")
+                    if not result_geom:
+                        return False  # GDAL not compiled with Spatialite
+                except Exception:
+                    return False
+                
+                # Test ST_Intersects
+                test_expr = f"ST_Intersects(\"{test_geom_col}\", GeomFromText('POINT(0 0)', 4326)) = 1 AND 1 = 0"
+                try:
+                    result = layer.setSubsetString(test_expr)
+                    layer.setSubsetString(original_subset if original_subset else "")
+                    if result:
+                        return True  # Success!
+                except Exception:
+                    pass
+            
+            return False
+            
+        except Exception as e:
+            self.log_debug(f"_test_spatialite_functions_no_cache error: {e}")
             return False
     
     def _get_spatialite_db_path(self, layer: QgsVectorLayer) -> Optional[str]:
@@ -956,6 +1218,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         Apply filter to Spatialite layer using setSubsetString.
         
+        v2.4.14: Added direct SQL mode for GeoPackage when setSubsetString doesn't
+        support Spatialite SQL but mod_spatialite is available. In this mode,
+        we query matching FIDs via direct SQL and apply a simple "fid IN (...)" filter.
+        
         Args:
             layer: Spatialite layer to filter
             expression: Spatialite SQL expression
@@ -972,6 +1238,16 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             if not expression:
                 self.log_warning("Empty expression, skipping filter")
                 return False
+            
+            # Check if direct SQL mode is needed for this layer
+            layer_id = layer.id()
+            use_direct_sql = False
+            with self.__class__._cache_lock:
+                use_direct_sql = self.__class__._direct_sql_mode_cache.get(layer_id, False)
+            
+            if use_direct_sql:
+                self.log_info(f"🚀 Using DIRECT SQL mode for {layer.name()} (bypassing GDAL/OGR)")
+                return self._apply_filter_direct_sql(layer, expression, old_subset, combine_operator)
             
             # Log layer information
             self.log_debug(f"Layer provider: {layer.providerType()}")
@@ -1018,8 +1294,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Applying Spatialite filter to {layer.name()}")
             self.log_debug(f"Expression length: {len(final_expression)} chars")
             
-            # Apply the filter (thread-safe)
-            result = safe_set_subset_string(layer, final_expression)
+            # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
+            # This defers the setSubsetString() call to the main thread in finished()
+            queue_callback = self.task_params.get('_subset_queue_callback')
+            
+            if queue_callback:
+                # Queue for main thread application
+                queue_callback(layer, final_expression)
+                self.log_debug(f"Spatialite filter queued for main thread application")
+                result = True  # We assume success, actual application happens in finished()
+            else:
+                # Fallback: direct application (for testing or non-task contexts)
+                self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
+                result = safe_set_subset_string(layer, final_expression)
             
             elapsed = time.time() - start_time
             
@@ -1108,6 +1395,164 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
         except Exception as e:
             self.log_error(f"Exception while applying filter: {str(e)}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            return False
+    
+    def _apply_filter_direct_sql(
+        self,
+        layer: QgsVectorLayer,
+        expression: str,
+        old_subset: Optional[str] = None,
+        combine_operator: Optional[str] = None
+    ) -> bool:
+        """
+        Apply filter using direct SQL queries with mod_spatialite.
+        
+        This method bypasses GDAL's OGR driver and queries the GeoPackage/SQLite
+        directly using mod_spatialite. It retrieves matching FIDs and applies
+        a simple "fid IN (...)" filter that works with any OGR driver.
+        
+        v2.4.14: New method for GeoPackage support when GDAL doesn't support
+        Spatialite SQL in setSubsetString.
+        
+        Args:
+            layer: GeoPackage/SQLite layer to filter
+            expression: Spatialite SQL expression (will be adapted for direct SQL)
+            old_subset: Existing subset string
+            combine_operator: Operator to combine filters (AND/OR)
+        
+        Returns:
+            True if filter applied successfully
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            # Get file path and table name
+            source = layer.source()
+            source_path = source.split('|')[0] if '|' in source else source
+            
+            # Get table name
+            table_name = None
+            if '|layername=' in source:
+                table_name = source.split('|layername=')[1].split('|')[0]
+            
+            if not table_name:
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(source)
+                table_name = uri.table()
+            
+            if not table_name:
+                self.log_error(f"Could not determine table name for direct SQL mode")
+                return False
+            
+            # Get mod_spatialite extension name
+            mod_available, ext_name = _test_mod_spatialite_available()
+            if not mod_available or not ext_name:
+                self.log_error(f"mod_spatialite not available for direct SQL mode")
+                return False
+            
+            # Connect to the database with mod_spatialite
+            conn = sqlite3.connect(source_path)
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            cursor = conn.cursor()
+            
+            # Build a SELECT query to get matching FIDs
+            # The expression is a WHERE clause, we need to extract the conditions
+            # and build a SELECT fid FROM table WHERE expression query
+            
+            # Get the primary key column name (usually 'fid' for GeoPackage)
+            pk_col = 'fid'  # Default for GeoPackage
+            try:
+                pk_indices = layer.primaryKeyAttributes()
+                if pk_indices:
+                    fields = layer.fields()
+                    pk_col = fields.at(pk_indices[0]).name()
+            except Exception:
+                pass
+            
+            # Build the SELECT query
+            # The expression is the WHERE clause from build_expression
+            select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {expression}'
+            
+            self.log_info(f"  → Direct SQL query: {select_query[:200]}...")
+            
+            # Execute the query
+            try:
+                cursor.execute(select_query)
+                matching_fids = [row[0] for row in cursor.fetchall()]
+            except Exception as sql_error:
+                self.log_error(f"Direct SQL query failed: {sql_error}")
+                conn.close()
+                return False
+            
+            conn.close()
+            
+            self.log_info(f"  → Found {len(matching_fids)} matching features via direct SQL")
+            
+            if len(matching_fids) == 0:
+                # No matching features - apply empty filter
+                fid_expression = "1 = 0"  # No features will match
+            elif len(matching_fids) > 10000:
+                # Too many FIDs - use range-based filter if possible
+                self.log_warning(
+                    f"Large result set ({len(matching_fids)} FIDs). "
+                    f"Performance may be affected. Consider PostgreSQL for better performance."
+                )
+                fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
+            else:
+                fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
+            
+            # Combine with old_subset if needed
+            if old_subset:
+                old_subset_upper = old_subset.upper()
+                
+                # Check for patterns that should not be combined
+                has_source_alias = '__source' in old_subset.lower()
+                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                spatial_predicates = [
+                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                    'INTERSECTS', 'CONTAINS', 'WITHIN'
+                ]
+                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                
+                if has_source_alias or has_exists or has_spatial_predicate:
+                    self.log_info(f"🔄 Old subset contains geometric filter - replacing")
+                    final_expression = fid_expression
+                else:
+                    if not combine_operator:
+                        combine_operator = 'AND'
+                    final_expression = f"({old_subset}) {combine_operator} ({fid_expression})"
+            else:
+                final_expression = fid_expression
+            
+            self.log_info(f"  → Applying FID-based filter: {len(final_expression)} chars")
+            
+            # Apply the FID-based filter using queue callback or direct
+            queue_callback = self.task_params.get('_subset_queue_callback')
+            
+            if queue_callback:
+                queue_callback(layer, final_expression)
+                result = True
+            else:
+                result = safe_set_subset_string(layer, final_expression)
+            
+            elapsed = time.time() - start_time
+            
+            if result:
+                self.log_info(
+                    f"✓ {layer.name()}: {len(matching_fids)} features via direct SQL ({elapsed:.2f}s)"
+                )
+            else:
+                self.log_error(f"✗ Direct SQL filter failed for {layer.name()}")
+            
+            return result
+            
+        except Exception as e:
+            self.log_error(f"Exception in direct SQL filter: {str(e)}")
             import traceback
             self.log_debug(f"Traceback: {traceback.format_exc()}")
             return False

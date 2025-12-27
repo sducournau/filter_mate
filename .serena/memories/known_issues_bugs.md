@@ -4,6 +4,27 @@
 
 ## Critical Bug Fixes (v2.4.x Series - December 2025)
 
+### v2.4.11 - Materialized View Cleanup Timing Fix (December 24, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- PostgreSQL filters were removed immediately after being applied
+- Layer-by-layer filtering worked but filters disappeared right after
+- Subset string referenced materialized views that no longer existed
+
+**Root Cause:**
+- `_cleanup_postgresql_materialized_views()` was called in `finished()` unconditionally
+- This deleted ALL materialized views (prefix `filtermate_mv_*`) after filtering completed
+- The layer subset strings (e.g., `"id" IN (SELECT "id" FROM schema.filtermate_mv_xxx)`) became invalid
+- Result: 0 features shown (view no longer exists)
+
+**Solution:**
+- Only call MV cleanup for `reset`, `unfilter`, and `export` actions
+- Filtering action (`filter`) now preserves materialized views for persistent filters
+- MVs are cleaned up when user explicitly removes filters or exports data
+
+---
+
 ### Overview
 The v2.4.x series focused heavily on fixing Windows access violation crashes that were occurring during:
 - Layer variable operations (setLayerVariable)

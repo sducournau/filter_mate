@@ -1538,6 +1538,38 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         force_all_action.setData('__FORCE_ALL__')
         force_all_action.setToolTip(force_all_tooltip)
         
+        # Add PostgreSQL maintenance section if PostgreSQL is available
+        if POSTGRESQL_AVAILABLE:
+            menu.addSeparator()
+            
+            # PostgreSQL maintenance submenu
+            pg_submenu = menu.addMenu("🐘 PostgreSQL Maintenance")
+            
+            # Auto cleanup toggle
+            auto_cleanup_enabled = getattr(self, '_pg_auto_cleanup_enabled', True)
+            cleanup_toggle_text = "✓ Auto-cleanup session views" if auto_cleanup_enabled else "  Auto-cleanup session views"
+            cleanup_toggle_action = pg_submenu.addAction(cleanup_toggle_text)
+            cleanup_toggle_action.setData('__PG_TOGGLE_CLEANUP__')
+            cleanup_toggle_action.setToolTip("Automatically drop materialized views when plugin unloads")
+            
+            pg_submenu.addSeparator()
+            
+            # Manual cleanup current session
+            cleanup_session_action = pg_submenu.addAction("🧹 Cleanup my session views now")
+            cleanup_session_action.setData('__PG_CLEANUP_SESSION__')
+            cleanup_session_action.setToolTip("Drop all materialized views created by this session")
+            
+            # Cleanup schema if no other sessions
+            cleanup_schema_action = pg_submenu.addAction("🗑️ Cleanup schema (if no other sessions)")
+            cleanup_schema_action.setData('__PG_CLEANUP_SCHEMA__')
+            cleanup_schema_action.setToolTip("Drop the filter_mate_temp schema if no other clients are using it")
+            
+            pg_submenu.addSeparator()
+            
+            # Show session info
+            session_info_action = pg_submenu.addAction("ℹ️ Show session info")
+            session_info_action.setData('__PG_SESSION_INFO__')
+        
         # Show menu and handle selection
         selected_action = menu.exec_(QCursor.pos())
         
@@ -1554,6 +1586,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Use detected backend (which may be forced or auto-detected)
                 backend_to_force = self._detect_current_backend(current_layer)
                 self._force_backend_for_all_layers(backend_to_force)
+                return
+            
+            # Handle PostgreSQL maintenance actions
+            if selected_backend == '__PG_TOGGLE_CLEANUP__':
+                self._toggle_pg_auto_cleanup()
+                return
+            
+            if selected_backend == '__PG_CLEANUP_SESSION__':
+                self._cleanup_postgresql_session_views()
+                return
+            
+            if selected_backend == '__PG_CLEANUP_SCHEMA__':
+                self._cleanup_postgresql_schema_if_empty()
+                return
+            
+            if selected_backend == '__PG_SESSION_INFO__':
+                self._show_postgresql_session_info()
                 return
             
             self._set_forced_backend(current_layer.id(), selected_backend)
@@ -2799,6 +2848,289 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.info(f"  → Unknown provider '{provider_type}' - using auto-selection")
         return None
     
+    # ========================================
+    # POSTGRESQL MAINTENANCE METHODS
+    # ========================================
+    
+    def _toggle_pg_auto_cleanup(self):
+        """
+        Toggle automatic cleanup of PostgreSQL session views on plugin unload.
+        """
+        current_state = getattr(self, '_pg_auto_cleanup_enabled', True)
+        self._pg_auto_cleanup_enabled = not current_state
+        
+        if self._pg_auto_cleanup_enabled:
+            show_success("FilterMate", "PostgreSQL auto-cleanup enabled. Session views will be dropped on plugin unload.")
+        else:
+            show_info("FilterMate", "PostgreSQL auto-cleanup disabled. Session views will remain after plugin unload.")
+        
+        logger.info(f"PostgreSQL auto-cleanup toggled: {self._pg_auto_cleanup_enabled}")
+    
+    def _cleanup_postgresql_session_views(self):
+        """
+        Manually cleanup all PostgreSQL materialized views for the current session.
+        """
+        from .modules.appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        
+        if not POSTGRESQL_AVAILABLE:
+            show_warning("FilterMate", "PostgreSQL not available")
+            return
+        
+        # Get session_id from app
+        app = getattr(self, '_app_ref', None)
+        if not app:
+            # Try to get from parent
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'session_id'):
+                    app = parent
+                    break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+        
+        session_id = getattr(app, 'session_id', None) if app else None
+        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
+        
+        if not session_id:
+            show_warning("FilterMate", "Session ID not available. Cannot identify session views.")
+            return
+        
+        # Find a PostgreSQL layer to get connection
+        connexion = None
+        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
+        
+        for layer_id, layer_info in project_layers.items():
+            layer = layer_info.get('layer')
+            if layer and layer.isValid() and layer.providerType() == 'postgres':
+                connexion, _ = get_datasource_connexion_from_layer(layer)
+                if connexion:
+                    break
+        
+        if not connexion:
+            show_warning("FilterMate", "No PostgreSQL connection available")
+            return
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Find all materialized views for this session
+                cursor.execute("""
+                    SELECT matviewname FROM pg_matviews 
+                    WHERE schemaname = %s AND matviewname LIKE %s
+                """, (schema, f"mv_{session_id}_%"))
+                views = cursor.fetchall()
+                
+                if not views:
+                    show_info("FilterMate", f"No materialized views found for session {session_id[:8]}")
+                    return
+                
+                count = 0
+                for (view_name,) in views:
+                    try:
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"Error dropping view {view_name}: {e}")
+                
+                connexion.commit()
+                show_success("FilterMate", f"Cleaned up {count} materialized view(s) for session {session_id[:8]}")
+                logger.info(f"Manually cleaned up {count} PostgreSQL materialized views for session {session_id}")
+        except Exception as e:
+            show_warning("FilterMate", f"Error cleaning up views: {str(e)[:50]}")
+            logger.error(f"Error cleaning PostgreSQL views: {e}")
+        finally:
+            try:
+                connexion.close()
+            except:
+                pass
+    
+    def _cleanup_postgresql_schema_if_empty(self):
+        """
+        Drop the filter_mate_temp schema if no other sessions are using it.
+        
+        Checks for existing materialized views from other sessions before dropping.
+        """
+        from .modules.appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        
+        if not POSTGRESQL_AVAILABLE:
+            show_warning("FilterMate", "PostgreSQL not available")
+            return
+        
+        # Get session_id and schema from app
+        app = getattr(self, '_app_ref', None)
+        if not app:
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'session_id'):
+                    app = parent
+                    break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+        
+        session_id = getattr(app, 'session_id', None) if app else None
+        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
+        
+        # Find a PostgreSQL layer to get connection
+        connexion = None
+        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
+        
+        for layer_id, layer_info in project_layers.items():
+            layer = layer_info.get('layer')
+            if layer and layer.isValid() and layer.providerType() == 'postgres':
+                connexion, _ = get_datasource_connexion_from_layer(layer)
+                if connexion:
+                    break
+        
+        if not connexion:
+            show_warning("FilterMate", "No PostgreSQL connection available")
+            return
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Check if schema exists
+                cursor.execute("""
+                    SELECT COUNT(*) FROM information_schema.schemata 
+                    WHERE schema_name = %s
+                """, (schema,))
+                if cursor.fetchone()[0] == 0:
+                    show_info("FilterMate", f"Schema '{schema}' does not exist")
+                    return
+                
+                # Check for any materialized views in the schema
+                cursor.execute("""
+                    SELECT matviewname FROM pg_matviews 
+                    WHERE schemaname = %s
+                """, (schema,))
+                views = cursor.fetchall()
+                
+                if views:
+                    # Filter out our own session's views
+                    other_session_views = []
+                    our_views = []
+                    for (view_name,) in views:
+                        if session_id and view_name.startswith(f"mv_{session_id}_"):
+                            our_views.append(view_name)
+                        else:
+                            other_session_views.append(view_name)
+                    
+                    if other_session_views:
+                        # Other sessions are active
+                        from qgis.PyQt.QtWidgets import QMessageBox
+                        msg = (f"Schema '{schema}' has {len(other_session_views)} view(s) from other sessions.\n\n"
+                               f"Other session views:\n" + 
+                               "\n".join(f"  • {v}" for v in other_session_views[:5]))
+                        if len(other_session_views) > 5:
+                            msg += f"\n  ... and {len(other_session_views) - 5} more"
+                        msg += f"\n\nOur session ({session_id[:8] if session_id else 'unknown'}): {len(our_views)} view(s)"
+                        msg += "\n\nDo you want to drop the ENTIRE schema anyway?\n⚠️ This will affect other FilterMate clients!"
+                        
+                        reply = QMessageBox.question(
+                            self, "Other Sessions Active", msg,
+                            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                        )
+                        
+                        if reply != QMessageBox.Yes:
+                            show_info("FilterMate", "Schema cleanup cancelled - other sessions are active")
+                            return
+                
+                # Drop the schema
+                cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
+                connexion.commit()
+                
+                show_success("FilterMate", f"Schema '{schema}' dropped successfully")
+                logger.info(f"PostgreSQL schema '{schema}' dropped")
+                
+        except Exception as e:
+            show_warning("FilterMate", f"Error dropping schema: {str(e)[:50]}")
+            logger.error(f"Error dropping PostgreSQL schema: {e}")
+        finally:
+            try:
+                connexion.close()
+            except:
+                pass
+    
+    def _show_postgresql_session_info(self):
+        """
+        Show information about the current PostgreSQL session and materialized views.
+        """
+        from .modules.appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+        from qgis.PyQt.QtWidgets import QMessageBox
+        
+        if not POSTGRESQL_AVAILABLE:
+            show_warning("FilterMate", "PostgreSQL not available")
+            return
+        
+        # Get session info from app
+        app = getattr(self, '_app_ref', None)
+        if not app:
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'session_id'):
+                    app = parent
+                    break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+        
+        session_id = getattr(app, 'session_id', None) if app else None
+        schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
+        auto_cleanup = getattr(self, '_pg_auto_cleanup_enabled', True)
+        
+        info_text = f"<b>Session Information</b><br><br>"
+        info_text += f"<b>Session ID:</b> {session_id or 'Not set'}<br>"
+        info_text += f"<b>Temp Schema:</b> {schema}<br>"
+        info_text += f"<b>Auto-cleanup:</b> {'Enabled' if auto_cleanup else 'Disabled'}<br><br>"
+        
+        # Try to get view count from database
+        connexion = None
+        project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
+        
+        for layer_id, layer_info in project_layers.items():
+            layer = layer_info.get('layer')
+            if layer and layer.isValid() and layer.providerType() == 'postgres':
+                connexion, _ = get_datasource_connexion_from_layer(layer)
+                if connexion:
+                    break
+        
+        if connexion:
+            try:
+                with connexion.cursor() as cursor:
+                    # Count our session's views
+                    if session_id:
+                        cursor.execute("""
+                            SELECT COUNT(*) FROM pg_matviews 
+                            WHERE schemaname = %s AND matviewname LIKE %s
+                        """, (schema, f"mv_{session_id}_%"))
+                        our_count = cursor.fetchone()[0]
+                    else:
+                        our_count = 0
+                    
+                    # Count all views in schema
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM pg_matviews 
+                        WHERE schemaname = %s
+                    """, (schema,))
+                    total_count = cursor.fetchone()[0]
+                    
+                    # Check if schema exists
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM information_schema.schemata 
+                        WHERE schema_name = %s
+                    """, (schema,))
+                    schema_exists = cursor.fetchone()[0] > 0
+                    
+                    info_text += f"<b>Schema exists:</b> {'Yes' if schema_exists else 'No'}<br>"
+                    info_text += f"<b>Your session views:</b> {our_count}<br>"
+                    info_text += f"<b>Total views in schema:</b> {total_count}<br>"
+                    info_text += f"<b>Other sessions views:</b> {total_count - our_count}<br>"
+                    
+            except Exception as e:
+                info_text += f"<b>Error querying database:</b> {str(e)[:50]}<br>"
+            finally:
+                try:
+                    connexion.close()
+                except:
+                    pass
+        else:
+            info_text += "<b>Database:</b> No PostgreSQL connection available<br>"
+        
+        QMessageBox.information(self, "PostgreSQL Session Info", info_text)
+
     def auto_select_optimal_backends(self):
         """
         Automatically select optimal backend for all layers in the project.

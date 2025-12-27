@@ -318,7 +318,10 @@ class BackendFactory:
         Returns:
             GeometricFilterBackend instance (or tuple if return_memory_info=True)
         """
-        logger.debug(f"Selecting backend for provider type: {layer_provider_type}")
+        # v2.4.13: Enhanced logging at INFO level for backend selection debugging
+        logger.info(f"🔧 BackendFactory.get_backend() called for '{layer.name()}'")
+        logger.info(f"   → layer_provider_type (requested): '{layer_provider_type}'")
+        logger.info(f"   → layer.providerType() (QGIS native): '{layer.providerType()}'")
         
         memory_layer = None
         use_optimization = False
@@ -416,9 +419,11 @@ class BackendFactory:
         
         # Try Spatialite backend for Spatialite and GeoPackage/SQLite layers
         if layer_provider_type == PROVIDER_SPATIALITE:
+            logger.info(f"   → Matched SPATIALITE branch (layer_provider_type='spatialite')")
             backend = SpatialiteGeometricFilter(task_params)
+            logger.info(f"   → Testing Spatialite support via supports_layer()...")
             if backend.supports_layer(layer):
-                logger.info(f"Using Spatialite backend for {layer.name()}")
+                logger.info(f"✓ Using Spatialite backend for {layer.name()}")
                 if return_memory_info:
                     return (backend, None, False)
                 return backend
@@ -426,7 +431,7 @@ class BackendFactory:
                 # Spatialite functions not available (e.g., GDAL without Spatialite support)
                 # Fall back to OGR backend which uses QGIS processing
                 logger.warning(
-                    f"Spatialite functions not available for {layer.name()}, "
+                    f"⚠️ Spatialite supports_layer() returned False for {layer.name()}, "
                     f"falling back to OGR backend"
                 )
                 backend = OGRGeometricFilter(task_params)
@@ -436,15 +441,26 @@ class BackendFactory:
         
         # For OGR layers, try Spatialite backend first (handles GeoPackage/SQLite)
         if layer_provider_type == PROVIDER_OGR:
+            logger.info(f"   → Matched OGR branch (layer_provider_type='ogr')")
             backend = SpatialiteGeometricFilter(task_params)
-            if backend.supports_layer(layer):
+            logger.info(f"   → Testing Spatialite support for OGR layer...")
+            spatialite_supports = backend.supports_layer(layer)
+            if spatialite_supports:
                 logger.info(f"🚀 Using Spatialite backend for OGR layer {layer.name()} (GeoPackage/SQLite)")
                 if return_memory_info:
                     return (backend, None, False)
                 return backend
+            else:
+                # Log why Spatialite is not supported
+                source = layer.source()
+                source_path = source.split('|')[0] if '|' in source else source
+                logger.info(
+                    f"ℹ️ Spatialite backend not supported for {layer.name()} - "
+                    f"source: {source_path[-80:] if len(source_path) > 80 else source_path}"
+                )
         
         # Fallback to OGR backend (Shapefiles, GeoJSON, etc.)
-        logger.info(f"Using OGR backend for {layer.name()}")
+        logger.info(f"→ Fallback: Using OGR backend for {layer.name()}")
         backend = OGRGeometricFilter(task_params)
         if return_memory_info:
             return (backend, None, False)

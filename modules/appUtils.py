@@ -109,6 +109,125 @@ def get_primary_key_name(layer):
     return field_names[0]
 
 
+def cleanup_corrupted_layer_filters(project):
+    """
+    Scan all layers in a project and clear any corrupted filter expressions.
+    
+    This function detects and clears filters that contain known corruption patterns
+    that would cause SQL errors. Should be called at plugin startup to clean up
+    any filters that were incorrectly saved in the project file.
+    
+    Corruption patterns detected:
+    1. __source alias without EXISTS wrapper (missing FROM-clause entry error)
+    2. Unbalanced parentheses (syntax error)
+    
+    Args:
+        project: QgsProject instance to scan
+    
+    Returns:
+        list: List of layer names that had corrupted filters cleared
+    
+    Added in v2.3.13 as part of filter integrity protection.
+    """
+    cleared_layers = []
+    
+    if project is None:
+        logger.warning("cleanup_corrupted_layer_filters: project is None")
+        return cleared_layers
+    
+    try:
+        for layer_id, layer in project.mapLayers().items():
+            # Only check vector layers
+            if not isinstance(layer, QgsVectorLayer):
+                continue
+            
+            # Skip invalid layers
+            if not layer.isValid():
+                continue
+            
+            # Get current filter expression
+            current_filter = layer.subsetString()
+            
+            # Skip if no filter
+            if not current_filter:
+                continue
+            
+            is_corrupted = False
+            corruption_reason = ""
+            
+            # Check for __source without EXISTS
+            if '__source' in current_filter.lower() and 'EXISTS' not in current_filter.upper():
+                is_corrupted = True
+                corruption_reason = "__source alias without EXISTS wrapper"
+            
+            # Check for unbalanced parentheses
+            elif current_filter.count('(') != current_filter.count(')'):
+                is_corrupted = True
+                open_count = current_filter.count('(')
+                close_count = current_filter.count(')')
+                corruption_reason = f"unbalanced parentheses ({open_count} '(' vs {close_count} ')')"
+            
+            if is_corrupted:
+                layer_name = layer.name()
+                logger.warning(f"CORRUPTED FILTER CLEARED on startup for layer '{layer_name}'")
+                logger.warning(f"  → Reason: {corruption_reason}")
+                logger.warning(f"  → Original filter: {current_filter[:200]}...")
+                
+                # Clear the corrupted filter
+                try:
+                    layer.setSubsetString("")
+                    cleared_layers.append(layer_name)
+                    logger.info(f"  → Filter cleared successfully for '{layer_name}'")
+                except Exception as e:
+                    logger.error(f"  → Failed to clear filter for '{layer_name}': {e}")
+    
+    except Exception as e:
+        logger.error(f"cleanup_corrupted_layer_filters failed: {e}")
+    
+    if cleared_layers:
+        logger.info(f"Startup cleanup: cleared corrupted filters from {len(cleared_layers)} layer(s): {cleared_layers}")
+    
+    return cleared_layers
+
+
+def apply_postgresql_type_casting(expression):
+    """
+    Apply PostgreSQL type casting to handle varchar/text columns in numeric comparisons.
+    
+    PostgreSQL is strict about types: comparing a varchar column to an integer
+    will fail with "operator does not exist: character varying < integer".
+    
+    This function adds ::numeric casts to column references in comparison operations.
+    
+    Args:
+        expression: SQL expression string
+    
+    Returns:
+        Expression with type casting applied
+        
+    Example:
+        Input:  ("importance" < 4)
+        Output: ("importance"::numeric < 4)
+    """
+    if not expression:
+        return expression
+    
+    # Add type casting for numeric comparison operations
+    # Handle both quoted and unquoted column names followed by comparison operators
+    expression = expression.replace('" >', '"::numeric >').replace('">', '"::numeric >')
+    expression = expression.replace('" <', '"::numeric <').replace('"<', '"::numeric <')
+    expression = expression.replace('" +', '"::numeric +').replace('"+', '"::numeric +')
+    expression = expression.replace('" -', '"::numeric -').replace('"-', '"::numeric -')
+    expression = expression.replace('" >=', '"::numeric >=').replace('">=', '"::numeric >=')
+    expression = expression.replace('" <=', '"::numeric <=').replace('"<=', '"::numeric <=')
+    
+    # Also handle LIKE/ILIKE operations with text casting
+    expression = expression.replace('" NOT ILIKE', '"::text NOT ILIKE').replace('" ILIKE', '"::text ILIKE')
+    expression = expression.replace('" NOT LIKE', '"::text NOT LIKE').replace('" LIKE', '"::text LIKE')
+    
+    return expression
+
+
 def safe_set_subset_string(layer, expression):
     """
     Apply a subset filter to a layer.
@@ -142,6 +261,41 @@ def safe_set_subset_string(layer, expression):
         if layer is None or not isinstance(layer, QgsVectorLayer) or not layer.isValid():
             logger.warning("safe_set_subset_string called on invalid or None layer; skipping.")
             return False
+
+        # CRITICAL FIX v2.3.13: Validate expression for common corruption patterns
+        # Prevent applying invalid expressions that would cause SQL errors
+        if expression:
+            expression_upper = expression.upper()
+            expression_lower = expression.lower()
+            
+            # Pattern 1: __source alias without EXISTS wrapper
+            # __source is only valid inside EXISTS subqueries
+            if '__source' in expression_lower and 'EXISTS' not in expression_upper:
+                logger.error(f"INVALID EXPRESSION BLOCKED for {layer.name()}")
+                logger.error(f"  → Expression contains '__source' alias without EXISTS wrapper")
+                logger.error(f"  → This would cause 'missing FROM-clause entry' error")
+                logger.error(f"  → Expression: {expression[:200]}...")
+                logger.warning(f"  → Applying empty filter to clear corrupted state")
+                # Apply empty filter to reset layer to unfiltered state
+                layer.setSubsetString("")
+                return False
+            
+            # Pattern 2: Unbalanced parentheses
+            open_parens = expression.count('(')
+            close_parens = expression.count(')')
+            if open_parens != close_parens:
+                logger.error(f"INVALID EXPRESSION BLOCKED for {layer.name()}")
+                logger.error(f"  → Unbalanced parentheses: {open_parens} '(' vs {close_parens} ')'")
+                logger.error(f"  → Expression: {expression[:200]}...")
+                logger.warning(f"  → Applying empty filter to clear corrupted state")
+                layer.setSubsetString("")
+                return False
+            
+            # Apply PostgreSQL type casting for postgres provider
+            # This fixes "operator does not exist: character varying < integer" errors
+            if layer.providerType() == 'postgres':
+                expression = apply_postgresql_type_casting(expression)
+                logger.debug(f"Applied PostgreSQL type casting: {expression[:100]}...")
 
         result = layer.setSubsetString(expression)
 

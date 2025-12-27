@@ -379,6 +379,26 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 # Get source layer - should be set by build_expression
                 source_layer = getattr(self, 'source_geom', None)
+                
+                # DIAGNOSTIC: Log source layer state
+                self.log_info(f"📍 OGR source_geom state for {layer.name()}:")
+                if source_layer is None:
+                    self.log_error("  → source_geom is None!")
+                elif not isinstance(source_layer, QgsVectorLayer):
+                    self.log_error(f"  → source_geom is not a QgsVectorLayer: {type(source_layer).__name__}")
+                else:
+                    self.log_info(f"  → Name: {source_layer.name()}")
+                    self.log_info(f"  → Valid: {source_layer.isValid()}")
+                    self.log_info(f"  → Feature count: {source_layer.featureCount()}")
+                    if source_layer.featureCount() > 0:
+                        # Check first geometry
+                        for feat in source_layer.getFeatures():
+                            geom = feat.geometry()
+                            self.log_info(f"  → First geometry valid: {geom is not None and not geom.isEmpty()}")
+                            if geom and not geom.isEmpty():
+                                self.log_info(f"  → First geometry type: {geom.wkbType()}")
+                            break
+                
                 if not source_layer:
                     self.log_error("No source layer/geometry provided for geometric filtering")
                     return False
@@ -440,7 +460,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
             return None
         
         if source_layer.featureCount() == 0:
-            self.log_warning(f"Source layer has no features: {source_layer.name()}")
+            self.log_error(f"⚠️ Source layer has no features: {source_layer.name()}")
+            self.log_error(f"  → This is the INTERSECT layer for spatial filtering")
+            self.log_error(f"  → Common causes:")
+            self.log_error(f"     1. No features selected in source layer")
+            self.log_error(f"     2. Source layer subset string filters out all features")
+            self.log_error(f"     3. Field-based filtering returned no matches")
             return None
         
         if buffer_value and buffer_value > 0:
@@ -908,7 +933,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"Intersect layer has no valid geometries (checked {invalid_geom_count} features)")
             return False
         
-        self.log_debug(f"✓ Intersect layer validated: {intersect_layer.name()} ({feature_count} features)")
+        self.log_info(f"✓ Intersect layer validated: {intersect_layer.name()} ({feature_count} features)")
         return True
     
     def _validate_input_layer(self, layer: QgsVectorLayer) -> bool:
@@ -998,14 +1023,32 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             True if selection completed successfully, False on error
         """
+        from qgis.core import QgsMessageLog, Qgis
+        
         try:
             # Validate both layers before processing
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: input={input_layer.name() if input_layer else 'None'} ({input_layer.featureCount() if input_layer else 0}), "
+                f"intersect={intersect_layer.name() if intersect_layer else 'None'} ({intersect_layer.featureCount() if intersect_layer else 0})",
+                "FilterMate", Qgis.Info
+            )
+            
+            self.log_info(f"🔍 Validating layers for selectbylocation...")
+            self.log_info(f"  → Input layer: {input_layer.name() if input_layer else 'None'}")
+            if input_layer:
+                self.log_info(f"    - Valid: {input_layer.isValid()}")
+                self.log_info(f"    - Feature count: {input_layer.featureCount()}")
+            self.log_info(f"  → Intersect layer: {intersect_layer.name() if intersect_layer else 'None'}")
+            if intersect_layer:
+                self.log_info(f"    - Valid: {intersect_layer.isValid()}")
+                self.log_info(f"    - Feature count: {intersect_layer.featureCount()}")
+            
             if not self._validate_input_layer(input_layer):
-                self.log_error("Input layer validation failed")
+                self.log_error("Input layer validation failed - see details above")
                 return False
             
             if not self._validate_intersect_layer(intersect_layer):
-                self.log_error("Intersect layer validation failed")
+                self.log_error("Intersect layer validation failed - see details above")
                 return False
             
             # Configure processing context to handle invalid geometries gracefully
@@ -1097,6 +1140,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
             except (RuntimeError, AttributeError) as e:
                 self.log_error(f"Failed to get selected feature count: {e}")
                 return False
+            
+            QgsMessageLog.logMessage(
+                f"selectbylocation result: {selected_count} features selected on {input_layer.name()}",
+                "FilterMate", Qgis.Info
+            )
+            
             self.log_info(f"✓ Selection complete: {selected_count} features selected")
             return True
             
@@ -1104,6 +1153,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"selectbylocation failed: {str(e)}")
             import traceback
             self.log_debug(f"Traceback: {traceback.format_exc()}")
+            
+            QgsMessageLog.logMessage(
+                f"selectbylocation FAILED on {input_layer.name() if input_layer else 'Unknown'}: {str(e)}",
+                "FilterMate", Qgis.Critical
+            )
             
             # Clear any partial selection to avoid inconsistent state
             try:
@@ -1227,13 +1281,36 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     final_expression = new_subset_expression
                 
                 # Apply subset filter
-                result = safe_set_subset_string(layer, final_expression)
+                # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                
+                # DIAGNOSTIC
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"Applying subset on {layer.name()}: queue_callback={'Yes' if queue_callback else 'No'}, expr_len={len(final_expression)}",
+                    "FilterMate", Qgis.Info
+                )
+                
+                if queue_callback:
+                    queue_callback(layer, final_expression)
+                    self.log_debug(f"OGR filter queued for main thread application")
+                    result = True
+                else:
+                    self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
+                    result = safe_set_subset_string(layer, final_expression)
+                    
                 if result:
                     try:
                         final_count = layer.featureCount()
                     except (RuntimeError, AttributeError):
                         final_count = -1  # Unknown
-                    self.log_info(f"✓ {layer.name()}: {final_count} features")
+                    
+                    QgsMessageLog.logMessage(
+                        f"✓ Subset applied on {layer.name()}: {final_count} features",
+                        "FilterMate", Qgis.Info
+                    )
+                    
+                    self.log_info(f"✓ {layer.name()}: {final_count if not queue_callback else '(pending)'} features")
                     
                     # Clear selection safely
                     try:
@@ -1241,11 +1318,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     except (RuntimeError, AttributeError):
                         pass
                     
-                    if final_count == 0 and selected_count > 0:
+                    if final_count == 0 and selected_count > 0 and not queue_callback:
                         self.log_warning(f"Filter returned 0 features - check primary key '{pk_field}'")
                     
                     return True
                 else:
+                    QgsMessageLog.logMessage(
+                        f"✗ Subset FAILED on {layer.name()}",
+                        "FilterMate", Qgis.Critical
+                    )
                     self.log_error(f"✗ Filter failed for {layer.name()}")
                     try:
                         layer.removeSelection()
@@ -1254,7 +1335,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     return False
             else:
                 self.log_debug("No features selected by geometric filter")
-                safe_set_subset_string(layer, '1 = 0')
+                # THREAD SAFETY FIX for empty result
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                if queue_callback:
+                    queue_callback(layer, '1 = 0')
+                else:
+                    safe_set_subset_string(layer, '1 = 0')
                 return True
                 
         except Exception as select_error:
@@ -1525,17 +1611,35 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     final_expression = new_subset_expression
                 
                 # Apply subset filter
-                result = safe_set_subset_string(layer, final_expression)
+                # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                
+                if queue_callback:
+                    queue_callback(layer, final_expression)
+                    self.log_debug(f"OGR large filter queued for main thread application")
+                    result = True
+                else:
+                    self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
+                    result = safe_set_subset_string(layer, final_expression)
+                    
                 if result:
-                    final_count = layer.featureCount()
-                    self.log_info(f"✓ {layer.name()}: {final_count} features")
+                    if not queue_callback:
+                        final_count = layer.featureCount()
+                        self.log_info(f"✓ {layer.name()}: {final_count} features")
+                    else:
+                        self.log_info(f"✓ {layer.name()}: filter queued")
                     return True
                 else:
                     self.log_error(f"✗ Filter failed for {layer.name()}")
                     return False
             else:
                 self.log_debug("No features selected by geometric filter")
-                safe_set_subset_string(layer, '1 = 0')
+                # THREAD SAFETY FIX for empty result
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                if queue_callback:
+                    queue_callback(layer, '1 = 0')
+                else:
+                    safe_set_subset_string(layer, '1 = 0')
                 return True
                 
         except Exception as e:
@@ -1660,10 +1764,23 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     final_expression = new_subset_expression
                 
                 # Apply subset filter to ORIGINAL PostgreSQL layer
-                result = safe_set_subset_string(original_layer, final_expression)
+                # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                
+                if queue_callback:
+                    queue_callback(original_layer, final_expression)
+                    self.log_debug(f"OGR PostgreSQL filter queued for main thread application")
+                    result = True
+                else:
+                    self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
+                    result = safe_set_subset_string(original_layer, final_expression)
+                    
                 if result:
-                    final_count = original_layer.featureCount()
-                    self.log_info(f"✓ {original_layer.name()}: {final_count} features (via memory optimization)")
+                    if not queue_callback:
+                        final_count = original_layer.featureCount()
+                        self.log_info(f"✓ {original_layer.name()}: {final_count} features (via memory optimization)")
+                    else:
+                        self.log_info(f"✓ {original_layer.name()}: filter queued (via memory optimization)")
                     return True
                 else:
                     self.log_error(f"✗ Filter failed for {original_layer.name()}")
@@ -1671,7 +1788,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_debug("No features selected by geometric filter (memory optimization)")
                 memory_layer.removeSelection()
-                safe_set_subset_string(original_layer, '1 = 0')
+                # THREAD SAFETY FIX for empty result
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                if queue_callback:
+                    queue_callback(original_layer, '1 = 0')
+                else:
+                    safe_set_subset_string(original_layer, '1 = 0')
                 return True
                 
         except Exception as e:

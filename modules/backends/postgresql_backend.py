@@ -20,7 +20,12 @@ from typing import Dict, Optional
 from qgis.core import QgsVectorLayer, QgsDataSourceUri
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
-from ..appUtils import safe_set_subset_string, get_datasource_connexion_from_layer, POSTGRESQL_AVAILABLE
+from ..appUtils import (
+    safe_set_subset_string, 
+    get_datasource_connexion_from_layer, 
+    POSTGRESQL_AVAILABLE,
+    apply_postgresql_type_casting
+)
 import time
 import uuid
 
@@ -405,6 +410,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 else:
                     break
         
+        # Step 5: Apply PostgreSQL type casting for numeric comparisons
+        # This fixes "operator does not exist: character varying < integer" errors
+        # when source layer filter contains expressions like ("importance" < 4)
+        adapted = apply_postgresql_type_casting(adapted)
+        
         return adapted
 
     def _normalize_column_case(self, expression: str, layer: QgsVectorLayer) -> str:
@@ -472,6 +482,69 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         if corrections_made:
             self.log_info(f"🔧 PostgreSQL column case normalization: {', '.join(corrections_made)}")
+        
+        return result_expression
+
+    def _apply_numeric_type_casting(self, expression: str, layer: QgsVectorLayer) -> str:
+        """
+        Apply ::numeric type casting to fix varchar/integer comparison errors.
+        
+        PostgreSQL is strict about type comparisons. When a varchar field like "importance"
+        is compared to an integer (e.g., "importance" < 4), PostgreSQL throws:
+        "ERROR: operator does not exist: character varying < integer"
+        
+        This function adds explicit ::numeric casting for numeric comparisons.
+        
+        Args:
+            expression: SQL expression string
+            layer: QgsVectorLayer to check field types
+        
+        Returns:
+            Expression with type casting applied where needed
+        """
+        import re
+        
+        if not expression or not layer:
+            return expression
+        
+        # Get varchar/text fields from layer
+        varchar_fields = set()
+        for field in layer.fields():
+            type_name = field.typeName().lower()
+            if type_name in ('varchar', 'text', 'character varying', 'char', 'character'):
+                varchar_fields.add(field.name().lower())
+        
+        if not varchar_fields:
+            return expression
+        
+        result_expression = expression
+        
+        # Pattern: "field" followed by comparison operator and number
+        # We need to check if the field is varchar and add ::numeric if so
+        numeric_comparison = re.compile(
+            r'"([^"]+)"(\s*)(<|>|<=|>=)(\s*)(\d+(?:\.\d+)?)',
+            re.IGNORECASE
+        )
+        
+        def cast_if_varchar(match):
+            field = match.group(1)
+            space1 = match.group(2)
+            operator = match.group(3)
+            space2 = match.group(4)
+            number = match.group(5)
+            
+            # Check if this field is a varchar type
+            if field.lower() in varchar_fields:
+                self.log_debug(f"Adding ::numeric cast to varchar field '{field}' for numeric comparison")
+                return f'"{field}"::numeric{space1}{operator}{space2}{number}'
+            return match.group(0)  # Return unchanged
+        
+        # Only apply if not already cast
+        if '::numeric' not in result_expression:
+            result_expression = numeric_comparison.sub(cast_if_varchar, result_expression)
+        
+        if result_expression != expression:
+            self.log_info(f"🔧 Applied numeric type casting for varchar field comparisons")
         
         return result_expression
 
@@ -764,6 +837,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             if old_subset:
                 old_subset = self._normalize_column_case(old_subset, layer)
             
+            # CRITICAL FIX v2.4.14: Apply numeric type casting for varchar fields
+            # This fixes "operator does not exist: character varying < integer" errors
+            # Example: "importance" < 4 → "importance"::numeric < 4 when importance is varchar
+            expression = self._apply_numeric_type_casting(expression, layer)
+            if old_subset:
+                old_subset = self._apply_numeric_type_casting(old_subset, layer)
+            
             # Get feature count to determine strategy
             feature_count = layer.featureCount()
             
@@ -772,97 +852,34 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             key_column = get_primary_key_name(layer)
             uses_ctid = (key_column == 'ctid')
             
-            # CRITICAL FIX: Clean invalid old_subset from previous failed operations
-            # Invalid old_subset patterns that MUST be cleared:
-            # 1. Contains __source alias (only valid inside EXISTS subqueries)
-            # 2. Contains EXISTS subquery (would create nested EXISTS = complex/slow)
-            # 3. Contains spatial predicates referencing other tables (cross-table filter)
+            # CRITICAL FIX v2.4.1: Geometric filtering REPLACES existing subset
+            # Do NOT combine with old_subset during geometric filtering
+            # 
+            # Reasons:
+            # 1. User filters may have incompatible SQL syntax or type mismatches
+            #    (e.g., "importance" < 4 where importance is varchar → SQL error)
+            # 2. Previous geometric filters should be replaced, not nested
+            # 3. Combining creates complex WHERE clauses that are slow and error-prone
+            # 4. EXISTS subqueries + old conditions = invalid SQL
             #
-            # When these patterns are detected in old_subset, it means:
-            # - A previous geometric filter operation left a corrupted/incompatible subset
-            # - Combining with such subset would create invalid SQL syntax
-            # - The new filter should completely replace the old one
+            # The geometric filter completely replaces any existing subset.
             if old_subset:
-                old_subset_upper = old_subset.upper()
-                
-                # Pattern 1: __source alias (invalid outside EXISTS)
-                has_source_alias = '__source' in old_subset.lower()
-                
-                # Pattern 2: EXISTS subquery (avoid nested EXISTS)
-                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
-                
-                # Pattern 3: Spatial predicates that reference external tables
-                # These indicate a cross-table spatial filter that should not be combined
-                spatial_predicates = [
-                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
-                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                    'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
-                ]
-                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
-                
-                # Determine if old_subset is invalid
-                should_clear_old_subset = has_source_alias or has_exists or has_spatial_predicate
-                
-                if should_clear_old_subset:
-                    reason = []
-                    if has_source_alias:
-                        reason.append("contains __source alias")
-                    if has_exists:
-                        reason.append("contains EXISTS subquery")
-                    if has_spatial_predicate:
-                        reason.append("contains spatial predicate (likely cross-table filter)")
-                    
-                    self.log_warning(f"⚠️ CRITICAL: Invalid old_subset detected - {', '.join(reason)}")
-                    self.log_warning(f"  → Corrupted subset: '{old_subset[:150]}'...")
-                    self.log_warning(f"  → This is from a previous geometric filtering operation")
-                    self.log_warning(f"  → Clearing invalid subset to prevent SQL syntax errors")
-                    # FORCE clear the invalid subset - DO NOT combine with it
-                    old_subset = None
-                    self.log_info(f"  ✓ Invalid subset cleared - will apply fresh filter")
+                self.log_info(f"🔄 Existing subset detected - will be REPLACED by geometric filter")
+                self.log_info(f"  → Existing: '{old_subset[:100]}...'")
+                self.log_info(f"  → Geometric filtering replaces (not combines) to avoid SQL errors")
+                old_subset = None  # Clear - geometric filter replaces everything
             
-            # Combine with existing filter if specified
-            # CRITICAL: Don't combine in these cases:
-            # 1. Expression already contains EXISTS subquery (source filter already integrated)
-            # 2. old_subset was just cleared (was invalid)
-            # 3. No explicit combine operator with EXISTS
+            # Check if expression already contains EXISTS subquery
             has_exists_subquery = 'EXISTS (' in expression.upper()
             
-            # DIAGNOSTIC: Log detection results
-            self.log_info(f"🔍 Filter combination check:")
+            # DIAGNOSTIC: Log filter status
+            self.log_info(f"🔍 Filter preparation:")
             self.log_info(f"  - Expression contains EXISTS: {has_exists_subquery}")
-            self.log_info(f"  - old_subset exists after cleanup: {old_subset is not None}")
-            if old_subset:
-                self.log_info(f"  - old_subset (valid): '{old_subset[:80]}'...")
-            self.log_info(f"  - combine_operator: {combine_operator}")
+            self.log_info(f"  - Expression length: {len(expression)} chars")
             
-            # CRITICAL FIX: When EXISTS subquery contains the source filter adapted inside it,
-            # DO NOT combine with old_subset again (would create duplicate conditions with syntax error)
-            # The source filter is already integrated in the WHERE clause of the EXISTS subquery
-            # Example: EXISTS (SELECT 1 FROM ... WHERE ST_Intersects(...) AND __source."id" = '17')
-            # If we combine with old_subset containing the same filter, we get:
-            # (old_filter) AND (EXISTS(...AND adapted_filter)) which creates an invalid double condition
-            should_skip_combination = (
-                has_exists_subquery or 
-                (old_subset and combine_operator is None)  # Don't auto-combine if no explicit operator
-            )
-            
-            self.log_info(f"  → should_skip_combination: {should_skip_combination}")
-            
-            if old_subset and not should_skip_combination:
-                if not combine_operator:
-                    combine_operator = 'AND'
-                    self.log_info(f"🔗 Préservation du filtre existant avec {combine_operator}")
-                self.log_info(f"  → Ancien subset: '{old_subset[:80]}...' (longueur: {len(old_subset)})")
-                self.log_info(f"  → Nouveau filtre: '{expression[:80]}...' (longueur: {len(expression)})")
-                final_expression = f"({old_subset}) {combine_operator} ({expression})"
-                self.log_info(f"  → Expression combinée: longueur {len(final_expression)} chars")
-            else:
-                if has_exists_subquery and old_subset:
-                    self.log_info(f"✓ EXISTS subquery detected - source filter already integrated in WHERE clause, skipping combination")
-                    self.log_info(f"  → Expression already contains source filter adapted for __source alias")
-                if old_subset and combine_operator is None and has_exists_subquery:
-                    self.log_info(f"✓ No explicit combine operator with EXISTS subquery - using expression as-is")
-                final_expression = expression
+            # Since geometric filtering always replaces (old_subset is cleared above),
+            # the final expression is simply the geometric filter expression
+            final_expression = expression
             
             # Decide strategy based on dataset size and primary key availability
             if uses_ctid:
@@ -956,12 +973,15 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         - Avoids creating spatial indexes
         - Uses PostgreSQL's query optimizer directly
         
+        THREAD SAFETY FIX v2.4.0: Uses queue callback to defer setSubsetString()
+        to main thread instead of applying directly from background thread.
+        
         Args:
             layer: PostgreSQL layer to filter
             expression: PostGIS SQL expression
         
         Returns:
-            True if successful
+            True if successful (filter queued for application)
         """
         start_time = time.time()
         
@@ -969,16 +989,26 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Applying direct filter to {layer.name()}")
             self.log_debug(f"Expression: {expression[:200]}...")
             
-            # Apply the filter (thread-safe)
-            result = safe_set_subset_string(layer, expression)
+            # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
+            # This defers the setSubsetString() call to the main thread in finished()
+            queue_callback = self.task_params.get('_subset_queue_callback')
+            
+            if queue_callback:
+                # Queue for main thread application
+                queue_callback(layer, expression)
+                self.log_debug(f"Filter queued for main thread application")
+                result = True  # We assume success, actual application happens in finished()
+            else:
+                # Fallback: direct application (for testing or non-task contexts)
+                # This should NOT happen during normal filtering from QgsTask
+                self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
+                result = safe_set_subset_string(layer, expression)
             
             elapsed = time.time() - start_time
             
             if result:
-                new_feature_count = layer.featureCount()
                 self.log_info(
-                    f"✓ Direct filter applied in {elapsed:.3f}s. "
-                    f"{new_feature_count} features match."
+                    f"✓ Direct filter {'queued' if queue_callback else 'applied'} in {elapsed:.3f}s."
                 )
             else:
                 self.log_error(f"Failed to apply direct filter to {layer.name()}")
@@ -1130,7 +1160,19 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             layer_subset = f'"{key_column}" IN (SELECT "{key_column}" FROM {full_mv_name})'
             self.log_debug(f"Setting subset string: {layer_subset[:200]}...")
             
-            result = safe_set_subset_string(layer, layer_subset)
+            # THREAD SAFETY FIX: Use queue callback if available (called from background thread)
+            # This defers the setSubsetString() call to the main thread in finished()
+            queue_callback = self.task_params.get('_subset_queue_callback')
+            
+            if queue_callback:
+                # Queue for main thread application
+                queue_callback(layer, layer_subset)
+                self.log_debug(f"MV filter queued for main thread application")
+                result = True  # We assume success, actual application happens in finished()
+            else:
+                # Fallback: direct application (for testing or non-task contexts)
+                self.log_warning(f"No queue callback - applying directly (may cause thread issues)")
+                result = safe_set_subset_string(layer, layer_subset)
             
             # Register MV for cleanup tracking (v2.4.0)
             if MV_REGISTRY_AVAILABLE and result:

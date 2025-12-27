@@ -154,11 +154,24 @@ from .result_streaming import StreamingExporter, StreamingConfig
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
     
+    # Signal to apply subset string on main thread (THREAD SAFETY FIX v2.3.21)
+    # setSubsetString is NOT thread-safe and MUST be called from the main Qt thread.
+    # This signal allows background tasks to request filter application on the main thread.
+    applySubsetRequest = pyqtSignal(QgsVectorLayer, str)
+    
     # Cache de classe (partagé entre toutes les instances de FilterEngineTask)
-    _geometry_cache = SourceGeometryCache()
+    # Lazy initialization to avoid import-time errors with logging
+    _geometry_cache = None
     
     # Cache d'expressions (partagé entre toutes les instances)
     _expression_cache = None  # Initialized lazily via get_query_cache()
+    
+    @classmethod
+    def get_geometry_cache(cls):
+        """Get or create the geometry cache (lazy initialization)."""
+        if cls._geometry_cache is None:
+            cls._geometry_cache = SourceGeometryCache()
+        return cls._geometry_cache
 
     def __init__(self, description, task_action, task_parameters):
 
@@ -168,8 +181,8 @@ class FilterEngineTask(QgsTask):
         self.task_action = task_action
         self.task_parameters = task_parameters
         
-        # Référence au cache partagé
-        self.geom_cache = FilterEngineTask._geometry_cache
+        # Référence au cache partagé (lazy initialization)
+        self.geom_cache = FilterEngineTask.get_geometry_cache()
         
         # Référence au cache d'expressions (lazy init)
         self.expr_cache = get_query_cache()
@@ -240,12 +253,44 @@ class FilterEngineTask(QgsTask):
         self.PROJECT = ENV_VARS["PROJECT"]
         self.current_materialized_view_schema = 'filter_mate_temp'
         
+        # Session ID for multi-client materialized view isolation
+        # Retrieved from task_parameters, defaults to 'default' for backward compatibility
+        self.session_id = None  # Will be set in run() from task_parameters
+        
         # Track active database connections for cleanup on cancellation
         self.active_connections = []
+        
+        # THREAD SAFETY FIX v2.3.21: Store subset string requests to apply on main thread
+        # Instead of calling setSubsetString directly from background thread (which causes
+        # access violations), we store the requests and emit applySubsetRequest signal
+        # after the task completes. The signal is connected with Qt.QueuedConnection
+        # to ensure setSubsetString is called on the main thread.
+        self._pending_subset_requests = []
         
         # Prepared statements manager (initialized when DB connection is established)
         self._ps_manager = None
 
+    def queue_subset_request(self, layer, expression):
+        """
+        Queue a subset string request to be applied on the main thread.
+        
+        THREAD SAFETY FIX v2.3.21:
+        setSubsetString() is NOT thread-safe and MUST be called from the main Qt thread.
+        Instead of calling it directly from run() (background thread), we store the
+        request and apply it in finished() which runs on the main thread.
+        
+        Args:
+            layer: QgsVectorLayer to apply the filter to
+            expression: Subset string expression to apply
+            
+        Note:
+            The actual application happens in finished() after run() completes.
+            This ensures all filters are applied atomically from the main thread.
+        """
+        if layer and expression is not None:
+            self._pending_subset_requests.append((layer, expression))
+            logger.debug(f"Queued subset request for {layer.name()}: {len(expression)} chars")
+        return True  # Return True to indicate success (actual application is deferred)
     
     def _ensure_db_directory_exists(self):
         """
@@ -275,6 +320,67 @@ class FilterEngineTask(QgsTask):
             sqlite3.OperationalError: If database cannot be opened
         """
         return safe_spatialite_connect(self.db_file_path)
+
+    def _get_valid_postgresql_connection(self):
+        """
+        Get a valid PostgreSQL connection for the current task.
+        
+        Checks if ACTIVE_POSTGRESQL in task_parameters contains a valid psycopg2 
+        connection object. If not (e.g., it's a string or None), attempts to 
+        obtain a fresh connection from the source layer.
+        
+        Returns:
+            psycopg2.connection: Valid PostgreSQL connection object
+            
+        Raises:
+            Exception: If no valid connection can be established
+        """
+        # Try to get connection from task parameters
+        connexion = self.task_parameters.get("task", {}).get("options", {}).get("ACTIVE_POSTGRESQL")
+        
+        # Validate that it's actually a connection object, not a string or None
+        if connexion is not None and not isinstance(connexion, str):
+            try:
+                # Check if connection has cursor method (duck typing for psycopg2 connection)
+                if hasattr(connexion, 'cursor') and callable(getattr(connexion, 'cursor')):
+                    # Also check if connection is not closed
+                    if not getattr(connexion, 'closed', True):
+                        return connexion
+                    else:
+                        logger.warning("ACTIVE_POSTGRESQL connection is closed, will obtain new connection")
+            except Exception as e:
+                logger.warning(f"Error checking ACTIVE_POSTGRESQL connection: {e}")
+        
+        # Connection is invalid (string, None, or closed) - try to get fresh connection from source layer
+        logger.info("ACTIVE_POSTGRESQL is not a valid connection object, obtaining fresh connection from source layer")
+        
+        if hasattr(self, 'source_layer') and self.source_layer is not None:
+            try:
+                connexion, source_uri = get_datasource_connexion_from_layer(self.source_layer)
+                if connexion is not None:
+                    # Track this connection for cleanup
+                    self.active_connections.append(connexion)
+                    return connexion
+            except Exception as e:
+                logger.error(f"Failed to get connection from source layer: {e}")
+        
+        # Last resort: try from infos layer_id
+        try:
+            layer_id = self.task_parameters.get("infos", {}).get("layer_id")
+            if layer_id:
+                layer = self.PROJECT.mapLayer(layer_id)
+                if layer and layer.providerType() == 'postgres':
+                    connexion, source_uri = get_datasource_connexion_from_layer(layer)
+                    if connexion is not None:
+                        self.active_connections.append(connexion)
+                        return connexion
+        except Exception as e:
+            logger.error(f"Failed to get connection from layer by ID: {e}")
+        
+        raise Exception(
+            "No valid PostgreSQL connection available. "
+            "ACTIVE_POSTGRESQL was not a valid connection object and could not obtain fresh connection from layer."
+        )
 
     def _initialize_source_layer(self):
         """
@@ -402,6 +508,9 @@ class FilterEngineTask(QgsTask):
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
             layer_id = layer_props.get("layer_id", "unknown")
+            
+            # DIAGNOSTIC: Log initial provider type
+            logger.debug(f"  📋 Layer '{layer_name}' initial provider_type='{provider_type}'")
             
             # PRIORITY 1: Check if backend is forced by user for this layer
             forced_backend = forced_backends.get(layer_id)
@@ -554,6 +663,17 @@ class FilterEngineTask(QgsTask):
             bool: True if task completed successfully, False otherwise
         """
         try:
+            # v2.4.13: Clear Spatialite support cache at the start of each filter task
+            # This ensures fresh detection of Spatialite support for GeoPackage layers
+            # and helps diagnose issues when GDAL/Spatialite configuration changes
+            if self.task_action == 'filter':
+                try:
+                    from ..backends.spatialite_backend import SpatialiteGeometricFilter
+                    SpatialiteGeometricFilter.clear_support_cache()
+                    logger.debug("Spatialite support cache cleared for fresh detection")
+                except Exception as e:
+                    logger.debug(f"Could not clear Spatialite cache: {e}")
+            
             # Initialize source layer
             if not self._initialize_source_layer():
                 return False
@@ -574,6 +694,18 @@ class FilterEngineTask(QgsTask):
                 proj_uuid = self.task_parameters["task"]['project_uuid']
                 if proj_uuid not in (None, ''):
                     self.project_uuid = proj_uuid
+            
+            # Extract session_id for multi-client materialized view isolation
+            if 'session_id' in self.task_parameters["task"]:
+                self.session_id = self.task_parameters["task"]['session_id']
+            elif 'options' in self.task_parameters["task"] and 'session_id' in self.task_parameters["task"]["options"]:
+                self.session_id = self.task_parameters["task"]["options"]['session_id']
+            else:
+                # Fallback: generate a short session id if not provided
+                import hashlib
+                import time
+                self.session_id = hashlib.md5(f"{time.time()}".encode()).hexdigest()[:8]
+                logger.debug(f"Generated fallback session_id: {self.session_id}")
             
             # Initialize progress and logging
             self.setProgress(0)
@@ -707,7 +839,34 @@ class FilterEngineTask(QgsTask):
             else:
                 self._source_postgresql_fallback = False
         
-        self.param_source_schema = infos["layer_schema"]
+        # CRITICAL FIX v2.3.15: Re-validate schema from actual layer source for PostgreSQL
+        # The stored layer_schema can be corrupted or incorrect (e.g., literal "schema" string)
+        # This causes "relation schema.table does not exist" errors
+        stored_schema = infos.get("layer_schema", "")
+        if self.param_source_provider_type == PROVIDER_POSTGRES and self.source_layer:
+            try:
+                from qgis.core import QgsDataSourceUri
+                source_uri = QgsDataSourceUri(self.source_layer.source())
+                detected_schema = source_uri.schema()
+                
+                if detected_schema:
+                    if stored_schema != detected_schema:
+                        logger.info(f"Schema mismatch detected: stored='{stored_schema}', actual='{detected_schema}'")
+                        logger.info(f"Using actual schema from layer source: '{detected_schema}'")
+                    self.param_source_schema = detected_schema
+                elif stored_schema and stored_schema != 'NULL':
+                    # Use stored value if valid and no schema detected
+                    self.param_source_schema = stored_schema
+                else:
+                    # Default to 'public' for PostgreSQL
+                    self.param_source_schema = 'public'
+                    logger.info(f"No schema detected, using default: 'public'")
+            except Exception as e:
+                logger.warning(f"Could not detect schema from layer source: {e}")
+                self.param_source_schema = stored_schema if stored_schema and stored_schema != 'NULL' else 'public'
+        else:
+            self.param_source_schema = stored_schema
+        
         # CRITICAL FIX: Use layer_table_name (actual DB table name) for PostgreSQL, not layer_name (display name)
         # layer_name is the QGIS layer name which can differ from the actual database table name
         # e.g., layer_name="Distribution Cluster" but layer_table_name="distribution_clusters"
@@ -730,12 +889,162 @@ class FilterEngineTask(QgsTask):
         # TOUJOURS capturer le filtre existant si présent
         # Cela garantit que les filtres ne sont jamais perdus lors du changement de couche
         if self.source_layer.subsetString():
-            self.param_source_old_subset = self.source_layer.subsetString()
+            self.param_source_old_subset = self._sanitize_subset_string(self.source_layer.subsetString())
             logger.info(f"FilterMate: Filtre existant détecté sur {self.param_source_table}: {self.param_source_old_subset[:100]}...")
         
         if self.has_combine_operator:
             self.param_source_layer_combine_operator = self.task_parameters["filtering"]["source_layer_combine_operator"]
             self.param_other_layers_combine_operator = self.task_parameters["filtering"]["other_layers_combine_operator"]
+
+    def _sanitize_subset_string(self, subset_string):
+        """
+        Remove non-boolean display expressions and fix type casting issues in subset string.
+        
+        Display expressions like 'coalesce("field",'<NULL>')' or CASE expressions that
+        return true/false are valid QGIS expressions but cause issues in SQL WHERE clauses.
+        This function removes such expressions and fixes common type casting issues.
+        
+        Args:
+            subset_string (str): The original subset string
+            
+        Returns:
+            str: Sanitized subset string with non-boolean expressions removed
+        """
+        if not subset_string:
+            return subset_string
+        
+        import re
+        
+        sanitized = subset_string
+        
+        # ========================================================================
+        # PHASE 1: Remove non-boolean display expressions
+        # ========================================================================
+        
+        # Pattern to match AND/OR followed by coalesce display expressions
+        coalesce_patterns = [
+            # Match AND/OR followed by coalesce expression with nested content
+            r'(?:^|\s+)AND\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
+            r'(?:^|\s+)OR\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
+            # Simpler patterns for common cases
+            r'(?:^|\s+)AND\s+\(coalesce\([^)]+\)\)',
+            r'(?:^|\s+)OR\s+\(coalesce\([^)]+\)\)',
+            # Match table.field syntax
+            r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
+            r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*\.\s*"[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
+        ]
+        
+        for pattern in coalesce_patterns:
+            match = re.search(pattern, sanitized, re.IGNORECASE)
+            if match:
+                logger.info(f"FilterMate: Removing invalid coalesce expression: '{match.group()[:60]}...'")
+                sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
+        
+        # Pattern to match AND/OR followed by CASE expressions that just return true/false
+        # These are style/display expressions, not filter conditions
+        # Match: AND ( case when ... end ) OR AND ( SELECT CASE when ... end )
+        # with multiple closing parentheses (malformed)
+        case_patterns = [
+            # Standard CASE expression
+            r'(?:^|\s+)AND\s+\(\s*case\s+when\s+.*?\s+end\s*\)+',
+            r'(?:^|\s+)OR\s+\(\s*case\s+when\s+.*?\s+end\s*\)+',
+            # SELECT CASE expression (from rule-based styles)
+            r'(?:^|\s+)AND\s+\(\s*SELECT\s+CASE\s+.*?\s+end\s*\)+',
+            r'(?:^|\s+)OR\s+\(\s*SELECT\s+CASE\s+.*?\s+end\s*\)+',
+        ]
+        
+        for pattern in case_patterns:
+            match = re.search(pattern, sanitized, re.IGNORECASE | re.DOTALL)
+            if match:
+                # Verify this is a display/style expression (returns true/false, not a comparison)
+                matched_text = match.group()
+                # Check if it's just "then true/false" without external comparison
+                if re.search(r'\bthen\s+(true|false)\b', matched_text, re.IGNORECASE):
+                    logger.info(f"FilterMate: Removing invalid CASE/style expression: '{matched_text[:60]}...'")
+                    sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Remove standalone coalesce expressions at start
+        standalone_coalesce = r'^\s*\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)\s*(?:AND|OR)?'
+        if re.match(standalone_coalesce, sanitized, re.IGNORECASE):
+            match = re.match(standalone_coalesce, sanitized, re.IGNORECASE)
+            logger.info(f"FilterMate: Removing standalone coalesce: '{match.group()[:60]}...'")
+            sanitized = re.sub(standalone_coalesce, '', sanitized, flags=re.IGNORECASE)
+        
+        # ========================================================================
+        # PHASE 2: Fix unbalanced parentheses
+        # ========================================================================
+        
+        # Count parentheses and fix if unbalanced
+        open_count = sanitized.count('(')
+        close_count = sanitized.count(')')
+        
+        if close_count > open_count:
+            # Remove excess closing parentheses from the end
+            excess = close_count - open_count
+            # Remove trailing )))) patterns
+            trailing_parens = re.search(r'\)+\s*$', sanitized)
+            if trailing_parens:
+                parens_at_end = len(trailing_parens.group().strip())
+                if parens_at_end >= excess:
+                    sanitized = re.sub(r'\){' + str(excess) + r'}\s*$', '', sanitized)
+                    logger.info(f"FilterMate: Removed {excess} excess closing parentheses")
+        
+        # ========================================================================
+        # PHASE 3: Clean up whitespace and orphaned operators
+        # ========================================================================
+        
+        sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+        sanitized = re.sub(r'\s+(AND|OR)\s*$', '', sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(r'^\s*(AND|OR)\s+', '', sanitized, flags=re.IGNORECASE)
+        
+        # Remove duplicate AND/OR operators
+        sanitized = re.sub(r'\s+AND\s+AND\s+', ' AND ', sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(r'\s+OR\s+OR\s+', ' OR ', sanitized, flags=re.IGNORECASE)
+        
+        if sanitized != subset_string:
+            logger.info(f"FilterMate: Subset sanitized from '{subset_string[:80]}...' to '{sanitized[:80]}...'")
+        
+        return sanitized
+    
+    def _apply_postgresql_type_casting(self, expression, layer=None):
+        """
+        Apply PostgreSQL type casting to fix common type mismatch errors.
+        
+        Handles cases like "importance" < 4 where importance is varchar.
+        
+        Args:
+            expression: SQL expression
+            layer: Optional layer to get field type information
+            
+        Returns:
+            str: Expression with type casting applied
+        """
+        if not expression:
+            return expression
+        
+        import re
+        
+        # Add ::numeric type casting for numeric comparisons if not already present
+        # This handles cases like "importance" < 4 → "importance"::numeric < 4
+        # Pattern: "field" followed by comparison operator and number
+        # Only apply if not already cast (no :: before the operator)
+        
+        numeric_comparison_pattern = r'"([^"]+)"(\s*)(<|>|<=|>=)(\s*)(\d+(?:\.\d+)?)'
+        
+        def add_numeric_cast(match):
+            field = match.group(1)
+            space1 = match.group(2)
+            operator = match.group(3)
+            space2 = match.group(4)
+            number = match.group(5)
+            # Check if already has type casting
+            return f'"{field}"::numeric{space1}{operator}{space2}{number}'
+        
+        # Only apply if not already cast (check for :: before operator)
+        if '::numeric' not in expression:
+            expression = re.sub(numeric_comparison_pattern, add_numeric_cast, expression)
+        
+        return expression
 
     def _process_qgis_expression(self, expression):
         """
@@ -753,6 +1062,19 @@ class FilterEngineTask(QgsTask):
         
         if not qgs_expr.isValid():
             logger.warning(f"Invalid QGIS expression: '{expression}'")
+            return None, None
+        
+        # CRITICAL FIX: Reject "display expressions" that don't return boolean values
+        # Display expressions like coalesce("field",'<NULL>') are valid QGIS expressions
+        # but they return string/value types, not boolean - they cannot be used as SQL WHERE filters
+        # Filter expressions must contain comparison/logical operators
+        comparison_operators = ['=', '>', '<', '!=', '<>', 'IN', 'LIKE', 'ILIKE', 'IS NULL', 'IS NOT NULL', 
+                               'BETWEEN', 'NOT', 'AND', 'OR', '~', 'SIMILAR TO', '@', '&&']
+        has_comparison = any(op in expression.upper() for op in comparison_operators)
+        
+        if not has_comparison:
+            # Expression doesn't contain comparison operators - likely a display expression
+            logger.debug(f"Rejecting expression '{expression}' - no comparison operators found (display expression, not filter)")
             return None, None
         
         # Add leading space and check for field equality
@@ -966,6 +1288,11 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful, False otherwise
         """
+        # Apply type casting for PostgreSQL to fix varchar/numeric comparison issues
+        provider_type = self.source_layer.providerType()
+        if provider_type == 'postgres':
+            expression = self._apply_postgresql_type_casting(expression, self.source_layer)
+        
         # CRITICAL: setSubsetString must be called from main thread
         result = safe_set_subset_string(self.source_layer, expression)
         
@@ -1555,6 +1882,18 @@ class FilterEngineTask(QgsTask):
         failed_filters = 0
         failed_layer_names = []  # Track names of failed layers for error message
         
+        # DIAGNOSTIC: Log results before processing
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"_filter_all_layers_parallel: all_layers count={len(all_layers)}, results count={len(results)}",
+            "FilterMate", Qgis.Info
+        )
+        for idx, res in enumerate(results):
+            QgsMessageLog.logMessage(
+                f"  Result[{idx}]: {res.layer_name} → success={res.success}, error={res.error_message}",
+                "FilterMate", Qgis.Info
+            )
+        
         for i, (layer_tuple, result) in enumerate(zip(all_layers, results), 1):
             layer, layer_props = layer_tuple
             self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer.name()}")
@@ -1630,6 +1969,13 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"   Features avant filtre: {layer_feature_count}")
                 
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
+                
+                # DIAGNOSTIC: Log result to QGIS Message Panel
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"_filter_all_layers_sequential: {layer_name} → result={result}",
+                    "FilterMate", Qgis.Info
+                )
                 
                 if result:
                     successful_filters += 1
@@ -1797,7 +2143,7 @@ class FilterEngineTask(QgsTask):
         
         # 2. Convert IF statements to CASE WHEN
         if expression.find('if') >= 0:
-            expression = re.sub(r'if\((.*,.*,.*)\))', r'(if(.* then .* else .*))', expression)
+            expression = re.sub(r'if\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)', r'CASE WHEN \1 THEN \2 ELSE \3 END', expression, flags=re.IGNORECASE)
             logger.debug(f"Expression after IF conversion: {expression}")
 
         # 3. Add type casting for numeric operations
@@ -3323,14 +3669,51 @@ class FilterEngineTask(QgsTask):
             self.is_field_expression[0] is True
         )
         
+        # Also check task_features early for diagnostic
+        task_features_early = self.task_parameters.get("task", {}).get("features", [])
+        valid_task_features_early = [f for f in task_features_early if f and f != ""]
+        
         logger.info(f"=== prepare_ogr_source_geom DEBUG ===")
+        logger.info(f"  Source layer name: {layer.name() if layer else 'None'}")
+        logger.info(f"  Source layer valid: {layer.isValid() if layer else False}")
+        logger.info(f"  Source layer feature count: {layer.featureCount() if layer else 0}")
         logger.info(f"  has_subset: {has_subset}")
         logger.info(f"  has_selection: {has_selection}")
         logger.info(f"  is_field_based_mode: {is_field_based_mode}")
+        logger.info(f"  valid_task_features count: {len(valid_task_features_early)}")
         if has_subset:
             logger.info(f"  Current subset: '{layer.subsetString()[:100]}'")
         
-        if has_subset or has_selection:
+        # DIAGNOSTIC: Log to QGIS Message Panel for visibility
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"prepare_ogr_source_geom: layer={layer.name() if layer else 'None'}, "
+            f"features={layer.featureCount() if layer else 0}, "
+            f"has_subset={has_subset}, has_selection={has_selection}, "
+            f"task_features={len(valid_task_features_early)}",
+            "FilterMate", Qgis.Info
+        )
+        
+        # CRITICAL: If task_features are provided, they should take precedence!
+        # This handles single selection by FID mode
+        if valid_task_features_early and len(valid_task_features_early) > 0:
+            logger.info(f"=== prepare_ogr_source_geom (TASK PARAMS MODE - PRIORITY) ===")
+            logger.info(f"  PRIORITY: Using {len(valid_task_features_early)} features from task_parameters")
+            
+            # DIAGNOSTIC: Log to QGIS Message Panel
+            QgsMessageLog.logMessage(
+                f"OGR TASK PARAMS MODE (PRIORITY): {len(valid_task_features_early)} features from task_parameters",
+                "FilterMate", Qgis.Info
+            )
+            
+            # Create memory layer from task features
+            layer = self._create_memory_layer_from_features(valid_task_features_early, layer.crs(), "source_from_task")
+            if layer:
+                logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
+            else:
+                logger.error(f"  ✗ Failed to create memory layer from task features, using original layer")
+                layer = self.source_layer
+        elif has_subset or has_selection:
             if has_subset:
                 logger.debug(f"Source layer has subset string, copying to memory first...")
             if has_selection:
@@ -3352,25 +3735,18 @@ class FilterEngineTask(QgsTask):
             # Copy all visible features to memory for consistent processing
             layer = self._copy_filtered_layer_to_memory(layer, "source_field_based")
         else:
-            # NO MODE DETECTED: Log and use source layer with its visible features
+            # DIRECT MODE: No task_features, no subset, no selection, no field-based mode
+            # Use source layer directly with all its features
             logger.info(f"=== prepare_ogr_source_geom (DIRECT MODE) ===")
-            logger.info(f"  No subset, selection, or field-based mode detected")
+            logger.info(f"  No task features, subset, selection, or field-based mode detected")
             logger.info(f"  Source layer: {layer.name()}")
             logger.info(f"  Source layer feature count: {layer.featureCount()}")
-            logger.info(f"  Source layer valid: {layer.isValid()}")
             
-            # If source layer has no visible features, try to use task_parameters features
-            if layer.featureCount() == 0:
-                task_features = self.task_parameters.get("task", {}).get("features", [])
-                logger.warning(f"  ⚠️ Source layer has no features! Task features: {len(task_features)}")
-                if task_features:
-                    # Create memory layer from task features
-                    logger.info(f"  → Creating memory layer from {len(task_features)} task features")
-                    layer = self._create_memory_layer_from_features(task_features, layer.crs(), "source_from_features")
-                    if layer:
-                        logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
-                    else:
-                        logger.error(f"  ✗ Failed to create memory layer from task features")
+            # DIAGNOSTIC: Log to QGIS Message Panel
+            QgsMessageLog.logMessage(
+                f"OGR DIRECT MODE: Using {layer.featureCount()} features from source layer",
+                "FilterMate", Qgis.Warning
+            )
         
         # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
         logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
@@ -3513,9 +3889,16 @@ class FilterEngineTask(QgsTask):
             return False
 
 
+    # DEPRECATED v2.3.13: This method is no longer called - expression building
+    # is now handled by postgresql_backend.build_expression().
+    # Keeping for reference but should be removed in a future version.
     def _build_postgis_predicates(self, postgis_predicates, layer_props, param_has_to_reproject_layer, param_layer_crs_authid):
         """
         Build PostGIS spatial predicates array for geometric filtering.
+        
+        DEPRECATED: Not currently used. Expression building is now handled by
+        postgresql_backend.build_expression() which properly wraps table references
+        in EXISTS subqueries.
         
         Args:
             postgis_predicates: List of PostGIS predicate functions (ST_Intersects, etc.)
@@ -4069,6 +4452,12 @@ class FilterEngineTask(QgsTask):
         if not old_subset or not combine_operator:
             return new_expression
         
+        # CRITICAL: Sanitize old_subset to remove non-boolean display expressions
+        # Display expressions like coalesce("field",'<NULL>') cause PostgreSQL type errors
+        old_subset = self._sanitize_subset_string(old_subset)
+        if not old_subset:
+            return new_expression
+        
         # Extract WHERE clause from old subset if present
         param_old_subset_where_clause = ''
         param_source_old_subset = old_subset
@@ -4130,33 +4519,29 @@ class FilterEngineTask(QgsTask):
             str: Filter expression or None on error
         """
         # Get source layer filter for EXISTS subqueries
-        # CRITICAL: Use param_source_new_subset instead of subsetString() to avoid recursive filters
-        # param_source_new_subset contains the clean filter before combination with old subset
+        # CRITICAL FIX v2.3.15: Do NOT include source_filter in geometric filtering
+        # 
+        # The source_filter was being used to add attribute conditions inside EXISTS,
+        # but this causes several problems:
+        # 1. Style-based rules from QGIS layer symbology get included incorrectly
+        # 2. Filters with unqualified field names (e.g., "nature" without table prefix)
+        #    cause "column does not exist" errors on target layers
+        # 3. Complex CASE expressions with table references break SQL syntax
+        #
+        # For geometric filtering, we only need the spatial predicate (ST_Intersects, etc.)
+        # applied to the source geometries. The source layer's own filter is already
+        # applied via its subsetString/featureCount, so we get the correct filtered
+        # source geometries without needing to duplicate the filter in EXISTS.
+        #
+        # Set source_filter to None - geometric predicates are sufficient
         source_filter = None
-        if hasattr(self, 'param_source_new_subset') and self.param_source_new_subset:
-            source_filter = self.param_source_new_subset
-            logger.debug(f"Using source filter for EXISTS subquery: {source_filter}")
-        elif hasattr(self, 'expression') and self.expression:
-            # Fallback to current expression if param_source_new_subset not set
-            source_filter = self.expression
-            logger.debug(f"Using expression as source filter for EXISTS: {source_filter}")
+        logger.debug(f"Geometric filtering: source_filter set to None (style rules excluded)")
         
-        # CRITICAL FIX: Validate source_filter before passing to backend
-        # If source_filter contains spatial predicates or __source alias, it's invalid
-        # and would cause SQL duplication errors in EXISTS subqueries
-        if source_filter:
-            source_filter_upper = source_filter.upper()
-            is_invalid_filter = any(pattern in source_filter_upper for pattern in [
-                'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
-                'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                '__SOURCE', 'EXISTS (', 'EXISTS('
-            ])
-            
-            if is_invalid_filter:
-                logger.warning(f"⚠️ Source filter contains spatial predicates or EXISTS - clearing to prevent SQL errors")
-                logger.warning(f"  → Invalid filter: '{source_filter[:100]}...'")
-                logger.warning(f"  → This is likely from a previous geometric filter operation")
-                source_filter = None
+        # REMOVED: Old logic that picked up source layer filter including style rules
+        # if hasattr(self, 'param_source_new_subset') and self.param_source_new_subset:
+        #     source_filter = self.param_source_new_subset
+        # elif hasattr(self, 'expression') and self.expression:
+        #     source_filter = self.expression
         
         # Get source feature count and WKT for simplified PostgreSQL expressions
         source_wkt = None
@@ -4284,6 +4669,27 @@ class FilterEngineTask(QgsTask):
             logger.info(f"FilterMate: Old subset contains {', '.join(reason)} - replacing instead of combining")
             return expression
         
+        # CRITICAL FIX v2.4.15: Detect QGIS style/symbology expressions
+        # These patterns indicate rule-based symbology filters that should NOT
+        # be combined with geometric filters as they cause type mismatch errors
+        import re
+        style_patterns = [
+            r'AND\s+TRUE\s*\)',           # Pattern: AND TRUE) - common in rule-based styles
+            r'THEN\s+true',               # CASE WHEN ... THEN true - style expression
+            r'THEN\s+false',              # CASE WHEN ... THEN false
+            r'SELECT\s+CASE',             # SELECT CASE in subquery
+            r'\)\s*AND\s+TRUE\s*\)',      # (...) AND TRUE) pattern
+        ]
+        has_style_pattern = any(
+            re.search(pattern, old_subset, re.IGNORECASE) 
+            for pattern in style_patterns
+        )
+        
+        if has_style_pattern:
+            logger.info(f"FilterMate: Old subset contains QGIS style patterns - replacing instead of combining")
+            logger.info(f"  → Detected style-based filter: '{old_subset[:80]}...'")
+            return expression
+        
         # Récupérer l'opérateur (ou AND par défaut)
         combine_operator = self._get_combine_operator()
         if not combine_operator:
@@ -4308,6 +4714,10 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
+        # THREAD SAFETY FIX: Pass queue_subset_request callback to backends
+        # This allows backends to defer setSubsetString() calls to the main thread
+        self.task_parameters['_subset_queue_callback'] = self.queue_subset_request
+        
         try:
             # STABILITY FIX v2.3.9: Validate layer before any operations
             # This prevents access violations on deleted/invalid layers
@@ -4476,9 +4886,13 @@ class FilterEngineTask(QgsTask):
                             if ogr_expression:
                                 logger.info(f"  → OGR expression built: {ogr_expression[:100]}...")
                                 
-                                # Get old subset and combine operator
-                                old_subset = layer.subsetString() if layer.subsetString() != '' else None
-                                combine_operator = self._get_combine_operator()
+                                # CRITICAL FIX v2.4.15: Do NOT combine with existing subset in OGR fallback
+                                # Geometric filtering REPLACES existing filters to avoid:
+                                # 1. Style-based conditions causing type mismatch errors
+                                # 2. Complex WHERE clauses that are slow and error-prone
+                                # 3. Previous geometric filters being nested incorrectly
+                                old_subset = None  # Clear - geometric filter replaces everything
+                                combine_operator = None  # No combination needed
                                 
                                 result = ogr_backend.apply_filter(layer, ogr_expression, old_subset, combine_operator)
                                 
@@ -4507,47 +4921,24 @@ class FilterEngineTask(QgsTask):
             old_subset = layer.subsetString() if layer.subsetString() != '' else None
             combine_operator = self._get_combine_operator()
             
-            # CRITICAL FIX: Clean invalid old_subset from previous geometric filtering operations
-            # Invalid old_subset patterns that MUST be cleared:
-            # 1. Contains __source alias (only valid inside EXISTS subqueries)
-            # 2. Contains EXISTS subquery (would create nested EXISTS = complex/slow)
-            # 3. Contains spatial predicates (ST_Intersects, etc.) - likely cross-table filter
+            # CRITICAL FIX v2.4.1: Do NOT combine with existing subset during geometric filtering
+            # Geometric filtering REPLACES any existing filter with the spatial predicate
+            # 
+            # Reasons to NOT combine:
+            # 1. User filters (style/project based) may have incompatible SQL syntax
+            # 2. Type mismatches (e.g., "importance" < 4 where importance is varchar)
+            # 3. Combining creates very complex WHERE clauses that are slow and error-prone
+            # 4. Previous geometric filters should be replaced, not combined
             #
-            # When these patterns are detected, the new filter should completely replace the old one
+            # The user's existing filter will be replaced by the geometric filter.
+            # If they want to preserve their filter, they should use the expression-based
+            # filtering mode instead of geometric filtering.
             if old_subset:
-                old_subset_upper = old_subset.upper()
-                
-                # Pattern 1: __source alias (invalid outside EXISTS)
-                has_source_alias = '__source' in old_subset.lower()
-                
-                # Pattern 2: EXISTS subquery (avoid nested EXISTS)
-                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
-                
-                # Pattern 3: Spatial predicates (likely from previous geometric filter)
-                spatial_predicates = [
-                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
-                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                    'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY'
-                ]
-                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
-                
-                # Determine if old_subset should be cleared
-                should_clear = has_source_alias or has_exists or has_spatial_predicate
-                
-                if should_clear:
-                    reason = []
-                    if has_source_alias:
-                        reason.append("__source alias")
-                    if has_exists:
-                        reason.append("EXISTS subquery")
-                    if has_spatial_predicate:
-                        reason.append("spatial predicate")
-                    
-                    logger.warning(f"⚠️ Invalid old subset detected - contains: {', '.join(reason)}")
-                    logger.warning(f"  → Invalid subset: '{old_subset[:100]}...'")
-                    logger.warning(f"  → This is from a previous geometric filtering operation")
-                    old_subset = None  # Clear invalid subset
-                    logger.info(f"  → Subset cleared, will apply new filter without combination")
+                logger.info(f"🔄 Existing subset detected on {layer.name()}")
+                logger.info(f"  → Existing: '{old_subset[:100]}...'")
+                logger.info(f"  → Geometric filtering REPLACES existing subset (not combining)")
+                logger.info(f"  → Reason: Combining may cause SQL type errors or complex clauses")
+                old_subset = None  # Clear - geometric filtering replaces, doesn't combine
             
             logger.info(f"📋 Préparation du filtre pour {layer.name()}")
             logger.info(f"  → Nouvelle expression: '{expression[:100]}...' ({len(expression)} chars)")
@@ -4640,6 +5031,13 @@ class FilterEngineTask(QgsTask):
                 # CRITICAL DIAGNOSTIC: Verify filter was actually applied
                 logger.info(f"✓ Filter operation completed for {layer.name()}")
                 logger.info(f"  - Backend returned: SUCCESS")
+                
+                # Log to QGIS Message Panel for visibility
+                from qgis.core import QgsMessageLog
+                QgsMessageLog.logMessage(
+                    f"execute_geometric_filtering ✓ {layer.name()} → backend returned SUCCESS",
+                    "FilterMate", Qgis.Info
+                )
                 logger.info(f"  - Features after filter: {feature_count:,}")
                 logger.info(f"  - Subset string applied: {final_expression[:200] if final_expression else '(empty)'}")
                 
@@ -4679,10 +5077,29 @@ class FilterEngineTask(QgsTask):
             else:
                 logger.error(f"✗ Backend returned FAILURE for {layer.name()}")
                 logger.error(f"  - Check backend logs for details")
+                
+                # Log to QGIS Message Panel for visibility
+                from qgis.core import QgsMessageLog
+                QgsMessageLog.logMessage(
+                    f"execute_geometric_filtering ✗ {layer.name()} → backend returned FAILURE",
+                    "FilterMate", Qgis.Warning
+                )
             
+            # DIAGNOSTIC: Log final return value
+            from qgis.core import QgsMessageLog
+            QgsMessageLog.logMessage(
+                f"execute_geometric_filtering → returning result={result} for {layer.name()}",
+                "FilterMate", Qgis.Info
+            )
             return result
             
         except Exception as e:
+            # DIAGNOSTIC: Log exception being caught
+            from qgis.core import QgsMessageLog
+            QgsMessageLog.logMessage(
+                f"execute_geometric_filtering EXCEPTION for {layer.name()}: {e}",
+                "FilterMate", Qgis.Critical
+            )
             safe_log(logger, logging.ERROR, f"Error in execute_geometric_filtering for {layer.name()}: {e}", exc_info=True)
             return False
     
@@ -5951,7 +6368,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             tuple: (db_path, table_name, layer_srid, is_native_spatialite)
         """
-        from .appUtils import get_spatialite_datasource_from_layer
+        from ..appUtils import get_spatialite_datasource_from_layer
         
         # Get Spatialite datasource
         db_path, table_name = get_spatialite_datasource_from_layer(layer)
@@ -6023,8 +6440,11 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
+        # Use session-prefixed name for multi-client isolation
+        session_name = self._get_session_prefixed_name(name)
+        
         # Apply subset string to layer (reference temp table)
-        layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{name})'
+        layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{session_name})'
         logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
         
         # CRITICAL FIX: Thread-safe subset string application
@@ -6069,7 +6489,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if successful
         """
-        from .appUtils import create_temp_spatialite_table
+        from ..appUtils import create_temp_spatialite_table
         
         # Get datasource information
         db_path, table_name, layer_srid, is_native_spatialite = self._get_spatialite_datasource(layer)
@@ -6087,11 +6507,12 @@ class FilterEngineTask(QgsTask):
             custom
         )
         
-        # Create temporary table
-        logger.info(f"Creating Spatialite temp table 'mv_{name}'")
+        # Create temporary table with session-prefixed name
+        session_name = self._get_session_prefixed_name(name)
+        logger.info(f"Creating Spatialite temp table 'mv_{session_name}' (session: {self.session_id})")
         success = create_temp_spatialite_table(
             db_path=db_path,
-            table_name=name,
+            table_name=session_name,
             sql_query=spatialite_query,
             geom_field=geom_key_name,
             srid=layer_srid
@@ -6264,6 +6685,226 @@ class FilterEngineTask(QgsTask):
                     where_clause_out_arr.append(clause)
         
         return where_clause_out_arr
+
+
+    def _ensure_temp_schema_exists(self, connexion, schema_name):
+        """
+        Ensure the temporary schema exists in PostgreSQL database.
+        
+        Creates the schema if it doesn't exist. This is required before
+        creating materialized views in the schema.
+        
+        Args:
+            connexion: psycopg2 connection
+            schema_name: Name of the schema to create
+            
+        Returns:
+            bool: True if schema exists or was created successfully
+            
+        Raises:
+            Exception: If connection is invalid or schema creation fails
+        """
+        # Validate connection before use
+        if connexion is None:
+            logger.error("Cannot ensure temp schema: connection is None")
+            raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connection is None")
+        
+        # Check if connexion is a string (connection string) instead of a connection object
+        if isinstance(connexion, str):
+            logger.error(f"Cannot ensure temp schema: connexion is a string ('{connexion[:50]}...'), not a connection object")
+            raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connexion is a string, not a connection object. This indicates ACTIVE_POSTGRESQL was not properly initialized.")
+        
+        # Check if connection has cursor method (duck typing validation)
+        if not hasattr(connexion, 'cursor') or not callable(getattr(connexion, 'cursor', None)):
+            logger.error(f"Cannot ensure temp schema: connexion object has no cursor() method (type: {type(connexion).__name__})")
+            raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connexion is not a valid connection object (type: {type(connexion).__name__})")
+        
+        # Check if connection is closed
+        try:
+            if connexion.closed:
+                logger.error("Cannot ensure temp schema: connection is closed")
+                raise Exception(f"Cannot create schema '{schema_name}': PostgreSQL connection is closed")
+        except AttributeError:
+            # Connection object doesn't have 'closed' attribute - proceed anyway
+            pass
+        
+        # First check if schema already exists
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute("""
+                    SELECT schema_name FROM information_schema.schemata 
+                    WHERE schema_name = %s
+                """, (schema_name,))
+                result = cursor.fetchone()
+                if result:
+                    logger.debug(f"Schema '{schema_name}' already exists")
+                    return True
+        except Exception as check_e:
+            logger.debug(f"Could not check if schema exists: {check_e}")
+            # Continue to try creating it
+        
+        # Try creating schema without explicit authorization (uses current user)
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}";')
+                connexion.commit()
+            logger.debug(f"Ensured schema '{schema_name}' exists")
+            return True
+        except Exception as e:
+            logger.warning(f"Error creating schema '{schema_name}' (no auth): {e}")
+            # Rollback failed transaction
+            try:
+                connexion.rollback()
+            except:
+                pass
+            
+            # Try with explicit AUTHORIZATION CURRENT_USER as fallback
+            try:
+                with connexion.cursor() as cursor:
+                    cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION CURRENT_USER;')
+                    connexion.commit()
+                logger.debug(f"Created schema '{schema_name}' with CURRENT_USER authorization")
+                return True
+            except Exception as e2:
+                logger.warning(f"Error creating schema with CURRENT_USER: {e2}")
+                try:
+                    connexion.rollback()
+                except:
+                    pass
+                
+                # Final fallback: try with postgres authorization
+                try:
+                    with connexion.cursor() as cursor:
+                        cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION postgres;')
+                        connexion.commit()
+                    logger.debug(f"Created schema '{schema_name}' with postgres authorization")
+                    return True
+                except Exception as e3:
+                    try:
+                        connexion.rollback()
+                    except:
+                        pass
+                    error_msg = f"Failed to create temp schema '{schema_name}': No auth error: {e}, CURRENT_USER error: {e2}, postgres auth error: {e3}"
+                    logger.error(error_msg)
+                    # Store the error for the calling code
+                    self._last_schema_error = error_msg
+                    return False
+
+
+    def _get_session_prefixed_name(self, base_name):
+        """
+        Generate a session-unique materialized view name.
+        
+        Prefixes the base name with the session_id to ensure different
+        QGIS clients don't conflict when using the same PostgreSQL database.
+        
+        Args:
+            base_name: Original layer-based name
+            
+        Returns:
+            str: Session-prefixed name (e.g., "a1b2c3d4_layername")
+        """
+        if self.session_id:
+            return f"{self.session_id}_{base_name}"
+        return base_name
+
+
+    def _cleanup_session_materialized_views(self, connexion, schema_name):
+        """
+        Clean up all materialized views for the current session.
+        
+        Drops all materialized views and indexes prefixed with the session_id.
+        Should be called when closing the plugin or resetting.
+        
+        Args:
+            connexion: psycopg2 connection
+            schema_name: Schema containing the materialized views
+            
+        Returns:
+            int: Number of views cleaned up
+        """
+        if not self.session_id:
+            return 0
+        
+        try:
+            with connexion.cursor() as cursor:
+                # Find all materialized views for this session
+                cursor.execute("""
+                    SELECT matviewname FROM pg_matviews 
+                    WHERE schemaname = %s AND matviewname LIKE %s
+                """, (schema_name, f"mv_{self.session_id}_%"))
+                views = cursor.fetchall()
+                
+                count = 0
+                for (view_name,) in views:
+                    try:
+                        # Drop associated index first
+                        index_name = view_name.replace('mv_', f'{schema_name}_').replace('_dump', '') + '_cluster'
+                        cursor.execute(f'DROP INDEX IF EXISTS "{schema_name}"."{index_name}" CASCADE;')
+                        # Drop the view
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"Error dropping view {view_name}: {e}")
+                
+                connexion.commit()
+                if count > 0:
+                    logger.info(f"Cleaned up {count} materialized view(s) for session {self.session_id}")
+                return count
+        except Exception as e:
+            logger.error(f"Error cleaning up session views: {e}")
+            return 0
+
+
+    def _cleanup_orphaned_materialized_views(self, connexion, schema_name, max_age_hours=24):
+        """
+        Clean up orphaned materialized views older than max_age_hours.
+        
+        This is a maintenance function to clean up views from crashed sessions
+        or sessions that didn't clean up properly.
+        
+        Args:
+            connexion: psycopg2 connection
+            schema_name: Schema containing the materialized views
+            max_age_hours: Maximum age in hours before a view is considered orphaned
+            
+        Returns:
+            int: Number of views cleaned up
+        """
+        try:
+            with connexion.cursor() as cursor:
+                # Find all materialized views in the schema
+                # Note: PostgreSQL doesn't track matview creation time directly,
+                # so we rely on naming convention and periodic cleanup
+                cursor.execute("""
+                    SELECT matviewname FROM pg_matviews 
+                    WHERE schemaname = %s AND matviewname LIKE 'mv_%'
+                """, (schema_name,))
+                views = cursor.fetchall()
+                
+                count = 0
+                for (view_name,) in views:
+                    try:
+                        # Try to drop views that start with an 8-char hex session prefix
+                        # Format: mv_<session_id>_<layer_id>
+                        parts = view_name[3:].split('_', 1)  # Remove 'mv_' prefix
+                        if len(parts) >= 2 and len(parts[0]) == 8:
+                            # This looks like a session-prefixed view
+                            # In a real scenario, you might check if the session is still active
+                            # For now, we just log and skip active session views
+                            if parts[0] == self.session_id:
+                                continue  # Skip our own session's views
+                        
+                        # For non-session views or very old ones, we could drop them
+                        # But to be safe, we only log here
+                        logger.debug(f"Found potentially orphaned view: {view_name}")
+                    except Exception as e:
+                        logger.debug(f"Error processing view {view_name}: {e}")
+                
+                return count
+        except Exception as e:
+            logger.error(f"Error checking orphaned views: {e}")
+            return 0
 
 
     def _execute_postgresql_commands(self, connexion, commands):
@@ -6473,7 +7114,7 @@ class FilterEngineTask(QgsTask):
         start_time = time.time()
         
         # Ensure source table has statistics for query optimization
-        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        connexion = self._get_valid_postgresql_connection()
         self._ensure_source_table_stats(
             connexion, 
             self.param_source_schema, 
@@ -6514,19 +7155,40 @@ class FilterEngineTask(QgsTask):
                         final_expression = where_clause
                         logger.info(f"Old subset contains geometric filter patterns - replacing instead of combining")
                     else:
-                        # Check if the new filter is identical to the old one to avoid duplication
-                        # Normalize both expressions for comparison (remove extra spaces/parentheses)
-                        normalized_old = old_subset.strip().strip('()')
-                        normalized_new = where_clause.strip().strip('()')
+                        # CRITICAL FIX v2.4.15: Detect QGIS style/symbology expressions
+                        # These patterns indicate rule-based symbology filters that should NOT
+                        # be combined with geometric filters as they cause type mismatch errors
+                        import re
+                        style_patterns = [
+                            r'AND\s+TRUE\s*\)',           # Pattern: AND TRUE) - common in rule-based styles
+                            r'THEN\s+true',               # CASE WHEN ... THEN true - style expression
+                            r'THEN\s+false',              # CASE WHEN ... THEN false
+                            r'SELECT\s+CASE',             # SELECT CASE in subquery
+                            r'\)\s*AND\s+TRUE\s*\)',      # (...) AND TRUE) pattern
+                        ]
+                        has_style_pattern = any(
+                            re.search(pattern, old_subset, re.IGNORECASE) 
+                            for pattern in style_patterns
+                        )
                         
-                        if normalized_old == normalized_new:
-                            # Identical filter - no need to combine, just use the new one
+                        if has_style_pattern:
                             final_expression = where_clause
-                            logger.debug(f"New filter identical to existing - replacing instead of combining")
+                            logger.info(f"Old subset contains QGIS style patterns - replacing instead of combining")
+                            logger.info(f"  → Detected style-based filter: '{old_subset[:80]}...'")
                         else:
-                            # Different filters - combine with existing filter using AND
-                            final_expression = f"({old_subset}) AND ({where_clause})"
-                            logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
+                            # Check if the new filter is identical to the old one to avoid duplication
+                            # Normalize both expressions for comparison (remove extra spaces/parentheses)
+                            normalized_old = old_subset.strip().strip('()')
+                            normalized_new = where_clause.strip().strip('()')
+                            
+                            if normalized_old == normalized_new:
+                                # Identical filter - no need to combine, just use the new one
+                                final_expression = where_clause
+                                logger.debug(f"New filter identical to existing - replacing instead of combining")
+                            else:
+                                # Different filters - combine with existing filter using AND
+                                final_expression = f"({old_subset}) AND ({where_clause})"
+                                logger.debug(f"Combining with existing filter: {old_subset[:50]}...")
                 else:
                     final_expression = where_clause
                 
@@ -6618,8 +7280,17 @@ class FilterEngineTask(QgsTask):
         
         schema = self.current_materialized_view_schema
         
+        # Generate session-unique view name for multi-client isolation
+        session_name = self._get_session_prefixed_name(name)
+        logger.debug(f"Using session-prefixed view name: {session_name} (session_id: {self.session_id})")
+        
+        # Ensure temp schema exists before creating materialized views
+        connexion = self._get_valid_postgresql_connection()
+        if not self._ensure_temp_schema_exists(connexion, schema):
+            error_detail = getattr(self, '_last_schema_error', 'Unknown error')
+            raise Exception(f"Failed to ensure temp schema '{schema}' exists: {error_detail}")
+        
         # Ensure source table has statistics for query optimization
-        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
         self._ensure_source_table_stats(
             connexion, 
             self.param_source_schema, 
@@ -6627,12 +7298,12 @@ class FilterEngineTask(QgsTask):
             geom_key_name
         )
         
-        # Build SQL commands
-        sql_drop = f'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
+        # Build SQL commands using session-prefixed name
+        sql_drop = f'DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
         
         if custom:
             # Parse custom buffer expression
-            sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}_dump" CASCADE;'
+            sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
             
             # Get previous subset if exists
             cur.execute(
@@ -6654,24 +7325,24 @@ class FilterEngineTask(QgsTask):
                 self.where_clause = ""
                 where_clause_fields_arr = []
             
-            sql_create = self._create_custom_buffer_view_sql(schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string)
+            sql_create = self._create_custom_buffer_view_sql(schema, session_name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string)
         else:
-            sql_create = self._create_simple_materialized_view_sql(schema, name, sql_subset_string)
+            sql_create = self._create_simple_materialized_view_sql(schema, session_name, sql_subset_string)
         
-        sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geom_key_name});'
-        sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'
-        sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{name}";'
+        sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{session_name}_cluster ON "{schema}"."mv_{session_name}" USING GIST ({geom_key_name});'
+        sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{session_name}" CLUSTER ON {schema}_{session_name}_cluster;'
+        sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{session_name}";'
         
         sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
         logger.debug(f"SQL drop request: {sql_drop}")
         logger.debug(f"SQL create request: {sql_create}")
         
         # Execute PostgreSQL commands
-        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        connexion = self._get_valid_postgresql_connection()
         commands = [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze]
         
         if custom:
-            sql_dump = f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}_dump" as SELECT ST_Union("{geom_key_name}") as {geom_key_name} from "{schema}"."mv_{name}";'
+            sql_dump = f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{session_name}_dump" as SELECT ST_Union("{geom_key_name}") as {geom_key_name} from "{schema}"."mv_{session_name}";'
             commands.append(sql_dump)
         
         self._execute_postgresql_commands(connexion, commands)
@@ -6679,8 +7350,8 @@ class FilterEngineTask(QgsTask):
         # Insert history
         self._insert_subset_history(cur, conn, layer, sql_subset_string, seq_order)
         
-        # Set subset string on layer
-        layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
+        # Set subset string on layer using session-prefixed view name
+        layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
         logger.debug(f"Layer subset string: {layer_subset_string}")
         safe_set_subset_string(layer, layer_subset_string)
         
@@ -6727,9 +7398,14 @@ class FilterEngineTask(QgsTask):
             )
             conn.commit()        # Drop materialized view
         schema = self.current_materialized_view_schema
-        sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
         
-        connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+        # Use session-prefixed name for multi-client isolation
+        session_name = self._get_session_prefixed_name(name)
+        sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
+        sql_drop += f' DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}_dump" CASCADE;'
+        sql_drop += f' DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE;'
+        
+        connexion = self._get_valid_postgresql_connection()
         self._execute_postgresql_commands(connexion, [sql_drop])
         
         # Clear subset string
@@ -6772,12 +7448,13 @@ class FilterEngineTask(QgsTask):
             )
             conn.commit()
         
-        # Drop temp table from filterMate_db
+        # Drop temp table from filterMate_db using session-prefixed name
         import sqlite3
+        session_name = self._get_session_prefixed_name(name)
         try:
             temp_conn = sqlite3.connect(self.db_file_path)
             temp_cur = temp_conn.cursor()
-            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{name}")
+            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{session_name}")
             temp_conn.commit()
             temp_cur.close()
             temp_conn.close()
@@ -6840,18 +7517,22 @@ class FilterEngineTask(QgsTask):
             
             elif use_postgresql:
                 schema = self.current_materialized_view_schema
-                sql_drop = f'DROP INDEX IF EXISTS {schema}_{name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{name}" CASCADE;'
-                sql_create = self._create_simple_materialized_view_sql(schema, name, sql_subset_string)
-                sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{name}_cluster ON "{schema}"."mv_{name}" USING GIST ({geom_key_name});'
-                sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{name}" CLUSTER ON {schema}_{name}_cluster;'
-                sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{name}";'
+                
+                # Use session-prefixed name for multi-client isolation
+                session_name = self._get_session_prefixed_name(name)
+                
+                sql_drop = f'DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE; DROP MATERIALIZED VIEW IF EXISTS "{schema}"."mv_{session_name}" CASCADE;'
+                sql_create = self._create_simple_materialized_view_sql(schema, session_name, sql_subset_string)
+                sql_create_index = f'CREATE INDEX IF NOT EXISTS {schema}_{session_name}_cluster ON "{schema}"."mv_{session_name}" USING GIST ({geom_key_name});'
+                sql_cluster = f'ALTER MATERIALIZED VIEW IF EXISTS  "{schema}"."mv_{session_name}" CLUSTER ON {schema}_{session_name}_cluster;'
+                sql_analyze = f'ANALYZE VERBOSE "{schema}"."mv_{session_name}";'
                 
                 sql_create = sql_create.replace('\n', '').replace('\t', '').replace('  ', ' ').strip()
                 
-                connexion = self.task_parameters["task"]["options"]["ACTIVE_POSTGRESQL"]
+                connexion = self._get_valid_postgresql_connection()
                 self._execute_postgresql_commands(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
                 
-                layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{name}"."{primary_key_name}" FROM "{schema}"."mv_{name}")'
+                layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
                 safe_set_subset_string(layer, layer_subset_string)
         else:
             safe_set_subset_string(layer, '')
@@ -7008,8 +7689,81 @@ class FilterEngineTask(QgsTask):
         result_action = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
         
-        # Cleanup PostgreSQL materialized views (critical for preventing accumulation)
-        self._cleanup_postgresql_materialized_views()
+        # THREAD SAFETY FIX v2.3.21: Apply pending subset strings on main thread
+        # This is called from the main Qt thread (unlike run() which is on a worker thread).
+        # Process all pending subset requests stored during run()
+        if hasattr(self, '_pending_subset_requests') and self._pending_subset_requests:
+            logger.info(f"Applying {len(self._pending_subset_requests)} pending subset requests on main thread")
+            
+            # DIAGNOSTIC: Log to QGIS Message Panel
+            # Note: Qgis and QgsMessageLog are already imported at module level
+            QgsMessageLog.logMessage(
+                f"finished(): Applying {len(self._pending_subset_requests)} pending subset requests",
+                "FilterMate", Qgis.Info
+            )
+            
+            for layer, expression in self._pending_subset_requests:
+                try:
+                    if layer and is_valid_layer(layer):
+                        # FIX v2.4.13: Use safe_set_subset_string to apply PostgreSQL type casting
+                        # This fixes "operator does not exist: character varying < integer" errors
+                        success = safe_set_subset_string(layer, expression)
+                        if success:
+                            layer.triggerRepaint()
+                            logger.debug(f"  ✓ Applied filter to {layer.name()}: {len(expression)} chars")
+                            
+                            # v2.4.13: Handle -1 feature count (unknown count for OGR/GeoPackage)
+                            feature_count = layer.featureCount()
+                            if feature_count >= 0:
+                                count_str = f"{feature_count} features"
+                            else:
+                                count_str = "(count pending)"
+                            
+                            QgsMessageLog.logMessage(
+                                f"finished() ✓ Applied: {layer.name()} → {count_str}",
+                                "FilterMate", Qgis.Info
+                            )
+                        else:
+                            # ENHANCED DIAGNOSTIC v2.4.12: Log detailed error information
+                            error_msg = 'Unknown error'
+                            if layer.error():
+                                error_msg = layer.error().message()
+                            logger.warning(f"  ✗ Failed to apply filter to {layer.name()}")
+                            logger.warning(f"    → Error: {error_msg}")
+                            logger.warning(f"    → Expression ({len(expression)} chars): {expression[:200]}...")
+                            logger.warning(f"    → Provider: {layer.providerType()}")
+                            
+                            QgsMessageLog.logMessage(
+                                f"finished() ✗ FAILED: {layer.name()} - {error_msg}",
+                                "FilterMate", Qgis.Critical
+                            )
+                    else:
+                        logger.warning(f"  ✗ Layer became invalid before filter could be applied")
+                        QgsMessageLog.logMessage(
+                            f"finished() ✗ Layer invalid: {layer.name() if layer else 'None'}",
+                            "FilterMate", Qgis.Warning
+                        )
+                except Exception as e:
+                    logger.error(f"  ✗ Error applying subset string: {e}")
+                    import traceback
+                    logger.error(f"    → Traceback: {traceback.format_exc()}")
+                    
+                    QgsMessageLog.logMessage(
+                        f"finished() ✗ Exception: {layer.name() if layer else 'Unknown'} - {str(e)}",
+                        "FilterMate", Qgis.Critical
+                    )
+            # Clear the pending requests
+            self._pending_subset_requests = []
+        
+        # CRITICAL FIX v2.3.13: Only cleanup MVs on reset/unfilter actions, NOT on filter
+        # When filtering, materialized views are referenced by the layer's subsetString.
+        # Cleaning them up would invalidate the filter expression causing empty results.
+        # Cleanup should only happen when:
+        # - reset: User wants to remove all filters (MVs no longer needed)
+        # - unfilter: User wants to revert to previous state (MVs no longer needed)
+        # - export: After exporting data (MVs were temporary for export)
+        if self.task_action in ('reset', 'unfilter', 'export'):
+            self._cleanup_postgresql_materialized_views()
 
         if self.exception is None:
             if result is None:
