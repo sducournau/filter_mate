@@ -2,6 +2,50 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.5.0] - 2025-12-29 - Major Stability Release
+
+### 🎉 Major Milestone
+
+This release consolidates all stability fixes from the 2.4.x series into a stable, production-ready version.
+
+### ✨ Highlights
+
+| Category | Improvement |
+|----------|-------------|
+| **GeoPackage** | Correct GeomFromGPB() function for GPB geometry conversion |
+| **Thread Safety** | Defer setSubsetString() to main thread via queue callback |
+| **Session Isolation** | Multi-client materialized view naming with session_id prefix |
+| **Type Casting** | Automatic ::numeric casting for varchar/numeric comparisons |
+| **Remote Layers** | Proper detection and fallback to OGR for WFS/HTTP services |
+| **Source Geometry** | Thread-safe feature validation with expression fallback |
+
+### 🛡️ Stability Improvements
+
+- **GeoPackage GeomFromGPB()**: Use correct SpatiaLite function (without ST_ prefix)
+- **GPB Geometry Conversion**: Proper GeoPackage Binary format handling
+- **Spatialite Thread-Safety**: task_parameters priority for source geometry
+- **Remote Layer Detection**: Prevents Spatialite from opening HTTP/WFS sources
+- **PostgreSQL Thread Safety**: Queue-based subset string updates
+- **Session View Naming**: Unique session_id prefix prevents multi-client conflicts
+
+### 🔧 Bug Fixes
+
+- Fixed SQL syntax errors with GeoPackage layers (ST_GeomFromGPB → GeomFromGPB)
+- Fixed spatial predicates returning ALL features for GeoPackage
+- Fixed source geometry selection in background threads
+- Fixed remote layer detection (WFS, HTTP services)
+- Fixed type casting for varchar/numeric field comparisons
+- Fixed filter sanitization for non-boolean display expressions
+
+### 📁 Files Modified
+
+- `modules/backends/spatialite_backend.py`: GeomFromGPB(), remote detection
+- `modules/backends/postgresql_backend.py`: Session isolation, connection validation
+- `modules/tasks/filter_task.py`: Thread-safe geometry, type casting
+- `filter_mate_app.py`: Thread-safe subset handling
+
+---
+
 ## [2.4.13] - 2025-12-29 - GeoPackage GeomFromGPB() Function Fix
 
 ### 🐛 Critical Bug Fix

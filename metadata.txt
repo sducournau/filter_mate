@@ -6,23 +6,20 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.4.13
+version=2.5.0
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.13 - GeoPackage GeomFromGPB() Function Fix
+about=FilterMate v2.5.0 - Major Stability Release
 
- NEW in v2.4.13:
- - 🐛 CRITICAL FIX: Use GeomFromGPB() instead of ST_GeomFromGPB()
- - 🔧 The correct SpatiaLite function is GeomFromGPB() (without ST_ prefix)
- - 🔧 ST_GeomFromGPB() does not exist in mod_spatialite
- - 🔍 Fixed SQL syntax error causing FAILURE on all GeoPackage layers
- 
- Previous (v2.4.8):
- - 🛡️ Thread safety: Defer setSubsetString() calls to main thread via queue callback
- - 🔒 Session isolation: Multi-client materialized view naming with session_id prefix
- - 🔧 Type casting: Fix varchar/numeric comparison errors with automatic ::numeric casting
- - 🧹 Filter sanitization: Remove non-boolean display expressions from subset strings
+ NEW in v2.5.0:
+ - 🎉 Major milestone: Consolidates all 2.4.x stability fixes
+ - 🛡️ GeoPackage: Correct GeomFromGPB() function for GPB geometry conversion
+ - 🔒 Thread Safety: Defer setSubsetString() to main thread via queue callback
+ - 🗄️ Session Isolation: Multi-client materialized view naming with session_id prefix
+ - 🔧 Type Casting: Automatic ::numeric casting for varchar/numeric comparisons
+ - 🔍 Remote Layer Detection: Proper fallback to OGR for WFS/HTTP services
+ - 🐛 Source Geometry: Thread-safe feature validation with expression fallback
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)

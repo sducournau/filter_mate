@@ -7,23 +7,36 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.4.8 - PostgreSQL Thread Safety & Session Isolation
+## 🎉 What's New in v2.5.0 - Major Stability Release
 
-### 🛡️ Thread Safety Improvements
+This release consolidates all stability fixes from the 2.4.x series into a stable, production-ready version.
 
-- **Defer setSubsetString() to Main Thread** - PostgreSQL subset string updates now use queue callback for thread safety
-- **Session Isolation** - Multi-client materialized view naming with session_id prefix prevents conflicts
-- **Connection Validation** - Proper validation of ACTIVE_POSTGRESQL connection objects before use
+### ✨ Highlights
+
+| Category | Improvement |
+|----------|-------------|
+| **GeoPackage** | Correct GeomFromGPB() function for GPB geometry conversion |
+| **Thread Safety** | Defer setSubsetString() to main thread via queue callback |
+| **Session Isolation** | Multi-client materialized view naming with session_id prefix |
+| **Type Casting** | Automatic ::numeric casting for varchar/numeric comparisons |
+| **Remote Layers** | Proper detection and fallback to OGR for WFS/HTTP services |
+
+### 🛡️ Stability Improvements
+
+- **GeoPackage GeomFromGPB()** - Use correct SpatiaLite function (without ST_ prefix)
+- **GPB Geometry Conversion** - Proper GeoPackage Binary format handling
+- **Remote Layer Detection** - Prevents Spatialite from opening HTTP/WFS sources
+- **Source Geometry** - Thread-safe feature validation with expression fallback
 
 ### 🔧 Key Fixes
 
 - **Type Casting** - Fix varchar/numeric comparison errors with automatic ::numeric casting
-- **Full SELECT Statement** - Build complete SQL for PostgreSQL materialized views (was causing syntax errors)
+- **Full SELECT Statement** - Build complete SQL for PostgreSQL materialized views
 - **Filter Sanitization** - Remove non-boolean display expressions from subset strings
 
-### 🔧 New Features
+### 🔧 Features
 
-- **PostgreSQL Maintenance Menu** - New UI for session view cleanup and schema management
+- **PostgreSQL Maintenance Menu** - UI for session view cleanup and schema management
 
 ## Previous Updates
 
