@@ -7,33 +7,41 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.4.6 - Layer Variable Access Violation Crash Fix
+## 🎉 What's New in v2.4.8 - PostgreSQL Thread Safety & Session Isolation
 
-### 🔥 Critical Bug Fix
+### 🛡️ Thread Safety Improvements
 
-- **Fixed setLayerVariable Crash** - Resolved "Windows fatal exception: access violation" in race condition between layer validation and C++ setLayerVariable call
-- **Root Cause**: Layer deleted between validation check and `QgsExpressionContextUtils.setLayerVariable()` call
-- **Solution**: Safe wrapper functions re-fetch layer from project registry immediately before operation
+- **Defer setSubsetString() to Main Thread** - PostgreSQL subset string updates now use queue callback for thread safety
+- **Session Isolation** - Multi-client materialized view naming with session_id prefix prevents conflicts
+- **Connection Validation** - Proper validation of ACTIVE_POSTGRESQL connection objects before use
 
-### 🛡️ Safe Layer Variable Wrappers
+### 🔧 Key Fixes
 
-- **`safe_set_layer_variable()`**: Re-fetches layer fresh, validates sip deletion, performs operation
-- **Minimal race window**: Validation happens right before C++ call
-- **Graceful failure**: Returns `False` instead of crashing
+- **Type Casting** - Fix varchar/numeric comparison errors with automatic ::numeric casting
+- **Full SELECT Statement** - Build complete SQL for PostgreSQL materialized views (was causing syntax errors)
+- **Filter Sanitization** - Remove non-boolean display expressions from subset strings
+
+### 🔧 New Features
+
+- **PostgreSQL Maintenance Menu** - New UI for session view cleanup and schema management
 
 ## Previous Updates
+
+### v2.4.7 - GeoPackage Geometry Detection & Stability Fix (December 24, 2025)
+
+- 🔧 Improved geometry column detection for GeoPackage/Spatialite layers
+- 🛡️ Multi-method detection: layer.geometryColumn() → dataProvider → gpkg_metadata
+- 🔒 Safe layer variable operations with deferred execution
+
+### v2.4.6 - Layer Variable Access Violation Crash Fix (December 23, 2025)
+
+- 🔥 **CRITICAL FIX**: Access violation in setLayerVariable race condition resolved
+- 🛡️ Safe wrapper functions re-fetch layer from project registry immediately before operation
 
 ### v2.4.5 - Processing Parameter Validation Fix (December 23, 2025)
 
 - 🔥 **CRITICAL FIX**: Access violation in checkParameterValues during geometric filtering
 - 🛡️ Pre-flight validation tests layer access before calling processing.run()
-- 🔒 Three-tier validation: input layer → intersect layer → final pre-flight check
-
-### v2.4.4 - Critical Thread Safety Fix (December 22, 2025)
-
-- 🔥 **Fixed Parallel Filtering Crash** - Windows fatal exception: access violation
-- 🛡️ OGR layers now always filter sequentially (QGIS layer objects NOT thread-safe)
-- 🔒 ParallelFilterExecutor auto-detects OGR/geometric ops → sequential mode
 
 ### v2.4.3 - Export System Fix (December 22, 2025)
 

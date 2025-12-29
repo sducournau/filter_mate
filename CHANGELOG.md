@@ -2,6 +2,52 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.8] - 2025-12-29 - PostgreSQL Thread Safety & Session Isolation
+
+### 🛡️ Thread Safety Improvements
+
+- **Defer setSubsetString() to Main Thread**: PostgreSQL subset string updates now use queue callback to ensure thread safety
+- **Session Isolation**: Multi-client materialized view naming with session_id prefix prevents conflicts
+- **Connection Validation**: Proper validation of ACTIVE_POSTGRESQL connection objects before use
+
+### 🔧 Bug Fixes
+
+#### PostgreSQL Type Casting
+
+- **Root Cause**: varchar/numeric comparison errors when filtering numeric fields stored as text
+- **Solution**: Automatic ::numeric casting for comparison operations
+- **Files**: `filter_task.py`, `postgresql_backend.py`
+
+#### Full SELECT Statement for Materialized Views
+
+- **Root Cause**: `manage_layer_subset_strings` expected complete SQL SELECT but received only WHERE clause
+- **Symptom**: Syntax errors like `CREATE MATERIALIZED VIEW ... AS WITH DATA;`
+- **Solution**: Build full SELECT statement from layer properties (schema, table, primary_key, geom_field)
+- **File**: `modules/tasks/filter_task.py`
+
+### 🧹 Filter Sanitization
+
+- **Remove Non-Boolean Display Expressions**: Filter sanitization removes display expressions without comparison operators
+- **Corrupted Filter Cleanup**: Clear filters with `__source` alias or unbalanced parentheses
+- **Expression Validation**: Reject display expressions that would cause SQL errors
+
+### 🔧 New Features
+
+- **PostgreSQL Maintenance Menu**: New UI for session view cleanup and schema management
+- **Schema Detection**: Re-validate layer_schema from layer source for PostgreSQL connections
+
+### 📁 Files Modified
+
+- `filter_mate_app.py`: Thread-safe subset string handling, PostgreSQL maintenance menu
+- `filter_mate_dockwidget.py`: PostgreSQL maintenance UI integration
+- `modules/tasks/filter_task.py`: Full SELECT statement builder, type casting
+- `modules/backends/postgresql_backend.py`: Session isolation, connection validation
+- `modules/backends/spatialite_backend.py`: Enhanced thread safety
+- `modules/appUtils.py`: Connection validation utilities
+- `tests/test_postgresql_buffer.py`: New test suite for PostgreSQL buffer handling
+
+---
+
 ## [2.4.7] - 2025-12-24 - GeoPackage Geometry Detection & Stability Fix
 
 ### 🔧 Bug Fixes

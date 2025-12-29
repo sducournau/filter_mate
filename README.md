@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.4.7** | December 2025 | **Production-Ready**
+**Version 2.4.8** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,24 +27,25 @@
 
 ## 📋 Recent Changes
 
+### v2.4.8 - PostgreSQL Thread Safety & Session Isolation
+
+- 🛡️ **Thread Safety**: Defer setSubsetString() calls to main thread via queue callback
+- 🔒 **Session Isolation**: Multi-client materialized view naming with session_id prefix
+- 🔧 **Type Casting**: Fix varchar/numeric comparison errors with automatic ::numeric casting
+- 🗄️ **Full SELECT Statement**: Build complete SQL for PostgreSQL materialized views
+- ✅ **Connection Validation**: Proper validation of ACTIVE_POSTGRESQL connection objects
+- 🧹 **PostgreSQL Maintenance Menu**: UI for session view cleanup and schema management
+
 ### v2.4.7 - GeoPackage Geometry Detection & Stability Fix
 
 - 🔧 **FIX**: Improved geometry column detection for GeoPackage/Spatialite layers
 - 🛡️ **Multi-method detection**: layer.geometryColumn() → dataProvider → gpkg_metadata
 - 🔒 Safe layer variable operations with deferred execution
-- 📝 Better diagnostics for spatial filter failures
-- ⚡ Support for non-spatial layers in attribute-only mode
 
 ### v2.4.6 - Layer Variable Access Violation Crash Fix
 
 - 🔥 **CRITICAL FIX**: Access violation in setLayerVariable race condition resolved
 - 🛡️ **Safe Wrappers**: Re-fetches layer from project registry before C++ calls
-- 🔒 Validates sip deletion status and layer validity right before access
-
-### v2.4.5 - Processing Parameter Validation Fix
-
-- 🔥 **CRITICAL FIX**: Access violation in checkParameterValues during geometric filtering
-- 🛡️ Pre-flight validation tests layer access before calling processing.run()
 
 > 📖 See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 

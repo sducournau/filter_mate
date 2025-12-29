@@ -6,25 +6,26 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.4.7
+version=2.4.8
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.4.7 - GeoPackage Geometry Detection & Stability Fix
+about=FilterMate v2.4.8 - PostgreSQL Thread Safety & Session Isolation
 
- NEW in v2.4.7:
+ NEW in v2.4.8:
+ - 🛡️ Thread safety: Defer setSubsetString() calls to main thread via queue callback
+ - 🔒 Session isolation: Multi-client materialized view naming with session_id prefix
+ - 🔧 Type casting: Fix varchar/numeric comparison errors with automatic ::numeric casting
+ - 🗄️ Full SELECT statement for PostgreSQL materialized views (syntax fix)
+ - ✅ Connection validation: Proper validation of ACTIVE_POSTGRESQL connection objects
+ - 🧹 Filter sanitization: Remove non-boolean display expressions from subset strings
+ - 🔧 PostgreSQL maintenance menu: UI for session view cleanup and schema management
+ 
+ Previous (v2.4.7):
  - 🔧 FIX: Improved geometry column detection for GeoPackage/Spatialite layers
  - 🛡️ Multiple detection methods: layer.geometryColumn(), dataProvider, gpkg_metadata
  - 🔒 Safe layer variable operations with deferred execution during layer changes
  - 📝 Better diagnostics for spatial filter failures
- - ⚡ Cache only positive Spatialite support results (avoids false negatives)
- - 🗃️ Support for non-spatial layers in attribute-only mode
- 
- Previous (v2.4.6):
- - 🔥 CRITICAL FIX: Access violation in setLayerVariable race condition resolved
- - 🛡️ Safe layer variable wrappers with fresh layer fetch before C++ calls
- - 🔒 Re-fetches layer from project registry immediately before operation
- - 📝 Validates sip deletion status and layer validity right before access
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
