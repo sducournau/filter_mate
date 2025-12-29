@@ -2,6 +2,161 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.4.13] - 2025-12-29 - GeoPackage GeomFromGPB() Function Fix
+
+### 🐛 Critical Bug Fix
+
+#### Wrong Function Name: ST_GeomFromGPB() Does Not Exist
+
+- **Root Cause**: Used `ST_GeomFromGPB()` but the correct SpatiaLite function is `GeomFromGPB()` (without ST_ prefix)
+- **Symptom**: All GeoPackage layers returned FAILURE because SQL query contained undefined function
+- **Evidence**: Logs showed `execute_geometric_filtering ✗ structures → backend returned FAILURE`
+- **Solution**: Use `GeomFromGPB("geom")` instead of `ST_GeomFromGPB("geom")`
+
+### 🔧 Technical Details
+
+**Before (broken - v2.4.12):**
+```sql
+ST_Intersects(ST_GeomFromGPB("geom"), GeomFromText('MultiPolygon...', 31370))
+```
+
+**After (fixed - v2.4.13):**
+```sql
+ST_Intersects(GeomFromGPB("geom"), GeomFromText('MultiPolygon...', 31370))
+```
+
+### 📚 SpatiaLite Documentation Reference
+
+From SpatiaLite 5.0 SQL Reference:
+- `GeomFromGPB(geom GPKG Blob Geometry) : BLOB encoded geometry`
+- Converts a GeoPackage format geometry blob into a SpatiaLite geometry blob
+- Alternative: `CastAutomagic()` can auto-detect GPB or standard WKB
+
+### 📁 Files Modified
+
+- `modules/backends/spatialite_backend.py`: Changed `ST_GeomFromGPB()` to `GeomFromGPB()` in `build_expression()`
+
+---
+
+## [2.4.12] - 2025-12-29 - GeoPackage GPB Geometry Conversion Fix
+
+### 🐛 Critical Bug Fix
+
+#### GeoPackage Spatial Predicates Returning ALL Features
+
+- **Root Cause**: GeoPackage stores geometries in GPB (GeoPackage Binary) format, NOT standard WKB
+- **Symptom**: `ST_Intersects("geom", GeomFromText(...))` returned TRUE for ALL features
+- **Evidence**: Logs showed `→ Direct SQL found 9307 matching FIDs` (entire layer) instead of ~50
+- **Solution**: Use `ST_GeomFromGPB("geom")` to convert GPB to Spatialite geometry before spatial predicates
+
+### 🔧 Technical Details
+
+**Before (broken):**
+```sql
+ST_Intersects("geom", GeomFromText('MultiPolygon...', 31370))
+```
+
+**After (fixed):**
+```sql
+ST_Intersects(ST_GeomFromGPB("geom"), GeomFromText('MultiPolygon...', 31370))
+```
+
+### 📁 Files Modified
+
+- `modules/backends/spatialite_backend.py`: Added GeoPackage detection and ST_GeomFromGPB() conversion in `build_expression()`
+
+---
+
+## [2.4.11] - 2025-12-29 - Spatialite Thread-Safety Fix for Source Geometry
+
+### 🐛 Critical Bug Fix
+
+#### Spatialite prepare_spatialite_source_geom() NOT Using task_parameters Priority
+
+- **Root Cause**: `prepare_spatialite_source_geom()` was checking `has_subset` first, but in background threads, `subsetString()` returns empty even when layer is filtered. Meanwhile, `prepare_ogr_source_geom()` was correctly using `task_parameters["task"]["features"]` as PRIORITY.
+- **Symptom**: OGR logs show correct 1 feature, but Spatialite backend receives geometry from ALL source features
+- **Analysis**: 
+  1. v2.4.10 fixed `prepare_ogr_source_geom()` to use task_features FIRST
+  2. But `prepare_spatialite_source_geom()` still used old logic: has_subset → getFeatures()
+  3. In background threads, getFeatures() returns ALL features if subset isn't visible
+- **Solution (v2.4.11)**: 
+  1. `prepare_spatialite_source_geom()` now uses same logic as OGR version
+  2. task_parameters["task"]["features"] is checked FIRST (priority mode)
+  3. Feature validation with try/except for thread-safety
+  4. Consistent logging format with OGR version
+
+### 🔧 Improvements
+
+- **Priority Order**: Both OGR and Spatialite now use: task_features > has_subset > has_selection > field_mode > fallback
+- **Better Diagnostics**: `has_task_features` logged with count for easier debugging
+- **Simplified else block**: Removed redundant code in else branch
+
+### 📁 Files Modified
+
+- `modules/tasks/filter_task.py`: 
+  - Refactored `prepare_spatialite_source_geom()` to use task_features priority mode (~line 2352)
+  - Added feature validation with try/except like OGR version
+  - Simplified fallback mode
+
+---
+
+## [2.4.10] - 2025-12-29 - Source Geometry Thread Safety Fix
+
+### 🐛 Critical Bug Fix
+
+#### Geometric Filter Selecting ALL Features Instead of Intersecting Subset
+
+- **Root Cause**: When filtering remote/distant layers with a filtered source layer (e.g., zone_distribution with 1 feature), the spatial predicate was returning ALL features instead of only intersecting ones
+- **Symptom**: Filter generates `'fid' IN (1, 2, 3, ..., 9307)` selecting all features instead of expected subset
+- **Analysis**: 
+  1. `task_features` passed from main thread to background task could become invalid (thread-safety)
+  2. `setSubsetString()` from background thread may not take effect immediately
+  3. Without valid task_features or visible subset, code falls into "DIRECT MODE" using ALL source features
+- **Solution (v2.4.22)**: 
+  1. More robust validation of task features with exception handling for thread-safety issues
+  2. Expression fallback mode: if no subset detected but `self.expression` exists, use it to filter features
+  3. Applied fix to both `prepare_ogr_source_geom()` and `prepare_spatialite_source_geom()`
+
+### 🔧 Improvements
+
+- **Better Diagnostics**: Added detailed logging for feature validation failures
+- **Expression Fallback**: New "EXPRESSION FALLBACK MODE" uses stored expression when subset detection fails
+- **Thread Safety Warnings**: Explicit logging when features become invalid due to thread issues
+
+### 📁 Files Modified
+
+- `modules/tasks/filter_task.py`: 
+  - Enhanced feature validation in `prepare_ogr_source_geom()` (~line 3693)
+  - Added expression fallback in `prepare_ogr_source_geom()` (~line 3814)
+  - Added expression fallback in `prepare_spatialite_source_geom()` (~line 2392)
+
+---
+
+## [2.4.9] - 2025-12-29 - Remote Layer Detection Fix
+
+### 🐛 Critical Bug Fix
+
+#### Remote/Distant Layers Incorrectly Handled by Spatialite Backend
+
+- **Root Cause**: Spatialite backend was attempting to open remote layers (WFS, HTTP services) as local SQLite files
+- **Symptom**: "unable to open database file" errors during filtering, `-1 features visible` result
+- **Solution**: Added detection for remote sources BEFORE attempting Spatialite operations:
+  1. Check for remote URL prefixes (http://, https://, ftp://, wfs:, wms:, /vsicurl/)
+  2. Check for service markers in source string (url=, service=, typename=)
+  3. Verify file existence before SQLite connection attempts
+- **Result**: Remote layers now properly fall back to OGR backend (QGIS processing)
+
+### 🔧 Improvements
+
+- **Cache Version Bump**: Force cache invalidation to ensure new detection logic is applied
+- **Better Logging**: Added diagnostic logging for remote source detection
+
+### 📁 Files Modified
+
+- `modules/backends/spatialite_backend.py`: Remote layer detection in `supports_layer()` and `_apply_filter_direct_sql()`
+
+---
+
 ## [2.4.8] - 2025-12-29 - PostgreSQL Thread Safety & Session Isolation
 
 ### 🛡️ Thread Safety Improvements

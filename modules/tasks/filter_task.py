@@ -2313,9 +2313,12 @@ class FilterEngineTask(QgsTask):
         
         Performance: Uses cache to avoid recalculating for multiple layers.
         """
-        # CRITICAL FIX: Respect active subset filter on source layer
+        # CRITICAL FIX v2.4.10: Respect active subset filter on source layer
         # When source layer has a subsetString (e.g., "homecount > 5"), we must use ONLY filtered features
         # for geometric operations, not all features in the layer.
+        
+        # THREAD-SAFETY FIX v2.4.10: In background threads, subsetString() may return empty
+        # even when the layer is filtered. Check task_parameters FIRST for reliable feature access.
         has_subset = bool(self.source_layer.subsetString())
         has_selection = self.source_layer.selectedFeatureCount() > 0
         
@@ -2328,15 +2331,56 @@ class FilterEngineTask(QgsTask):
             self.is_field_expression[0] is True
         )
         
+        # Check task_features FIRST (passed from main thread, reliable across threads)
+        task_features = self.task_parameters.get("task", {}).get("features", [])
+        has_task_features = task_features and len(task_features) > 0
+        
         logger.info(f"=== prepare_spatialite_source_geom DEBUG ===")
+        logger.info(f"  has_task_features: {has_task_features} ({len(task_features) if task_features else 0} features)")
         logger.info(f"  has_subset: {has_subset}")
         logger.info(f"  has_selection: {has_selection}")
         logger.info(f"  is_field_based_mode: {is_field_based_mode}")
         if has_subset:
             logger.info(f"  Current subset: '{self.source_layer.subsetString()[:100]}'")
         
-        if has_subset:
-            # Source layer is filtered (e.g., from custom expression) - use getFeatures() which respects subsetString
+        # PRIORITY ORDER (v2.4.10):
+        # 1. task_features from task_parameters (most reliable, thread-safe)
+        # 2. getFeatures() with subset (if has_subset is True)
+        # 3. selectedFeatures() (if has_selection)
+        # 4. is_field_based_mode
+        # 5. FALLBACK: getFeatures() (all features)
+        
+        if has_task_features and not is_field_based_mode:
+            # PRIORITY MODE v2.4.10: Use task_features passed from main thread (thread-safe)
+            logger.info(f"=== prepare_spatialite_source_geom (TASK PARAMS PRIORITY MODE) ===")
+            logger.info(f"  Using {len(task_features)} features from task_parameters (thread-safe)")
+            
+            # Validate features (filter out invalid/empty ones)
+            valid_features = []
+            for i, f in enumerate(task_features):
+                try:
+                    if f is None or f == "":
+                        continue
+                    if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
+                        if f.hasGeometry() and not f.geometry().isEmpty():
+                            valid_features.append(f)
+                            # Log first few features for diagnostic
+                            if i < 3:
+                                geom = f.geometry()
+                                bbox = geom.boundingBox()
+                                logger.info(f"  Feature[{i}]: type={geom.wkbType()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
+                        else:
+                            logger.debug(f"  Skipping feature[{i}] without valid geometry")
+                    elif f:
+                        valid_features.append(f)
+                except Exception as e:
+                    logger.warning(f"  Feature[{i}] validation error (thread-safety): {e}")
+                    continue
+            
+            features = valid_features
+            logger.info(f"  Valid features after filtering: {len(features)}")
+        elif has_subset and not has_task_features:
+            # Fallback: use getFeatures() which respects subsetString
             logger.info(f"=== prepare_spatialite_source_geom (FILTERED MODE) ===")
             logger.info(f"  Source layer has active filter: {self.source_layer.subsetString()[:100]}")
             logger.info(f"  Using {self.source_layer.featureCount()} filtered features from source layer")
@@ -2357,44 +2401,52 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  Using ALL {self.source_layer.featureCount()} filtered features for geometric intersection")
             features = list(self.source_layer.getFeatures())
         else:
-            # Get features from task parameters (single selection or expression mode)
-            features = self.task_parameters["task"]["features"]
-            logger.info(f"=== prepare_spatialite_source_geom (TASK PARAMS MODE) ===")
-            logger.info(f"  Features from task_parameters: {len(features) if features else 0} features")
-            # DIAGNOSTIC v2.4.12: Log feature types and validate
-            if features:
-                # CRITICAL FIX v2.4.16: Filter out features without valid geometry
-                valid_features = []
-                for f in features:
-                    if f is None or f == "":
-                        continue
-                    if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
-                        if f.hasGeometry() and not f.geometry().isEmpty():
-                            valid_features.append(f)
-                        else:
-                            logger.debug(f"  Skipping feature without valid geometry")
-                    elif f:
-                        valid_features.append(f)
-                
-                features = valid_features
-                logger.info(f"  Valid features after filtering: {len(features)}")
-                
-                if features:
-                    first_feat = features[0]
-                    logger.info(f"  First feature type: {type(first_feat).__name__}")
-                    if hasattr(first_feat, 'hasGeometry'):
-                        logger.info(f"  First feature hasGeometry: {first_feat.hasGeometry()}")
-                        if first_feat.hasGeometry():
-                            geom = first_feat.geometry()
-                            logger.info(f"  First feature geometry type: {geom.wkbType()}")
+            # FINAL FALLBACK: No task_features, no subset, no selection, no field mode
+            # Use all features from source layer (this should be rare)
+            logger.info(f"=== prepare_spatialite_source_geom (FALLBACK MODE) ===")
+            logger.info(f"  No specific mode matched - using all source features")
+            features = list(self.source_layer.getFeatures())
+            logger.info(f"  Retrieved {len(features)} features from source layer")
         
         # FALLBACK: If features list is empty, use all visible features from source layer
+        # FIX v2.4.22: Also check for expression/subset that should be applied
         if not features or len(features) == 0:
-            logger.warning(f"  ⚠️ No features provided! Falling back to source layer's visible features")
-            logger.info(f"  → Source layer: {self.source_layer.name()}")
-            logger.info(f"  → Source layer feature count: {self.source_layer.featureCount()}")
-            logger.info(f"  → Source layer subset: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else ''}'")
-            features = list(self.source_layer.getFeatures())
+            logger.warning(f"  ⚠️ No features provided! Checking for expression fallback...")
+            
+            # Check if we have an expression that should filter the source layer
+            filter_expression = getattr(self, 'expression', None)
+            new_subset = getattr(self, 'param_source_new_subset', None)
+            
+            filter_to_use = None
+            if filter_expression and filter_expression.strip():
+                filter_to_use = filter_expression
+                logger.info(f"  → Found expression: '{filter_expression[:80]}...'")
+            elif new_subset and new_subset.strip():
+                filter_to_use = new_subset
+                logger.info(f"  → Found new_subset: '{new_subset[:80]}...'")
+            
+            if filter_to_use:
+                # Use a feature request with expression to filter features
+                from qgis.core import QgsFeatureRequest, QgsExpression
+                
+                try:
+                    expr = QgsExpression(filter_to_use)
+                    if not expr.hasParserError():
+                        request = QgsFeatureRequest(expr)
+                        features = list(self.source_layer.getFeatures(request))
+                        logger.info(f"  → Expression fallback: {len(features)} features")
+                    else:
+                        logger.warning(f"  → Expression parse error: {expr.parserErrorString()}")
+                        features = list(self.source_layer.getFeatures())
+                except Exception as e:
+                    logger.warning(f"  → Expression fallback failed: {e}")
+                    features = list(self.source_layer.getFeatures())
+            else:
+                logger.info(f"  → Source layer: {self.source_layer.name()}")
+                logger.info(f"  → Source layer feature count: {self.source_layer.featureCount()}")
+                logger.info(f"  → Source layer subset: '{self.source_layer.subsetString()[:100] if self.source_layer.subsetString() else ''}'")
+                features = list(self.source_layer.getFeatures())
+            
             logger.info(f"  → Fallback: Using {len(features)} features from source layer")
         
         logger.debug(f"  Buffer value: {self.param_buffer_value}")
@@ -3691,19 +3743,37 @@ class FilterEngineTask(QgsTask):
         # CRITICAL FIX v2.4.16: Properly validate QgsFeature objects
         # Old filter: [f for f in task_features_early if f and f != ""]
         # This missed invalid features that are truthy but don't have geometry
+        #
+        # FIX v2.4.22: More robust validation with detailed logging
+        # Thread safety issue: QgsFeature objects may become invalid when passed
+        # between threads. We need to catch exceptions during validation.
         valid_task_features_early = []
+        invalid_count = 0
         for f in task_features_early:
             if f is None or f == "":
                 continue
             # Check if it's a QgsFeature with geometry
-            if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
-                if f.hasGeometry() and not f.geometry().isEmpty():
+            try:
+                if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
+                    if f.hasGeometry():
+                        geom = f.geometry()
+                        if geom is not None and not geom.isEmpty():
+                            valid_task_features_early.append(f)
+                        else:
+                            invalid_count += 1
+                            logger.debug(f"  Skipping feature with empty geometry: id={f.id() if hasattr(f, 'id') else 'unknown'}")
+                    else:
+                        invalid_count += 1
+                        logger.debug(f"  Skipping feature without geometry: id={f.id() if hasattr(f, 'id') else 'unknown'}")
+                elif f:
+                    # Non-QgsFeature truthy value (e.g., feature ID)
                     valid_task_features_early.append(f)
-                else:
-                    logger.debug(f"  Skipping feature without valid geometry: {f}")
-            elif f:
-                # Non-QgsFeature truthy value (e.g., feature ID)
-                valid_task_features_early.append(f)
+            except (RuntimeError, AttributeError) as e:
+                invalid_count += 1
+                logger.warning(f"  ⚠️ Feature access error (thread-safety issue?): {e}")
+        
+        if invalid_count > 0:
+            logger.warning(f"  ⚠️ {invalid_count} task features were invalid or had no geometry")
         
         logger.info(f"=== prepare_ogr_source_geom DEBUG ===")
         logger.info(f"  Source layer name: {layer.name() if layer else 'None'}")
@@ -3795,17 +3865,84 @@ class FilterEngineTask(QgsTask):
             layer = self._copy_filtered_layer_to_memory(layer, "source_field_based")
         else:
             # DIRECT MODE: No task_features, no subset, no selection, no field-based mode
-            # Use source layer directly with all its features
-            logger.info(f"=== prepare_ogr_source_geom (DIRECT MODE) ===")
-            logger.info(f"  No task features, subset, selection, or field-based mode detected")
-            logger.info(f"  Source layer: {layer.name()}")
-            logger.info(f"  Source layer feature count: {layer.featureCount()}")
+            #
+            # FIX v2.4.22: Check if we have an expression that should filter the source layer
+            # This handles the case where setSubsetString() from a background thread didn't
+            # take effect immediately (thread-safety issue).
+            #
+            # Try multiple fallback strategies:
+            # 1. Check if self.expression was set during execute_source_layer_filtering()
+            # 2. Check if param_source_new_subset was set
+            # 3. Use all features as last resort
             
-            # DIAGNOSTIC: Log to QGIS Message Panel
-            QgsMessageLog.logMessage(
-                f"OGR DIRECT MODE: Using {layer.featureCount()} features from source layer",
-                "FilterMate", Qgis.Warning
-            )
+            filter_expression = getattr(self, 'expression', None)
+            new_subset = getattr(self, 'param_source_new_subset', None)
+            
+            # Determine if we should filter
+            should_filter = False
+            filter_to_use = None
+            
+            if filter_expression and filter_expression.strip():
+                should_filter = True
+                filter_to_use = filter_expression
+                logger.info(f"=== prepare_ogr_source_geom (EXPRESSION FALLBACK MODE) ===")
+                logger.info(f"  ⚠️ No subset detected but self.expression exists")
+                logger.info(f"  Expression: '{filter_expression[:80]}...'")
+            elif new_subset and new_subset.strip():
+                should_filter = True
+                filter_to_use = new_subset
+                logger.info(f"=== prepare_ogr_source_geom (SUBSET FALLBACK MODE) ===")
+                logger.info(f"  ⚠️ No subset detected but param_source_new_subset exists")
+                logger.info(f"  New subset: '{new_subset[:80]}...'")
+            
+            if should_filter and filter_to_use:
+                # Use a feature request with expression to filter features
+                from qgis.core import QgsFeatureRequest, QgsExpression
+                
+                try:
+                    expr = QgsExpression(filter_to_use)
+                    if expr.hasParserError():
+                        logger.warning(f"  Expression parse error: {expr.parserErrorString()}")
+                        logger.warning(f"  Falling back to all features")
+                    else:
+                        request = QgsFeatureRequest(expr)
+                        filtered_features = list(layer.getFeatures(request))
+                        
+                        if len(filtered_features) > 0:
+                            logger.info(f"  ✓ Filtered to {len(filtered_features)} features using expression")
+                            
+                            # Create memory layer from filtered features
+                            layer = self._create_memory_layer_from_features(
+                                filtered_features, layer.crs(), "source_expr_filtered"
+                            )
+                            if layer:
+                                logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
+                                
+                                # DIAGNOSTIC: Log to QGIS Message Panel
+                                QgsMessageLog.logMessage(
+                                    f"OGR EXPRESSION FALLBACK: Using {layer.featureCount()} features (filtered from expression)",
+                                    "FilterMate", Qgis.Info
+                                )
+                            else:
+                                logger.error(f"  ✗ Failed to create memory layer, using original layer")
+                                layer = self.source_layer
+                        else:
+                            logger.warning(f"  ⚠️ Expression returned 0 features, using original layer")
+                            layer = self.source_layer
+                except Exception as e:
+                    logger.error(f"  Expression filtering failed: {e}")
+                    layer = self.source_layer
+            else:
+                logger.info(f"=== prepare_ogr_source_geom (DIRECT MODE) ===")
+                logger.info(f"  No task features, subset, selection, or field-based mode detected")
+                logger.info(f"  Source layer: {layer.name()}")
+                logger.info(f"  Source layer feature count: {layer.featureCount()}")
+                
+                # DIAGNOSTIC: Log to QGIS Message Panel
+                QgsMessageLog.logMessage(
+                    f"OGR DIRECT MODE: Using {layer.featureCount()} features from source layer",
+                    "FilterMate", Qgis.Warning
+                )
         
         # Step 1: DISABLED - Skip geometry validation/repair, let invalid geometries pass
         logger.info("Geometry validation DISABLED - allowing invalid geometries to pass through")
@@ -4834,11 +4971,18 @@ class FilterEngineTask(QgsTask):
             # 3. PostgreSQLGeometricFilter for PostgreSQL layers - needs SQL expression
             backend_name = backend.get_backend_name().lower()
             
+            # v2.4.20: Log backend selection to QGIS Message Panel for debugging
+            from qgis.core import QgsMessageLog
+            QgsMessageLog.logMessage(
+                f"execute_geometric_filtering: {layer.name()} → backend={backend_name.upper()}",
+                "FilterMate", Qgis.Info
+            )
+            
             # Log actual backend being used
             if forced_backend and backend_name != forced_backend:
                 logger.warning(f"  ⚠️ Forced backend '{forced_backend}' but got '{backend_name}' (backend may not support layer)")
             else:
-                logger.info(f"  ✓ Using backend: {backend_name}")
+                logger.info(f"  ✓ Using backend: {backend_name.upper()}")
             
             # Store actual backend used for this layer (for UI indicator)
             if 'actual_backends' not in self.task_parameters:
@@ -5140,13 +5284,21 @@ class FilterEngineTask(QgsTask):
                     # Non-PostgreSQL layers use the expression directly
                     sql_subset_string = final_expression
                 
-                self.manage_layer_subset_strings(
-                    layer,
-                    sql_subset_string,
-                    primary_key,
-                    geom_field,
-                    False
-                )
+                # CRITICAL FIX: Only call manage_layer_subset_strings if we have a valid sql_subset_string
+                # Empty sql_subset_string causes SQL syntax error: "AS WITH DATA;" without SELECT
+                if sql_subset_string and sql_subset_string.strip():
+                    self.manage_layer_subset_strings(
+                        layer,
+                        sql_subset_string,
+                        primary_key,
+                        geom_field,
+                        False
+                    )
+                else:
+                    logger.info(
+                        f"Skipping manage_layer_subset_strings for {layer.name()}: "
+                        f"no subset expression to store (filter applied via setSubsetString)"
+                    )
                 
                 logger.info(f"✓ Successfully filtered {layer.name()}: {feature_count:,} features match")
             else:
@@ -6689,7 +6841,18 @@ class FilterEngineTask(QgsTask):
             
         Returns:
             str: SQL CREATE MATERIALIZED VIEW statement
+            
+        Raises:
+            ValueError: If sql_subset_string is empty or None
         """
+        # CRITICAL FIX: Validate sql_subset_string is not empty
+        # Empty sql_subset_string causes SQL syntax error: "AS WITH DATA;" without SELECT
+        if not sql_subset_string or not sql_subset_string.strip():
+            raise ValueError(
+                f"Cannot create materialized view 'mv_{name}': sql_subset_string is empty. "
+                f"This usually means the filter expression was not properly built."
+            )
+        
         return 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
             schema=schema,
             name=name,
@@ -7581,6 +7744,15 @@ class FilterEngineTask(QgsTask):
         if len(results) == 1:
             sql_subset_string = results[0][-1]
             
+            # CRITICAL FIX: Validate sql_subset_string from history before using
+            if not sql_subset_string or not sql_subset_string.strip():
+                logger.warning(
+                    f"Unfilter: Previous subset string from history is empty for {layer.name()}. "
+                    f"Clearing layer filter."
+                )
+                safe_set_subset_string(layer, '')
+                return True
+            
             if use_spatialite:
                 logger.info("Unfilter - Spatialite backend - recreating previous subset")
                 success = self._manage_spatialite_subset(
@@ -7653,6 +7825,16 @@ class FilterEngineTask(QgsTask):
             # Execute appropriate action based on task_action
             if self.task_action == 'filter':
                 current_seq_order = last_seq_order + 1
+                
+                # CRITICAL FIX: Skip materialized view creation if sql_subset_string is empty
+                # Empty sql_subset_string causes SQL syntax error in materialized view creation
+                if not sql_subset_string or not sql_subset_string.strip():
+                    logger.warning(
+                        f"Skipping subset management for {layer.name()}: "
+                        f"sql_subset_string is empty. Filter was applied via setSubsetString but "
+                        f"history/materialized view creation is skipped."
+                    )
+                    return True
                 
                 # Use Spatialite backend for local layers
                 if use_spatialite:

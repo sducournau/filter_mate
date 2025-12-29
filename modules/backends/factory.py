@@ -354,10 +354,22 @@ class BackendFactory:
             elif forced_backend == 'spatialite':
                 backend = SpatialiteGeometricFilter(task_params)
                 if not backend.supports_layer(layer):
+                    # FIX v2.4.19: Auto-fallback to OGR when forced Spatialite doesn't work
+                    # Spatialite SQL functions may not be available in GDAL/OGR driver
+                    # Using OGR backend (QGIS processing) ensures spatial filtering works
                     logger.warning(
-                        f"⚠️ Spatialite backend forced for '{layer.name()}' but layer type may not be fully supported. "
-                        f"Proceeding with forced backend as requested."
+                        f"⚠️ Spatialite backend forced for '{layer.name()}' but Spatialite functions NOT available. "
+                        f"Falling back to OGR backend (QGIS processing) for reliable spatial filtering."
                     )
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        f"⚠️ Spatialite unavailable for '{layer.name()}' - using OGR fallback",
+                        "FilterMate", Qgis.Warning
+                    )
+                    backend = OGRGeometricFilter(task_params)
+                    if return_memory_info:
+                        return (backend, None, False)
+                    return backend
                 if return_memory_info:
                     return (backend, None, False)
                 return backend

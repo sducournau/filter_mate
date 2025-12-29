@@ -2383,8 +2383,33 @@ class FilterMateApp:
             "FilterMate", Qgis.Info
         )
         
+        # FIX v2.4.19: Deduplicate features by ID to prevent processing same feature twice
+        # This can happen when features are passed from multiple sources (e.g., selection + expression)
+        deduplicated_features = []
+        seen_ids = set()
+        if features:
+            for feat in features:
+                if hasattr(feat, 'id'):
+                    feat_id = feat.id()
+                    if feat_id not in seen_ids:
+                        seen_ids.add(feat_id)
+                        deduplicated_features.append(feat)
+                    else:
+                        logger.debug(f"  Removing duplicate feature id={feat_id}")
+                else:
+                    # Non-QgsFeature item, keep as is
+                    deduplicated_features.append(feat)
+        
+        if len(deduplicated_features) != feat_count:
+            logger.info(f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}")
+            QgsMessageLog.logMessage(
+                f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}",
+                "FilterMate", Qgis.Warning
+            )
+            features = deduplicated_features
+        
         logger.info(f"=== _build_common_task_params DIAGNOSTIC ===")
-        logger.info(f"  features count: {feat_count}")
+        logger.info(f"  features count: {len(features) if features else 0}")
         if features:
             for idx, feat in enumerate(features):
                 if hasattr(feat, 'id') and hasattr(feat, 'geometry'):

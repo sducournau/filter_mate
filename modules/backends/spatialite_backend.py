@@ -13,6 +13,15 @@ v2.4.14 Improvements:
 - Direct mod_spatialite loading for GeoPackage (bypasses GDAL limitations)
 - Fallback to FID-based filtering when setSubsetString doesn't support Spatialite SQL
 - Improved GeoPackage spatial query performance
+
+v2.4.20 Improvements:
+- PRIORITY DIRECT SQL for GeoPackage (more reliable than native mode)
+- Cache invalidation to force retesting with direct SQL mode
+
+v2.4.21 Improvements:
+- CRITICAL FIX: Remote/distant layers detection before Spatialite testing
+- Prevents "unable to open database file" errors for WFS/HTTP/service layers
+- File existence verification before SQLite connection attempts
 """
 
 from typing import Dict, Optional, Tuple, List
@@ -27,6 +36,10 @@ from ..constants import PROVIDER_SPATIALITE
 from ..appUtils import safe_set_subset_string
 
 logger = get_tasks_logger()
+
+# v2.4.21: Force cache clear on module reload to apply remote detection fix
+# This ensures that the new logic is used instead of cached results
+_CACHE_VERSION = "2.4.21"  # Increment this to force cache invalidation
 
 # Import WKT Cache for performance optimization (v2.4.0)
 try:
@@ -103,6 +116,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     v2.4.1: Improved GeoPackage detection with file-level caching
     v2.4.12: Added thread-safe cache access with lock
     v2.4.14: Added direct SQL mode for GeoPackage when setSubsetString doesn't support Spatialite
+    v2.4.20: Priority direct SQL mode for GeoPackage - more reliable than native setSubsetString
     """
     
     # Class-level caches for Spatialite support testing
@@ -112,6 +126,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     # Cache for direct SQL mode (GeoPackage with mod_spatialite but without setSubsetString support)
     # layer_id -> True means use direct SQL mode (query FIDs via mod_spatialite, then simple IN filter)
     _direct_sql_mode_cache: Dict[str, bool] = {}
+    
+    # v2.4.20: Cache version tracking for automatic invalidation on upgrade
+    _cache_version: str = ""
     
     # Thread lock for cache access (thread-safety for large GeoPackage with 50+ layers)
     import threading
@@ -165,6 +182,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         # WKT cache reference (v2.4.0)
         self._wkt_cache = get_wkt_cache() if WKT_CACHE_AVAILABLE else None
+        
+        # v2.4.20: Auto-clear cache if version changed (ensures new direct SQL logic is used)
+        with self.__class__._cache_lock:
+            if self.__class__._cache_version != _CACHE_VERSION:
+                logger.info(f"🔄 Cache version changed ({self.__class__._cache_version} → {_CACHE_VERSION}), clearing Spatialite support cache")
+                self.__class__._spatialite_support_cache.clear()
+                self.__class__._spatialite_file_cache.clear()
+                self.__class__._direct_sql_mode_cache.clear()
+                self.__class__._cache_version = _CACHE_VERSION
 
     def _get_buffer_endcap_style(self) -> str:
         """
@@ -254,40 +280,72 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             source = layer.source()
             source_path = source.split('|')[0] if '|' in source else source
             
+            # v2.4.21: CRITICAL FIX - Detect remote/distant sources before testing
+            # Remote sources should NOT use Spatialite backend - use OGR fallback instead
+            source_lower = source_path.lower().strip()
+            
+            # Check for remote URLs (http, https, ftp, etc.)
+            remote_prefixes = ('http://', 'https://', 'ftp://', 'wfs:', 'wms:', 'wcs://', '/vsicurl/')
+            if any(source_lower.startswith(prefix) for prefix in remote_prefixes):
+                self.log_info(f"⚠️ Remote source detected for {layer.name()} - Spatialite NOT supported")
+                self.log_debug(f"   → Source: {source_path[:100]}...")
+                return False
+            
+            # Check for service markers in source string (WFS, OAPIF, etc.)
+            service_markers = ['url=', 'service=', 'srsname=', 'typename=', 'version=']
+            if any(marker in source_lower for marker in service_markers):
+                self.log_info(f"⚠️ Service source detected for {layer.name()} - Spatialite NOT supported")
+                self.log_debug(f"   → Source contains service markers")
+                return False
+            
+            # v2.4.21: Verify file exists before testing Spatialite support
+            # This prevents "unable to open database file" errors for non-existent paths
             if source_path.lower().endswith('.gpkg') or source_path.lower().endswith('.sqlite'):
                 file_type = "GeoPackage" if source_path.lower().endswith('.gpkg') else "SQLite"
+                
+                # Check if file exists locally
+                if not os.path.isfile(source_path):
+                    self.log_info(f"⚠️ {file_type} file not found for {layer.name()} - Spatialite NOT supported")
+                    self.log_debug(f"   → Path: {source_path}")
+                    self.log_debug(f"   → This may be a remote or virtual source")
+                    return False
                 
                 self.log_info(f"🔍 Testing Spatialite support for {file_type} layer: {layer.name()}")
                 
                 # Check cache first for this layer - only use cache if we have a POSITIVE result
-                # Negative results need to be retested in case direct SQL mode is now available
+                # FIX v2.4.20: Always retest if cached mode is "native" - direct SQL is more reliable
                 with self.__class__._cache_lock:
                     if layer_id in self.__class__._spatialite_support_cache:
                         cached = self.__class__._spatialite_support_cache[layer_id]
-                        if cached:  # Only use cached positive results
+                        if cached:  # Cached positive result
                             use_direct = self.__class__._direct_sql_mode_cache.get(layer_id, False)
-                            mode = "direct SQL" if use_direct else "native"
-                            self.log_info(f"  → CACHE HIT (True): mode={mode}")
-                            return True
+                            if use_direct:
+                                # Direct SQL mode cached - safe to use
+                                self.log_info(f"  → CACHE HIT (True): mode=direct SQL")
+                                return True
+                            else:
+                                # Native mode cached - retest for direct SQL (more reliable)
+                                self.log_info(f"  → CACHE HIT (True, native mode) - retesting for direct SQL...")
+                                # Invalidate cache to force retest with direct SQL priority
+                                del self.__class__._spatialite_support_cache[layer_id]
+                                if layer_id in self.__class__._direct_sql_mode_cache:
+                                    del self.__class__._direct_sql_mode_cache[layer_id]
                         else:
                             # Cached negative result - need to retest with direct SQL
                             self.log_info(f"  → CACHE HIT (False) - retesting with direct SQL mode...")
                             # Remove from cache to force retest
                             del self.__class__._spatialite_support_cache[layer_id]
                 
-                # Test 1: Try native setSubsetString with Spatialite SQL
-                # Use _test_spatialite_functions_no_cache to avoid double-caching
-                native_works = self._test_spatialite_functions_no_cache(layer)
-                if native_works:
-                    self.log_info(f"✓ {file_type} layer: {layer.name()} - Spatialite native mode works")
-                    with self.__class__._cache_lock:
-                        self.__class__._spatialite_support_cache[layer_id] = True
-                        self.__class__._direct_sql_mode_cache[layer_id] = False  # Use native mode
-                    return True
-                else:
-                    self.log_info(f"  → Native mode failed, trying direct SQL mode...")
+                # FIX v2.4.20: PRIORITY DIRECT SQL for GeoPackage
+                # The native setSubsetString mode with Spatialite SQL is unreliable:
+                # - Simple test expressions (ST_Intersects with POINT) may pass
+                # - But complex expressions with WKT geometries are silently ignored by GDAL
+                # - This causes filters to appear successful but return ALL features
+                #
+                # Solution: Always prefer direct SQL mode for GeoPackage/SQLite
+                # This queries FIDs directly via mod_spatialite and applies simple "fid IN (...)" filter
                 
-                # Test 2: Try direct SQL mode (mod_spatialite via sqlite3)
+                # Test 1: Try direct SQL mode FIRST (more reliable for complex expressions)
                 # This works even when GDAL's OGR driver doesn't support Spatialite SQL
                 mod_available, ext_name = _test_mod_spatialite_available()
                 self.log_info(f"  → mod_spatialite available: {mod_available}")
@@ -304,6 +362,24 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                             self.__class__._direct_sql_mode_cache[layer_id] = True  # Use direct SQL mode
                             self.__class__._spatialite_support_cache[layer_id] = True
                         return True
+                    else:
+                        self.log_info(f"  → Direct SQL mode failed, trying native mode as fallback...")
+                else:
+                    self.log_info(f"  → mod_spatialite not available, trying native mode...")
+                
+                # Test 2: Fallback to native setSubsetString with Spatialite SQL
+                # NOTE: This may work for simple expressions but fail for complex WKT geometries
+                native_works = self._test_spatialite_functions_no_cache(layer)
+                if native_works:
+                    self.log_warning(
+                        f"⚠️ {file_type} layer: {layer.name()} - Using NATIVE mode (less reliable)\n"
+                        f"   Direct SQL mode unavailable. Native mode may fail with complex geometries.\n"
+                        f"   Install mod_spatialite for more reliable spatial filtering."
+                    )
+                    with self.__class__._cache_lock:
+                        self.__class__._spatialite_support_cache[layer_id] = True
+                        self.__class__._direct_sql_mode_cache[layer_id] = False  # Use native mode
+                    return True
                 
                 # Both methods failed - cache negative result
                 with self.__class__._cache_lock:
@@ -1008,12 +1084,49 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         wkt_length = len(source_geom)
         self.log_debug(f"Source WKT length: {wkt_length} chars")
         
+        # DIAGNOSTIC v2.4.10: Log WKT preview and bounding box
+        from qgis.core import QgsMessageLog, Qgis, QgsGeometry
+        wkt_preview = source_geom[:250] if len(source_geom) > 250 else source_geom
+        QgsMessageLog.logMessage(
+            f"Spatialite build_expression WKT ({wkt_length} chars): {wkt_preview}...",
+            "FilterMate", Qgis.Info
+        )
+        # Try to calculate bounding box of source geometry
+        try:
+            temp_geom = QgsGeometry.fromWkt(source_geom.replace("''", "'"))
+            if temp_geom and not temp_geom.isEmpty():
+                bbox = temp_geom.boundingBox()
+                QgsMessageLog.logMessage(
+                    f"  Source geometry bbox: ({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
+                    "FilterMate", Qgis.Info
+                )
+        except Exception as e:
+            QgsMessageLog.logMessage(f"  Could not parse WKT bbox: {e}", "FilterMate", Qgis.Warning)
+        
         # Build geometry expression for target layer
+        # CRITICAL FIX v2.4.12/v2.4.13: GeoPackage stores geometries in GPB (GeoPackage Binary) format
+        # We MUST use GeomFromGPB() to convert GPB to Spatialite geometry before spatial predicates
+        # NOTE: The function is GeomFromGPB() NOT ST_GeomFromGPB() (ST_ version doesn't exist!)
+        # Without this conversion, ST_Intersects returns TRUE for ALL features!
         geom_expr = f'"{geom_field}"'
         
         # Check if we need table prefix (usually not needed for subset strings)
         if table and '.' in str(table):
             geom_expr = f'"{table}"."{geom_field}"'
+        
+        # Detect if this is a GeoPackage layer (needs GPB conversion)
+        is_geopackage = False
+        if layer:
+            source = layer.source().lower()
+            is_geopackage = '.gpkg' in source or 'gpkg|' in source
+        
+        # Apply GPB conversion for GeoPackage layers
+        # CRITICAL v2.4.13: Use GeomFromGPB() NOT ST_GeomFromGPB()
+        # The SpatiaLite function is GeomFromGPB() (without ST_ prefix)
+        # Alternatively, CastAutomagic() auto-detects GPB or standard WKB
+        if is_geopackage:
+            geom_expr = f'GeomFromGPB({geom_expr})'
+            self.log_info(f"GeoPackage detected: using GeomFromGPB() for geometry conversion")
         
         self.log_info(f"Geometry column detected: '{geom_field}' for layer {layer_props.get('layer_name', 'unknown')}")
         
@@ -1041,6 +1154,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     self.log_debug(f"Source geometry SRID: {source_srid} (from {source_crs_authid})")
                 except (ValueError, IndexError):
                     self.log_warning(f"Could not parse source SRID from {source_crs_authid}")
+        
+        # DIAGNOSTIC v2.4.11: Log SRIDs for debugging
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"  Spatialite SRID check: source={source_srid}, target={target_srid}, needs_transform={source_srid != target_srid}",
+            "FilterMate", Qgis.Info
+        )
         
         # Check if CRS transformation is needed
         needs_transform = source_srid != target_srid
@@ -1203,6 +1323,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 f"using {method} method"
             )
             self.log_debug(f"Expression preview: {combined[:150]}...")
+            
+            # DIAGNOSTIC v2.4.11: Log full expression for first predicate to help debug
+            from qgis.core import QgsMessageLog, Qgis
+            first_expr_preview = predicate_expressions[0][:300] if predicate_expressions else "NONE"
+            QgsMessageLog.logMessage(
+                f"  Spatialite predicate: {first_expr_preview}...",
+                "FilterMate", Qgis.Info
+            )
+            
             return combined
         
         self.log_warning("No predicates to apply")
@@ -1245,9 +1374,20 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             with self.__class__._cache_lock:
                 use_direct_sql = self.__class__._direct_sql_mode_cache.get(layer_id, False)
             
+            # v2.4.20: Log which mode is being used for debugging
+            from qgis.core import QgsMessageLog, Qgis
+            mode_str = "DIRECT SQL" if use_direct_sql else "NATIVE (setSubsetString)"
+            QgsMessageLog.logMessage(
+                f"Spatialite apply_filter: {layer.name()} → mode={mode_str}",
+                "FilterMate", Qgis.Info
+            )
+            
             if use_direct_sql:
                 self.log_info(f"🚀 Using DIRECT SQL mode for {layer.name()} (bypassing GDAL/OGR)")
                 return self._apply_filter_direct_sql(layer, expression, old_subset, combine_operator)
+            
+            # NATIVE MODE: Using setSubsetString with Spatialite SQL
+            self.log_info(f"📝 Using NATIVE mode for {layer.name()} (setSubsetString with Spatialite SQL)")
             
             # Log layer information
             self.log_debug(f"Layer provider: {layer.providerType()}")
@@ -1433,6 +1573,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             source = layer.source()
             source_path = source.split('|')[0] if '|' in source else source
             
+            # v2.4.21: CRITICAL - Verify source is a local file before connecting
+            # This prevents SQLite errors on remote/virtual sources
+            source_lower = source_path.lower().strip()
+            remote_prefixes = ('http://', 'https://', 'ftp://', 'wfs:', 'wms:', 'wcs://', '/vsicurl/')
+            if any(source_lower.startswith(prefix) for prefix in remote_prefixes):
+                self.log_error(f"Cannot use direct SQL on remote source: {layer.name()}")
+                return False
+            
+            if not os.path.isfile(source_path):
+                self.log_error(f"Source file not found for direct SQL: {source_path}")
+                self.log_error(f"  → This may be a remote or virtual source")
+                return False
+            
             # Get table name
             table_name = None
             if '|layername=' in source:
@@ -1490,6 +1643,12 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             conn.close()
             
+            # DIAGNOSTIC v2.4.11: Log number of matching FIDs to QGIS message panel
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"  → Direct SQL found {len(matching_fids)} matching FIDs for {layer.name()}",
+                "FilterMate", Qgis.Info
+            )
             self.log_info(f"  → Found {len(matching_fids)} matching features via direct SQL")
             
             if len(matching_fids) == 0:
@@ -1530,6 +1689,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 final_expression = fid_expression
             
             self.log_info(f"  → Applying FID-based filter: {len(final_expression)} chars")
+            
+            # DIAGNOSTIC v2.4.11: Log first few FIDs to verify correct filtering
+            from qgis.core import QgsMessageLog, Qgis
+            if matching_fids and len(matching_fids) > 0:
+                fid_preview = matching_fids[:10]
+                QgsMessageLog.logMessage(
+                    f"  → FID-based filter for {layer.name()}: first FIDs = {fid_preview}{'...' if len(matching_fids) > 10 else ''}",
+                    "FilterMate", Qgis.Info
+                )
             
             # Apply the FID-based filter using queue callback or direct
             queue_callback = self.task_params.get('_subset_queue_callback')

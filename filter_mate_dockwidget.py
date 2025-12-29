@@ -6031,65 +6031,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             features = []    
             expression = ''
 
-            # Log current groupbox state for filtering diagnostics
-            logger.debug(f"get_current_features: current_exploring_groupbox = '{self.current_exploring_groupbox}'")
-            logger.info(f"🔍 get_current_features DIAGNOSTIC:")
-            logger.info(f"   current_exploring_groupbox = '{self.current_exploring_groupbox}'")
-            logger.info(f"   current_layer = '{self.current_layer.name()}' (id: {self.current_layer.id()[:8]}...)")
+            # Log current groupbox state for filtering diagnostics (debug level to reduce noise)
+            logger.debug(f"get_current_features: groupbox='{self.current_exploring_groupbox}', layer='{self.current_layer.name()}'")
             
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-                logger.info(f"   SINGLE_SELECTION input feature: {input}")
                 
-                # DIAGNOSTIC v2.4.17: Enhanced logging for debugging empty features issue
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"get_current_features: mode=single_selection, input={input}, type={type(input).__name__}",
-                    "FilterMate", Qgis.Info
-                )
+                # NOTE: QgsFeaturePickerWidget emits featureChanged with invalid features during
+                # typing/searching. This is normal behavior - only log at debug level.
+                # Only log at info level when a valid feature is actually selected.
+                if input is None or (hasattr(input, 'isValid') and not input.isValid()):
+                    # Normal behavior during search - log at debug level only
+                    logger.debug(f"   SINGLE_SELECTION: awaiting valid feature selection (input={type(input).__name__})")
+                    return [], ''
                 
-                if input is None:
-                    QgsMessageLog.logMessage(
-                        f"  ⚠️ SINGLE_SELECTION returned None! Check if feature is selected in widget",
-                        "FilterMate", Qgis.Warning
-                    )
-                elif hasattr(input, 'isValid') and not input.isValid():
-                    QgsMessageLog.logMessage(
-                        f"  ⚠️ SINGLE_SELECTION returned invalid feature!",
-                        "FilterMate", Qgis.Warning
-                    )
+                # Valid feature selected - log at info level
+                logger.info(f"   SINGLE_SELECTION valid feature: id={input.id()}")
+                if hasattr(input, 'geometry') and input.hasGeometry():
+                    geom = input.geometry()
+                    bbox = geom.boundingBox()
+                    logger.debug(f"      geometry bbox = ({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
                 
-                if input:
-                    logger.info(f"      feature.isValid() = {input.isValid() if hasattr(input, 'isValid') else 'N/A'}")
-                    logger.info(f"      feature.id() = {input.id() if hasattr(input, 'id') else 'N/A'}")
-                    if hasattr(input, 'geometry') and input.hasGeometry():
-                        geom = input.geometry()
-                        bbox = geom.boundingBox()
-                        logger.info(f"      geometry bbox = ({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
-                        QgsMessageLog.logMessage(
-                            f"  ✓ Feature has geometry: bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
-                            "FilterMate", Qgis.Info
-                        )
                 features, expression = self.get_exploring_features(input, True)
-                logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
-                # DIAGNOSTIC v2.4.17: Log each feature to detect duplicates
-                for idx, feat in enumerate(features):
-                    if hasattr(feat, 'id'):
-                        feat_id = feat.id()
-                        feat_bbox = feat.geometry().boundingBox() if feat.hasGeometry() else None
-                        logger.info(f"   RESULT feature[{idx}]: id={feat_id}, bbox={feat_bbox}")
-                    else:
-                        logger.info(f"   RESULT feature[{idx}]: type={type(feat).__name__}")
+                logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
             elif self.current_exploring_groupbox == "multiple_selection":
                 input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()
-                logger.info(f"   MULTIPLE_SELECTION checked items: {len(input) if input else 0}")
+                logger.debug(f"   MULTIPLE_SELECTION checked items: {len(input) if input else 0}")
                 features, expression = self.get_exploring_features(input, True)
-                logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
+                logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
             elif self.current_exploring_groupbox == "custom_selection":
                 expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                logger.info(f"   CUSTOM_SELECTION expression: '{expression}'")
+                logger.debug(f"   CUSTOM_SELECTION expression: '{expression}'")
                 
                 # Save expression to layer_props before calling exploring_custom_selection
                 if self.current_layer.id() in self.PROJECT_LAYERS:
@@ -6097,7 +6071,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Process expression (whether field or complex expression)
                 features, expression = self.exploring_custom_selection()
-                logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
+                logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
 
             else:
                 logger.warning(f"   ⚠️ current_exploring_groupbox '{self.current_exploring_groupbox}' does not match any known groupbox!")

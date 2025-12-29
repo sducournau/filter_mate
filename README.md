@@ -77,6 +77,53 @@ modules/backends/
 | Spatialite |     <2s      |     ~10s      |    ~60s     |
 | OGR        |     ~5s      |     ~30s      |    >120s    |
 
+### 🔄 Backend Management
+
+FilterMate provides tools to manage and monitor backends:
+
+#### Backend Indicator
+
+The **backend indicator** is displayed in the plugin interface showing the current backend status:
+
+| Indicator | Meaning |
+| :-------: | ------- |
+| 🟢 **PostgreSQL** | PostgreSQL backend active (optimal performance) |
+| 🔵 **Spatialite** | Spatialite backend active (good performance) |
+| 🟠 **OGR** | OGR fallback active (universal compatibility) |
+| 🔴 **Unavailable** | No backend available for this layer |
+
+#### Reload Backend
+
+To **reload the backend** after configuration changes:
+
+1. **Via Menu**: `FilterMate` → `Backend` → `Reload Backend`
+2. **Via Button**: Click the **🔄 refresh icon** next to the backend indicator
+3. **Automatic**: Backend auto-reloads when:
+   - Switching active layer
+   - Installing/uninstalling psycopg2
+   - Changing data source connection
+
+#### PostgreSQL Maintenance
+
+For PostgreSQL users, a dedicated maintenance menu is available:
+
+| Action | Description |
+| ------ | ----------- |
+| **Clean Session Views** | Remove temporary materialized views from current session |
+| **Clean All Views** | Remove all FilterMate materialized views from schema |
+| **View Schema Info** | Display current PostgreSQL schema statistics |
+
+Access via: `FilterMate` → `PostgreSQL` → `Maintenance`
+
+#### Troubleshooting Backend Issues
+
+| Issue | Solution |
+| ----- | -------- |
+| PostgreSQL not detected | Install `psycopg2-binary`: `pip install psycopg2-binary` |
+| Slow performance on large data | Switch to PostgreSQL data source |
+| Backend indicator shows "OGR" for GeoPackage | Normal - GeoPackage uses Spatialite internally via OGR |
+| Connection errors | Check database credentials and network connectivity |
+
 ---
 
 ## 📦 Installation
