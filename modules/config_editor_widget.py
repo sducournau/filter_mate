@@ -40,7 +40,6 @@ try:
     IMPORTS_OK = True
 except ImportError:
     IMPORTS_OK = False
-    print("Warning: Could not import config modules")
 
 
 class ConfigEditorWidget(QWidget):
@@ -302,7 +301,6 @@ class ConfigEditorWidget(QWidget):
         valid, error = validate_config_value_with_metadata(config_path, new_value)
         
         if not valid:
-            print(f"Invalid value for {config_path}: {error}")
             # Show error message to user
             show_error_msg(
                 "FilterMate - Configuration",
@@ -315,8 +313,8 @@ class ConfigEditorWidget(QWidget):
         try:
             set_config_value(self.config_data, new_value, *keys)
             self.config_changed.emit(config_path, new_value)
-        except Exception as e:
-            print(f"Error setting config value: {e}")
+        except Exception:
+            pass  # Error already shown to user via validation
     
     def add_action_buttons(self, layout: QVBoxLayout):
         """Add action buttons (Save, Reset, etc.)."""
@@ -378,12 +376,8 @@ class ConfigEditorWidget(QWidget):
                 f"Configuration saved to {os.path.basename(config_path)}"
             )
             
-            print(f"✓ Configuration saved to {config_path}")
-            
         except Exception as e:
             error_msg = f"Failed to save configuration: {str(e)}"
-            print(f"✗ {error_msg}")
-            
             # Show error message
             show_error_msg("FilterMate", error_msg)
         

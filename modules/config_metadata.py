@@ -50,10 +50,8 @@ class ConfigMetadata:
             with open(self.schema_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except FileNotFoundError:
-            print(f"Warning: Config schema not found at {self.schema_path}")
             return {}
-        except json.JSONDecodeError as e:
-            print(f"Error parsing config schema: {e}")
+        except json.JSONDecodeError:
             return {}
 
     def get_metadata(self, config_path: str) -> Optional[Dict[str, Any]]:

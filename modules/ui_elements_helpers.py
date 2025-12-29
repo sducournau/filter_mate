@@ -154,7 +154,6 @@ def setup_ui_dimensions(self):
     
     # Apply dimensions
     count = apply_spacer_dimensions(self, compact_mode=compact_mode)
-    print(f"FilterMate: Configured {count} spacers in {'compact' if compact_mode else 'normal'} mode")
 
 
 def toggle_compact_mode(self):
@@ -175,7 +174,6 @@ def configure_section_spacing(self, section: str, size: int):
         compact_mode=self.compact_mode,
         custom_size=size
     )
-    print(f"Updated {count} spacers in '{section}' section to {size}px")
 """
 
 # =============================================================================
