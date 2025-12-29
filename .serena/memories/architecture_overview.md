@@ -1,8 +1,8 @@
-# Architecture Overview - FilterMate v2.4.10
+# Architecture Overview - FilterMate v2.5.5
 
-**Last Updated:** December 23, 2025
-**Current Version:** 2.4.10 (Production)
-**Key Features:** Multi-backend filtering, Windows crash protection, Thread safety
+**Last Updated:** December 29, 2025
+**Current Version:** 2.5.5 (Production)
+**Key Features:** Multi-backend filtering, Negative buffer handling, HiDPI support, Thread safety
 
 ## System Architecture
 

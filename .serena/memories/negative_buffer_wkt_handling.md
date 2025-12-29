@@ -116,13 +116,23 @@ layer.setSubsetString(expression)
 
 ## Version History
 
-### v2.5.5 (December 2025)
-- Fixed Spatialite `ST_IsEmpty()` check (returns integer, not boolean)
-- Consistent handling across all backends
+### v2.5.5 (December 29, 2025) - CRITICAL FIX
+- **PostgreSQL**: Fixed empty geometry detection using `ST_IsEmpty()` instead of `NULLIF`
+- `NULLIF(geom, 'GEOMETRYCOLLECTION EMPTY')` only detected that exact type
+- `ST_IsEmpty()` detects ALL empty types: `POLYGON EMPTY`, `MULTIPOLYGON EMPTY`, etc.
+- Applied in: `_build_st_buffer_with_style()`, `_build_simple_wkt_expression()`, `build_expression()`
 
-### v2.5.4 (December 2025)
-- Fixed PostgreSQL bug where `NULLIF` only detected `GEOMETRYCOLLECTION EMPTY`
-- Now uses `ST_IsEmpty()` to detect all empty geometry types
+### v2.5.4 (December 29, 2025)
+- **OGR**: Fixed memory layer feature counting (use iteration, not `featureCount()`)
+- Memory layers return 0 from `featureCount()` immediately after creation
+
+### v2.5.3 (December 29, 2025)
+- Improved erosion tracking with separate counters for eroded vs invalid features
+- User-friendly message when all features are eroded
+
+### v2.5.2 (December 29, 2025)
+- **OGR/Spatialite**: Fixed negative buffer not being applied
+- OGR `build_expression()` now passes `buffer_value` to `apply_filter()`
 
 ### v2.4.23
 - Initial `ST_IsEmpty()` implementation for empty geometry detection

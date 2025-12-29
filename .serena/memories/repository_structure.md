@@ -1,6 +1,6 @@
-# Repository Structure - FilterMate v2.4.10
+# Repository Structure - FilterMate v2.5.5
 
-**Last Updated:** December 23, 2025
+**Last Updated:** December 29, 2025
 
 ## Overview
 
@@ -114,69 +114,68 @@ modules/
 Development utilities (NOT part of plugin runtime):
 ```
 tools/
-├── README.md                   # Tool documentation
-├── cleanup_postgresql_virtual_id.py  # PostgreSQL cleanup utility
-├── build/                      # Build & release
-│   └── create_release_zip.py
-├── diagnostic/                 # Debugging tools
-│   ├── README_PRIMARY_KEY_DETECTION.md
-│   ├── check_column_names.py
-│   ├── check_primary_keys.py
-│   ├── check_remote_layers_filter.py
-│   ├── fix_ctid_layers.py
-│   ├── fix_postgresql_stats.py
-│   ├── reload_plugin.py
-│   ├── test_import.py
-│   ├── test_pk_detection_live.py
-│   ├── test_plugin_load.py
-│   └── validate_config_helpers.py
-├── i18n/                       # Translation tools
-│   ├── add_ui_tooltips_translations.py
-│   ├── compile_translations.bat
-│   ├── compile_ts_to_qm.py
-│   ├── open_qt_linguist.bat
-│   ├── simple_qm_compiler.py
-│   ├── update_translations.py
-│   └── verify_translations.py
-└── ui/                         # UI modification tools
-    ├── fix_pyuic5_imports.py
-    ├── fix_ui_suffixes.py
-    ├── remove_ui_suffixes.py
-    ├── update_ui_tooltips.py
-    └── verify_ui_fix.py
+├── README.md                       # Tool documentation
+├── add_missing_strings.py          # Add missing translation strings
+├── compile_translations_simple.py  # Simple translation compiler
+├── create_new_translations.py      # Create new language translations
+├── enable_debug_logs.py            # Enable debug logging
+├── test_spatialite_large_gpkg.py   # Spatialite performance testing
+├── update_translations.py          # Update translation files
+├── verify_all_translations.py      # Verify translation completeness
+├── zip_plugin.py                   # Create plugin ZIP (Python)
+├── zip_plugin.sh                   # Create plugin ZIP (Shell)
+├── i18n/                           # Translation tools (additional)
+│   └── ...
+└── ui/                             # UI modification tools
+    └── ...
 ```
 
 ### tests/
 Unit and integration tests:
 ```
 tests/
-├── conftest.py             # Pytest fixtures
-├── README.md               # Testing documentation
-├── test_*.py               # Test modules (30+ files)
-└── test_backends/          # Backend-specific tests
+├── conftest.py                      # Pytest fixtures
+├── README.md                        # Testing documentation
+├── __init__.py                      # Package init
+├── test_auto_activate_config.py     # Config auto-activation tests
+├── test_auto_config_reset.py        # Config reset tests
+├── test_config_fallback.py          # Config fallback tests
+├── test_config_helpers.py           # Config helper tests
+├── test_config_improved_structure.py # Config structure tests
+├── test_config_migration.py         # Config migration tests
+├── test_filter_preservation.py      # Filter preservation tests
+├── test_forced_backend_respect.py   # Backend forcing tests
+├── test_geographic_crs.py           # CRS handling tests
+├── test_negative_buffer.py          # Negative buffer tests (v2.5.x)
+├── test_phase4_optimizations.py     # Phase 4 optimization tests
+├── test_plugin_loading.py           # Plugin loading tests
+├── test_postgresql_buffer.py        # PostgreSQL buffer tests
+├── test_postgresql_layer_handling.py # PostgreSQL layer tests
+├── test_postgresql_mv_cleanup.py    # MV cleanup tests
+├── test_primary_key_detection.py    # PK detection tests
+├── test_project_change.py           # Project change tests
+├── test_undo_redo.py                # Undo/redo tests
+└── test_backends/                   # Backend-specific tests
 ```
 
 ### docs/
 Documentation:
 ```
 docs/
-├── AUDIT_POSTGRESQL_POSTGIS_2025-12-16.md    # PostgreSQL audit
-├── CONFIG_HARMONIZATION_PROPOSAL.md          # Configuration docs
-├── CONFIG_HARMONIZATION_SUMMARY.md
-├── FIX_IMPORT_ERROR_2025-12-14.md            # Import error fix
-├── IMPLEMENTATION_RECOMMENDATIONS_2025-12-16.md
-├── POSTGRESQL_MV_OPTIMIZATION.md             # MV optimization
+├── FIX_MEMORY_LAYER_COUNT_2025-12.md         # Memory layer feature count fix
+├── FIX_NEGATIVE_BUFFER_2025-12.md            # Negative buffer handling fix
+├── NEGATIVE_BUFFER_FIX_README.md             # Negative buffer documentation
+├── RELEASE_NOTES_v2.5.3.md                   # v2.5.3 release notes
+├── RELEASE_NOTES_v2.5.4.md                   # v2.5.4 release notes
+├── RELEASE_NOTES_v2.5.5.md                   # v2.5.5 release notes (CRITICAL)
+├── TRANSLATION_PLAN_2025-12.md               # Translation planning
 ├── archive/                                   # Historical documentation
 │   ├── CODEBASE_QUALITY_AUDIT_*.md
 │   ├── IMPLEMENTATION_STATUS_*.md
 │   ├── UNDO_REDO_*.md
 │   └── ... (archived docs)
-└── fixes/                                     # Bug fix documentation
-    ├── FREEZE_QGIS_POSTGRESQL_FIX_2025-12-16.md
-    ├── POSTGRESQL_LAYER_ACTIVATION_FIX.md
-    ├── POSTGRESQL_NO_PRIMARY_KEY_SUPPORT_2025-12-16.md
-    ├── POSTGRESQL_VIRTUAL_ID_FIX_2025-12-16.md
-    └── TEST_POSTGRESQL_FIX.md
+└── fixes/                                     # Bug fix documentation (legacy)
+    └── ... (older fix documentation)
 ```
 
 ### i18n/

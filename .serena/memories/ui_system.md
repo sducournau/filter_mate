@@ -1,6 +1,6 @@
-# UI System Documentation - FilterMate v2.4.10
+# UI System Documentation - FilterMate v2.5.5
 
-**Last Updated:** December 23, 2025
+**Last Updated:** December 29, 2025
 
 ## Overview
 
@@ -27,15 +27,16 @@ modules/
     └── delegate.py           # Custom item delegate
 ```
 
-## Dynamic Dimensions System (v2.1.0+)
+## Dynamic Dimensions System (v2.1.0+, HiDPI in v2.5.5)
 
 ### Display Profile Enum
 **File:** `modules/ui_config.py`
 
 **Modes:**
-- `AUTO`: Automatic detection based on screen resolution
+- `AUTO`: Automatic detection based on screen resolution and DPI
 - `COMPACT`: Optimized for small screens (< 1920x1080)
 - `NORMAL`: Comfortable spacing for large displays (≥ 1920x1080)
+- `HIDPI`: NEW in v2.5.5 - Optimized for 4K/Retina displays with auto-detection
 
 ### Resolution Detection
 **Threshold:** 1920×1080 pixels

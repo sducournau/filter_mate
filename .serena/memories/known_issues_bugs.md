@@ -1,6 +1,64 @@
 # Known Issues & Bug Fixes - FilterMate
 
-**Last Updated:** December 23, 2025
+**Last Updated:** December 29, 2025
+
+## Critical Bug Fixes (v2.5.x Series - December 2025)
+
+### v2.5.5 - PostgreSQL Negative Buffer Empty Geometry Detection (December 29, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- PostgreSQL backend incorrectly detected empty geometries from negative buffers
+- `NULLIF(geom, 'GEOMETRYCOLLECTION EMPTY')` only detected that exact type
+- `POLYGON EMPTY`, `MULTIPOLYGON EMPTY`, etc. were NOT detected
+
+**Root Cause:**
+- Negative buffer (erosion) produces different empty geometry types depending on source
+- NULLIF pattern was too specific
+
+**Solution:**
+- Replaced `NULLIF(...)` with `CASE WHEN ST_IsEmpty(...) THEN NULL ELSE ... END`
+- `ST_IsEmpty()` detects ALL empty geometry types (PostGIS standard)
+- Applied in 3 functions: `_build_st_buffer_with_style()`, `_build_simple_wkt_expression()`, `build_expression()`
+
+---
+
+### v2.5.4 - OGR Backend Memory Layer Feature Count (December 29, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- OGR backend reported 0 features in memory layers
+- `featureCount()` returns 0 immediately after memory layer creation
+
+**Solution:**
+- Automatic memory layer detection via `providerType() == 'memory'`
+- Force `updateExtents()` before counting
+- Count by iteration for memory layers (more reliable)
+
+---
+
+### v2.5.3 - Negative Buffer Erosion Handling (December 29, 2025)
+**Status:** ✅ FIXED
+
+**Improvements:**
+- Separate tracking for completely eroded features
+- Clear user message when all features eroded
+- Detailed logging for erosion vs invalid distinction
+
+---
+
+### v2.5.2 - Negative Buffer for All Backends (December 29, 2025)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Negative buffer only worked for PostgreSQL direct connections
+- OGR backend ignored `buffer_value` parameter
+
+**Solution:**
+- OGR `build_expression()` now passes `buffer_value` to `apply_filter()`
+- Buffer applied via correct method for each backend
+
+---
 
 ## Critical Bug Fixes (v2.4.x Series - December 2025)
 
@@ -161,20 +219,28 @@ New module (v2.4.x) providing safe wrappers for C++ operations:
 
 ## Negative Buffer (Erosion) Handling - v2.5.5
 
-**Status:** ✅ FULLY IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED (All backends)
 
 ### Implementation Details
 
-Both PostgreSQL and Spatialite backends properly handle negative buffers:
+All backends properly handle negative buffers:
 
 1. **Wrap in MakeValid()** - Ensures valid geometry after erosion
-2. **Use ST_IsEmpty()** - Detects all empty geometry types (v2.5.4 fix)
+2. **Use ST_IsEmpty()** - Detects ALL empty geometry types (v2.5.5 fix)
 3. **Return NULL** - Prevents false positive spatial matches
 
-| Backend | Validity Function | Empty Check |
-|---------|-------------------|-------------|
-| PostgreSQL | `ST_MakeValid()` | `ST_IsEmpty(geom)` |
-| Spatialite | `MakeValid()` | `ST_IsEmpty(geom) = 1` |
+| Backend | Validity Function | Empty Check | Buffer Application |
+|---------|-------------------|-------------|-------------------|
+| PostgreSQL | `ST_MakeValid()` | `ST_IsEmpty(geom)` | SQL ST_Buffer() |
+| Spatialite | `MakeValid()` | `ST_IsEmpty(geom) = 1` | SQL ST_Buffer() |
+| OGR | QGIS native | Feature iteration | native:buffer (Processing) |
+
+**Key Fix (v2.5.5):** PostgreSQL now uses `ST_IsEmpty()` instead of `NULLIF` to detect:
+- `POLYGON EMPTY`
+- `MULTIPOLYGON EMPTY`
+- `LINESTRING EMPTY`
+- `GEOMETRYCOLLECTION EMPTY`
+- All other empty geometry types
 
 See: `.serena/memories/negative_buffer_wkt_handling.md` for full documentation.
 

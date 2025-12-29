@@ -1,6 +1,6 @@
-# Testing & Quality Assurance - FilterMate v2.4.10
+# Testing & Quality Assurance - FilterMate v2.5.5
 
-**Last Updated**: December 23, 2025
+**Last Updated**: December 29, 2025
 
 ## Test Structure
 
@@ -492,7 +492,13 @@ pytest tests/ -v --strict-markers --tb=short
 - `docs/DEVELOPER_ONBOARDING.md`: Developer setup including testing
 - `docs/COLOR_HARMONIZATION.md`: Accessibility testing guide
 
-## Recent Test Additions (v2.2.x-2.3.x)
+## Recent Test Additions (v2.2.x-2.5.x)
+
+### v2.5.x (December 29, 2025)
+- ✅ `test_negative_buffer.py`: Negative buffer handling tests (NEW)
+- ✅ Tests for complete erosion, partial erosion, and positive buffers
+- ✅ `test_postgresql_buffer.py`: PostgreSQL buffer operation tests
+- ✅ `test_postgresql_mv_cleanup.py`: Materialized view cleanup tests
 
 ### v2.3.0-alpha (December 2025)
 - ✅ `test_undo_redo.py`: Undo/redo functionality tests

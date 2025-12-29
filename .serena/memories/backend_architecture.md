@@ -1,7 +1,7 @@
 # Backend Architecture - FilterMate
 
-**Last Updated:** December 23, 2025
-**Current Version:** 2.4.10
+**Last Updated:** December 29, 2025
+**Current Version:** 2.5.5
 
 ## Multi-Backend System
 
@@ -247,18 +247,30 @@ qgis_expression_to_spatialite(expression)
 
 See [negative_buffer_wkt_handling.md](negative_buffer_wkt_handling.md) for full details.
 
-### PostgreSQL Pattern (v2.5.4+)
+### PostgreSQL Pattern (v2.5.5+)
 ```sql
+-- ✅ ST_IsEmpty detects ALL empty geometry types (POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.)
 CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer(geom, -10))) THEN NULL 
      ELSE ST_MakeValid(ST_Buffer(geom, -10)) END
+
+-- ❌ OLD (pre-v2.5.5): Only detected GEOMETRYCOLLECTION EMPTY
+-- NULLIF(ST_MakeValid(ST_Buffer(geom, -10)), 'GEOMETRYCOLLECTION EMPTY'::geometry)
 ```
 
 ### Spatialite Pattern (v2.5.5+)  
 ```sql
 -- Note: MakeValid() instead of ST_MakeValid()
--- Note: = 1 for boolean comparison
+-- Note: = 1 for boolean comparison (Spatialite returns integer)
 CASE WHEN ST_IsEmpty(MakeValid(ST_Buffer(geom, -10))) = 1 THEN NULL 
      ELSE MakeValid(ST_Buffer(geom, -10)) END
+```
+
+### OGR Backend (v2.5.4+)
+```python
+# Memory layer feature counting now uses iteration instead of featureCount()
+# featureCount() returns 0 immediately after memory layer creation
+for feat in layer.getFeatures():
+    count += 1  # More reliable for memory layers
 ```
 
 ### Key Functions

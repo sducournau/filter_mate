@@ -18,102 +18,87 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
 ## Current Status
-- **Version**: 2.4.10 (December 23, 2025)
-- **Status**: Production - Stable with critical Windows access violation fixes
+- **Version**: 2.5.5 (December 29, 2025)
+- **Status**: Production - Stable with critical negative buffer fixes
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
-- **Recent Focus (v2.4.x)**: Windows crash fixes, thread safety, layer validation
+- **Recent Focus (v2.5.x)**: Negative buffer handling, empty geometry detection, HiDPI support
 - **Languages Supported**: 21 languages (including Slovenian, Filipino, Amharic)
 
-## Recent Development (December 23, 2025)
+## Recent Development (December 29, 2025)
 
-### v2.4.10 - Backend Change Access Violation Fix (✅ Complete)
-**Date**: December 23, 2025
-
-**Problem Solved:**
-- Windows fatal exception during backend change to Spatialite
-- Race condition in `setLayerVariableEvent()` signal emission
-
-**Solutions Implemented:**
-1. **Robust Layer Validation** - `is_valid_layer()` check in `_save_single_property()`
-2. **Pre-emit Validation** - Layer validation before signal emission
-3. **Entry Point Validation** - Full C++ deletion detection
-
----
-
-### v2.4.9 - Definitive Layer Variable Access Violation Fix (✅ Complete)
-**Date**: December 23, 2025
+### v2.5.5 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection (✅ Complete)
+**Date**: December 29, 2025
 
 **Problem Solved:**
-- Race condition between layer validation and C++ call
-- Windows access violations are FATAL (cannot be caught by Python)
+- PostgreSQL backend incorrectly detected empty geometries from negative buffers
+- `NULLIF(geom, 'GEOMETRYCOLLECTION EMPTY'::geometry)` only detected that exact type
+- Did NOT detect `POLYGON EMPTY`, `MULTIPOLYGON EMPTY`, `LINESTRING EMPTY`, etc.
 
 **Solutions Implemented:**
-1. **QTimer.singleShot(0) Deferral** - Complete event loop separation
-2. **Direct setCustomProperty()** - Wrapped C++ calls with try/except
-3. **Defense-in-depth**: 4 layers of protection against race conditions
+- Replaced `NULLIF(...)` with `CASE WHEN ST_IsEmpty(...) THEN NULL ELSE ... END`
+- `ST_IsEmpty()` detects ALL empty geometry types (PostGIS standard)
+- Applied in: `_build_st_buffer_with_style()`, `_build_simple_wkt_expression()`, `build_expression()`
+
+**New Features:**
+- 🎨 HiDPI UI profile for 4K/Retina displays with auto-detection
+- 🖼️ UI improvements: Compact sidebar, harmonized button spacing
 
 ---
 
-### v2.4.5 - Processing Parameter Validation Crash Fix (✅ Complete)
-**Date**: December 23, 2025
+### v2.5.4 - CRITICAL FIX: OGR Backend Memory Layer Feature Count (✅ Complete)
+**Date**: December 29, 2025
 
 **Problem Solved:**
-- Access violation in `checkParameterValues` during geometric filtering
-- Corrupted/invalid layers causing GEOS/PDAL crashes
+- OGR backend falsely reported 0 features in memory layers
+- `featureCount()` returns 0 immediately after memory layer creation
 
 **Solutions Implemented:**
-1. **Pre-flight Layer Validation** - Three-tier validation before `processing.run()`
-2. **Deep Provider Access Validation** - Tests all layer properties before C++ access
+- Automatic memory layer detection via `providerType() == 'memory'`
+- Force `updateExtents()` before counting
+- Intelligent counting by iteration for memory layers
 
 ---
 
-### v2.4.4 - Critical Thread Safety Fix (✅ Complete)
-**Date**: December 23, 2025
+### v2.5.3 - Negative Buffer Erosion Handling (✅ Complete)
+**Date**: December 29, 2025
+
+**Improvements:**
+- Separate tracking for completely eroded features
+- Clear user message via QGIS message bar when all features eroded
+- Detailed logging for erosion vs invalid distinction
+
+---
+
+### v2.5.2 - CRITICAL FIX: Negative Buffer for All Backends (✅ Complete)
+**Date**: December 29, 2025
 
 **Problem Solved:**
-- Parallel filtering access violation crash
-- QGIS `QgsVectorLayer` objects are NOT thread-safe
+- Negative buffer not working for OGR, Spatialite, and fallback backends
+- OGR backend was ignoring `buffer_value` parameter
 
 **Solutions Implemented:**
-1. **Sequential Execution for OGR** - Auto-detection forces sequential for unsafe operations
-2. **Thread Tracking** - Logs warnings for concurrent access attempts
+- OGR `build_expression()` now correctly passes `buffer_value`
+- Buffer applied via correct method for each backend
 
 ---
 
-### v2.4.3 - Export System Fix & Message Bar Improvements (✅ Complete)
-**Date**: December 22, 2025
+### v2.5.0 - Major Milestone Release (✅ Complete)
+**Date**: December 27, 2025
 
-**Fixes:**
-- Missing file extensions in exports
-- Driver name mapping for all formats
-- Correct message bar argument order
-
----
-
-### v2.4.2 - Exploring ValueRelation & Display Enhancement (✅ Complete)
-**Date**: December 22, 2025
-
-**Features:**
-- Smart display expression detection for exploring widgets
-- ValueRelation support with `represent_value()` display
-- Intelligent field selection priority order
+**Highlights:**
+- Consolidates all v2.4.x stability fixes
+- GeoPackage: Correct GeomFromGPB() function for GPB geometry conversion
+- Thread Safety: Defer setSubsetString() to main thread via queue callback
+- Session Isolation: Multi-client materialized view naming with session_id prefix
 
 ---
 
-### v2.4.1 - International Edition Extended (✅ Complete)
-**Date**: December 22, 2025
-
-**Features:**
-- 3 new languages: Slovenian, Filipino/Tagalog, Amharic
-- Total: 21 languages supported
-- Fixed hardcoded French strings
-
----
-
-### v2.4.0 - Major Refactoring Release
-**Date**: December 20-21, 2025
-
-Consolidated all v2.3.x stability improvements into production release.
+### v2.4.x Series Summary (December 20-24, 2025)
+- Windows access violation crash fixes (v2.4.4-v2.4.10)
+- Thread safety for OGR backend (v2.4.4)
+- Export system fixes (v2.4.3)
+- ValueRelation widget support (v2.4.2)
+- 21 languages (v2.4.1)
 
 ---
 
@@ -372,7 +357,7 @@ pytest --cov=modules --cov-report=html
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.4.10
+- **Current Plugin Version**: 2.5.5
 
 ## BMAD Documentation
 
