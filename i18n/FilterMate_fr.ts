@@ -115,6 +115,30 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>Filtrage des géométries invalides non modifié. Certaines entités peuvent être exclues des exports.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Valeur du tampon en mètres (positif=agrandir, négatif=réduire les polygones)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Tampon négatif (érosion) : réduit les polygones vers l&apos;intérieur</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>point</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>ligne</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>non-polygone</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Mode batch</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

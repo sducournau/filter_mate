@@ -7,7 +7,25 @@ slug: /
 
 **FilterMate** est un plugin QGIS prêt pour la production qui offre des capacités avancées de filtrage et d'export pour les données vectorielles - fonctionne avec N'IMPORTE QUELLE source de données !
 
-## 🎉 Nouveautés de la v2.2.5 - Gestion automatique des SCR géographiques
+## 🎉 Nouveautés de la v2.5.4 - Correction critique : Backend OGR
+
+Cette version corrige un bug critique dans le backend OGR qui causait l'échec de tous les filtres en raison d'un comptage incorrect des entités dans les couches mémoire.
+
+### 🐛 Corrections critiques
+
+| Problème | Solution |
+|----------|----------|
+| **Comptage Memory Layer** | Mécanisme de réessai intelligent pour le comptage des entités |
+| **Faux "0 entités"** | Diagnostics et validation améliorés |
+| **Échecs filtres OGR** | Empêche le rejet prématuré des couches valides |
+
+### Versions précédentes
+
+## 🎉 v2.5.0 - Version majeure de stabilité
+
+Cette version consolide toutes les corrections de stabilité de la série 2.4.x en une version stable, prête pour la production.
+
+## 🎉 v2.2.5 - Gestion automatique des SCR géographiques
 
 ### Améliorations majeures
 - ✅ **Conversion automatique en EPSG:3857** - Les SCR géographiques (EPSG:4326, etc.) sont automatiquement convertis pour les opérations métriques

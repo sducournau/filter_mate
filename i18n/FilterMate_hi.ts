@@ -115,6 +115,30 @@ Please restart QGIS to apply all changes.</source>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>अमान्य ज्यामिति फ़िल्टरिंग संशोधित नहीं की गई। कुछ सुविधाएं निर्यात से बाहर हो सकती हैं।</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>मीटर में बफर मान (सकारात्मक=विस्तार, नकारात्मक=बहुभुज सिकुड़ें)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>नकारात्मक बफर (क्षरण): बहुभुज को अंदर की ओर सिकोड़ता है</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>बिंदु</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>रेखा</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>गैर-बहुभुज</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>बैच मोड</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

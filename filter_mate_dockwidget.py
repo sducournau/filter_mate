@@ -6559,6 +6559,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.exploring_link_widgets(expression)
 
             self.get_current_features()
+            
+            # Update buffer validation based on source layer geometry type
+            self._update_buffer_validation()
 
  
 
@@ -6664,6 +6667,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             preserve_filter_if_empty: DEPRECATED - no longer needed since filters aren't auto-applied
         """
         if self.widgets_initialized is True and self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
+            
+            # Update buffer validation when source features/layer changes
+            try:
+                self._update_buffer_validation()
+            except Exception as e:
+                logger.debug(f"Could not update buffer validation: {e}")
             
             # CRITICAL: Check if layer C++ object has been deleted
             try:
@@ -8157,6 +8166,87 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Zero or positive buffer - reset to default style
             spinbox.setStyleSheet("")
             spinbox.setToolTip(self.tr("Buffer value in meters (positive=expand, negative=shrink polygons)"))
+    
+    def _update_buffer_validation(self):
+        """
+        Update buffer spinbox validation based on source layer geometry type.
+        
+        Negative buffers (erosion) only work on polygon/multipolygon geometries.
+        For point and line geometries, the minimum value is set to 0 to prevent
+        negative buffer input.
+        
+        This method checks the current source layer (from exploring widgets) and
+        adjusts the spinbox minimum value accordingly.
+        """
+        from qgis.core import QgsWkbTypes
+        
+        spinbox = self.mQgsDoubleSpinBox_filtering_buffer_value
+        
+        # Get source layer from exploring widgets
+        source_layer = None
+        features = []
+        
+        try:
+            if self.current_layer is not None and self.widgets_initialized:
+                features, _ = self.get_current_features()
+                
+                # Source layer is the current layer in exploring mode
+                source_layer = self.current_layer
+        except Exception as e:
+            logger.debug(f"_update_buffer_validation: Could not get source layer: {e}")
+        
+        # Default: allow negative buffers (for polygons)
+        min_value = -1000000.0
+        tooltip = self.tr("Buffer value in meters (positive=expand, negative=shrink polygons)")
+        
+        if source_layer is not None:
+            try:
+                geom_type = source_layer.geometryType()
+                
+                # Check if geometry is polygon/multipolygon
+                is_polygon = geom_type == QgsWkbTypes.PolygonGeometry
+                
+                if not is_polygon:
+                    # Point or Line geometry: disable negative buffers
+                    min_value = 0.0
+                    
+                    # Get geometry type name for tooltip
+                    if geom_type == QgsWkbTypes.PointGeometry:
+                        geom_name = self.tr("point")
+                    elif geom_type == QgsWkbTypes.LineGeometry:
+                        geom_name = self.tr("line")
+                    else:
+                        geom_name = self.tr("non-polygon")
+                    
+                    tooltip = self.tr(
+                        f"Buffer value in meters (positive only for {geom_name} layers. "
+                        f"Negative buffers only work on polygon layers)"
+                    )
+                    
+                    # If current value is negative, reset to 0
+                    current_value = spinbox.value()
+                    if current_value < 0:
+                        logger.info(f"Resetting negative buffer to 0 for {geom_name} layer: {source_layer.name()}")
+                        spinbox.setValue(0.0)
+                        
+                        # Update PROJECT_LAYERS if layer exists
+                        if hasattr(self, 'current_layer') and self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+                            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value"] = 0.0
+                    
+                    logger.debug(f"Buffer validation: {geom_name} geometry detected, minimum set to 0")
+                else:
+                    logger.debug(f"Buffer validation: Polygon geometry detected, negative buffers allowed")
+                    
+            except Exception as e:
+                logger.warning(f"_update_buffer_validation: Error checking geometry type: {e}")
+        
+        # Apply validation
+        spinbox.setMinimum(min_value)
+        
+        # Update tooltip (unless it's already in orange/negative mode)
+        current_value = spinbox.value()
+        if current_value is None or current_value >= 0:
+            spinbox.setToolTip(tooltip)
 
     def set_exporting_properties(self):
 

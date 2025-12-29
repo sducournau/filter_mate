@@ -115,6 +115,30 @@ Vui lòng khởi động lại QGIS để áp dụng tất cả các thay đổi
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>Bộ lọc hình học không hợp lệ không được thay đổi. Một số đối tượng có thể bị loại khỏi xuất.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Giá trị đệm tính bằng mét (dương=mở rộng, âm=thu nhỏ đa giác)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Đệm âm (xói mòn): thu nhỏ đa giác vào trong</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>điểm</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>đường</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>không phải đa giác</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Chế độ batch</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

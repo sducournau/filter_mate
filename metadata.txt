@@ -6,13 +6,19 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.5.2
+version=2.5.4
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.5.2 - CRITICAL FIX: Negative Buffer for All Backends
+about=FilterMate v2.5.4 - CRITICAL FIX: OGR Backend Memory Layer Feature Count
 
- CRITICAL FIX in v2.5.2:
+ CRITICAL FIX in v2.5.4:
+ - 🐛 FIXED: OGR backend now correctly counts features in memory layers
+ - 🔧 Added intelligent feature counting that handles memory layer refresh delays
+ - 🔍 Enhanced diagnostics for memory layer feature validation
+ - ✅ Prevents false "0 features" errors that caused all OGR filters to fail
+ 
+ Previous fixes (v2.5.2):
  - 🐛 FIXED: Negative buffer now works for OGR, Spatialite, and fallback modes
  - 🔧 OGR backend now correctly applies buffer in apply_filter
  - 📊 Enhanced logging for buffer value debugging

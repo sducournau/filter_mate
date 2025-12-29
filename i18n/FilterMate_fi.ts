@@ -115,6 +115,30 @@ Käynnistä QGIS uudelleen ottaaksesi kaikki muutokset käyttöön.</translation
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>Virheellisten geometrioiden suodatusta ei muutettu. Jotkin kohteet voivat jäädä pois viennistä.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Puskurin arvo metreinä (positiivinen=laajenna, negatiivinen=kutista polygoneja)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Negatiivinen puskuri (eroosio): kutistaa polygoneja sisäänpäin</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>piste</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>viiva</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>ei-polygoni</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Eräkäsittely-tila</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

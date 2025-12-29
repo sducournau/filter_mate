@@ -209,6 +209,30 @@ Please restart QGIS to apply the changes.</source>
 
 Please restart QGIS to apply the changes.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>በሜትር ውስጥ የቋት ዋጋ (አዎንታዊ=ማስፋፋት, አሉታዊ=ፖሊጎኖችን መቀነስ)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>አሉታዊ ቋት (መሸርሸር)፡ ፖሊጎኖችን ወደ ውስጥ ያሳንሳል</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>ነጥብ</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>መስመር</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>ባልሆነ-ፖሊጎን</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>የባች ሁነታ</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

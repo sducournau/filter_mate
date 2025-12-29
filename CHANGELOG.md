@@ -2,6 +2,128 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.5.5] - 2025-12-29 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection
+
+### 🐛 Bug Fixes
+
+- **CRITICAL FIX: PostgreSQL backend incorrectly detected empty geometries from negative buffers**
+  - **Symptôme**: Buffer négatif (érosion) sur PostgreSQL pouvait filtrer incorrectement les features
+  - **Cause**: `NULLIF(geom, 'GEOMETRYCOLLECTION EMPTY'::geometry)` ne détectait que ce type exact
+    - Ne détectait PAS `POLYGON EMPTY`, `MULTIPOLYGON EMPTY`, `LINESTRING EMPTY`, etc.
+    - Buffer négatif produit différents types de géométries vides selon la géométrie source
+    - Résultat : géométries vides non-NULL passaient dans les prédicats spatiaux → résultats incorrects
+  - **Solution**:
+    - Remplacement de `NULLIF(...)` par `CASE WHEN ST_IsEmpty(...) THEN NULL ELSE ... END`
+    - `ST_IsEmpty()` détecte TOUS les types de géométries vides (PostGIS standard)
+    - Application dans 3 fonctions : `_build_st_buffer_with_style()`, `_build_simple_wkt_expression()`, `build_expression()` (chemin EXISTS)
+    - Garantit que toute géométrie vide devient NULL → ne matche aucun prédicat spatial
+
+### 📊 Impact
+
+- **Fichier modifié**: `modules/backends/postgresql_backend.py`
+- **Fonctions affectées**: 
+  - `_build_st_buffer_with_style()` (ligne ~180-195)
+  - `_build_simple_wkt_expression()` (ligne ~630-650)
+  - `build_expression()` - chemin EXISTS (ligne ~870-895)
+- **Compatibilité**: PostGIS 2.0+ (ST_IsEmpty disponible)
+- **Régression**: Aucune - les résultats sont maintenant CORRECTS
+
+### 🔧 Détails techniques
+
+**Avant:**
+```sql
+-- ❌ Ne détecte que GEOMETRYCOLLECTION EMPTY
+NULLIF(ST_MakeValid(ST_Buffer(geom, -50)), 'GEOMETRYCOLLECTION EMPTY'::geometry)
+-- Problème : POLYGON EMPTY, MULTIPOLYGON EMPTY → non-NULL → match incorrects
+```
+
+**Après:**
+```sql
+-- ✅ Détecte TOUS les types de géométries vides
+CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer(geom, -50))) 
+     THEN NULL 
+     ELSE ST_MakeValid(ST_Buffer(geom, -50)) 
+END
+-- Solution : Toute géométrie vide → NULL → aucun match
+```
+
+---
+
+## [2.5.4] - 2025-12-29 - CRITICAL FIX: OGR Backend Memory Layer Feature Count
+
+### 🐛 Bug Fixes
+
+- **CRITICAL FIX: OGR backend falsely reported 0 features in memory layers**
+  - **Symptôme**: Tous les filtres OGR échouaient systématiquement avec "backend returned FAILURE"
+  - **Logs observés**: "Source layer has no features" même quand les logs montraient 1 feature
+  - **Cause**: `featureCount()` retourne 0 immédiatement après création de memory layer
+    - Pour les memory layers, le count n'est pas actualisé instantanément
+    - Le backend OGR vérifiait `source_layer.featureCount() == 0` avant l'actualisation
+  - **Solution**:
+    - Détection automatique des memory layers via `providerType() == 'memory'`
+    - Force `updateExtents()` avant comptage
+    - Comptage intelligent par itération pour memory layers (plus fiable)
+    - Fallback sur `featureCount()` pour autres providers
+    - Log de diagnostic si mismatch entre `featureCount()` et comptage réel
+
+### 📊 Diagnostics améliorés
+
+- **Logs de validation memory layer**:
+  - Affiche provider type (memory, postgres, ogr, etc.)
+  - Compare `featureCount()` vs comptage par itération
+  - Avertissement si mismatch détecté
+  - Détails complets pour debugging
+
+### 🔧 Impact technique
+
+- **Fichier modifié**: `modules/backends/ogr_backend.py` (lignes 473-499)
+- **Fonction affectée**: `_apply_buffer()`
+- **Compatibilité**: Toutes versions QGIS 3.x
+- **Régression**: Aucune - amélioration pure
+
+---
+
+## [2.5.3] - 2025-12-29 - Amélioration Gestion Buffers Négatifs
+
+### 🐛 Bug Fixes
+
+- **FIXED: Problème de filtrage avec buffer négatif sur couches polygones**
+  - **Symptôme**: Buffer négatif (érosion) pouvait échouer silencieusement quand il érodait complètement les géométries
+  - **Cause**: Pas de distinction entre "échec d'opération" et "érosion complète" (géométrie vide légitime)
+  - **Solution**:
+    - Tracking séparé des features complètement érodées dans `_buffer_all_features()`
+    - Message utilisateur clair via barre de message QGIS quand toutes les features sont érodées
+    - Logs détaillés pour diagnostiquer le problème (erosion vs invalid)
+    - Documentation améliorée dans `safe_buffer()` pour expliquer le comportement
+
+### 📊 Améliorations
+
+- **Logs enrichis pour buffers négatifs**:
+  - Détection automatique des buffers négatifs
+  - Compte des features érodées vs invalides
+  - Avertissement si toutes les features disparaissent
+  - Suggestion d'action: "Réduisez la distance du buffer"
+
+- **Messages utilisateur**:
+  - `iface.messageBar().pushWarning()` avec message explicite
+  - Format: "Le buffer négatif de -Xm a complètement érodé toutes les géométries"
+  - Guidance claire pour résoudre le problème
+
+### 🧪 Tests
+
+- Nouveau fichier: `tests/test_negative_buffer.py`
+- Tests pour érosion complète, partielle, et buffers positifs
+- Documentation complète: `docs/FIX_NEGATIVE_BUFFER_2025-12.md`
+
+### 📝 Fichiers Modifiés
+
+- `modules/geometry_safety.py`: Amélioration `safe_buffer()` avec logs négatifs
+- `modules/tasks/filter_task.py`: Amélioration `_buffer_all_features()` avec tracking érosion
+- `tests/test_negative_buffer.py`: Tests unitaires (nouveau)
+- `docs/FIX_NEGATIVE_BUFFER_2025-12.md`: Documentation technique (nouveau)
+
+---
+
 ## [2.5.2] - 2025-12-29 - CRITICAL FIX: Negative Buffer for All Backends
 
 ### 🐛 Critical Bug Fixes

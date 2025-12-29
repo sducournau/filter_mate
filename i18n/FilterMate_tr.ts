@@ -115,6 +115,30 @@ Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</t
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>Geçersiz geometri filtreleme değiştirilmedi. Bazı özellikler dışa aktarmalardan hariç tutulabilir.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Metre cinsinden tampon değeri (pozitif=genişlet, negatif=daralt poligonlar)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Negatif tampon (erozyon): poligonları içe doğru daraltır</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>nokta</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>çizgi</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>çokgen-olmayan</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Toplu işlem modu</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

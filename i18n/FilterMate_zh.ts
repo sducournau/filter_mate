@@ -115,6 +115,30 @@ Please restart QGIS to apply all changes.</source>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>无效几何过滤未修改。某些要素可能会从导出中排除。</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>缓冲区值（米）（正值=扩展，负值=收缩多边形）</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>负缓冲区（侵蚀）：向内收缩多边形</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>点</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>线</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>非多边形</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>批处理模式</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

@@ -209,6 +209,30 @@ Please restart QGIS to apply the changes.</source>
 
 O&apos;zgarishlarni qo&apos;llash uchun QGIS ni qayta ishga tushiring.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Bufer qiymati metrda (musbat=kengaytirish, manfiy=poligonlarni qisqartirish)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Manfiy bufer (eroziya): poligonlarni ichkariga qisqartiradi</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>nuqta</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>chiziq</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>ko&apos;pburchak-emas</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Ommaviy rejim</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

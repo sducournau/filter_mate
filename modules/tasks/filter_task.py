@@ -1871,10 +1871,13 @@ class FilterEngineTask(QgsTask):
                 'filter_type': getattr(self, 'filter_type', 'geometric')
             }
         }
+        # CANCELLATION FIX v2.3.22: Pass cancel_check callback to executor
+        # This allows parallel workers to check if task was canceled and stop immediately
         results = executor.filter_layers_parallel(
             all_layers, 
             self.execute_geometric_filtering,
-            task_parameters
+            task_parameters,
+            cancel_check=self.isCanceled
         )
         
         # Process results and update progress
@@ -3308,18 +3311,26 @@ class FilterEngineTask(QgsTask):
         STABILITY FIX v2.3.9: Uses safe_buffer wrapper to prevent
         access violations on certain machines.
         
+        NOTE: Negative buffers (erosion) may produce empty geometries if the buffer
+        distance is larger than the feature width. This is expected behavior.
+        
         Args:
             layer: Source layer
-            buffer_dist: Buffer distance
+            buffer_dist: Buffer distance (can be negative for erosion)
             
         Returns:
-            tuple: (list of geometries, valid_count, invalid_count)
+            tuple: (list of geometries, valid_count, invalid_count, eroded_count)
         """
         geometries = []
         valid_features = 0
         invalid_features = 0
+        eroded_features = 0  # Count features that eroded completely
         
+        is_negative_buffer = buffer_dist < 0
         logger.debug(f"Buffering features: layer type={layer.geometryType()}, wkb type={layer.wkbType()}, buffer_dist={buffer_dist}")
+        
+        if is_negative_buffer:
+            logger.info(f"⚠️ Applying NEGATIVE BUFFER (erosion) of {buffer_dist}m - some features may disappear completely")
         
         for idx, feature in enumerate(layer.getFeatures()):
             geom = feature.geometry()
@@ -3340,15 +3351,27 @@ class FilterEngineTask(QgsTask):
                     valid_features += 1
                     logger.debug(f"Feature {idx}: Buffered geometry accepted")
                 else:
-                    logger.warning(f"Feature {idx}: safe_buffer returned None")
-                    invalid_features += 1
+                    # Check if this is complete erosion (expected for negative buffers)
+                    if is_negative_buffer:
+                        logger.debug(f"Feature {idx}: Completely eroded (negative buffer)")
+                        eroded_features += 1
+                    else:
+                        logger.warning(f"Feature {idx}: safe_buffer returned None")
+                        invalid_features += 1
                     
             except Exception as buffer_error:
                 logger.warning(f"Feature {idx}: Buffer operation failed: {buffer_error}")
                 invalid_features += 1
         
-        logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
-        return geometries, valid_features, invalid_features
+        # Enhanced logging for negative buffers
+        if is_negative_buffer and eroded_features > 0:
+            logger.info(f"📊 Buffer négatif résultats: {valid_features} features conservées, {eroded_features} complètement érodées, {invalid_features} invalides")
+            if valid_features == 0:
+                logger.warning(f"⚠️ TOUTES les features ont été érodées par le buffer de {buffer_dist}m! Réduisez la distance du buffer.")
+        else:
+            logger.debug(f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features")
+        
+        return geometries, valid_features, invalid_features, eroded_features
 
     def _dissolve_and_add_to_layer(self, geometries, buffered_layer):
         """
@@ -3480,14 +3503,27 @@ class FilterEngineTask(QgsTask):
         buffered_layer = self._create_memory_layer_for_buffer(layer)
         
         # Buffer all features
-        geometries, valid_features, invalid_features = self._buffer_all_features(layer, buffer_dist)
+        geometries, valid_features, invalid_features, eroded_features = self._buffer_all_features(layer, buffer_dist)
         
         # MODIFIED: Accept result even with 0 valid geometries (return empty layer instead of error)
         if not geometries:
-            logger.warning(
-                f"⚠️ Manual buffer produced no geometries. "
-                f"Total: {feature_count}, Valid: {valid_features}, Invalid: {invalid_features}"
-            )
+            # Enhanced warning message for negative buffers
+            if buffer_dist < 0:
+                logger.warning(
+                    f"⚠️ Buffer négatif ({buffer_dist}m) a complètement érodé toutes les géométries. "
+                    f"Total: {feature_count}, Valides: {valid_features}, Érodées: {eroded_features}, Invalides: {invalid_features}"
+                )
+                # Show user-facing message
+                from qgis.utils import iface
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    f"Le buffer négatif de {buffer_dist}m a complètement érodé toutes les géométries. Réduisez la distance du buffer."
+                )
+            else:
+                logger.warning(
+                    f"⚠️ Manual buffer produced no geometries. "
+                    f"Total: {feature_count}, Valid: {valid_features}, Invalid: {invalid_features}"
+                )
             # Return empty layer instead of raising exception
             return buffered_layer
         
@@ -4923,6 +4959,12 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if filtering succeeded, False otherwise
         """
+        # CANCELLATION FIX v2.3.22: Check if task was canceled before processing layer
+        # This prevents continuing to filter layers after user cancels the task
+        if self.isCanceled():
+            logger.info(f"⚠️ Skipping layer {layer.name() if hasattr(layer, 'name') else 'unknown'} - task was canceled")
+            return False
+        
         # THREAD SAFETY FIX: Pass queue_subset_request callback to backends
         # This allows backends to defer setSubsetString() calls to the main thread
         self.task_parameters['_subset_queue_callback'] = self.queue_subset_request
@@ -5976,7 +6018,7 @@ class FilterEngineTask(QgsTask):
             save_styles: Whether to save layer styles
             
         Returns:
-            bool: True if successful
+            tuple: (success: bool, error_message: str or None)
         """
         current_projection = projection if projection else layer.sourceCrs()
         
@@ -6012,18 +6054,20 @@ class FilterEngineTask(QgsTask):
             )
             
             if result[0] != QgsVectorFileWriter.NoError:
-                logger.error(f"Export failed for layer '{layer.name()}': {result[1]}")
-                return False
+                error_msg = result[1] if len(result) > 1 else "Unknown error"
+                logger.error(f"Export failed for layer '{layer.name()}': {error_msg}")
+                return False, error_msg
             
             # Save style if requested
             if save_styles:
                 self._save_layer_style(layer, output_path, style_format, datatype)
             
-            return True
+            return True, None
             
         except Exception as e:
-            logger.error(f"Export exception for layer '{layer.name()}': {e}")
-            return False
+            error_msg = str(e)
+            logger.error(f"Export exception for layer '{layer.name()}': {error_msg}")
+            return False, error_msg
 
 
     def _export_to_gpkg(self, layer_names, output_path, save_styles):
@@ -6131,11 +6175,12 @@ class FilterEngineTask(QgsTask):
             # Sanitize filename to handle special characters like em-dash (—)
             safe_filename = sanitize_filename(layer_name)
             output_path = os.path.join(output_folder, f"{safe_filename}{file_extension}")
-            success = self._export_single_layer(
+            success, error_msg = self._export_single_layer(
                 layer, output_path, projection, datatype, style_format, save_styles
             )
             
             if not success:
+                logger.error(f"Failed to export layer '{layer_name}': {error_msg}")
                 return False
             
             if self.isCanceled():
@@ -6170,10 +6215,13 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"Created output directory: {output_folder}")
             except Exception as e:
                 logger.error(f"Failed to create output directory: {e}")
+                self.error_details = f"Failed to create output directory: {str(e)}"
                 return False
         
         total_layers = len(layer_names)
         exported_files = []
+        failed_layers = []  # Track failed layers with reasons
+        skipped_layers = []  # Track skipped layers (not found)
         
         for idx, layer_item in enumerate(layer_names, 1):
             # Handle both dict (layer info) and string (layer name) formats
@@ -6186,6 +6234,7 @@ class FilterEngineTask(QgsTask):
             layer = self._get_layer_by_name(layer_name)
             if not layer:
                 logger.warning(f"Skipping layer '{layer_name}' (not found)")
+                skipped_layers.append(layer_name)
                 continue
             
             # Determine file extension based on datatype
@@ -6216,7 +6265,7 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
             
             try:
-                success = self._export_single_layer(
+                success, error_msg = self._export_single_layer(
                     layer, output_path, projection, datatype, style_format, save_styles
                 )
                 
@@ -6224,18 +6273,45 @@ class FilterEngineTask(QgsTask):
                     exported_files.append(output_path)
                     logger.info(f"Successfully exported: {layer_name}")
                 else:
-                    logger.error(f"Failed to export layer '{layer_name}' (see logs for details)")
-                    return False
+                    error_detail = f"{layer_name}: {error_msg}" if error_msg else layer_name
+                    failed_layers.append(error_detail)
+                    logger.error(f"Failed to export layer '{layer_name}': {error_msg}")
                     
             except Exception as e:
                 import traceback
+                error_detail = f"{layer_name}: {str(e)}"
+                failed_layers.append(error_detail)
                 logger.error(f"Exception during export of '{layer_name}': {e}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
-                return False
             
             if self.isCanceled():
                 logger.info("Batch export cancelled by user")
+                self.error_details = f"Export cancelled by user. Exported {len(exported_files)}/{total_layers} layers."
                 return False
+        
+        # Build detailed summary
+        success_count = len(exported_files)
+        total_attempted = len(layer_names)
+        
+        if failed_layers or skipped_layers:
+            # Some failures occurred
+            details = []
+            if success_count > 0:
+                details.append(f"✓ {success_count} layer(s) exported successfully")
+            if failed_layers:
+                details.append(f"✗ {len(failed_layers)} layer(s) failed:")
+                for failed in failed_layers[:5]:  # Limit to first 5 to avoid too long messages
+                    details.append(f"  - {failed}")
+                if len(failed_layers) > 5:
+                    details.append(f"  ... and {len(failed_layers) - 5} more (see logs)")
+            if skipped_layers:
+                details.append(f"⚠ {len(skipped_layers)} layer(s) not found: {', '.join(skipped_layers[:3])}")
+                if len(skipped_layers) > 3:
+                    details.append(f"  ... and {len(skipped_layers) - 3} more")
+            
+            self.error_details = "\n".join(details)
+            logger.warning(f"Batch export completed with errors: {success_count}/{total_attempted} successful")
+            return False
         
         logger.info(f"Batch export completed: {len(exported_files)} file(s) in {output_folder}")
         return True
@@ -6265,10 +6341,13 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"Created output directory: {output_folder}")
             except Exception as e:
                 logger.error(f"Failed to create output directory: {e}")
+                self.error_details = f"Failed to create output directory: {str(e)}"
                 return False
         
         total_layers = len(layer_names)
         exported_zips = []
+        failed_layers = []  # Track failed layers with reasons
+        skipped_layers = []  # Track skipped layers (not found)
         
         for idx, layer_item in enumerate(layer_names, 1):
             # Handle both dict (layer info) and string (layer name) formats
@@ -6281,6 +6360,7 @@ class FilterEngineTask(QgsTask):
             layer = self._get_layer_by_name(layer_name)
             if not layer:
                 logger.warning(f"Skipping layer '{layer_name}' (not found)")
+                skipped_layers.append(layer_name)
                 continue
             
             # Sanitize filename to handle special characters like em-dash (—)
@@ -6316,15 +6396,17 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"Exporting layer '{layer_name}' to temp: {temp_output}")
                 logger.debug(f"Export params - datatype: {datatype}, projection: {projection}, style_format: {style_format}")
                 
-                success = self._export_single_layer(
+                success, error_msg = self._export_single_layer(
                     layer, temp_output, projection, datatype, style_format, save_styles
                 )
                 
                 if not success:
-                    logger.error(f"Failed to export layer '{layer_name}' (see logs for details)")
+                    error_detail = f"{layer_name}: {error_msg}" if error_msg else layer_name
+                    failed_layers.append(error_detail)
+                    logger.error(f"Failed to export layer '{layer_name}': {error_msg}")
                     import shutil
                     shutil.rmtree(temp_dir, ignore_errors=True)
-                    return False
+                    continue  # Continue with next layer instead of failing entire batch
                 
                 # Create ZIP for this layer
                 zip_path = os.path.join(output_folder, f"{safe_filename}.zip")
@@ -6343,10 +6425,12 @@ class FilterEngineTask(QgsTask):
                     exported_zips.append(zip_path)
                     logger.info(f"Successfully created ZIP: {zip_path}")
                 else:
+                    error_detail = f"{layer_name}: Failed to create ZIP archive"
+                    failed_layers.append(error_detail)
                     logger.error(f"Failed to create ZIP for '{layer_name}' at {zip_path}")
                     import shutil
                     shutil.rmtree(temp_dir, ignore_errors=True)
-                    return False
+                    continue  # Continue with next layer instead of failing entire batch
                 
                 # Clean up temporary directory
                 import shutil
@@ -6354,15 +6438,41 @@ class FilterEngineTask(QgsTask):
                 
             except Exception as e:
                 import traceback
+                error_detail = f"{layer_name}: {str(e)}"
+                failed_layers.append(error_detail)
                 logger.error(f"Error during batch ZIP export of '{layer_name}': {e}")
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 import shutil
                 shutil.rmtree(temp_dir, ignore_errors=True)
-                return False
             
             if self.isCanceled():
                 logger.info("Batch ZIP export cancelled by user")
+                self.error_details = f"Export cancelled by user. Created {len(exported_zips)}/{total_layers} ZIP files."
                 return False
+        
+        # Build detailed summary
+        success_count = len(exported_zips)
+        total_attempted = len(layer_names)
+        
+        if failed_layers or skipped_layers:
+            # Some failures occurred
+            details = []
+            if success_count > 0:
+                details.append(f"✓ {success_count} ZIP file(s) created successfully")
+            if failed_layers:
+                details.append(f"✗ {len(failed_layers)} layer(s) failed:")
+                for failed in failed_layers[:5]:  # Limit to first 5 to avoid too long messages
+                    details.append(f"  - {failed}")
+                if len(failed_layers) > 5:
+                    details.append(f"  ... and {len(failed_layers) - 5} more (see logs)")
+            if skipped_layers:
+                details.append(f"⚠ {len(skipped_layers)} layer(s) not found: {', '.join(skipped_layers[:3])}")
+                if len(skipped_layers) > 3:
+                    details.append(f"  ... and {len(skipped_layers) - 3} more")
+            
+            self.error_details = "\n".join(details)
+            logger.warning(f"Batch ZIP export completed with errors: {success_count}/{total_attempted} successful")
+            return False
         
         logger.info(f"Batch ZIP export completed: {len(exported_zips)} ZIP file(s) in {output_folder}")
         return True
@@ -6485,7 +6595,11 @@ class FilterEngineTask(QgsTask):
             if export_success:
                 self.message = f'Batch export: {len(layers)} layer(s) exported to <a href="file:///{output_folder}">{output_folder}</a>'
             else:
-                self.message = f'Batch export failed for {len(layers)} layer(s)'
+                # Use detailed error info if available
+                if hasattr(self, 'error_details') and self.error_details:
+                    self.message = f'Batch export completed with errors:\n{self.error_details}'
+                else:
+                    self.message = f'Batch export failed for {len(layers)} layer(s)'
             return export_success
         
         # BATCH MODE: One ZIP per layer
@@ -6497,7 +6611,11 @@ class FilterEngineTask(QgsTask):
             if export_success:
                 self.message = f'Batch ZIP export: {len(layers)} ZIP file(s) created in <a href="file:///{output_folder}">{output_folder}</a>'
             else:
-                self.message = f'Batch ZIP export failed for {len(layers)} layer(s)'
+                # Use detailed error info if available
+                if hasattr(self, 'error_details') and self.error_details:
+                    self.message = f'Batch ZIP export completed with errors:\n{self.error_details}'
+                else:
+                    self.message = f'Batch ZIP export failed for {len(layers)} layer(s)'
             return export_success
         
         # GPKG STANDARD MODE: Always use qgis:package for single file with all layers and styles
@@ -8135,6 +8253,13 @@ class FilterEngineTask(QgsTask):
     def finished(self, result):
         result_action = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
+        
+        # CANCELLATION FIX v2.3.22: Don't apply pending subset requests if task was canceled
+        # This prevents duplicate filter applications when user cancels during parallel execution
+        if self.isCanceled():
+            logger.info("Task was canceled - skipping pending subset requests to prevent partial filter application")
+            if hasattr(self, '_pending_subset_requests'):
+                self._pending_subset_requests = []  # Clear to prevent any application
         
         # THREAD SAFETY FIX v2.3.21: Apply pending subset strings on main thread
         # This is called from the main Qt thread (unlike run() which is on a worker thread).

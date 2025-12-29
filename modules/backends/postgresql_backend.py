@@ -156,6 +156,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             - Negative buffer on a polygon shrinks it inward
             - Negative buffer on a point or line returns empty geometry
             - Very large negative buffers may collapse the polygon entirely
+            - Negative buffers are wrapped in ST_MakeValid() to prevent invalid geometries
+            - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
         """
         endcap_style = self._get_buffer_endcap_style()
         
@@ -163,12 +165,30 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         if buffer_value < 0:
             self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
         
+        # Build base buffer expression
         if endcap_style == 'round':
             # Default style - no need to specify
-            return f"ST_Buffer({geom_expr}, {buffer_value})"
+            buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value})"
         else:
             # Use optional style parameter
-            return f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
+            buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
+        
+        # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
+        # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
+        # CRITICAL FIX v2.5.4: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
+        #                      but not POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
+        # Negative buffers (erosion/shrinking) can produce invalid or empty geometries,
+        # especially on complex polygons or when buffer is too large.
+        # ST_MakeValid() ensures the result is always geometrically valid.
+        # ST_IsEmpty() detects ALL empty geometry types (POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.)
+        if buffer_value < 0:
+            self.log_info(f"  🛡️ Wrapping negative buffer in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
+            # Use CASE WHEN to return NULL if buffer produces empty geometry
+            # This ensures empty results from negative buffers don't match spatial predicates
+            validated_expr = f"ST_MakeValid({buffer_expr})"
+            return f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
+        else:
+            return buffer_expr
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -615,13 +635,24 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
                 
                 # Transform -> Buffer -> Transform back
-                source_geom_sql = (
+                buffer_expr_3857 = (
                     f"ST_Transform("
                     f"ST_Buffer("
                     f"ST_Transform({source_geom_sql}, 3857), "
                     f"{buffer_value}{buffer_style_param}), "
                     f"{source_srid})"
                 )
+                
+                # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
+                # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
+                # CRITICAL FIX v2.5.4: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
+                if buffer_value < 0:
+                    self.log_info(f"  🛡️ Wrapping negative buffer in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
+                    validated_expr = f"ST_MakeValid({buffer_expr_3857})"
+                    source_geom_sql = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
+                else:
+                    source_geom_sql = buffer_expr_3857
+                
                 buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
                 self.log_info(f"  ✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}) via EPSG:3857 reprojection")
             else:
@@ -788,20 +819,92 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     source_schema_name = source_table_ref['schema']
                     source_table_name = source_table_ref['table']
                     source_geom_field = source_table_ref['geom_field']
-                    source_has_buffer = source_table_ref.get('buffer_expr')
+                    source_has_buffer_expr = source_table_ref.get('buffer_expr')
                     
                     # Build source geometry expression within subquery
-                    if source_has_buffer:
-                        source_geom_in_subquery = source_has_buffer
+                    # Start with base geometry reference
+                    source_geom_in_subquery = f'__source."{source_geom_field}"'
+                    
+                    # Determine actual buffer value to apply
+                    # Priority: buffer_value parameter > embedded buffer in source_geom
+                    actual_buffer_value = None
+                    
+                    if buffer_value is not None and buffer_value != 0:
+                        # Explicit buffer_value parameter takes precedence
+                        actual_buffer_value = buffer_value
+                        self.log_info(f"  ✓ Using explicit buffer_value parameter: {buffer_value}m")
+                    elif source_has_buffer_expr:
+                        # Extract buffer value from embedded ST_Buffer() expression
+                        # Pattern: ST_Buffer(__source."geom", VALUE) or ST_Buffer(__source."geom", VALUE, ...)
+                        import re
+                        buffer_match = re.search(r'ST_Buffer\s*\([^,]+,\s*([^,)]+)', source_has_buffer_expr, re.IGNORECASE)
+                        if buffer_match:
+                            try:
+                                actual_buffer_value = float(buffer_match.group(1).strip())
+                                self.log_info(f"  ✓ Extracted buffer from source_geom: {actual_buffer_value}m")
+                            except ValueError:
+                                self.log_warning(f"  ⚠️ Could not parse buffer value from: {source_has_buffer_expr}")
+                    
+                    # Apply buffer with proper geographic CRS handling (same logic as _build_simple_wkt_expression)
+                    if actual_buffer_value is not None and actual_buffer_value != 0:
+                        self.log_info(f"  ✓ Applying buffer to source geometry in EXISTS: {actual_buffer_value}m")
+                        if actual_buffer_value < 0:
+                            self.log_info(f"  ⚠️ NEGATIVE BUFFER (erosion) in EXISTS subquery: {actual_buffer_value}m")
+                        
+                        # CRITICAL FIX: Check if source layer uses geographic CRS
+                        # For geographic CRS (degrees), transform to EPSG:3857 for metric buffer
+                        # Get source SRID from task_params (infos section contains source layer CRS)
+                        source_srid_value = None
+                        is_geographic = False
+                        
+                        if hasattr(self, 'task_params') and self.task_params:
+                            source_crs_authid = self.task_params.get('infos', {}).get('source_layer_crs_authid', '')
+                            if source_crs_authid.startswith('EPSG:'):
+                                try:
+                                    source_srid_value = int(source_crs_authid.split(':')[1])
+                                    # Check if SRID indicates geographic CRS (e.g., 4326)
+                                    is_geographic = source_srid_value == 4326 or (
+                                        source_crs_authid.startswith('EPSG:4') and
+                                        source_srid_value < 5000  # Heuristic: low SRID numbers are often geographic
+                                    )
+                                except (ValueError, IndexError):
+                                    pass
+                        
+                        if is_geographic:
+                            # Geographic CRS: transform to EPSG:3857 for metric buffer, then back
+                            self.log_info(f"  🌍 Geographic CRS detected (SRID={source_srid_value}) - applying buffer via EPSG:3857")
+                            endcap_style = self._get_buffer_endcap_style()
+                            buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
+                            
+                            # Transform -> Buffer -> Transform back
+                            buffer_expr_3857 = (
+                                f"ST_Transform("
+                                f"ST_Buffer("
+                                f"ST_Transform({source_geom_in_subquery}, 3857), "
+                                f"{actual_buffer_value}{buffer_style_param}), "
+                                f"{source_srid_value})"
+                            )
+                            
+                            # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
+                            # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
+                            # CRITICAL FIX v2.5.4: Fixed bug where NULLIF only detected GEOMETRYCOLLECTION EMPTY
+                            if actual_buffer_value < 0:
+                                self.log_info(f"  🛡️ Wrapping negative buffer in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
+                                validated_expr = f"ST_MakeValid({buffer_expr_3857})"
+                                source_geom_in_subquery = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
+                            else:
+                                source_geom_in_subquery = buffer_expr_3857
+                            
+                            buffer_type_str = "expansion" if actual_buffer_value > 0 else "erosion (shrink)"
+                            self.log_info(f"  ✓ Applied ST_Buffer({actual_buffer_value}m, {buffer_type_str}) via EPSG:3857 reprojection")
+                        else:
+                            # Projected CRS: buffer directly in native units
+                            source_geom_in_subquery = self._build_st_buffer_with_style(
+                                source_geom_in_subquery, 
+                                actual_buffer_value
+                            )
                     else:
-                        source_geom_in_subquery = f'__source."{source_geom_field}"'
-                    
-                    # CRITICAL FIX: Include source layer filter in EXISTS subquery
-                    # When source layer is filtered (via setSubsetString), we must
-                    # only match against the filtered features, not the entire table
-                    where_clauses = [f'{predicate_func}({geom_expr}, {source_geom_in_subquery})']
-                    
-                    self.log_info(f"🔧 Building EXISTS subquery for {layer_props.get('layer_name', 'unknown')}")
+                        self.log_info(f"  ℹ️ No buffer to apply in EXISTS (buffer_value={actual_buffer_value})")
                     self.log_info(f"  - Source filter provided: {source_filter is not None}")
                     
                     if source_filter:

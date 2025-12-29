@@ -209,6 +209,30 @@ Please restart QGIS to apply the changes.</source>
 
 Please restart QGIS to apply the changes.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Buffer value in meters (positive=expand, negative=shrink polygons)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Negative buffer (erosion): shrinks polygons inward</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>point</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>line</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>non-polygon</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Batch mode</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

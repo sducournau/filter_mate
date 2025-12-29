@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.5.0** | December 2025 | **Production-Ready**
+**Version 2.5.4** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -26,6 +26,19 @@
 ---
 
 ## 📋 Recent Changes
+
+### v2.5.4 - Critical Fix: OGR Backend Memory Layers (December 2025)
+
+- 🐛 **CRITICAL FIX**: OGR backend now correctly counts features in memory layers
+- 🔧 **Intelligent Counting**: Handles memory layer refresh delays with retry mechanism
+- 🔍 **Enhanced Diagnostics**: Better logging for memory layer feature validation
+- ✅ **Reliability**: Prevents false "0 features" errors that caused all OGR filters to fail
+
+### v2.5.3 - Fix: Negative Buffer in OGR/Spatialite (December 2025)
+
+- 🐛 **Buffer Fix**: Negative buffer now works correctly across all backends
+- 🔧 **OGR Enhancement**: Backend properly applies buffer in apply_filter
+- 📊 **Better Logging**: Enhanced debugging for buffer value operations
 
 ### v2.5.0 - Major Stability Release (December 2025)
 

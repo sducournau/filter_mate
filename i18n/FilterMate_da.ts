@@ -115,6 +115,30 @@ Genstart QGIS for at anvende alle ændringer.</translation>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>Filtrering af ugyldige geometrier ikke ændret. Nogle objekter kan udelukkes fra eksport.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Bufferværdi i meter (positiv=udvid, negativ=formindsk polygoner)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Negativ buffer (erosion): formindsker polygoner indad</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>punkt</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>linje</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>ikke-polygon</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Batch-tilstand</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

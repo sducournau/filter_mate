@@ -242,6 +242,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             - Negative buffer on a polygon shrinks it inward
             - Negative buffer on a point or line returns empty geometry
             - Very large negative buffers may collapse the polygon entirely
+            - Negative buffers are wrapped in MakeValid() to prevent invalid geometries
+            - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
         """
         endcap_style = self._get_buffer_endcap_style()
         
@@ -249,12 +251,28 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         if buffer_value < 0:
             self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
         
+        # Build base buffer expression
         if endcap_style == 'round':
             # Default style - no need to specify
-            return f"ST_Buffer({geom_expr}, {buffer_value})"
+            buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value})"
         else:
             # Spatialite uses same syntax as PostGIS for endcap
-            return f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
+            buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
+        
+        # CRITICAL FIX v2.3.9: Wrap negative buffers in MakeValid()
+        # CRITICAL FIX v2.4.23: Also use NULLIF to convert empty geometries to NULL
+        # Negative buffers (erosion/shrinking) can produce invalid geometries,
+        # especially on complex polygons or when buffer is too large.
+        # MakeValid() ensures the result is always geometrically valid.
+        # NULLIF ensures empty geometries become NULL (won't match spatial predicates)
+        # Note: Spatialite uses MakeValid() instead of ST_MakeValid()
+        if buffer_value < 0:
+            self.log_info(f"  🛡️ Wrapping negative buffer in MakeValid() + NULLIF for empty geometry handling")
+            # NULLIF(geom, ST_GeomFromText('GEOMETRYCOLLECTION EMPTY')) returns NULL if geom is empty
+            # This ensures empty results from negative buffers don't match
+            return f"NULLIF(MakeValid({buffer_expr}), ST_GeomFromText('GEOMETRYCOLLECTION EMPTY'))"
+        else:
+            return buffer_expr
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -1271,6 +1289,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 else:
                     # Source is different from target, transform source to 3857 for buffer
                     buffered_geom = f"ST_Buffer(ST_Transform({source_geom_expr}, 3857), {buffer_value}{buffer_style_param})"
+                
+                # CRITICAL FIX v2.3.9: Wrap negative buffers in MakeValid()
+                # CRITICAL FIX v2.4.23: Also use NULLIF to handle empty geometries
+                # Note: Spatialite uses MakeValid() instead of ST_MakeValid()
+                if buffer_value < 0:
+                    self.log_info(f"  🛡️ Wrapping negative buffer in MakeValid() + NULLIF for empty geometry handling")
+                    buffered_geom = f"NULLIF(MakeValid({buffered_geom}), ST_GeomFromText('GEOMETRYCOLLECTION EMPTY'))"
                 
                 # Transform buffered result to target SRID
                 source_geom_expr = f"ST_Transform({buffered_geom}, {target_srid})"

@@ -471,7 +471,30 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"Source layer is not valid: {source_layer.name()}")
             return None
         
-        if source_layer.featureCount() == 0:
+        # CRITICAL FIX v2.5.4: For memory layers, featureCount() can return 0 immediately after creation
+        # even if features were added. We need to force a refresh/recount.
+        # Try to get actual feature count by iterating (more reliable for memory layers)
+        actual_feature_count = 0
+        if source_layer.providerType() == 'memory':
+            # For memory layers, force extent update and iterate to get real count
+            source_layer.updateExtents()
+            
+            # DIAGNOSTIC: Log both featureCount() and actual iteration count
+            reported_count = source_layer.featureCount()
+            try:
+                actual_feature_count = sum(1 for _ in source_layer.getFeatures())
+            except Exception as e:
+                self.log_warning(f"Failed to iterate features: {e}, using featureCount()")
+                actual_feature_count = reported_count
+            
+            if reported_count != actual_feature_count:
+                self.log_warning(f"⚠️ Memory layer count mismatch: featureCount()={reported_count}, actual={actual_feature_count}")
+        else:
+            actual_feature_count = source_layer.featureCount()
+        
+        self.log_debug(f"Source layer '{source_layer.name()}': provider={source_layer.providerType()}, features={actual_feature_count}")
+        
+        if actual_feature_count == 0:
             self.log_error(f"⚠️ Source layer has no features: {source_layer.name()}")
             self.log_error(f"  → This is the INTERSECT layer for spatial filtering")
             self.log_error(f"  → Common causes:")
@@ -546,16 +569,52 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 buffered_layer = buffer_result['OUTPUT']
                 
-                # For negative buffers, filter out empty geometries that may result
-                # from polygons that were too small for the erosion
+                # CRITICAL FIX v2.4.23: For negative buffers, REMOVE empty/invalid geometries
+                # Negative buffers can collapse polygons to empty geometries if the erosion
+                # is too large. These must be removed or selectbylocation will fail.
                 if buffer_dist < 0:
+                    from qgis.core import QgsVectorLayer, QgsFeature
+                    
+                    # Count and collect valid features
+                    valid_features = []
                     empty_count = 0
+                    
                     for feature in buffered_layer.getFeatures():
                         geom = feature.geometry()
                         if geom.isNull() or geom.isEmpty():
                             empty_count += 1
+                        else:
+                            # Keep only valid, non-empty geometries
+                            valid_features.append(feature)
+                    
                     if empty_count > 0:
-                        self.log_info(f"📐 Negative buffer: {empty_count} features collapsed to empty (removed)")
+                        self.log_info(f"📐 Negative buffer: {empty_count} features collapsed to empty (removing)")
+                        
+                        # Create new layer with only valid geometries
+                        if valid_features:
+                            # Create new memory layer with same CRS and geometry type
+                            crs_authid = buffered_layer.crs().authid()
+                            geom_type = buffered_layer.wkbType()
+                            from qgis.core import QgsWkbTypes
+                            geom_type_str = QgsWkbTypes.displayString(geom_type)
+                            
+                            new_layer = QgsVectorLayer(
+                                f"{geom_type_str}?crs={crs_authid}",
+                                "filtered_buffer",
+                                "memory"
+                            )
+                            
+                            # Copy valid features to new layer
+                            provider = new_layer.dataProvider()
+                            provider.addFeatures(valid_features)
+                            new_layer.updateExtents()
+                            
+                            self.log_info(f"  ✓ Created new layer with {len(valid_features)} valid features (removed {empty_count} empty)")
+                            buffered_layer = new_layer
+                        else:
+                            self.log_error(f"  ⚠️ All features collapsed to empty after negative buffer!")
+                            self.log_error(f"  → Buffer value {buffer_dist}m is too large for the polygons")
+                            return None
                 
                 # CRITICAL FIX: Check for and convert GeometryCollection to MultiPolygon
                 # native:buffer can produce GeometryCollection when features don't overlap

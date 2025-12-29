@@ -337,13 +337,17 @@ def safe_buffer(
     
     CRITICAL: Prevents GEOS crashes when buffering invalid geometries.
     
+    NOTE: Negative buffers (erosion) can produce empty geometries if the buffer 
+    distance is larger than the feature width. This is expected behavior - the 
+    feature completely erodes away.
+    
     Args:
         geom: QgsGeometry to buffer
-        distance: Buffer distance
+        distance: Buffer distance (can be negative for erosion)
         segments: Number of segments for curves (default 5)
         
     Returns:
-        QgsGeometry or None: Buffered geometry, or None on failure
+        QgsGeometry or None: Buffered geometry, or None on failure or complete erosion
     """
     if not validate_geometry(geom):
         logger.debug("safe_buffer: Invalid input geometry")
@@ -354,6 +358,10 @@ def safe_buffer(
     except (ValueError, TypeError):
         logger.error(f"safe_buffer: Invalid distance value: {distance}")
         return None
+    
+    # Log negative buffer (erosion) operations
+    if distance < 0:
+        logger.debug(f"safe_buffer: Applying negative buffer (erosion) of {distance}m")
     
     working_geom = geom
     
@@ -382,7 +390,11 @@ def safe_buffer(
         if result and not result.isEmpty() and not result.isNull():
             return result
         else:
-            logger.debug("safe_buffer: Buffer produced empty/null geometry")
+            # Empty geometry can be normal for negative buffers (complete erosion)
+            if distance < 0:
+                logger.debug(f"safe_buffer: Negative buffer ({distance}m) produced empty geometry (complete erosion)")
+            else:
+                logger.debug("safe_buffer: Buffer produced empty/null geometry")
             return None
     except Exception as e:
         logger.error(f"safe_buffer: Buffer operation failed: {e}")

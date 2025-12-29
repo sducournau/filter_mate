@@ -7,7 +7,21 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.5.0 - Major Stability Release
+## 🎉 What's New in v2.5.4 - Critical Fix: OGR Backend
+
+This release fixes a critical bug in the OGR backend that caused all filters to fail due to incorrect feature counting in memory layers.
+
+### 🐛 Critical Fixes
+
+| Issue | Solution |
+|-------|----------|
+| **Memory Layer Count** | Intelligent retry mechanism for feature counting |
+| **False "0 features"** | Enhanced diagnostics and validation |
+| **OGR Filter Failures** | Prevents premature rejection of valid layers |
+
+### Previous Releases
+
+## 🎉 v2.5.0 - Major Stability Release
 
 This release consolidates all stability fixes from the 2.4.x series into a stable, production-ready version.
 

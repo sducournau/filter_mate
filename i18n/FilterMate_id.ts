@@ -115,6 +115,30 @@ Silakan restart QGIS untuk menerapkan semua perubahan.</translation>
         <source>Invalid geometry filtering not modified. Some features may be excluded from exports.</source>
         <translation>Pemfilteran geometri tidak valid tidak diubah. Beberapa fitur mungkin dikecualikan dari ekspor.</translation>
     </message>
+    <message>
+        <source>Buffer value in meters (positive=expand, negative=shrink polygons)</source>
+        <translation>Nilai buffer dalam meter (positif=perluas, negatif=perkecil poligon)</translation>
+    </message>
+    <message>
+        <source>Negative buffer (erosion): shrinks polygons inward</source>
+        <translation>Buffer negatif (erosi): memperkecil poligon ke dalam</translation>
+    </message>
+    <message>
+        <source>point</source>
+        <translation>titik</translation>
+    </message>
+    <message>
+        <source>line</source>
+        <translation>garis</translation>
+    </message>
+    <message>
+        <source>non-polygon</source>
+        <translation>bukan-poligon</translation>
+    </message>
+    <message>
+        <source>Mode batch</source>
+        <translation>Mode batch</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>
