@@ -926,11 +926,18 @@ class FilterEngineTask(QgsTask):
         # ========================================================================
         
         # Pattern to match AND/OR followed by coalesce display expressions
+        # CRITICAL: These patterns must match display expressions that return values, not booleans
+        # Example: AND (coalesce("cleabs",'<NULL>')) - returns text, not boolean
+        # Note: The outer ( ) wraps coalesce(...) so we have )) at the end
         coalesce_patterns = [
+            # Match coalesce with quoted string containing special chars like '<NULL>'
+            # Pattern: AND (coalesce("field",'<NULL>'))  - note TWO closing parens
+            r'(?:^|\s+)AND\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
+            r'(?:^|\s+)OR\s+\(coalesce\("[^"]+"\s*,\s*\'[^\']*\'\s*\)\)',
             # Match AND/OR followed by coalesce expression with nested content
             r'(?:^|\s+)AND\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
             r'(?:^|\s+)OR\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)',
-            # Simpler patterns for common cases
+            # Simpler patterns for common cases (TWO closing parens)
             r'(?:^|\s+)AND\s+\(coalesce\([^)]+\)\)',
             r'(?:^|\s+)OR\s+\(coalesce\([^)]+\)\)',
             # Match table.field syntax
@@ -4873,6 +4880,7 @@ class FilterEngineTask(QgsTask):
         - Si aucun opérateur n'est spécifié, utilise AND par défaut
         - Garantit que les filtres multi-couches ne sont jamais perdus
         - EXCEPTION: Les filtres géométriques (EXISTS, ST_*) sont REMPLACÉS, pas combinés
+        - EXCEPTION: Les expressions display (coalesce) sont SUPPRIMÉES
         
         Args:
             expression: New filter expression
@@ -4884,6 +4892,12 @@ class FilterEngineTask(QgsTask):
         old_subset = layer.subsetString() if layer.subsetString() != '' else None
         
         # Si aucun filtre existant, retourner la nouvelle expression
+        if not old_subset:
+            return expression
+        
+        # CRITICAL FIX v2.5.6: Sanitize old_subset to remove non-boolean display expressions
+        # Display expressions like coalesce("field",'<NULL>') cause PostgreSQL type errors
+        old_subset = self._sanitize_subset_string(old_subset)
         if not old_subset:
             return expression
         
