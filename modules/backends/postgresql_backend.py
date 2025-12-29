@@ -629,7 +629,15 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Apply buffer if specified (with endcap style)
         # Supports both positive (expand) and negative (shrink/erode) buffers
         # v2.4.22: Handle geographic CRS by transforming to EPSG:3857 for metric buffer
-        if buffer_value and buffer_value != 0:
+        # DIAGNOSTIC v2.5.6: Log the exact condition check for debugging
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"📝 _build_simple_wkt_expression buffer check: buffer_value={buffer_value}, "
+            f"type={type(buffer_value).__name__}, condition_result={(buffer_value and buffer_value != 0)}",
+            "FilterMate", Qgis.Info
+        )
+        
+        if buffer_value is not None and buffer_value != 0:
             self.log_info(f"  ✓ Applying buffer: {buffer_value}m")
             
             # Check if source CRS is geographic (SRID 4326 or similar)
@@ -683,7 +691,15 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         else:
             self.log_info(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
         
-        return f"{predicate_func}({geom_expr}, {source_geom_sql})"
+        # DIAGNOSTIC v2.5.6: Log the final expression for debugging
+        final_expr = f"{predicate_func}({geom_expr}, {source_geom_sql})"
+        # Log first 500 chars to QGIS MessageLog for visibility
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"📝 _build_simple_wkt_expression FINAL: {final_expr[:500]}...",
+            "FilterMate", Qgis.Info
+        )
+        return final_expr
 
     def build_expression(
         self,
