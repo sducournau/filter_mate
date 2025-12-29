@@ -2374,6 +2374,35 @@ class FilterMateApp:
         Returns:
             dict: Common task parameters
         """
+        from qgis.core import QgsMessageLog, Qgis
+        
+        # DIAGNOSTIC v2.4.17: Log incoming features to detect duplicates (visible in QGIS message panel)
+        feat_count = len(features) if features else 0
+        QgsMessageLog.logMessage(
+            f"_build_common_task_params: {feat_count} features received, expression='{expression}'",
+            "FilterMate", Qgis.Info
+        )
+        
+        logger.info(f"=== _build_common_task_params DIAGNOSTIC ===")
+        logger.info(f"  features count: {feat_count}")
+        if features:
+            for idx, feat in enumerate(features):
+                if hasattr(feat, 'id') and hasattr(feat, 'geometry'):
+                    feat_id = feat.id()
+                    if feat.hasGeometry():
+                        bbox = feat.geometry().boundingBox()
+                        logger.info(f"  feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
+                        QgsMessageLog.logMessage(
+                            f"  Feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
+                            "FilterMate", Qgis.Info
+                        )
+                    else:
+                        logger.info(f"  feature[{idx}]: id={feat_id}, NO GEOMETRY")
+                else:
+                    logger.info(f"  feature[{idx}]: type={type(feat).__name__}")
+        logger.info(f"  expression: '{expression}'")
+        logger.info(f"  layers_to_filter count: {len(layers_to_filter)}")
+        
         # CRITICAL FIX: Validate that expression is a boolean filter expression, not a display expression
         # Display expressions like coalesce("field",'<NULL>') return values, not boolean
         # They cannot be used in SQL WHERE clauses

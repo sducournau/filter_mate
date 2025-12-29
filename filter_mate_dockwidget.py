@@ -6040,11 +6040,46 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.current_exploring_groupbox == "single_selection":
                 input = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
                 logger.info(f"   SINGLE_SELECTION input feature: {input}")
+                
+                # DIAGNOSTIC v2.4.17: Enhanced logging for debugging empty features issue
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"get_current_features: mode=single_selection, input={input}, type={type(input).__name__}",
+                    "FilterMate", Qgis.Info
+                )
+                
+                if input is None:
+                    QgsMessageLog.logMessage(
+                        f"  ⚠️ SINGLE_SELECTION returned None! Check if feature is selected in widget",
+                        "FilterMate", Qgis.Warning
+                    )
+                elif hasattr(input, 'isValid') and not input.isValid():
+                    QgsMessageLog.logMessage(
+                        f"  ⚠️ SINGLE_SELECTION returned invalid feature!",
+                        "FilterMate", Qgis.Warning
+                    )
+                
                 if input:
                     logger.info(f"      feature.isValid() = {input.isValid() if hasattr(input, 'isValid') else 'N/A'}")
                     logger.info(f"      feature.id() = {input.id() if hasattr(input, 'id') else 'N/A'}")
+                    if hasattr(input, 'geometry') and input.hasGeometry():
+                        geom = input.geometry()
+                        bbox = geom.boundingBox()
+                        logger.info(f"      geometry bbox = ({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
+                        QgsMessageLog.logMessage(
+                            f"  ✓ Feature has geometry: bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
+                            "FilterMate", Qgis.Info
+                        )
                 features, expression = self.get_exploring_features(input, True)
                 logger.info(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
+                # DIAGNOSTIC v2.4.17: Log each feature to detect duplicates
+                for idx, feat in enumerate(features):
+                    if hasattr(feat, 'id'):
+                        feat_id = feat.id()
+                        feat_bbox = feat.geometry().boundingBox() if feat.hasGeometry() else None
+                        logger.info(f"   RESULT feature[{idx}]: id={feat_id}, bbox={feat_bbox}")
+                    else:
+                        logger.info(f"   RESULT feature[{idx}]: type={type(feat).__name__}")
 
             elif self.current_exploring_groupbox == "multiple_selection":
                 input = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].checkedItems()

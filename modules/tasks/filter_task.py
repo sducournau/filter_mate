@@ -2360,16 +2360,33 @@ class FilterEngineTask(QgsTask):
             # Get features from task parameters (single selection or expression mode)
             features = self.task_parameters["task"]["features"]
             logger.info(f"=== prepare_spatialite_source_geom (TASK PARAMS MODE) ===")
-            logger.info(f"  Features from task_parameters: {len(features)} features")
-            # DIAGNOSTIC v2.4.12: Log feature types
+            logger.info(f"  Features from task_parameters: {len(features) if features else 0} features")
+            # DIAGNOSTIC v2.4.12: Log feature types and validate
             if features:
-                first_feat = features[0]
-                logger.info(f"  First feature type: {type(first_feat).__name__}")
-                if hasattr(first_feat, 'hasGeometry'):
-                    logger.info(f"  First feature hasGeometry: {first_feat.hasGeometry()}")
-                    if first_feat.hasGeometry():
-                        geom = first_feat.geometry()
-                        logger.info(f"  First feature geometry type: {geom.wkbType()}")
+                # CRITICAL FIX v2.4.16: Filter out features without valid geometry
+                valid_features = []
+                for f in features:
+                    if f is None or f == "":
+                        continue
+                    if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
+                        if f.hasGeometry() and not f.geometry().isEmpty():
+                            valid_features.append(f)
+                        else:
+                            logger.debug(f"  Skipping feature without valid geometry")
+                    elif f:
+                        valid_features.append(f)
+                
+                features = valid_features
+                logger.info(f"  Valid features after filtering: {len(features)}")
+                
+                if features:
+                    first_feat = features[0]
+                    logger.info(f"  First feature type: {type(first_feat).__name__}")
+                    if hasattr(first_feat, 'hasGeometry'):
+                        logger.info(f"  First feature hasGeometry: {first_feat.hasGeometry()}")
+                        if first_feat.hasGeometry():
+                            geom = first_feat.geometry()
+                            logger.info(f"  First feature geometry type: {geom.wkbType()}")
         
         # FALLBACK: If features list is empty, use all visible features from source layer
         if not features or len(features) == 0:
@@ -3671,7 +3688,22 @@ class FilterEngineTask(QgsTask):
         
         # Also check task_features early for diagnostic
         task_features_early = self.task_parameters.get("task", {}).get("features", [])
-        valid_task_features_early = [f for f in task_features_early if f and f != ""]
+        # CRITICAL FIX v2.4.16: Properly validate QgsFeature objects
+        # Old filter: [f for f in task_features_early if f and f != ""]
+        # This missed invalid features that are truthy but don't have geometry
+        valid_task_features_early = []
+        for f in task_features_early:
+            if f is None or f == "":
+                continue
+            # Check if it's a QgsFeature with geometry
+            if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
+                if f.hasGeometry() and not f.geometry().isEmpty():
+                    valid_task_features_early.append(f)
+                else:
+                    logger.debug(f"  Skipping feature without valid geometry: {f}")
+            elif f:
+                # Non-QgsFeature truthy value (e.g., feature ID)
+                valid_task_features_early.append(f)
         
         logger.info(f"=== prepare_ogr_source_geom DEBUG ===")
         logger.info(f"  Source layer name: {layer.name() if layer else 'None'}")
@@ -3706,10 +3738,37 @@ class FilterEngineTask(QgsTask):
                 "FilterMate", Qgis.Info
             )
             
+            # DIAGNOSTIC v2.4.17: Log geometry details of task features before creating memory layer
+            QgsMessageLog.logMessage(
+                f"OGR TASK PARAMS: {len(valid_task_features_early)} features to use",
+                "FilterMate", Qgis.Info
+            )
+            for idx, feat in enumerate(valid_task_features_early):
+                if hasattr(feat, 'geometry') and feat.hasGeometry():
+                    geom = feat.geometry()
+                    geom_type = geom.type()
+                    geom_wkt_preview = geom.asWkt()[:200] if geom.asWkt() else "EMPTY"
+                    bbox = geom.boundingBox()
+                    QgsMessageLog.logMessage(
+                        f"  Feature[{idx}]: type={geom_type}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f}), wkt={geom_wkt_preview}...",
+                        "FilterMate", Qgis.Info
+                    )
+                else:
+                    QgsMessageLog.logMessage(
+                        f"  Feature[{idx}]: NO GEOMETRY or type={type(feat).__name__}",
+                        "FilterMate", Qgis.Warning
+                    )
+            
             # Create memory layer from task features
             layer = self._create_memory_layer_from_features(valid_task_features_early, layer.crs(), "source_from_task")
             if layer:
                 logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
+                # Log combined extent
+                extent = layer.extent()
+                QgsMessageLog.logMessage(
+                    f"  Memory layer extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})",
+                    "FilterMate", Qgis.Info
+                )
             else:
                 logger.error(f"  ✗ Failed to create memory layer from task features, using original layer")
                 layer = self.source_layer

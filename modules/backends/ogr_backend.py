@@ -1118,22 +1118,55 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     'METHOD': 0
                 }, context=context, feedback=feedback)
                 
-                # STABILITY FIX v2.3.9.1: Wrap selectedFeatures in try-except
-                # Get selected feature IDs from safe layer
+                # FIX v2.4.18: Map selection back using primary key values, not feature IDs
+                # The safe layer is a memory copy where feature IDs don't match the original
+                # We must use the primary key field values to map back to the original layer
                 try:
-                    selected_fids = [f.id() for f in safe_input.selectedFeatures()]
+                    from ..appUtils import get_primary_key_name
+                    pk_field = get_primary_key_name(input_layer)
+                    
+                    if pk_field:
+                        # Get primary key values from selected features in safe layer
+                        pk_values = []
+                        for f in safe_input.selectedFeatures():
+                            pk_val = f.attribute(pk_field)
+                            if pk_val is not None:
+                                pk_values.append(pk_val)
+                        
+                        if pk_values:
+                            # Select features in original layer by matching primary key values
+                            # Build an expression to select matching features
+                            from qgis.PyQt.QtCore import QMetaType
+                            field_idx = input_layer.fields().indexFromName(pk_field)
+                            field_type = input_layer.fields()[field_idx].type()
+                            
+                            # Quote string values, keep numeric values unquoted
+                            if field_type == QMetaType.Type.QString:
+                                pk_list = ','.join(f"'{str(v).replace(chr(39), chr(39)+chr(39))}'" for v in pk_values)
+                            else:
+                                pk_list = ','.join(str(v) for v in pk_values)
+                            
+                            from qgis.core import QgsExpression, QgsFeatureRequest
+                            expr_str = f'"{pk_field}" IN ({pk_list})'
+                            expr = QgsExpression(expr_str)
+                            request = QgsFeatureRequest(expr)
+                            
+                            # Get matching feature IDs from original layer
+                            matching_ids = [f.id() for f in input_layer.getFeatures(request)]
+                            input_layer.selectByIds(matching_ids)
+                            self.log_debug(f"Mapped {len(matching_ids)} features back to original layer using '{pk_field}'")
+                        else:
+                            self.log_warning("No primary key values found in selected features")
+                            input_layer.removeSelection()
+                    else:
+                        # Fallback: try using feature IDs directly (may not work for all cases)
+                        self.log_warning(f"No primary key found for {input_layer.name()}, trying direct ID mapping (may fail)")
+                        selected_fids = [f.id() for f in safe_input.selectedFeatures()]
+                        if selected_fids:
+                            input_layer.selectByIds(selected_fids)
                 except (RuntimeError, AttributeError) as e:
-                    self.log_error(f"Failed to get selected features from safe layer: {e}")
+                    self.log_error(f"Failed to map selection back to original layer: {e}")
                     return False
-                
-                # Select same features on original layer
-                if selected_fids:
-                    try:
-                        input_layer.selectByIds(selected_fids)
-                        self.log_debug(f"Mapped {len(selected_fids)} selected features back to original layer")
-                    except (RuntimeError, AttributeError) as e:
-                        self.log_error(f"Failed to map selection to original layer: {e}")
-                        return False
             
             try:
                 selected_count = input_layer.selectedFeatureCount()
@@ -1145,6 +1178,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 f"selectbylocation result: {selected_count} features selected on {input_layer.name()}",
                 "FilterMate", Qgis.Info
             )
+            
+            # DIAGNOSTIC v2.4.17: Log intersect layer geometry extent
+            if intersect_layer and intersect_layer.isValid():
+                extent = intersect_layer.extent()
+                QgsMessageLog.logMessage(
+                    f"  Intersect layer '{intersect_layer.name()}' extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})",
+                    "FilterMate", Qgis.Info
+                )
+                # Log first geometry WKT preview
+                for feat in intersect_layer.getFeatures():
+                    geom = feat.geometry()
+                    if geom and not geom.isEmpty():
+                        wkt_preview = geom.asWkt()[:200] if geom.asWkt() else "EMPTY"
+                        QgsMessageLog.logMessage(
+                            f"  First intersect geom: {wkt_preview}...",
+                            "FilterMate", Qgis.Info
+                        )
+                    break
             
             self.log_info(f"✓ Selection complete: {selected_count} features selected")
             return True
@@ -1177,7 +1228,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Uses direct selectbylocation and subset string with feature IDs.
         
         STABILITY FIX v2.3.9: Added layer validation to prevent access violations.
+        FIX v2.4.18: Clear existing subset before selectbylocation to prevent GDAL errors.
         """
+        # Initialize existing_subset early for exception handling
+        existing_subset = None
+        
         # STABILITY FIX v2.3.9: Validate layers before any operations
         if layer is None or not layer.isValid():
             self.log_error("Target layer is None or invalid - cannot proceed with standard filtering")
@@ -1196,11 +1251,46 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"  → source_layer.featureCount() = {source_layer.featureCount()}")
             return False
         
+        # FIX v2.4.18: Save and temporarily clear existing subset string
+        # This prevents GDAL "feature id out of available range" errors when
+        # selectbylocation tries to access features that are filtered out by the existing subset.
+        # The existing subset is saved and will be combined with the new filter later if needed.
+        existing_subset = layer.subsetString()
+        if existing_subset:
+            self.log_info(f"🔄 Temporarily clearing existing subset on {layer.name()} for selectbylocation")
+            self.log_debug(f"  → Existing subset: '{existing_subset[:100]}...'")
+            safe_set_subset_string(layer, "")
+            # Update old_subset to use the existing subset for combination later
+            if old_subset is None:
+                old_subset = existing_subset
+        
         self.log_debug(f"OGR standard filter: target={layer.name()} ({layer.featureCount()} features), source={source_layer.name()} ({source_layer.featureCount()} features)")
+        
+        # DIAGNOSTIC v2.4.17: Log source layer geometry details before buffer
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"_apply_filter_standard: source_layer={source_layer.name()}, features={source_layer.featureCount()}",
+            "FilterMate", Qgis.Info
+        )
+        if source_layer.featureCount() > 0:
+            for idx, feat in enumerate(source_layer.getFeatures()):
+                geom = feat.geometry()
+                if geom and not geom.isEmpty():
+                    bbox = geom.boundingBox()
+                    QgsMessageLog.logMessage(
+                        f"  Source feature[{idx}]: id={feat.id()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
+                        "FilterMate", Qgis.Info
+                    )
+                if idx >= 2:  # Only log first 3 features
+                    break
         
         # Apply buffer
         intersect_layer = self._apply_buffer(source_layer, buffer_value)
         if intersect_layer is None:
+            # FIX v2.4.18: Restore original subset if buffer failed
+            if existing_subset:
+                self.log_warning(f"Restoring original subset after buffer failure")
+                safe_set_subset_string(layer, existing_subset)
             return False
         
         # Map predicates
@@ -1209,6 +1299,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
         # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
         if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
             self.log_error("Safe select by location failed - cannot proceed")
+            # FIX v2.4.18: Restore original subset if selectbylocation failed
+            if existing_subset:
+                self.log_warning(f"Restoring original subset after selectbylocation failure")
+                safe_set_subset_string(layer, existing_subset)
             return False
         
         selected_count = layer.selectedFeatureCount()
@@ -1332,6 +1426,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         layer.removeSelection()
                     except (RuntimeError, AttributeError):
                         pass
+                    # FIX v2.4.18: Restore original subset if filter application failed
+                    if existing_subset:
+                        self.log_warning(f"Restoring original subset after filter failure")
+                        safe_set_subset_string(layer, existing_subset)
                     return False
             else:
                 self.log_debug("No features selected by geometric filter")
@@ -1345,6 +1443,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
         except Exception as select_error:
             self.log_error(f"Select by location failed: {str(select_error)}")
+            # FIX v2.4.18: Restore original subset on exception
+            if existing_subset:
+                self.log_warning(f"Restoring original subset after exception")
+                try:
+                    safe_set_subset_string(layer, existing_subset)
+                except Exception:
+                    pass
             return False
     
     def _apply_filter_large(
@@ -1363,7 +1468,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         STABILITY FIX v2.3.9: Falls back to standard method if layer cannot be edited
         (e.g., read-only GeoPackage, locked database, etc.)
+        FIX v2.4.18: Clear existing subset before selectbylocation to prevent GDAL errors.
         """
+        # Initialize existing_subset early for exception handling
+        existing_subset = None
+        
         try:
             # STABILITY FIX v2.3.9: Validate layer before any operations
             if layer is None or not layer.isValid():
@@ -1388,9 +1497,22 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     old_subset, combine_operator
                 )
             
+            # FIX v2.4.18: Save and temporarily clear existing subset string
+            # This prevents GDAL "feature id out of available range" errors
+            existing_subset = layer.subsetString()
+            if existing_subset:
+                self.log_info(f"🔄 Temporarily clearing existing subset on {layer.name()} for large dataset filtering")
+                self.log_debug(f"  → Existing subset: '{existing_subset[:100]}...'")
+                safe_set_subset_string(layer, "")
+                if old_subset is None:
+                    old_subset = existing_subset
+            
             # Apply buffer
             intersect_layer = self._apply_buffer(source_layer, buffer_value)
             if intersect_layer is None:
+                # Restore original subset if buffer failed
+                if existing_subset:
+                    safe_set_subset_string(layer, existing_subset)
                 return False
             
             # Map predicates
