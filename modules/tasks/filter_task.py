@@ -5065,9 +5065,25 @@ class FilterEngineTask(QgsTask):
                     )
                 
                 # Store subset string for history/undo functionality
+                # CRITICAL FIX: For PostgreSQL layers, build a full SELECT statement
+                # because manage_layer_subset_strings expects a complete SQL SELECT
+                # for materialized view creation, not just a WHERE clause expression
+                if layer.providerType() == 'postgres' and final_expression:
+                    # Build full SELECT statement from WHERE clause
+                    sql_subset_string = (
+                        f'SELECT "{layer_name}"."{primary_key}", '
+                        f'"{layer_name}"."{geom_field}" '
+                        f'FROM "{layer_schema}"."{layer_name}" '
+                        f'WHERE {final_expression}'
+                    )
+                    logger.debug(f"Built full SELECT for PostgreSQL history: {sql_subset_string[:200]}...")
+                else:
+                    # Non-PostgreSQL layers use the expression directly
+                    sql_subset_string = final_expression
+                
                 self.manage_layer_subset_strings(
                     layer,
-                    final_expression,
+                    sql_subset_string,
                     primary_key,
                     geom_field,
                     False
