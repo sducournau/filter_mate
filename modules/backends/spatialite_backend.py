@@ -228,14 +228,26 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         Build ST_Buffer expression with endcap style from task_params.
         
+        Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
+        Negative buffers only work on polygon geometries - they shrink the polygon inward.
+        
         Args:
             geom_expr: Geometry expression to buffer
-            buffer_value: Buffer distance
+            buffer_value: Buffer distance (positive=expand, negative=shrink/erode)
             
         Returns:
             Spatialite ST_Buffer expression with style parameter
+            
+        Note:
+            - Negative buffer on a polygon shrinks it inward
+            - Negative buffer on a point or line returns empty geometry
+            - Very large negative buffers may collapse the polygon entirely
         """
         endcap_style = self._get_buffer_endcap_style()
+        
+        # Log negative buffer usage for visibility
+        if buffer_value < 0:
+            self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
         
         if endcap_style == 'round':
             # Default style - no need to specify
@@ -1216,19 +1228,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     "Performance may be reduced for datasets >10k features."
                 )
             
-            # Build source geometry expression with proper SRID
-            # Use source SRID for GeomFromText, then transform to target if needed
-            if needs_transform:
-                # Transform source geometry to target CRS
-                source_geom_expr = f"ST_Transform(GeomFromText('{source_geom}', {source_srid}), {target_srid})"
-                self.log_info(f"Using ST_Transform: SRID {source_srid} → {target_srid}")
-            else:
-                source_geom_expr = f"GeomFromText('{source_geom}', {target_srid})"
-                self.log_debug(f"Using SRID {target_srid} (same as target)")
+            # Build source geometry expression
+            # CRITICAL v2.4.22: Don't transform here if buffer will need geographic transformation
+            # The buffer logic below will handle all transformations properly
+            # We just create the base GeomFromText expression in source SRID
+            source_geom_expr = f"GeomFromText('{source_geom}', {source_srid})"
+            self.log_debug(f"Created base geometry expression with SRID {source_srid}")
         
         # Apply buffer using ST_Buffer() SQL function if specified
         # This uses Spatialite native spatial functions instead of QGIS processing
-        if buffer_value is not None and buffer_value > 0:
+        # Supports both positive (expand) and negative (shrink/erode) buffers
+        if buffer_value is not None and buffer_value != 0:
             # Check if CRS is geographic - buffer needs to be in appropriate units
             is_target_geographic = target_srid == 4326 or (layer and layer.crs().isGeographic())
             
@@ -1236,23 +1246,50 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             endcap_style = self._get_buffer_endcap_style()
             buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
             
+            # Log negative buffer usage
+            buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
+            
             if is_target_geographic:
                 # Geographic CRS: buffer is in degrees, which is problematic
                 # Use ST_Transform to project to Web Mercator (EPSG:3857) for metric buffer
-                # Then transform back to original CRS
-                self.log_info(f"🌍 Geographic CRS (SRID={target_srid}) - applying buffer in EPSG:3857")
-                source_geom_expr = (
-                    f"ST_Transform("
-                    f"ST_Buffer("
-                    f"ST_Transform({source_geom_expr}, 3857), "
-                    f"{buffer_value}{buffer_style_param}), "
-                    f"{target_srid})"
-                )
-                self.log_info(f"✓ Applied ST_Buffer({buffer_value}m, endcap={endcap_style}) via EPSG:3857 reprojection")
+                # Then transform back to target CRS
+                # 
+                # CRITICAL v2.4.22 FIX: Build complete transformation chain:
+                # 1. Start with source geometry in source_srid
+                # 2. Transform to 3857 for metric buffer
+                # 3. Apply buffer in meters
+                # 4. Transform result to target_srid
+                self.log_info(f"🌍 Geographic CRS (target SRID={target_srid}, source SRID={source_srid}) - applying buffer in EPSG:3857")
+                
+                # Build transformation chain
+                if source_srid == 3857:
+                    # Source already in 3857, just buffer and transform to target
+                    buffered_geom = f"ST_Buffer({source_geom_expr}, {buffer_value}{buffer_style_param})"
+                elif source_srid == target_srid:
+                    # Source and target are same geographic CRS, transform to 3857 for buffer then back
+                    buffered_geom = f"ST_Buffer(ST_Transform({source_geom_expr}, 3857), {buffer_value}{buffer_style_param})"
+                else:
+                    # Source is different from target, transform source to 3857 for buffer
+                    buffered_geom = f"ST_Buffer(ST_Transform({source_geom_expr}, 3857), {buffer_value}{buffer_style_param})"
+                
+                # Transform buffered result to target SRID
+                source_geom_expr = f"ST_Transform({buffered_geom}, {target_srid})"
+                self.log_info(f"✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}, endcap={endcap_style}) via EPSG:3857 reprojection")
             else:
                 # Projected CRS: buffer value is directly in map units (usually meters)
+                # First ensure geometry is in target SRID if transformation is needed
+                if needs_transform:
+                    source_geom_expr = f"ST_Transform({source_geom_expr}, {target_srid})"
+                    self.log_info(f"Transformed source: SRID {source_srid} → {target_srid}")
+                
+                # Then apply buffer in native CRS
                 source_geom_expr = self._build_st_buffer_with_style(source_geom_expr, buffer_value)
-                self.log_info(f"✓ Applied ST_Buffer({buffer_value}, endcap={endcap_style}) in native CRS (SRID={target_srid})")
+                self.log_info(f"✓ Applied ST_Buffer({buffer_value}, {buffer_type_str}, endcap={endcap_style}) in native CRS (SRID={target_srid})")
+        else:
+            # No buffer: just apply CRS transformation if needed
+            if not use_temp_table and needs_transform:
+                source_geom_expr = f"ST_Transform({source_geom_expr}, {target_srid})"
+                self.log_info(f"Transformed source (no buffer): SRID {source_srid} → {target_srid}")
         
         # Dynamic buffer expressions use attribute values
         if buffer_expression:

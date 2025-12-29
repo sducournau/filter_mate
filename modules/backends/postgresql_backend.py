@@ -142,14 +142,26 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         Build ST_Buffer expression with endcap style from task_params.
         
+        Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
+        Negative buffers only work on polygon geometries - they shrink the polygon inward.
+        
         Args:
             geom_expr: Geometry expression to buffer
-            buffer_value: Buffer distance
+            buffer_value: Buffer distance (positive=expand, negative=shrink/erode)
             
         Returns:
             PostGIS ST_Buffer expression with style parameter
+            
+        Note:
+            - Negative buffer on a polygon shrinks it inward
+            - Negative buffer on a point or line returns empty geometry
+            - Very large negative buffers may collapse the polygon entirely
         """
         endcap_style = self._get_buffer_endcap_style()
+        
+        # Log negative buffer usage for visibility
+        if buffer_value < 0:
+            self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
         
         if endcap_style == 'round':
             # Default style - no need to specify
@@ -573,12 +585,50 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             Simple PostGIS expression like:
             ST_Intersects("table"."geom", ST_GeomFromText('POLYGON(...)', 31370))
         """
+        self.log_info(f"📝 _build_simple_wkt_expression called:")
+        self.log_info(f"  - buffer_value: {buffer_value}")
+        self.log_info(f"  - source_srid: {source_srid}")
+        self.log_info(f"  - WKT length: {len(source_wkt) if source_wkt else 0}")
+        
         # Build source geometry from WKT
         source_geom_sql = f"ST_GeomFromText('{source_wkt}', {source_srid})"
         
         # Apply buffer if specified (with endcap style)
-        if buffer_value and buffer_value > 0:
-            source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
+        # Supports both positive (expand) and negative (shrink/erode) buffers
+        # v2.4.22: Handle geographic CRS by transforming to EPSG:3857 for metric buffer
+        if buffer_value and buffer_value != 0:
+            self.log_info(f"  ✓ Applying buffer: {buffer_value}m")
+            
+            # Check if source CRS is geographic (SRID 4326 or similar)
+            # Geographic CRS use degrees, so buffer in meters requires transformation
+            is_geographic = source_srid == 4326 or (
+                hasattr(self, 'task_params') and 
+                self.task_params and 
+                self.task_params.get('infos', {}).get('layer_crs_authid', '').startswith('EPSG:4') and
+                source_srid < 5000  # Heuristic: low SRID numbers are often geographic
+            )
+            
+            if is_geographic:
+                # Geographic CRS: transform to EPSG:3857 for metric buffer, then back
+                self.log_info(f"  🌍 Geographic CRS (SRID={source_srid}) - applying buffer via EPSG:3857")
+                endcap_style = self._get_buffer_endcap_style()
+                buffer_style_param = "" if endcap_style == 'round' else f", 'endcap={endcap_style}'"
+                
+                # Transform -> Buffer -> Transform back
+                source_geom_sql = (
+                    f"ST_Transform("
+                    f"ST_Buffer("
+                    f"ST_Transform({source_geom_sql}, 3857), "
+                    f"{buffer_value}{buffer_style_param}), "
+                    f"{source_srid})"
+                )
+                buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
+                self.log_info(f"  ✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}) via EPSG:3857 reprojection")
+            else:
+                # Projected CRS: buffer directly in native units
+                source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
+        else:
+            self.log_info(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
         
         return f"{predicate_func}({geom_expr}, {source_geom_sql})"
 
@@ -617,6 +667,17 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         self.log_debug(f"Building PostgreSQL expression for {layer_props.get('layer_name', 'unknown')}")
         
+        # Log buffer parameters for debugging negative buffer issues
+        self.log_info(f"📐 Buffer parameters received:")
+        self.log_info(f"  - buffer_value: {buffer_value} (type: {type(buffer_value).__name__})")
+        self.log_info(f"  - buffer_expression: {buffer_expression}")
+        if buffer_value is not None and buffer_value < 0:
+            self.log_info(f"  ⚠️ NEGATIVE BUFFER (erosion) requested: {buffer_value}m")
+        elif buffer_value is not None and buffer_value > 0:
+            self.log_info(f"  ✓ Positive buffer (expansion): {buffer_value}m")
+        else:
+            self.log_info(f"  ℹ️ No buffer applied (value is 0 or None)")
+        
         # Extract layer properties
         schema = layer_props.get("layer_schema", "public")
         # Use layer_table_name (actual source table) if available, fallback to layer_name (display name)
@@ -647,13 +708,16 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         self.log_debug(f"Using geometry field: '{geom_field}'")
         
-        # Build geometry expression
+        # Build geometry expression for target layer
         geom_expr = f'"{table}"."{geom_field}"'
         
-        # Apply buffer if specified (with endcap style from task_params)
-        if buffer_value and buffer_value > 0:
-            geom_expr = self._build_st_buffer_with_style(geom_expr, buffer_value)
-        elif buffer_expression:
+        # NOTE: Buffer is applied to SOURCE geometry, not target geometry
+        # The buffer_value will be passed to source geometry expression builders
+        # (e.g., _build_simple_wkt_expression, EXISTS subquery source geom)
+        # This ensures "find features in target that intersect buffered source"
+        
+        # Dynamic buffer expression handling (for attribute-based buffer)
+        if buffer_expression:
             # Dynamic buffer expression - use endcap style
             endcap_style = self._get_buffer_endcap_style()
             if endcap_style == 'round':
@@ -703,7 +767,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     predicate_func=predicate_func,
                     source_wkt=source_wkt,
                     source_srid=source_srid,
-                    buffer_value=None  # Buffer already applied to geom_expr if needed
+                    buffer_value=buffer_value  # Apply buffer to source geometry
                 )
                 self.log_debug(f"  ✓ Simple WKT expression: {expr[:100]}...")
                 predicate_expressions.append(expr)

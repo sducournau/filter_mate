@@ -286,20 +286,24 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         self.log_debug(f"Preparing OGR processing for {layer_props.get('layer_name', 'unknown')}")
         
+        # Log buffer parameters for debugging
+        self.log_info(f"📐 OGR build_expression - Buffer parameters:")
+        self.log_info(f"  - buffer_value: {buffer_value}")
+        self.log_info(f"  - buffer_expression: {buffer_expression}")
+        if buffer_value is not None and buffer_value < 0:
+            self.log_info(f"  ⚠️ NEGATIVE BUFFER (erosion) requested: {buffer_value}m")
+        
         # Store source_geom for later use in apply_filter
-        # NOTE: For OGR, source_geom is already a QgsVectorLayer with buffer applied
-        # in prepare_ogr_source_geom(), so we don't need to apply buffer again
         self.source_geom = source_geom
         
-        # For OGR, we'll use QGIS processing, so we just return predicate names
+        # For OGR, we'll use QGIS processing, so we return predicate names and buffer params
         # The actual filtering will be done in apply_filter()
-        # NOTE: buffer_value is NOT passed here because it's already applied to source_geom
+        # CRITICAL FIX: Pass buffer_value to apply_filter for application there
         import json
         params = {
             'predicates': list(predicates.keys()),
-            # Buffer is already applied in prepare_ogr_source_geom - don't apply again
-            'buffer_value': None,
-            'buffer_expression': None
+            'buffer_value': buffer_value,
+            'buffer_expression': buffer_expression
         }
         return json.dumps(params)
     
@@ -434,6 +438,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
     def _apply_buffer(self, source_layer, buffer_value):
         """Apply buffer to source layer if specified.
         
+        Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
+        Negative buffers only work on polygon geometries - they shrink the polygon inward.
+        
         CRITICAL FIX: Handles GeometryCollection results from native:buffer.
         When buffering multiple non-overlapping geometries, QGIS Processing can
         produce GeometryCollection which is incompatible with typed layers (MultiPolygon).
@@ -445,6 +452,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
         - 0: Round (default)
         - 1: Flat
         - 2: Square
+        
+        Note on negative buffers:
+        - Negative buffer on a polygon shrinks it inward (erosion)
+        - Negative buffer on a point or line produces empty geometry
+        - Very large negative buffers may collapse the polygon entirely
         """
         # STABILITY FIX v2.3.9: Validate source layer before any operations
         if source_layer is None:
@@ -468,8 +480,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"     3. Field-based filtering returned no matches")
             return None
         
-        if buffer_value and buffer_value > 0:
-            self.log_debug(f"Applying buffer of {buffer_value} to source layer")
+        # Support both positive and negative buffer values
+        if buffer_value and buffer_value != 0:
+            buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
+            self.log_debug(f"Applying {buffer_type_str} buffer of {buffer_value} to source layer")
+            
+            # Warn for negative buffer on non-polygon layers
+            if buffer_value < 0:
+                geom_type = source_layer.geometryType()
+                # 0 = Point, 1 = Line, 2 = Polygon
+                if geom_type != 2:  # Not polygon
+                    self.log_warning(f"⚠️ Negative buffer applied to non-polygon geometry type ({geom_type})")
+                    self.log_warning(f"  → This may produce empty or invalid geometries")
+            
             try:
                 # Ensure buffer_value is numeric
                 buffer_dist = float(buffer_value)
@@ -509,6 +532,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     fixed_layer = source_layer
                 
                 # Now apply buffer on the fixed layer
+                # native:buffer supports negative distances for polygon erosion
                 buffer_result = processing.run("native:buffer", {
                     'INPUT': fixed_layer,
                     'DISTANCE': buffer_dist,
@@ -521,6 +545,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 }, context=context, feedback=feedback)
                 
                 buffered_layer = buffer_result['OUTPUT']
+                
+                # For negative buffers, filter out empty geometries that may result
+                # from polygons that were too small for the erosion
+                if buffer_dist < 0:
+                    empty_count = 0
+                    for feature in buffered_layer.getFeatures():
+                        geom = feature.geometry()
+                        if geom.isNull() or geom.isEmpty():
+                            empty_count += 1
+                    if empty_count > 0:
+                        self.log_info(f"📐 Negative buffer: {empty_count} features collapsed to empty (removed)")
                 
                 # CRITICAL FIX: Check for and convert GeometryCollection to MultiPolygon
                 # native:buffer can produce GeometryCollection when features don't overlap
@@ -535,11 +570,11 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"  - CRS: {source_layer.crs().authid()} (Geographic: {source_layer.crs().isGeographic()})")
                 
                 # Check for common error causes
-                if source_layer.crs().isGeographic() and float(buffer_value) > 1:
+                if source_layer.crs().isGeographic() and abs(float(buffer_value)) > 1:
                     self.log_error(
                         f"ERROR: Geographic CRS detected with large buffer value!\n"
                         f"  A buffer of {buffer_value}° in a geographic CRS (lat/lon) is equivalent to\n"
-                        f"  approximately {float(buffer_value) * 111}km at the equator.\n"
+                        f"  approximately {abs(float(buffer_value)) * 111}km at the equator.\n"
                         f"  → Solution: Reproject your layer to a projected CRS (e.g., EPSG:3857, EPSG:2154)"
                     )
                 

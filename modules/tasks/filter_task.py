@@ -2473,10 +2473,11 @@ class FilterEngineTask(QgsTask):
             
             # Check if buffer expected but cached geometry is LineString
             cache_is_valid = True
-            if self.param_buffer_value and self.param_buffer_value > 0:
+            if self.param_buffer_value and self.param_buffer_value != 0:
                 if 'LineString' in wkt_type or 'Line' in wkt_type:
                     logger.error("❌ CACHE BUG DETECTED!")
-                    logger.error(f"  Expected: Polygon/MultiPolygon (with {self.param_buffer_value}m buffer)")
+                    buffer_type_str = "expansion" if self.param_buffer_value > 0 else "erosion"
+                    logger.error(f"  Expected: Polygon/MultiPolygon (with {self.param_buffer_value}m {buffer_type_str} buffer)")
                     logger.error(f"  Got: {wkt_type} (no buffer applied!)")
                     logger.error("  → Cache has stale geometry without buffer")
                     logger.error("  → Clearing cache and recomputing...")
@@ -2538,8 +2539,10 @@ class FilterEngineTask(QgsTask):
                 # SPATIALITE OPTIMIZATION: Buffer is now applied via ST_Buffer() in SQL expression
                 # This avoids GeometryCollection issues from QGIS buffer and uses native Spatialite functions
                 # The buffer value is passed to build_expression() which adds ST_Buffer() to the SQL
-                if self.param_buffer_value is not None and self.param_buffer_value > 0:
-                    logger.info(f"Buffer of {self.param_buffer_value}m will be applied via ST_Buffer() in SQL")
+                # Supports both positive (expand) and negative (shrink/erode) buffers
+                if self.param_buffer_value is not None and self.param_buffer_value != 0:
+                    buffer_type_str = "expansion" if self.param_buffer_value > 0 else "erosion (shrink)"
+                    logger.info(f"Buffer of {self.param_buffer_value}m ({buffer_type_str}) will be applied via ST_Buffer() in SQL")
                     # NOTE: Do NOT apply buffer here - it's done in Spatialite SQL expression
                     
                 geometries.append(geom_copy)
@@ -3979,29 +3982,30 @@ class FilterEngineTask(QgsTask):
             layer = self._reproject_layer(layer, self.source_layer_crs_authid)
         
         # Step 4: Apply buffer if specified
-        # SPATIALITE OPTIMIZATION: If spatialite_source_geom is prepared OR we're in fallback mode,
-        # buffer will be applied via ST_Buffer() in SQL expression, so skip buffer here
-        has_spatialite_geom = hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom is not None
+        # CRITICAL FIX v2.5.2: Only skip buffer when using Spatialite backend for SQL-based buffer
+        # Do NOT skip if using OGR backend directly (even if spatialite_source_geom exists for other layers)
+        #
+        # IMPORTANT: Buffer must be applied in ONE place only to avoid double-buffering:
+        # - Spatialite backend: Buffer via ST_Buffer() in SQL (backend.build_expression applies it)
+        # - OGR backend: Buffer via QGIS Processing (here OR in apply_filter)
+        # - PostgreSQL backend: Buffer via ST_Buffer() in SQL
+        #
+        # The ogr_source_geom layer is used by OGR backend's apply_filter method
+        # Buffer is applied there via _apply_buffer() using the buffer_value param from build_expression
+        # So we should NOT apply buffer here for OGR layers - let apply_filter handle it
+        #
+        # Skip buffer in prepare_ogr only if it will be applied via SQL (Spatialite fallback mode)
         is_spatialite_fallback = hasattr(self, '_spatialite_fallback_mode') and self._spatialite_fallback_mode
-        skip_buffer = has_spatialite_geom or is_spatialite_fallback
         
-        if buffer_distance is not None and not skip_buffer:
-            # Only apply buffer via processing if Spatialite WKT is NOT available
-            # (Spatialite backend will use ST_Buffer() in SQL instead)
-            logger.info("Applying buffer via QGIS processing (Spatialite WKT not available)")
-            buffered_layer = self._apply_buffer_with_fallback(layer, buffer_distance)
-            
-            # STABILITY FIX v2.3.9: Check if buffer failed (returns None) or produced empty layer
-            if buffered_layer is None or not buffered_layer.isValid() or buffered_layer.featureCount() == 0:
-                logger.warning("⚠️ Buffer operation failed or produced empty layer - using unbuffered geometry")
-                # Fallback: use original geometry without buffer
-                layer = self.source_layer
-                if layer.subsetString():
-                    layer = self._copy_filtered_layer_to_memory(layer, "source_filtered_no_buffer")
-            else:
-                layer = buffered_layer
-        elif buffer_distance is not None and skip_buffer:
+        if buffer_distance is not None and not is_spatialite_fallback:
+            # Buffer will be applied in OGR backend's apply_filter via _apply_buffer()
+            # This is the correct place because OGR uses QGIS Processing algorithms
+            logger.info(f"Buffer of {buffer_distance}m will be applied in OGR backend's apply_filter")
+        elif buffer_distance is not None and is_spatialite_fallback:
             logger.info(f"Buffer of {buffer_distance}m will be applied via ST_Buffer() in Spatialite SQL")
+        
+        # REMOVED: Don't apply buffer here, let OGR apply_filter handle it via _apply_buffer()
+        # This ensures buffer is applied with correct parameters and error handling
         
         # STABILITY FIX v2.3.9: Validate the final layer before storing
         if layer is None:
@@ -4788,12 +4792,21 @@ class FilterEngineTask(QgsTask):
         else:
             cache_key = None
         
+        # Log buffer values being passed to backend
+        passed_buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
+        passed_buffer_expression = self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
+        logger.info(f"📐 _build_backend_expression - Buffer being passed to backend:")
+        logger.info(f"  - param_buffer_value: {passed_buffer_value}")
+        logger.info(f"  - param_buffer_expression: {passed_buffer_expression}")
+        if passed_buffer_value is not None and passed_buffer_value < 0:
+            logger.info(f"  ⚠️ NEGATIVE BUFFER (erosion) will be passed: {passed_buffer_value}m")
+        
         expression = backend.build_expression(
             layer_props=layer_props,
             predicates=self.current_predicates,
             source_geom=source_geom,
-            buffer_value=self.param_buffer_value if hasattr(self, 'param_buffer_value') else None,
-            buffer_expression=self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None,
+            buffer_value=passed_buffer_value,
+            buffer_expression=passed_buffer_expression,
             source_filter=source_filter,
             source_wkt=source_wkt,
             source_srid=source_srid,
@@ -5759,18 +5772,195 @@ class FilterEngineTask(QgsTask):
         Args:
             layer: QgsVectorLayer
             output_path: Base path for export (without extension)
-            style_format: Style file format (e.g., 'qml', 'sld')
+            style_format: Style file format (e.g., 'qml', 'sld', 'lyrx')
             datatype: Export datatype (to check if styles are supported)
         """
         if datatype == 'XLSX' or not style_format:
             return
         
-        style_path = os.path.normcase(f"{output_path}.{style_format}")
+        # Normalize format name
+        format_lower = style_format.lower().replace('arcgis (lyrx)', 'lyrx').strip()
+        
+        # Handle ArcGIS LYRX format
+        if format_lower == 'lyrx' or 'arcgis' in format_lower:
+            self._save_layer_style_lyrx(layer, output_path)
+            return
+        
+        style_path = os.path.normcase(f"{output_path}.{format_lower}")
         try:
             layer.saveNamedStyle(style_path)
             logger.debug(f"Style saved: {style_path}")
         except Exception as e:
             logger.warning(f"Could not save style for '{layer.name()}': {e}")
+
+    def _save_layer_style_lyrx(self, layer, output_path):
+        """
+        Export layer style to ArcGIS-compatible LYRX format.
+        
+        Creates a JSON-based style file that can be imported into ArcGIS Pro.
+        Note: This is a basic conversion that includes symbology metadata.
+        Full ArcGIS style support requires ArcPy (not available in QGIS).
+        
+        Args:
+            layer: QgsVectorLayer
+            output_path: Base path for export (without extension)
+        """
+        import json
+        from datetime import datetime
+        
+        style_path = os.path.normcase(f"{output_path}.lyrx")
+        
+        try:
+            # Build ArcGIS-compatible layer definition
+            renderer = layer.renderer()
+            geometry_type_map = {
+                0: "esriGeometryPoint",
+                1: "esriGeometryPolyline", 
+                2: "esriGeometryPolygon",
+                3: "esriGeometryMultipoint",
+                4: "esriGeometryNull"
+            }
+            
+            lyrx_content = {
+                "type": "CIMLayerDocument",
+                "version": "2.9.0",
+                "build": 32739,
+                "layers": [
+                    f"CIMPATH=map/{layer.name().replace(' ', '_')}.json"
+                ],
+                "layerDefinitions": [
+                    {
+                        "type": "CIMFeatureLayer",
+                        "name": layer.name(),
+                        "uRI": f"CIMPATH=map/{layer.name().replace(' ', '_')}.json",
+                        "sourceModifiedTime": {
+                            "type": "TimeInstant",
+                            "start": datetime.now().timestamp() * 1000
+                        },
+                        "description": f"Exported from QGIS FilterMate - {layer.name()}",
+                        "layerType": "Operational",
+                        "showLegends": True,
+                        "visibility": True,
+                        "displayCacheType": "Permanent",
+                        "maxDisplayCacheAge": 5,
+                        "showPopups": True,
+                        "serviceLayerID": -1,
+                        "refreshRate": -1,
+                        "refreshRateUnit": "esriTimeUnitsSeconds",
+                        "autoGenerateFeatureTemplates": True,
+                        "featureTable": {
+                            "type": "CIMFeatureTable",
+                            "displayField": layer.displayField() or "",
+                            "editable": True,
+                            "dataConnection": {
+                                "type": "CIMStandardDataConnection",
+                                "workspaceFactory": "FileGDB" if ".gdb" in layer.source() else "Shapefile"
+                            },
+                            "studyAreaSpatialRel": "esriSpatialRelUndefined",
+                            "searchOrder": "esriSearchOrderSpatial"
+                        },
+                        "htmlPopupEnabled": True,
+                        "selectable": True,
+                        "featureCacheType": "Session",
+                        "geometryType": geometry_type_map.get(layer.geometryType(), "esriGeometryNull"),
+                        "_qgis_renderer_type": renderer.type() if renderer else "unknown",
+                        "_qgis_crs": layer.crs().authid(),
+                        "_qgis_feature_count": layer.featureCount(),
+                        "_filtermate_export": {
+                            "version": "2.5.0",
+                            "timestamp": datetime.now().isoformat(),
+                            "note": "Basic LYRX export. For full symbology, use ArcGIS Pro import."
+                        }
+                    }
+                ]
+            }
+            
+            # Add symbology info if available
+            if renderer:
+                if renderer.type() == 'singleSymbol':
+                    symbol = renderer.symbol()
+                    if symbol:
+                        lyrx_content["layerDefinitions"][0]["renderer"] = {
+                            "type": "CIMSimpleRenderer",
+                            "symbol": {
+                                "type": "CIMSymbolReference",
+                                "symbol": self._convert_symbol_to_arcgis(symbol)
+                            }
+                        }
+            
+            with open(style_path, 'w', encoding='utf-8') as f:
+                json.dump(lyrx_content, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"ArcGIS LYRX style saved: {style_path}")
+            
+        except Exception as e:
+            logger.warning(f"Could not save ArcGIS LYRX style for '{layer.name()}': {e}")
+
+    def _convert_symbol_to_arcgis(self, symbol):
+        """
+        Convert QGIS symbol to basic ArcGIS CIM symbol format.
+        
+        Args:
+            symbol: QGIS symbol object
+            
+        Returns:
+            dict: ArcGIS CIM symbol definition
+        """
+        try:
+            # Get basic color from first symbol layer
+            if symbol.symbolLayerCount() > 0:
+                symbol_layer = symbol.symbolLayer(0)
+                color = symbol_layer.color()
+                rgb = [color.red(), color.green(), color.blue(), color.alpha()]
+            else:
+                rgb = [128, 128, 128, 255]
+            
+            symbol_type = symbol.type()
+            
+            if symbol_type == 0:  # Marker (Point)
+                return {
+                    "type": "CIMPointSymbol",
+                    "symbolLayers": [{
+                        "type": "CIMVectorMarker",
+                        "enable": True,
+                        "size": symbol.size() if hasattr(symbol, 'size') else 6,
+                        "colorLocked": True,
+                        "markerGraphics": [{
+                            "type": "CIMMarkerGraphic",
+                            "geometry": {"rings": [[[-1, -1], [-1, 1], [1, 1], [1, -1], [-1, -1]]]},
+                            "symbol": {
+                                "type": "CIMPolygonSymbol",
+                                "symbolLayers": [{
+                                    "type": "CIMSolidFill",
+                                    "enable": True,
+                                    "color": {"type": "CIMRGBColor", "values": rgb}
+                                }]
+                            }
+                        }]
+                    }]
+                }
+            elif symbol_type == 1:  # Line
+                return {
+                    "type": "CIMLineSymbol",
+                    "symbolLayers": [{
+                        "type": "CIMSolidStroke",
+                        "enable": True,
+                        "width": symbol.width() if hasattr(symbol, 'width') else 1,
+                        "color": {"type": "CIMRGBColor", "values": rgb}
+                    }]
+                }
+            else:  # Polygon
+                return {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [{
+                        "type": "CIMSolidFill",
+                        "enable": True,
+                        "color": {"type": "CIMRGBColor", "values": rgb}
+                    }]
+                }
+        except Exception as e:
+            logger.debug(f"Symbol conversion fallback: {e}")
+            return {"type": "CIMSymbolReference", "note": "Fallback symbol"}
 
 
     def _export_single_layer(self, layer, output_path, projection, datatype, style_format, save_styles):

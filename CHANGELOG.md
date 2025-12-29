@@ -2,6 +2,61 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.5.2] - 2025-12-29 - CRITICAL FIX: Negative Buffer for All Backends
+
+### 🐛 Critical Bug Fixes
+
+- **FIXED: Negative buffer not working for OGR, Spatialite, and fallback backends**
+  - **Root Cause**: OGR backend was ignoring `buffer_value` parameter in `build_expression()`
+  - **Root Cause**: `prepare_ogr_source_geom()` was skipping buffer application when `spatialite_source_geom` existed
+  - **Impact**: Negative buffers (erosion) were only working for PostgreSQL direct connections
+  - **Solution**: 
+    - OGR `build_expression()` now correctly passes `buffer_value` to `apply_filter()`
+    - OGR `apply_filter()` applies buffer via `_apply_buffer()` with full negative value support
+    - Removed incorrect buffer skip logic in `prepare_ogr_source_geom()`
+    - Buffer is now applied in the correct place for each backend:
+      - PostgreSQL: ST_Buffer() in SQL (backend)
+      - Spatialite: ST_Buffer() in SQL (backend)
+      - OGR: native:buffer in apply_filter (Processing)
+
+### 📊 Testing
+
+- Added comprehensive logging for buffer value tracing through backend pipeline
+- Logs show buffer values at each step: filter_task → backend.build_expression → apply_filter
+
+### 🔍 Debugging Improvements
+
+- Enhanced logging in `build_expression()` (all backends) to trace buffer parameters
+- Added logging in `_build_simple_wkt_expression()` to confirm buffer application
+- Added logging in `_apply_filter_standard()` to confirm buffer passed to `_apply_buffer()`
+
+---
+
+## [2.5.1] - 2025-12-29 - Negative Buffer Support
+
+### ✨ New Features
+
+- **Negative Buffer (Erosion)**: Support for negative buffer values across all three backends
+  - PostgreSQL: Native ST_Buffer() with negative distance
+  - Spatialite: Native ST_Buffer() with negative distance  
+  - OGR: QGIS Processing native:buffer with negative distance
+  - Shrinks polygons inward instead of expanding outward
+  - Visual feedback: Orange/yellow styling when negative buffer is active
+
+### 🎨 UI Improvements
+
+- Buffer spinbox now accepts values from -1,000,000 to +1,000,000 meters
+- Updated tooltips explaining positive (expand) vs negative (shrink) buffers
+- Dynamic styling on buffer spinbox when negative value entered
+- Clear visual indication of erosion mode
+
+### 📝 Documentation
+
+- Updated docstrings for buffer-related methods
+- Added notes about negative buffer limitations (polygon geometries only)
+
+---
+
 ## [2.5.0] - 2025-12-29 - Major Stability Release
 
 ### 🎉 Major Milestone

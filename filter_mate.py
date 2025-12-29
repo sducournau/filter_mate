@@ -1193,7 +1193,7 @@ class FilterMate:
                         pass  # Not connected, ignore
                     self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
             except Exception as e:
-                iface.messageBar().pushCritical(
+                self.iface.messageBar().pushCritical(
                     "FilterMate",
                     f"Error loading plugin: {str(e)}. Check QGIS Python console for details."
                 )

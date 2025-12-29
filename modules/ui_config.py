@@ -155,17 +155,21 @@ class UIConfig:
                 "preferred_height": 300
             },
             
-            # Widget keys dimensions (NEW)
+            # Widget keys dimensions - Compact sidebar buttons
             "widget_keys": {
-                "min_width": 38,
-                "max_width": 48,
-                "base_width": 42
+                "min_width": 42,
+                "max_width": 52,
+                "base_width": 46,
+                "padding": 6,
+                "border_radius": 6
             },
             
-            # GroupBox dimensions (NEW)
+            # GroupBox dimensions - Compact grouping
             "groupbox": {
-                "min_height": 100,
-                "padding": 3
+                "min_height": 60,
+                "padding": 6,
+                "title_padding": 4,
+                "border_radius": 4
             },
             
             # Spacer dimensions - Harmonized spacing values
@@ -239,165 +243,174 @@ class UIConfig:
         "normal": {
             "description": "Standard layout for normal screens (desktops, large laptops)",
             
-            # Button dimensions
+            # Button dimensions - More generous for large screens
             "button": {
-                "height": 48,
-                "icon_size": 27,
-                "padding": {"top": 8, "right": 12, "bottom": 8, "left": 12},
-                "border_radius": 9,
-                "min_width": 120
-            },
-            
-            # Action buttons (filter, export, etc.)
-            "action_button": {
-                "height": 42,
-                "icon_size": 30,
-                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
-                "border_radius": 6,
-                "min_width": 42
-            },
-            
-            # Tool buttons (identify, zoom, etc.)
-            "tool_button": {
-                "height": 42,
-                "icon_size": 30,
-                "padding": {"top": 3, "right": 3, "bottom": 3, "left": 3},
-                "border_radius": 5
-            },
-            
-            # Key buttons (buttons in widget_*_keys containers)
-            "key_button": {
-                "min_size": 38,
-                "max_size": 42,
+                "height": 52,
                 "icon_size": 28,
-                "spacing": 6
+                "padding": {"top": 10, "right": 16, "bottom": 10, "left": 16},
+                "border_radius": 10,
+                "min_width": 140
             },
             
-            # Frame and container dimensions
+            # Action buttons (filter, export, etc.) - Larger touch targets
+            "action_button": {
+                "height": 46,
+                "icon_size": 32,
+                "padding": {"top": 8, "right": 12, "bottom": 8, "left": 12},
+                "border_radius": 8,
+                "min_width": 46
+            },
+            
+            # Tool buttons (identify, zoom, etc.) - Better spacing
+            "tool_button": {
+                "height": 46,
+                "icon_size": 32,
+                "padding": {"top": 4, "right": 4, "bottom": 4, "left": 4},
+                "border_radius": 6
+            },
+            
+            # Key buttons (buttons in widget_*_keys containers) - Larger for big screens
+            "key_button": {
+                "min_size": 44,
+                "max_size": 52,
+                "icon_size": 32,
+                "spacing": 8
+            },
+            
+            # Frame and container dimensions - More padding
             "frame": {
-                "min_height": 80,
-                "max_height": 200,
-                "padding": 8,
-                "border_width": 1
+                "min_height": 100,
+                "max_height": 250,
+                "padding": 12,
+                "border_width": 1,
+                "border_radius": 8
             },
             
-            # Action frame (top buttons area) - Normal profile
+            # Action frame (top buttons area) - Normal profile, more spacious
             "action_frame": {
-                "min_height": 60,
-                "max_height": 75,
-                "padding": 8
+                "min_height": 64,
+                "max_height": 80,
+                "padding": 10
             },
             
-            # Splitter dimensions - Enhanced configuration
+            # Splitter dimensions - Enhanced configuration for responsiveness
             "splitter": {
-                "handle_width": 6,
-                "handle_margin": 40,  # Horizontal margin for the handle bar
+                "handle_width": 8,
+                "handle_margin": 50,  # Horizontal margin for the handle bar
                 "exploring_stretch": 2,  # Stretch factor for frame_exploring
                 "toolset_stretch": 5,    # Stretch factor for frame_toolset (larger = more priority)
                 "collapsible": False,    # Whether frames can be collapsed
                 "opaque_resize": True,   # Whether to show live resize
-                "initial_exploring_ratio": 0.30,  # Initial ratio for exploring (30%)
-                "initial_toolset_ratio": 0.70     # Initial ratio for toolset (70%)
+                "initial_exploring_ratio": 0.28,  # Initial ratio for exploring (28%)
+                "initial_toolset_ratio": 0.72,    # Initial ratio for toolset (72%)
+                "min_exploring_height": 180,      # Minimum height for exploring frame
+                "min_toolset_height": 300         # Minimum height for toolset frame
             },
             
-            # ComboBox dimensions
+            # ComboBox dimensions - Better readability
             "combobox": {
-                "height": 36,
-                "padding": {"top": 5, "right": 9, "bottom": 5, "left": 9},
-                "item_height": 36,
-                "icon_size": 24
+                "height": 40,
+                "padding": {"top": 6, "right": 12, "bottom": 6, "left": 12},
+                "item_height": 40,
+                "icon_size": 26
             },
             
-            # SpinBox and input fields
+            # SpinBox and input fields - Larger for ease of use
             "input": {
-                "height": 36,
-                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
-                "border_radius": 6
+                "height": 40,
+                "padding": {"top": 8, "right": 12, "bottom": 8, "left": 12},
+                "border_radius": 8
             },
             
             # Header bar dimensions
             "header": {
-                "height": 32,
-                "min_height": 28,
-                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
-                "title_font_size": 12,
-                "indicator_font_size": 9
+                "height": 36,
+                "min_height": 32,
+                "padding": {"top": 8, "right": 12, "bottom": 8, "left": 12},
+                "title_font_size": 13,
+                "indicator_font_size": 10
             },
             
-            # Layout dimensions - Harmonized spacing (Normal profile)
+            # Layout dimensions - More generous spacing for large screens
             "layout": {
-                "spacing_main": 8,       # Harmonized - main container spacing
-                "spacing_section": 8,    # Harmonized - between sections
-                "spacing_content": 8,    # Harmonized - within content areas
-                "spacing_buttons": 10,   # Harmonized - between buttons
-                "spacing_frame": 10,     # Harmonized - internal frame spacing
-                "margins_main": 8,       # Harmonized - main container margins
-                "margins_section": 8,    # Harmonized - section margins
-                "margins_content": 8,    # Harmonized - content margins
-                "margins_frame": {"left": 10, "top": 10, "right": 10, "bottom": 12},  # Harmonized - frame margins
-                "margins_actions": {"left": 10, "top": 8, "right": 10, "bottom": 14}  # Action bar margins with extra bottom
+                "spacing_main": 12,       # Main container spacing
+                "spacing_section": 12,    # Between sections
+                "spacing_content": 10,    # Within content areas
+                "spacing_buttons": 12,    # Between buttons
+                "spacing_frame": 14,      # Internal frame spacing
+                "margins_main": 12,       # Main container margins
+                "margins_section": 12,    # Section margins
+                "margins_content": 10,    # Content margins
+                "margins_frame": {"left": 14, "top": 12, "right": 14, "bottom": 16},  # Frame margins
+                "margins_actions": {"left": 12, "top": 10, "right": 12, "bottom": 16}  # Action bar margins
             },
             
-            # Frame exploring dimensions - Enhanced with size policy
+            # Frame exploring dimensions - Enhanced with responsive size policy
             "frame_exploring": {
-                "min_height": 150,
-                "base_height": 220,
-                "max_height": 450,
+                "min_height": 180,
+                "base_height": 260,
+                "max_height": 500,
                 "size_policy_h": "Preferred",
                 "size_policy_v": "Minimum",  # Can shrink but has minimum
-                "preferred_height": 250
+                "preferred_height": 280,
+                "stretch_factor": 2
             },
             
-            # Frame toolset dimensions
+            # Frame toolset dimensions - More space for content
             "frame_toolset": {
-                "min_height": 250,
+                "min_height": 300,
                 "max_height": 16777215,  # QWIDGETSIZE_MAX
                 "size_policy_h": "Preferred",
                 "size_policy_v": "Expanding",  # Takes remaining space
-                "preferred_height": 500
+                "preferred_height": 550,
+                "stretch_factor": 5
             },
             
             # Frame filtering dimensions (inside toolset/toolbox)
             "frame_filtering": {
-                "min_height": 220,
-                "preferred_height": 350
+                "min_height": 260,
+                "preferred_height": 400
             },
             
-            # Widget keys dimensions (NEW)
+            # Widget keys dimensions - Wider for large screens
             "widget_keys": {
-                "min_width": 44,
-                "max_width": 56,
-                "base_width": 50
+                "min_width": 56,
+                "max_width": 72,
+                "base_width": 64,
+                "padding": 10,
+                "border_radius": 8
             },
             
-            # GroupBox dimensions (NEW)
+            # GroupBox dimensions - More padding
             "groupbox": {
-                "min_height": 50,
-                "padding": 6
+                "min_height": 60,
+                "padding": 10,
+                "title_padding": 8,
+                "border_radius": 6
             },
             
-            # Spacer dimensions - Harmonized spacing values (Normal profile)
+            # Spacer dimensions - More generous for visual breathing room
             "spacer": {
-                "default_size": 10,     # Harmonized base spacer
-                "section_main": 12,     # Main section spacer
-                "section_exploring": 8, # Exploring section spacer
-                "section_filtering": 10, # Filtering section spacer
-                "section_exporting": 10, # Exporting section spacer
-                "section_config": 14,   # Config section spacer
-                "after_actions": 14     # Extra spacing after action buttons
+                "default_size": 14,     # Base spacer
+                "section_main": 16,     # Main section spacer
+                "section_exploring": 12, # Exploring section spacer
+                "section_filtering": 14, # Filtering section spacer
+                "section_exporting": 14, # Exporting section spacer
+                "section_config": 18,   # Config section spacer
+                "after_actions": 18     # Extra spacing after action buttons
             },
             
-            # Labels and text
+            # Labels and text - Better typography
             "label": {
-                "font_size": 14,
-                "line_height": 21,
-                "padding": 6
+                "font_size": 15,
+                "line_height": 24,
+                "padding": 8
             },
             
-            # Tree/List widgets
+            # Tree/List widgets - More comfortable item height
             "tree": {
-                "item_height": 36,
-                "indent": 24,
+                "item_height": 40,
+                "indent": 28,
                 "icon_size": 21
             },
             
@@ -435,12 +448,24 @@ class UIConfig:
                 "handle_min_height": 20
             },
             
-            # Dockwidget dimensions
+            # Dockwidget dimensions - Generous sizing for large screens
             "dockwidget": {
-                "min_width": 350,
-                "min_height": 550,
-                "preferred_width": 450,
-                "preferred_height": 750
+                "min_width": 380,
+                "min_height": 600,
+                "preferred_width": 480,
+                "preferred_height": 850,
+                "responsive_breakpoints": {
+                    "small": {"width": 350, "height": 500},
+                    "medium": {"width": 450, "height": 700},
+                    "large": {"width": 550, "height": 900}
+                }
+            },
+            
+            # Icon size scaling for readability
+            "icon_scaling": {
+                "small": 24,
+                "medium": 28,
+                "large": 32
             }
         }
     }

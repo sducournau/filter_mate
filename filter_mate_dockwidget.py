@@ -875,12 +875,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         filtering_config = UIConfig.get_config('frame_filtering')
         filtering_min = filtering_config.get('min_height', 180) if filtering_config else 180
         
-        # Apply to widget keys containers
+        # Get widget_keys padding and border radius from config
+        widget_keys_config = UIConfig.get_config('widget_keys')
+        widget_keys_padding = widget_keys_config.get('padding', 8) if widget_keys_config else 8
+        
+        # Apply to widget keys containers with enhanced styling
         for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self, widget_name):
                 widget = getattr(self, widget_name)
                 widget.setMinimumWidth(widget_keys_min_width)
                 widget.setMaximumWidth(widget_keys_max_width)
+                # Apply consistent padding via layout margins
+                layout = widget.layout()
+                if layout:
+                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
+                                            widget_keys_padding, widget_keys_padding)
         
         # Apply to frame_exploring with size policy
         if hasattr(self, 'frame_exploring'):
@@ -1017,6 +1026,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Get harmonized layout spacing from config
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
             content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
+            section_spacing = UIConfig.get_config('layout', 'spacing_section') or 8
+            main_spacing = UIConfig.get_config('layout', 'spacing_main') or 8
+            
+            # Apply main container spacing for better responsiveness
+            if hasattr(self, 'verticalLayout_main_content'):
+                self.verticalLayout_main_content.setSpacing(main_spacing)
             
             # Apply spacing to exploring layouts
             exploring_layouts = [
@@ -1046,6 +1061,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if hasattr(self, layout_name):
                     getattr(self, layout_name).setSpacing(content_spacing)
             
+            # Apply section margins for horizontal layouts (keys/values containers)
+            margins_section = UIConfig.get_config('layout', 'margins_section') or 8
+            horizontal_layouts = [
+                'horizontalLayout_filtering_content',
+                'horizontalLayout_exporting_main'
+            ]
+            for layout_name in horizontal_layouts:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    layout.setSpacing(section_spacing)
+                    layout.setContentsMargins(margins_section, 0, margins_section, 0)
+            
             # Apply harmonized margins to groupbox layouts
             margins_frame = UIConfig.get_config('layout', 'margins_frame')
             if margins_frame and isinstance(margins_frame, dict):
@@ -1062,6 +1089,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 ]
                 
                 for layout_name in groupbox_layouts:
+                    if hasattr(self, layout_name):
+                        layout = getattr(self, layout_name)
+                        layout.setContentsMargins(left, top, right, bottom)
+                
+                # Apply to filtering/exporting value layouts
+                value_layouts = [
+                    'verticalLayout_filtering_values',
+                    'verticalLayout_exporting_values'
+                ]
+                for layout_name in value_layouts:
                     if hasattr(self, layout_name):
                         layout = getattr(self, layout_name)
                         layout.setContentsMargins(left, top, right, bottom)
@@ -2072,14 +2109,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 show_success("FilterMate", f"Applied filter: {fav.name}")
     
     def _show_favorites_manager_dialog(self):
-        """Show the favorites management dialog with list, edit, and delete capabilities."""
+        """Show the favorites management dialog with list, edit, delete, and search capabilities."""
         from qgis.PyQt.QtWidgets import (
             QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
             QPushButton, QLabel, QLineEdit, QTextEdit, QMessageBox, QMenu,
             QGroupBox, QFormLayout, QDialogButtonBox, QSplitter, QTreeWidget,
-            QTreeWidgetItem, QHeaderView, QTabWidget, QWidget, QScrollArea
+            QTreeWidgetItem, QHeaderView, QTabWidget, QWidget, QScrollArea,
+            QCompleter
         )
-        from qgis.PyQt.QtCore import Qt
+        from qgis.PyQt.QtCore import Qt, QStringListModel
         from qgis.PyQt.QtGui import QFont, QColor
         
         if not self._favorites_manager or self._favorites_manager.count == 0:
@@ -2092,18 +2130,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         dialog = QDialog(self)
         dialog.setWindowTitle("FilterMate - Favorites Manager")
-        dialog.setMinimumSize(500, 350)
-        dialog.resize(580, 420)
+        dialog.setMinimumSize(550, 400)
+        dialog.resize(650, 480)
         dialog.setModal(True)
         
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
         
-        # Header
+        # Header with search
+        header_layout = QHBoxLayout()
         header_label = QLabel(f"<b>Saved Favorites ({self._favorites_manager.count})</b>")
         header_label.setStyleSheet("font-size: 11pt; margin-bottom: 5px;")
-        layout.addWidget(header_label)
+        header_layout.addWidget(header_label)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+        
+        # Search box for filtering favorites
+        search_layout = QHBoxLayout()
+        search_label = QLabel("🔍")
+        search_label.setStyleSheet("font-size: 12pt;")
+        search_layout.addWidget(search_label)
+        
+        search_edit = QLineEdit()
+        search_edit.setPlaceholderText("Search by name, expression, tags, or description...")
+        search_edit.setClearButtonEnabled(True)
+        search_edit.setStyleSheet("padding: 4px 8px; border-radius: 4px;")
+        search_layout.addWidget(search_edit)
+        layout.addLayout(search_layout)
         
         # Main content with splitter
         splitter = QSplitter(Qt.Horizontal)
@@ -2119,20 +2173,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         list_widget.setMaximumWidth(250)
         list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         
-        # Populate list
-        favorites = self._favorites_manager.get_all_favorites()
-        for fav in favorites:
-            layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
-            item_text = f"★ {fav.name}"
-            if layers_count > 1:
-                item_text += f" [{layers_count}]"
-            item = QListWidgetItem(item_text)
-            item.setData(Qt.UserRole, fav.id)
-            tooltip = f"Layer: {fav.layer_name}\nUsed: {fav.use_count} times"
-            if fav.description:
-                tooltip += f"\n\n{fav.description}"
-            item.setToolTip(tooltip)
-            list_widget.addItem(item)
+        # Store all favorites for search filtering
+        all_favorites = self._favorites_manager.get_all_favorites()
+        
+        def populate_list(favorites_to_show):
+            """Populate list widget with given favorites."""
+            list_widget.clear()
+            for fav in favorites_to_show:
+                layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
+                item_text = f"★ {fav.name}"
+                if layers_count > 1:
+                    item_text += f" [{layers_count}]"
+                # Show tags in item if any
+                if fav.tags:
+                    item_text += f" 🏷️"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.UserRole, fav.id)
+                tooltip = f"Layer: {fav.layer_name}\nUsed: {fav.use_count} times"
+                if fav.tags:
+                    tooltip += f"\nTags: {', '.join(fav.tags)}"
+                if fav.description:
+                    tooltip += f"\n\n{fav.description}"
+                item.setToolTip(tooltip)
+                list_widget.addItem(item)
+        
+        def on_search_changed(text):
+            """Filter favorites based on search text."""
+            if not text.strip():
+                populate_list(all_favorites)
+            else:
+                filtered = self._favorites_manager.search_favorites(text)
+                populate_list(filtered)
+                # Update header with filtered count
+                header_label.setText(f"<b>Favorites ({len(filtered)}/{self._favorites_manager.count})</b>")
+        
+        search_edit.textChanged.connect(on_search_changed)
+        
+        # Initial population
+        populate_list(all_favorites)
         
         left_layout.addWidget(list_widget)
         splitter.addWidget(left_panel)
@@ -2161,6 +2239,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         description_edit.setMaximumHeight(60)
         description_edit.setPlaceholderText("Description (auto-generated, editable)")
         general_layout.addRow("Description:", description_edit)
+        
+        # Tags editing field
+        tags_edit = QLineEdit()
+        tags_edit.setPlaceholderText("Enter tags separated by commas (e.g., urban, population, 2024)")
+        tags_edit.setToolTip("Tags help organize and search favorites.\nSeparate multiple tags with commas.")
+        general_layout.addRow("Tags:", tags_edit)
         
         layer_label = QLabel("-")
         layer_label.setStyleSheet("color: #555;")
@@ -2274,6 +2358,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     current_fav_id[0] = fav_id
                     name_edit.setText(fav.name)
                     description_edit.setText(fav.description or "")
+                    # Load tags as comma-separated string
+                    tags_edit.setText(", ".join(fav.tags) if fav.tags else "")
                     layer_label.setText(fav.layer_name or "-")
                     provider_label.setText(fav.layer_provider or "-")
                     expression_edit.setText(fav.expression)
@@ -2316,12 +2402,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 new_name = name_edit.text().strip()
                 new_expr = expression_edit.toPlainText().strip()
                 new_desc = description_edit.toPlainText().strip()
+                # Parse tags from comma-separated string
+                new_tags = [tag.strip() for tag in tags_edit.text().split(',') if tag.strip()]
                 if new_name:
                     self._favorites_manager.update_favorite(
                         current_fav_id[0],
                         name=new_name,
                         expression=new_expr,
-                        description=new_desc
+                        description=new_desc,
+                        tags=new_tags
                     )
                     self._favorites_manager.save_to_project()
                     # Update list item
@@ -2332,6 +2421,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         item_text = f"★ {new_name}"
                         if layers_count > 1:
                             item_text += f" [{layers_count}]"
+                        if new_tags:
+                            item_text += " 🏷️"
                         item.setText(item_text)
                     show_success("FilterMate", "Favorite updated")
         
@@ -2354,6 +2445,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # Tab 1: General
                         name_edit.clear()
                         description_edit.clear()
+                        tags_edit.clear()
                         layer_label.setText("-")
                         provider_label.setText("-")
                         use_count_label.setText("-")
@@ -3855,9 +3947,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Parent must be dockWidgetContents, not self (the dock widget), to avoid widget appearing in dock title bar
         self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
         
-        # Insert into layout
+        # Insert into layout - position just above verticalSpacer_filtering_values_search_bottom (index 2)
         layout = self.verticalLayout_filtering_values
-        layout.insertWidget(3, self.checkableComboBoxLayer_filtering_layers_to_filter)
+        layout.insertWidget(2, self.checkableComboBoxLayer_filtering_layers_to_filter)
         
         # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
         from .modules.ui_config import UIConfig
@@ -3883,12 +3975,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Parent must be EXPORTING widget, not self (the dock widget)
         self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
         
-        # Insert into verticalLayout_6 (the values column in EXPORTING tab)
-        # verticalLayout_6 contains: spacer, spacer, projection, spacer, styles, spacer, datatype, etc.
-        # We insert at index 0 to put it at the top
-        if hasattr(self, 'verticalLayout_6'):
-            self.verticalLayout_6.insertWidget(0, self.checkableComboBoxLayer_exporting_layers)
-            logger.debug("Exporting layers combobox inserted into verticalLayout_6")
+        # Insert into verticalLayout_exporting_values (the values column in EXPORTING tab)
+        # verticalLayout_exporting_values contains: projection, spacer, styles, spacer, datatype, etc.
+        # We insert at index 0 to put it at the top, then add a spacer to align with keys
+        if hasattr(self, 'verticalLayout_exporting_values'):
+            self.verticalLayout_exporting_values.insertWidget(0, self.checkableComboBoxLayer_exporting_layers)
+            # Add spacer after combobox to align with keys spacer (Expanding like keys)
+            spacer_after_layers = QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+            self.verticalLayout_exporting_values.insertItem(1, spacer_after_layers)
+            logger.debug("Exporting layers combobox inserted into verticalLayout_exporting_values")
         
         # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
         from .modules.ui_config import UIConfig
@@ -3985,7 +4080,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='source_layer_combine_operator': self.layer_property_changed(x, state))]},
                                     "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='other_layers_combine_operator': self.layer_property_changed(x, state))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
-                                    "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed(x, state))]},
+                                    "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed_with_buffer_style(x, state))]},
                                     "BUFFER_VALUE_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_value_property, "SIGNALS":[("changed", lambda state=None, x='buffer_value_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed(), "CUSTOM_DATA": lambda x: self.get_buffer_property_state()}: self.layer_property_changed(x, state, custom_functions))]},
                                     "BUFFER_TYPE":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_buffer_type, "SIGNALS":[("currentTextChanged", lambda state, x='buffer_type': self.layer_property_changed(x, state))]},
                                     }
@@ -8016,6 +8111,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect')
 
+    def layer_property_changed_with_buffer_style(self, input_property, input_data=None):
+        """
+        Handle buffer value changes with visual style feedback.
+        
+        Applies visual styling to indicate negative buffer (erosion) vs positive buffer (expansion):
+        - Negative buffer: Orange/yellow background to indicate erosion mode
+        - Zero/positive buffer: Default style
+        
+        Args:
+            input_property: The property name being changed
+            input_data: The new value
+        """
+        # First, call the normal property change handler
+        self.layer_property_changed(input_property, input_data)
+        
+        # Then update the visual style based on the buffer value
+        self._update_buffer_spinbox_style(input_data)
+    
+    def _update_buffer_spinbox_style(self, buffer_value):
+        """
+        Update the visual style of the buffer spinbox based on value.
+        
+        Negative values get a distinctive style to indicate erosion mode.
+        
+        Args:
+            buffer_value: The current buffer value
+        """
+        spinbox = self.mQgsDoubleSpinBox_filtering_buffer_value
+        
+        if buffer_value is not None and buffer_value < 0:
+            # Negative buffer (erosion) - use distinctive orange/yellow style
+            spinbox.setStyleSheet("""
+                QgsDoubleSpinBox {
+                    background-color: #FFF3CD;
+                    border: 2px solid #FFC107;
+                    color: #856404;
+                }
+                QgsDoubleSpinBox:focus {
+                    border: 2px solid #FF9800;
+                }
+            """)
+            spinbox.setToolTip(self.tr("Negative buffer (erosion): shrinks polygons inward"))
+        else:
+            # Zero or positive buffer - reset to default style
+            spinbox.setStyleSheet("")
+            spinbox.setToolTip(self.tr("Buffer value in meters (positive=expand, negative=shrink polygons)"))
+
     def set_exporting_properties(self):
 
         if self.widgets_initialized is True and self.has_loaded_layers is True:
@@ -9178,6 +9320,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         F5: Force reload all layers from current project.
              Useful when project change doesn't properly refresh the layer list.
+        Ctrl+Z: Undo last filter operation.
+        Ctrl+Y: Redo last undone filter operation.
         """
         from qgis.PyQt.QtWidgets import QShortcut
         from qgis.PyQt.QtGui import QKeySequence
@@ -9187,7 +9331,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._reload_shortcut.activated.connect(self._on_reload_layers_shortcut)
         self._reload_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
         
-        logger.debug("Keyboard shortcuts initialized: F5 = Reload layers")
+        # Ctrl+Z - Undo filter operation
+        self._undo_shortcut = QShortcut(QKeySequence.Undo, self)  # Standard Ctrl+Z / Cmd+Z
+        self._undo_shortcut.activated.connect(self._on_undo_shortcut)
+        self._undo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+        
+        # Ctrl+Y - Redo filter operation (also Ctrl+Shift+Z on some platforms)
+        self._redo_shortcut = QShortcut(QKeySequence.Redo, self)  # Standard Ctrl+Y / Cmd+Shift+Z
+        self._redo_shortcut.activated.connect(self._on_redo_shortcut)
+        self._redo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+        
+        logger.debug("Keyboard shortcuts initialized: F5 = Reload layers, Ctrl+Z = Undo, Ctrl+Y = Redo")
     
     def _on_reload_layers_shortcut(self):
         """
@@ -9222,6 +9376,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Emit reload signal
         self.launchingTask.emit('reload_layers')
+
+    def _on_undo_shortcut(self):
+        """
+        Handle Ctrl+Z shortcut to undo last filter operation.
+        
+        Triggers the undo action if the undo button is enabled.
+        """
+        logger.info("Ctrl+Z pressed - Undo filter operation")
+        undo_widget = self.widgets.get("ACTION", {}).get("UNDO_FILTER", {}).get("WIDGET")
+        if undo_widget and undo_widget.isEnabled():
+            self.launchTaskEvent(False, 'undo')
+        else:
+            logger.debug("Undo shortcut ignored - no undo available")
+
+    def _on_redo_shortcut(self):
+        """
+        Handle Ctrl+Y shortcut to redo last undone filter operation.
+        
+        Triggers the redo action if the redo button is enabled.
+        """
+        logger.info("Ctrl+Y pressed - Redo filter operation")
+        redo_widget = self.widgets.get("ACTION", {}).get("REDO_FILTER", {}).get("WIDGET")
+        if redo_widget and redo_widget.isEnabled():
+            self.launchTaskEvent(False, 'redo')
+        else:
+            logger.debug("Redo shortcut ignored - no redo available")
 
 
 

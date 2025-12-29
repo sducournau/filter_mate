@@ -280,6 +280,35 @@
           "value": 5000,
           "description": "Number of features per batch during streaming export"
         }
+      },
+      "PERFORMANCE": {
+        "description": "Performance monitoring and warning settings",
+        "enable_performance_warnings": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Show warnings when working with large datasets"
+        },
+        "large_dataset_warning_threshold": {
+          "value": 50000,
+          "description": "Number of features above which performance warnings are shown"
+        },
+        "show_backend_performance_tips": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Show tips about optimal backend selection"
+        }
+      },
+      "HISTORY": {
+        "description": "Filter history (undo/redo) settings",
+        "max_history_size": {
+          "value": 100,
+          "description": "Maximum number of filter operations to keep in history per layer"
+        },
+        "persist_history": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Save filter history to project file"
+        }
       }
     }
   },

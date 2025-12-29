@@ -6,27 +6,34 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.5.0
+version=2.5.2
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.5.0 - Major Stability Release
+about=FilterMate v2.5.2 - CRITICAL FIX: Negative Buffer for All Backends
 
- NEW in v2.5.0:
+ CRITICAL FIX in v2.5.2:
+ - 🐛 FIXED: Negative buffer now works for OGR, Spatialite, and fallback modes
+ - 🔧 OGR backend now correctly applies buffer in apply_filter
+ - 📊 Enhanced logging for buffer value debugging
+ 
+ v2.5.1 features:
+ - 📐 Negative buffer (erosion): Shrink polygons inward
+ - 🎨 Visual feedback: Orange styling when using negative buffer
+ - ✅ All 3 backends: PostgreSQL, Spatialite, OGR
+ 
+ v2.5.0 highlights:
  - 🎉 Major milestone: Consolidates all 2.4.x stability fixes
  - 🛡️ GeoPackage: Correct GeomFromGPB() function for GPB geometry conversion
  - 🔒 Thread Safety: Defer setSubsetString() to main thread via queue callback
  - 🗄️ Session Isolation: Multi-client materialized view naming with session_id prefix
- - 🔧 Type Casting: Automatic ::numeric casting for varchar/numeric comparisons
- - 🔍 Remote Layer Detection: Proper fallback to OGR for WFS/HTTP services
- - 🐛 Source Geometry: Thread-safe feature validation with expression fallback
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
  - Automatic backend selection (PostgreSQL, Spatialite, or Local)
  - Intuitive search and selection of entities
  - Filter vector layers by expression and geometric predicates
- - Buffer support with automatic geometry repair
+ - Buffer support with automatic geometry repair (positive and negative)
  - Configure widgets independently for each layer
  - Export layers intuitively
  - Automatic CRS reprojection on the fly

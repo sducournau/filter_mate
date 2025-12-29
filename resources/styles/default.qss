@@ -17,17 +17,20 @@
 
 /* ========================================================================
    DOCKWIDGET - Base styling for docked and floating modes
+   Responsive layout with flexible dimensions managed by UIConfig
    ======================================================================== */
 
 QDockWidget {
     background-color: {color_bg_0};
     color: {color_font_0};
+    /* Dimensions managed dynamically by UIConfig for profile-specific sizing */
 }
 
 QDockWidget::title {
     background-color: {color_1};
     color: {color_font_0};
-    padding: 4px;
+    padding: 6px 10px;
+    font-weight: 500;
 }
 
 QDockWidget > QWidget {
@@ -36,10 +39,38 @@ QDockWidget > QWidget {
 
 #dockWidgetContents {
     background-color: {color_bg_0};
+    padding: 4px;
 }
 
 /* ========================================================================
-   QGIS Widgets - Common Styling
+   SPLITTER - Enhanced styling for responsive resizing
+   ======================================================================== */
+
+QSplitter::handle {
+    background-color: {color_2};
+    border-radius: 2px;
+}
+
+QSplitter::handle:hover {
+    background-color: {color_accent};
+}
+
+QSplitter::handle:pressed {
+    background-color: {color_accent_dark};
+}
+
+QSplitter::handle:vertical {
+    height: 6px;
+    margin: 2px 30px;
+}
+
+QSplitter::handle:horizontal {
+    width: 6px;
+    margin: 30px 2px;
+}
+
+/* ========================================================================
+   QGIS Widgets - Common Styling with better spacing
    ======================================================================== */
 QgsFeaturePickerWidget,
 QgsProjectionSelectionWidget,
@@ -51,10 +82,10 @@ QComboBox,
 QgsCheckableComboBoxLayer {
     background-color: {color_1};
     border: 1px solid {color_2};
-    border-radius: 3px;
-    padding: 3px 5px; /* Reduced padding for compact mode compatibility */
+    border-radius: 4px;
+    padding: 4px 8px;
     color: {color_font_0};
-    /* min-height removed - managed dynamically by UIConfig in Python */
+    /* min-height managed dynamically by UIConfig in Python for responsive sizing */
 }
 
 QgsFeaturePickerWidget:hover,
@@ -204,22 +235,76 @@ QDockWidget::float-button:pressed {
     background: {color_accent};
 }
 
-/* Frames - Base styling */
+/* ========================================================================
+   FRAMES - Base styling with responsive dimensions
+   ======================================================================== */
+
 QFrame {
     background-color: {color_bg_0};
     border: none;
-    border-radius: 4px;
-    padding: 4px;
+    border-radius: 6px;
+    padding: 6px;
     margin: 0px;
     color: {color_font_0};
 }
 
-/* Frame ToolSet - Integration améliorée */
+/* Main content frame - Primary container */
+QFrame#frame_main_content {
+    background-color: {color_bg_0};
+    border: none;
+    padding: 8px;
+    margin: 0px;
+}
+
+/* Frame ToolSet - Seamless integration with responsive behavior */
 QFrame#frame_toolset {
     background-color: transparent;
     border: none;
     padding: 0;
     margin: 0;
+}
+
+/* Frame Exploring - Content container with subtle styling */
+QFrame#frame_exploring {
+    background-color: {color_bg_0};
+    border: none;
+    border-radius: 8px;
+    padding: 6px;
+    margin: 4px 2px;
+}
+
+/* Frame Filtering - Main filtering area */
+QFrame#frame_filtering {
+    background-color: {color_bg_0};
+    border: none;
+    border-radius: 8px;
+    padding: 6px;
+    margin: 2px;
+}
+
+/* Frame Exporting - Export options area */
+QFrame#frame_exporting {
+    background-color: {color_bg_0};
+    border: none;
+    border-radius: 8px;
+    padding: 6px;
+    margin: 2px;
+}
+
+/* Container frames for keys/values layout */
+QFrame[objectName^="frame_filtering_"],
+QFrame[objectName^="frame_exporting_"] {
+    background-color: transparent;
+    border: none;
+    padding: 4px;
+    margin: 0px;
+}
+
+/* Horizontal layout containers - Better flex behavior */
+QWidget#widget_filtering_content,
+QWidget#widget_exporting_content {
+    background-color: transparent;
+    padding: 4px;
 }
 
 /* Expression Builder */
@@ -421,13 +506,17 @@ QScrollBar::sub-page:horizontal {
     background: none;
 }
 
-/* GroupBox Styling */
+/* ========================================================================
+   GROUPBOX - Enhanced styling with better alignment
+   ======================================================================== */
+
 QGroupBox {
     background-color: transparent;
     border: 1px solid {color_2};
-    border-radius: 3px;
-    margin-top: 0.8ex;
-    padding: 8px;
+    border-radius: 6px;
+    margin-top: 1ex;
+    padding: 10px;
+    padding-top: 16px;
     font-weight: 600;
     color: {color_font_0};
 }
@@ -435,39 +524,74 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 0 8px;
+    padding: 2px 10px;
     color: {color_font_0};
-    max-width: 350px;
+    background-color: transparent;
+    margin-left: 8px;
+    /* Improved text handling */
+    max-width: 400px;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
 }
 
-/* Exploring Tab */
+/* Collapsible GroupBox - QGIS specific */
+QgsCollapsibleGroupBox {
+    background-color: {color_1};
+    border: 1px solid {color_2};
+    border-radius: 6px;
+    padding: 12px;
+    padding-top: 28px;
+    margin-top: 4px;
+    color: {color_font_0};
+}
+
+QgsCollapsibleGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 4px 10px;
+    margin-left: 28px;
+    margin-top: 4px;
+}
+
+/* Exploring Section GroupBox - Subtle styling */
 QGroupBox#groupBoxExploring {
     border: none;
+    padding: 8px;
 }
 
 QGroupBox#groupBoxExploring::title {
-    color: #3daee9;
+    color: {color_accent};
 }
 
-/* Filtering Tab */
+/* Filtering Section GroupBox - Green accent */
 QGroupBox#groupBoxFiltering {
     border-color: #27ae60;
+    border-radius: 6px;
 }
 
 QGroupBox#groupBoxFiltering::title {
     color: #27ae60;
 }
 
-/* Exporting Tab */
+/* Exporting Section GroupBox - Orange accent */
 QGroupBox#groupBoxExporting {
     border-color: #f39c12;
+    border-radius: 6px;
 }
 
 QGroupBox#groupBoxExporting::title {
     color: #f39c12;
+}
+
+/* Config Section GroupBox - Accent color */
+QGroupBox#groupBoxConfiguration {
+    border-color: {color_accent};
+    border-radius: 6px;
+}
+
+QGroupBox#groupBoxConfiguration::title {
+    color: {color_accent};
 }
 
 /* Buttons - Non-checkable - Enhanced visibility */
@@ -749,26 +873,34 @@ QProgressBar::chunk {
     border-radius: 2px;
 }
 
-/* Widget Keys Panels - Sidebar buttons */
-/* Harmonized background with main frame color for consistency */
+/* Widget Keys Panels - Sidebar buttons with responsive layout */
+/* Enhanced styling for better alignment and visual hierarchy */
 QWidget#widget_exploring_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
     background-color: {color_1};
     border: 1px solid {color_2};
-    border-radius: 6px;
-    padding: 8px;
-    margin: 2px;
+    border-radius: 8px;
+    padding: 10px 8px;
+    margin: 4px 2px;
+    /* Smooth transitions for responsive behavior */
 }
 
-/* Buttons inside widget_exploring_keys - Non-checkable */
+/* Ensure proper vertical alignment within key widgets */
+QWidget#widget_exploring_keys QVBoxLayout,
+QWidget#widget_filtering_keys QVBoxLayout,
+QWidget#widget_exporting_keys QVBoxLayout {
+    spacing: 8px;
+    margin: 0px;
+}
+
+/* Buttons inside widget_exploring_keys - Non-checkable - Responsive sizing */
 QWidget#widget_exploring_keys QPushButton:!checkable {
     background-color: transparent;
     border: 2px solid transparent;
-    border-radius: 6px;
-    padding: 10px;
-    min-width: 36px;
-    min-height: 36px;
+    border-radius: 8px;
+    padding: 8px;
+    /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
 QWidget#widget_exploring_keys QPushButton:!checkable::icon {
@@ -778,26 +910,25 @@ QWidget#widget_exploring_keys QPushButton:!checkable::icon {
 QWidget#widget_exploring_keys QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
-    padding: 8px;
+    padding: 6px;
+    /* Subtle scale effect on hover */
+    transform: scale(1.02);
 }
 
 QWidget#widget_exploring_keys QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 8px;
-    transform: scale(0.95);
+    padding: 6px;
+    transform: scale(0.96);
 }
 
 /* Buttons inside widget_exploring_keys - Checkable - Enhanced visibility */
 QWidget#widget_exploring_keys QPushButton:checkable {
     background-color: transparent;
     border: 2px solid transparent;
-    border-radius: 6px;
-    padding: 9px;
-    min-width: 40px;
-    max-width: 40px;
-    min-height: 40px;
-    max-height: 40px;
+    border-radius: 8px;
+    padding: 8px;
+    /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable::icon {
@@ -942,66 +1073,65 @@ QWidget#widget_exporting_keys QPushButton:checkable:checked:pressed {
 }
 
 /* ========================================================================
-   HEADER BAR - Backend indicator only (minimal, transparent)
+   HEADER BAR - Backend indicator with responsive styling
    ======================================================================== */
 QFrame#frame_header {
     background-color: transparent;
     border: none;
     border-radius: 0px;
-    padding: 2px 10px;
+    padding: 4px 12px;
     margin: 0px;
-    min-height: 18px;
-    max-height: 24px;
+    min-height: 20px;
+    max-height: 28px;
 }
 
 /* label_plugin_title removed - title no longer displayed */
 
 QLabel#label_backend_indicator {
-    font-size: 8pt;
+    font-size: 9pt;
     font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 3px 10px;
+    border-radius: 6px;
     border: 1px solid {color_2};
     color: {color_font_1};
     background-color: {color_1};
 }
 
-/* Frame Actions - Bottom action buttons */
+/* ========================================================================
+   FRAME ACTIONS - Bottom action bar with responsive buttons
+   ======================================================================== */
 QFrame#frame_actions {
-    background-color: transparent;
+    background-color: {color_bg_0};
     border-top: 1px solid {color_2};
     border-radius: 0px;
-    padding: 6px 8px 4px 8px;
+    padding: 8px 12px;
     margin: 0px;
 }
 
+/* Action buttons - Responsive sizing managed by UIConfig */
 QFrame#frame_actions QPushButton:!checkable {
     background-color: transparent;
     border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 4px;
-    min-width: 28px;
-    min-height: 28px;
-    max-height: 28px;
+    border-radius: 6px;
+    padding: 6px;
+    /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
 QFrame#frame_actions QPushButton:!checkable::icon {
     filter: {icon_filter};
 }
 
-QFrame#frame_actions QPushButton:!checkable:hover,
-QFrame#frame_actions QPushButton:!checkable:pressed {
-    border: 1px solid {color_accent};
-    padding: 4px;
-}
-
 QFrame#frame_actions QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
+    border: 2px solid {color_accent};
+    padding: 5px;
 }
 
 QFrame#frame_actions QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
-    border-color: {color_accent_dark};
+    border: 2px solid {color_accent_dark};
+    padding: 5px;
+    transform: scale(0.96);
 }
 
 QFrame#frame_actions QPushButton:!checkable:disabled {
@@ -1009,6 +1139,11 @@ QFrame#frame_actions QPushButton:!checkable:disabled {
     border-color: transparent;
     color: {color_font_2};
     opacity: 0.4;
+}
+
+/* Spacer between action button groups */
+QFrame#frame_actions QSpacerItem {
+    min-width: 12px;
 }
 
 /* TreeView & ListWidget - Harmonized backgrounds */

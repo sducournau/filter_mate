@@ -450,8 +450,10 @@ class FilterMateApp:
                                     }
         
         # Initialize filter history manager for undo/redo functionality
-        self.history_manager = HistoryManager(max_size=100)
-        logger.info("FilterMate: HistoryManager initialized for undo/redo functionality")
+        # Get max_history_size from configuration (default: 100)
+        history_max_size = self._get_history_max_size_from_config()
+        self.history_manager = HistoryManager(max_size=history_max_size)
+        logger.info(f"FilterMate: HistoryManager initialized for undo/redo functionality (max_size={history_max_size})")
         
         # Initialize filter favorites manager for saving/loading favorites
         self.favorites_manager = FavoritesManager(max_favorites=50)
@@ -511,6 +513,26 @@ class FilterMateApp:
         self.PROJECT_LAYERS = {}
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
+
+    def _get_history_max_size_from_config(self):
+        """
+        Get the maximum history size from configuration.
+        
+        Reads the HISTORY.max_history_size setting from config.json
+        to control how many filter operations are kept in the undo/redo stack.
+        
+        Returns:
+            int: Maximum history size (default: 100)
+        """
+        try:
+            from .config.config import ENV_VARS
+            config_data = ENV_VARS.get("CONFIG_DATA", {})
+            history_config = config_data.get("APP", {}).get("OPTIONS", {}).get("HISTORY", {})
+            max_size = history_config.get("max_history_size", {}).get("value", 100)
+            return int(max_size)
+        except Exception as e:
+            logger.warning(f"FilterMate: Could not get history max_size from config: {e}. Using default 100.")
+            return 100
 
     def _init_feedback_level(self):
         """
