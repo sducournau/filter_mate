@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.5.4** | December 2025 | **Production-Ready**
+**Version 2.5.5** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,18 +27,19 @@
 
 ## 📋 Recent Changes
 
+### v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection (December 2025)
+
+- 🐛 **CRITICAL FIX**: PostgreSQL backend now correctly detects ALL empty geometry types from negative buffers
+- 🔧 **ST_IsEmpty**: Uses ST_IsEmpty() instead of NULLIF to detect POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
+- 🎨 **HiDPI Profile**: New UI profile for 4K/Retina displays with auto-detection
+- 🖼️ **UI Improvements**: Compact sidebar buttons, harmonized spacing across all tabs
+- ✅ **Thread Safety**: Warning messages properly stored for main thread display
+
 ### v2.5.4 - Critical Fix: OGR Backend Memory Layers (December 2025)
 
 - 🐛 **CRITICAL FIX**: OGR backend now correctly counts features in memory layers
 - 🔧 **Intelligent Counting**: Handles memory layer refresh delays with retry mechanism
 - 🔍 **Enhanced Diagnostics**: Better logging for memory layer feature validation
-- ✅ **Reliability**: Prevents false "0 features" errors that caused all OGR filters to fail
-
-### v2.5.3 - Fix: Negative Buffer in OGR/Spatialite (December 2025)
-
-- 🐛 **Buffer Fix**: Negative buffer now works correctly across all backends
-- 🔧 **OGR Enhancement**: Backend properly applies buffer in apply_filter
-- 📊 **Better Logging**: Enhanced debugging for buffer value operations
 
 ### v2.5.0 - Major Stability Release (December 2025)
 
@@ -95,12 +96,12 @@ FilterMate provides tools to manage and monitor backends:
 
 The **backend indicator** is displayed in the plugin interface showing the current backend status:
 
-| Indicator | Meaning |
-| :-------: | ------- |
-| 🟢 **PostgreSQL** | PostgreSQL backend active (optimal performance) |
-| 🔵 **Spatialite** | Spatialite backend active (good performance) |
-| 🟠 **OGR** | OGR fallback active (universal compatibility) |
-| 🔴 **Unavailable** | No backend available for this layer |
+|     Indicator      | Meaning                                         |
+| :----------------: | ----------------------------------------------- |
+| 🟢 **PostgreSQL**  | PostgreSQL backend active (optimal performance) |
+| 🔵 **Spatialite**  | Spatialite backend active (good performance)    |
+|     🟠 **OGR**     | OGR fallback active (universal compatibility)   |
+| 🔴 **Unavailable** | No backend available for this layer             |
 
 #### Reload Backend
 
@@ -117,22 +118,22 @@ To **reload the backend** after configuration changes:
 
 For PostgreSQL users, a dedicated maintenance menu is available:
 
-| Action | Description |
-| ------ | ----------- |
+| Action                  | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
 | **Clean Session Views** | Remove temporary materialized views from current session |
-| **Clean All Views** | Remove all FilterMate materialized views from schema |
-| **View Schema Info** | Display current PostgreSQL schema statistics |
+| **Clean All Views**     | Remove all FilterMate materialized views from schema     |
+| **View Schema Info**    | Display current PostgreSQL schema statistics             |
 
 Access via: `FilterMate` → `PostgreSQL` → `Maintenance`
 
 #### Troubleshooting Backend Issues
 
-| Issue | Solution |
-| ----- | -------- |
-| PostgreSQL not detected | Install `psycopg2-binary`: `pip install psycopg2-binary` |
-| Slow performance on large data | Switch to PostgreSQL data source |
-| Backend indicator shows "OGR" for GeoPackage | Normal - GeoPackage uses Spatialite internally via OGR |
-| Connection errors | Check database credentials and network connectivity |
+| Issue                                        | Solution                                                 |
+| -------------------------------------------- | -------------------------------------------------------- |
+| PostgreSQL not detected                      | Install `psycopg2-binary`: `pip install psycopg2-binary` |
+| Slow performance on large data               | Switch to PostgreSQL data source                         |
+| Backend indicator shows "OGR" for GeoPackage | Normal - GeoPackage uses Spatialite internally via OGR   |
+| Connection errors                            | Check database credentials and network connectivity      |
 
 ---
 

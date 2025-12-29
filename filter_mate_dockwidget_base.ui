@@ -396,7 +396,7 @@
               <item row="0" column="0">
                <layout class="QGridLayout" name="gridLayout_main_actions">
                 <property name="leftMargin">
-                 <number>4</number>
+                 <number>0</number>
                 </property>
                 <property name="topMargin">
                  <number>0</number>
@@ -408,7 +408,7 @@
                  <number>0</number>
                 </property>
                 <property name="spacing">
-                 <number>8</number>
+                 <number>4</number>
                 </property>
                 <item row="0" column="1">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
@@ -454,10 +454,10 @@
                    </property>
                    <item>
                     <layout class="QVBoxLayout" name="verticalLayout_exploring_content">
-                     <item>
+                     <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_identify">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -526,10 +526,10 @@
                        </property>
                       </spacer>
                      </item>
-                     <item>
+                     <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_zoom">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -598,10 +598,10 @@
                        </property>
                       </spacer>
                      </item>
-                     <item>
+                     <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_selecting">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -682,10 +682,10 @@
                        </property>
                       </spacer>
                      </item>
-                     <item>
+                     <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_tracking">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -766,10 +766,10 @@
                        </property>
                       </spacer>
                      </item>
-                     <item>
+                     <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_linking_widgets">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -850,10 +850,10 @@
                        </property>
                       </spacer>
                      </item>
-                     <item>
+                     <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_reset_layer_properties">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -920,7 +920,7 @@
                 <item row="0" column="2">
                  <layout class="QVBoxLayout" name="verticalLayout_exploring_tabs_content">
                   <property name="spacing">
-                   <number>2</number>
+                   <number>4</number>
                   </property>
                   <item>
                    <widget class="QgsCollapsibleGroupBox" name="mGroupBox_exploring_single_selection">
@@ -1489,10 +1489,10 @@
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_auto_current_layer">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1573,10 +1573,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_layers_to_filter">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1660,10 +1660,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_current_layer_combine_operator">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -1747,10 +1747,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_geometric_predicates">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2033,13 +2033,13 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_value">
                          <property name="enabled">
                           <bool>false</bool>
                          </property>
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2123,7 +2123,7 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_filtering_buffer_type">
                          <property name="text">
                           <string/>
@@ -2621,24 +2621,27 @@
                      </size>
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
+                     <property name="spacing">
+                      <number>2</number>
+                     </property>
                      <property name="leftMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="topMargin">
-                      <number>8</number>
+                      <number>2</number>
                      </property>
                      <property name="rightMargin">
-                      <number>4</number>
+                      <number>2</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>8</number>
+                      <number>2</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_layers">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2713,10 +2716,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_projection">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2803,10 +2806,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_styles">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2890,10 +2893,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_datatype">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2977,10 +2980,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_output_folder">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3064,10 +3067,10 @@
                          </property>
                         </spacer>
                        </item>
-                       <item>
+                       <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_zip">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>

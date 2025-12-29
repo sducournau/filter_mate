@@ -7,19 +7,31 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.5.4 - Critical Fix: OGR Backend
+## 🎉 What's New in v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection
 
-This release fixes a critical bug in the OGR backend that caused all filters to fail due to incorrect feature counting in memory layers.
+This release fixes a critical bug in the PostgreSQL backend where negative buffers (erosion) could produce incorrect filtering results due to incomplete empty geometry detection.
 
 ### 🐛 Critical Fixes
 
-| Issue | Solution |
-|-------|----------|
-| **Memory Layer Count** | Intelligent retry mechanism for feature counting |
-| **False "0 features"** | Enhanced diagnostics and validation |
-| **OGR Filter Failures** | Prevents premature rejection of valid layers |
+| Issue                                 | Solution                                             |
+| ------------------------------------- | ---------------------------------------------------- |
+| **Empty Geometry Detection**          | Uses ST_IsEmpty() to detect ALL empty geometry types |
+| **POLYGON EMPTY, MULTIPOLYGON EMPTY** | Now correctly detected and converted to NULL         |
+| **Incorrect Spatial Matches**         | Prevents false positives with empty geometries       |
+
+### 🎨 UI Improvements
+
+| Feature             | Description                                               |
+| ------------------- | --------------------------------------------------------- |
+| **HiDPI Profile**   | New UI profile for 4K/Retina displays with auto-detection |
+| **Compact Sidebar** | Smaller, centered buttons with harmonized spacing         |
+| **Equal Splitter**  | 50/50 ratio for exploring/toolset frames                  |
 
 ### Previous Releases
+
+## 🔧 v2.5.4 - Critical Fix: OGR Backend
+
+This release fixes a critical bug in the OGR backend that caused all filters to fail due to incorrect feature counting in memory layers.
 
 ## 🎉 v2.5.0 - Major Stability Release
 
@@ -27,17 +39,17 @@ This release consolidates all stability fixes from the 2.4.x series into a stabl
 
 ### ✨ Highlights
 
-| Category | Improvement |
-|----------|-------------|
-| **GeoPackage** | Correct GeomFromGPB() function for GPB geometry conversion |
-| **Thread Safety** | Defer setSubsetString() to main thread via queue callback |
+| Category              | Improvement                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| **GeoPackage**        | Correct GeomFromGPB() function for GPB geometry conversion   |
+| **Thread Safety**     | Defer setSubsetString() to main thread via queue callback    |
 | **Session Isolation** | Multi-client materialized view naming with session_id prefix |
-| **Type Casting** | Automatic ::numeric casting for varchar/numeric comparisons |
-| **Remote Layers** | Proper detection and fallback to OGR for WFS/HTTP services |
+| **Type Casting**      | Automatic ::numeric casting for varchar/numeric comparisons  |
+| **Remote Layers**     | Proper detection and fallback to OGR for WFS/HTTP services   |
 
 ### 🛡️ Stability Improvements
 
-- **GeoPackage GeomFromGPB()** - Use correct SpatiaLite function (without ST_ prefix)
+- **GeoPackage GeomFromGPB()** - Use correct SpatiaLite function (without ST\_ prefix)
 - **GPB Geometry Conversion** - Proper GeoPackage Binary format handling
 - **Remote Layer Detection** - Prevents Spatialite from opening HTTP/WFS sources
 - **Source Geometry** - Thread-safe feature validation with expression fallback

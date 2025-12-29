@@ -6,27 +6,22 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.5.4
+version=2.5.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.5.4 - CRITICAL FIX: OGR Backend Memory Layer Feature Count
+about=FilterMate v2.5.5 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection
 
- CRITICAL FIX in v2.5.4:
+ CRITICAL FIX in v2.5.5:
+ - 🐛 FIXED: PostgreSQL backend now correctly detects ALL empty geometry types from negative buffers
+ - 🔧 Uses ST_IsEmpty() instead of NULLIF to detect POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
+ - 🎨 NEW: HiDPI UI profile for 4K/Retina displays with auto-detection
+ - 🖼️ UI improvements: Compact sidebar, harmonized button spacing across all tabs
+ - ✅ Thread safety: Warning messages stored for main thread display
+ 
+ Previous fixes (v2.5.4):
  - 🐛 FIXED: OGR backend now correctly counts features in memory layers
  - 🔧 Added intelligent feature counting that handles memory layer refresh delays
- - 🔍 Enhanced diagnostics for memory layer feature validation
- - ✅ Prevents false "0 features" errors that caused all OGR filters to fail
- 
- Previous fixes (v2.5.2):
- - 🐛 FIXED: Negative buffer now works for OGR, Spatialite, and fallback modes
- - 🔧 OGR backend now correctly applies buffer in apply_filter
- - 📊 Enhanced logging for buffer value debugging
- 
- v2.5.1 features:
- - 📐 Negative buffer (erosion): Shrink polygons inward
- - 🎨 Visual feedback: Orange styling when using negative buffer
- - ✅ All 3 backends: PostgreSQL, Spatialite, OGR
  
  v2.5.0 highlights:
  - 🎉 Major milestone: Consolidates all 2.4.x stability fixes
@@ -58,6 +53,17 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
+    Version 2.5.5 (December 2025) - Critical PostgreSQL Negative Buffer Fix
+    🐛 CRITICAL: PostgreSQL backend now correctly detects ALL empty geometry types
+    🔧 Uses ST_IsEmpty() instead of NULLIF for POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
+    🎨 NEW: HiDPI UI profile for 4K/Retina displays with auto-detection
+    🖼️ UI improvements: Compact sidebar, harmonized button spacing across all tabs
+    ✅ Thread safety: Warning messages stored for main thread display
+    
+    Version 2.5.4 (December 2025) - OGR Backend Memory Layer Fix
+    🐛 CRITICAL: OGR backend now correctly counts features in memory layers
+    🔧 Intelligent feature counting with retry mechanism
+    
     Version 2.4.4 (December 2025) - Critical Thread Safety Fix
     🔥 CRITICAL: Fixed parallel filtering crash (Windows fatal exception: access violation)
     🛡️ Thread Safety: OGR layers now always filter sequentially

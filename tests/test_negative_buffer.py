@@ -110,7 +110,7 @@ class TestSpatialiteBackendNegativeBuffer(unittest.TestCase):
     
     def test_build_st_buffer_sql_structure(self):
         """Test SQL structure for negative vs positive buffers."""
-        # Test that negative buffers should include MakeValid and NULLIF
+        # Test that negative buffers should include MakeValid and ST_IsEmpty check
         # This is a logic test - the actual SQL generation is tested in integration
         
         negative_buffer_value = -10.0
@@ -119,16 +119,18 @@ class TestSpatialiteBackendNegativeBuffer(unittest.TestCase):
         # Negative buffer should be wrapped for safety
         self.assertTrue(negative_buffer_value < 0, "Test verifies negative buffer logic")
         
-        # Expected SQL patterns for negative buffer (from code review):
-        # NULLIF(MakeValid(ST_Buffer(geom, -10.0)), ST_GeomFromText('GEOMETRYCOLLECTION EMPTY'))
-        expected_patterns_negative = ["MakeValid", "NULLIF", "ST_Buffer", "GEOMETRYCOLLECTION EMPTY"]
+        # Expected SQL patterns for negative buffer (v2.5.4+ - uses ST_IsEmpty instead of NULLIF):
+        # PostgreSQL: CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer(geom, -10.0))) THEN NULL ELSE ST_MakeValid(ST_Buffer(geom, -10.0)) END
+        # Spatialite: CASE WHEN ST_IsEmpty(MakeValid(ST_Buffer(geom, -10.0))) = 1 THEN NULL ELSE MakeValid(ST_Buffer(geom, -10.0)) END
+        expected_patterns_negative_postgresql = ["ST_MakeValid", "ST_IsEmpty", "ST_Buffer", "CASE WHEN", "THEN NULL"]
+        expected_patterns_negative_spatialite = ["MakeValid", "ST_IsEmpty", "ST_Buffer", "CASE WHEN", "= 1", "THEN NULL"]
         
         # Positive buffer should be simple
         self.assertTrue(positive_buffer_value > 0, "Test verifies positive buffer logic")
         
         # Expected SQL pattern for positive buffer:
         # ST_Buffer(geom, 10.0)
-        # Should NOT include MakeValid or NULLIF
+        # Should NOT include MakeValid or ST_IsEmpty
     
     def test_spatialite_handles_empty_geometries(self):
         """Test that Spatialite backend logic handles empty geometries from negative buffers."""

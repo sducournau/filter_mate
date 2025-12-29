@@ -241,6 +241,34 @@ qgis_expression_to_spatialite(expression)
 # Note: ~90% compatible with PostGIS functions
 ```
 
+## Negative Buffer (Erosion) Handling
+
+**Critical:** Buffer is applied via SQL `ST_Buffer()`, NOT in Python WKT preparation!
+
+See [negative_buffer_wkt_handling.md](negative_buffer_wkt_handling.md) for full details.
+
+### PostgreSQL Pattern (v2.5.4+)
+```sql
+CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer(geom, -10))) THEN NULL 
+     ELSE ST_MakeValid(ST_Buffer(geom, -10)) END
+```
+
+### Spatialite Pattern (v2.5.5+)  
+```sql
+-- Note: MakeValid() instead of ST_MakeValid()
+-- Note: = 1 for boolean comparison
+CASE WHEN ST_IsEmpty(MakeValid(ST_Buffer(geom, -10))) = 1 THEN NULL 
+     ELSE MakeValid(ST_Buffer(geom, -10)) END
+```
+
+### Key Functions
+| Backend | Function | Purpose |
+|---------|----------|---------|
+| PostgreSQL | `_build_st_buffer_with_style()` | Apply buffer with style + empty check |
+| PostgreSQL | `_build_simple_wkt_expression()` | WKT mode for small datasets |
+| Spatialite | `_build_st_buffer_with_style()` | Apply buffer with Spatialite syntax |
+| Spatialite | `build_expression()` | Full expression builder |
+
 ### OGR
 ```python
 # Uses QGIS expression engine directly

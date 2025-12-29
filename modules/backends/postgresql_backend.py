@@ -164,6 +164,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Log negative buffer usage for visibility
         if buffer_value < 0:
             self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
+            # DIAGNOSTIC v2.5.6: Log to QGIS MessageLog for guaranteed visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"🛡️ _build_st_buffer_with_style: NEGATIVE buffer_value = {buffer_value}m",
+                "FilterMate", Qgis.Info
+            )
         
         # Build base buffer expression
         if endcap_style == 'round':
@@ -605,6 +611,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             Simple PostGIS expression like:
             ST_Intersects("table"."geom", ST_GeomFromText('POLYGON(...)', 31370))
         """
+        # DIAGNOSTIC v2.5.6: Log buffer value to QGIS MessageLog for visibility
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"📝 _build_simple_wkt_expression: buffer_value={buffer_value} (type={type(buffer_value).__name__}), source_srid={source_srid}",
+            "FilterMate", Qgis.Info
+        )
+        
         self.log_info(f"📝 _build_simple_wkt_expression called:")
         self.log_info(f"  - buffer_value: {buffer_value}")
         self.log_info(f"  - source_srid: {source_srid}")
@@ -658,6 +671,15 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             else:
                 # Projected CRS: buffer directly in native units
                 source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
+                # DIAGNOSTIC v2.5.6: Log buffer application for projected CRS
+                buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
+                self.log_info(f"  ✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}) in native CRS units (SRID={source_srid})")
+                # Log to QGIS MessageLog for visibility
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"📐 Buffer APPLIED: {buffer_value}m ({buffer_type_str}) for SRID={source_srid}",
+                    "FilterMate", Qgis.Info
+                )
         else:
             self.log_info(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
         
@@ -905,6 +927,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                             )
                     else:
                         self.log_info(f"  ℹ️ No buffer to apply in EXISTS (buffer_value={actual_buffer_value})")
+                    
+                    # CRITICAL FIX v2.5.6: Initialize where_clauses with the spatial predicate
+                    # The spatial predicate MUST be the first clause in the WHERE clause
+                    spatial_predicate = f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"
+                    where_clauses = [spatial_predicate]
+                    self.log_info(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
                     self.log_info(f"  - Source filter provided: {source_filter is not None}")
                     
                     if source_filter:
@@ -962,6 +990,14 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         if predicate_expressions:
             combined = " OR ".join(predicate_expressions)
             self.log_debug(f"Built expression: {combined[:100]}...")
+            
+            # DIAGNOSTIC v2.5.6: Log final expression to QGIS Message Panel
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"PostgreSQL FINAL expression ({len(combined)} chars): {combined[:300]}...",
+                "FilterMate", Qgis.Info
+            )
+            
             return combined
         
         return ""

@@ -81,11 +81,13 @@
       },
       "UI_PROFILE": {
         "value": "auto",
-        "choices": ["auto", "compact", "normal"],
-        "description": "UI display profile: 'auto' (detect from screen), 'compact' for small screens, 'normal' for standard displays",
+        "choices": ["auto", "compact", "normal", "hidpi"],
+        "description": "UI display profile: 'auto' (detect from screen/DPI), 'compact' for small screens, 'normal' for standard displays, 'hidpi' for high resolution displays (4K, Retina)",
         "auto_detection_thresholds": {
           "compact_if_width_less_than": 1920,
-          "compact_if_height_less_than": 1080
+          "compact_if_height_less_than": 1080,
+          "hidpi_if_device_pixel_ratio_above": 1.5,
+          "hidpi_if_physical_width_above": 3840
         }
       },
       "DOCK_POSITION": {

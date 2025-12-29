@@ -329,8 +329,9 @@ QgsCollapsibleGroupBox {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 8px;
+    padding: 6px;
     padding-top: 24px;
+    margin: 0px;
     color: {color_font_0};
     min-height: 50px;
 }
@@ -540,9 +541,9 @@ QgsCollapsibleGroupBox {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
-    padding: 12px;
-    padding-top: 28px;
-    margin-top: 4px;
+    padding: 8px;
+    padding-top: 26px;
+    margin: 0px 0px 2px 0px;
     color: {color_font_0};
 }
 
@@ -880,9 +881,9 @@ QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
     background-color: {color_1};
     border: 1px solid {color_2};
-    border-radius: 8px;
-    padding: 10px 8px;
-    margin: 4px 2px;
+    border-radius: 6px;
+    padding: 3px 3px;
+    margin: 0px 0px;
     /* Smooth transitions for responsive behavior */
 }
 
@@ -890,7 +891,7 @@ QWidget#widget_exporting_keys {
 QWidget#widget_exploring_keys QVBoxLayout,
 QWidget#widget_filtering_keys QVBoxLayout,
 QWidget#widget_exporting_keys QVBoxLayout {
-    spacing: 8px;
+    spacing: 2px;
     margin: 0px;
 }
 
@@ -898,8 +899,9 @@ QWidget#widget_exporting_keys QVBoxLayout {
 QWidget#widget_exploring_keys QPushButton:!checkable {
     background-color: transparent;
     border: 2px solid transparent;
-    border-radius: 8px;
-    padding: 8px;
+    border-radius: 6px;
+    padding: 2px;
+    margin: 1px 0px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
@@ -910,24 +912,25 @@ QWidget#widget_exploring_keys QPushButton:!checkable::icon {
 QWidget#widget_exploring_keys QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
-    padding: 6px;
+    padding: 2px;
+    margin: 1px 0px;
     /* Subtle scale effect on hover */
-    transform: scale(1.02);
 }
 
 QWidget#widget_exploring_keys QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
-    padding: 6px;
-    transform: scale(0.96);
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 /* Buttons inside widget_exploring_keys - Checkable - Enhanced visibility */
 QWidget#widget_exploring_keys QPushButton:checkable {
     background-color: transparent;
     border: 2px solid transparent;
-    border-radius: 8px;
-    padding: 8px;
+    border-radius: 6px;
+    padding: 2px;
+    margin: 1px 0px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
@@ -937,37 +940,40 @@ QWidget#widget_exploring_keys QPushButton:checkable::icon {
 
 QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
-    border: 3px solid {color_accent};
-    padding: 8px;
+    border: 2px solid {color_accent};
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:checked {
     background-color: {color_accent};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
-    border: 3px solid {color_accent_dark};
-    padding: 8px;
-    transform: translateY(1px);
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
-    transform: translateY(1px);
 }
 
 /* Buttons inside widget_filtering_keys - Checkable only - Enhanced visibility */
@@ -975,11 +981,9 @@ QWidget#widget_filtering_keys QPushButton:checkable {
     background-color: transparent;
     border: 2px solid transparent;
     border-radius: 6px;
-    padding: 9px;
-    min-width: 40px;
-    max-width: 40px;
-    min-height: 40px;
-    max-height: 40px;
+    padding: 2px;
+    margin: 1px 0px;
+    /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable::icon {
@@ -988,37 +992,40 @@ QWidget#widget_filtering_keys QPushButton:checkable::icon {
 
 QWidget#widget_filtering_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
-    border: 3px solid {color_accent};
-    padding: 8px;
+    border: 2px solid {color_accent};
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:checked {
     background-color: {color_accent};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
-    border: 3px solid {color_accent_dark};
-    padding: 8px;
-    transform: translateY(1px);
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 QWidget#widget_filtering_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
-    transform: translateY(1px);
 }
 
 /* Buttons inside widget_exporting_keys - Checkable only - Enhanced visibility */
@@ -1026,11 +1033,9 @@ QWidget#widget_exporting_keys QPushButton:checkable {
     background-color: transparent;
     border: 2px solid transparent;
     border-radius: 6px;
-    padding: 9px;
-    min-width: 40px;
-    max-width: 40px;
-    min-height: 40px;
-    max-height: 40px;
+    padding: 2px;
+    margin: 1px 0px;
+    /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable::icon {
@@ -1039,37 +1044,40 @@ QWidget#widget_exporting_keys QPushButton:checkable::icon {
 
 QWidget#widget_exporting_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
-    border: 3px solid {color_accent};
-    padding: 8px;
+    border: 2px solid {color_accent};
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:checked {
     background-color: {color_accent};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
-    border: 3px solid {color_accent_dark};
-    padding: 8px;
-    transform: translateY(1px);
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
 }
 
 QWidget#widget_exporting_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
-    border: 4px solid {color_accent_dark};
-    padding: 6px;
+    border: 2px solid {color_accent_dark};
+    padding: 2px;
+    margin: 1px 0px;
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
-    transform: translateY(1px);
 }
 
 /* ========================================================================

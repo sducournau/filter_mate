@@ -2567,6 +2567,19 @@ class FilterMateApp:
                 return None
             
             task_parameters = self.PROJECT_LAYERS[current_layer.id()]
+            
+            # CRITICAL FIX v2.5.x: Synchronize buffer spinbox value to PROJECT_LAYERS
+            # The spinbox valueChanged signal may not have updated PROJECT_LAYERS yet
+            # Read the current spinbox value directly and sync it before creating task params
+            if self.dockwidget and hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
+                current_spinbox_buffer = self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.value()
+                stored_buffer = task_parameters.get("filtering", {}).get("buffer_value", 0.0)
+                if current_spinbox_buffer != stored_buffer:
+                    logger.info(f"SYNC buffer_value: spinbox={current_spinbox_buffer}, stored={stored_buffer} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["buffer_value"] = current_spinbox_buffer
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_value"] = current_spinbox_buffer
 
             if current_layer.subsetString() != '':
                 self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True

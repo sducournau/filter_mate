@@ -701,26 +701,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Set initial splitter sizes based on configuration ratios.
         
         Uses the available height to distribute space between frames
-        according to the configured ratios.
+        according to the configured ratios (50/50 by default for equal space).
         """
         from .modules.ui_config import UIConfig
         
         splitter_config = UIConfig.get_config('splitter')
-        exploring_ratio = splitter_config.get('initial_exploring_ratio', 0.30)
-        toolset_ratio = splitter_config.get('initial_toolset_ratio', 0.70)
+        exploring_ratio = splitter_config.get('initial_exploring_ratio', 0.50)
+        toolset_ratio = splitter_config.get('initial_toolset_ratio', 0.50)
         
-        # Get frame configurations for constraints
-        exploring_config = UIConfig.get_config('frame_exploring')
-        toolset_config = UIConfig.get_config('frame_toolset')
+        # Get available height from splitter or use default
+        total_height = self.main_splitter.height()
+        if total_height < 100:  # Splitter not yet sized, use reasonable default
+            total_height = 600
         
-        # Calculate initial sizes based on preferred heights
-        exploring_preferred = exploring_config.get('preferred_height', 200) if exploring_config else 200
-        toolset_preferred = toolset_config.get('preferred_height', 400) if toolset_config else 400
+        # Calculate sizes based on ratios for equal distribution
+        exploring_size = int(total_height * exploring_ratio)
+        toolset_size = int(total_height * toolset_ratio)
         
         # Set sizes - Qt will adjust based on actual available space
-        self.main_splitter.setSizes([exploring_preferred, toolset_preferred])
+        self.main_splitter.setSizes([exploring_size, toolset_size])
         
-        logger.debug(f"Initial splitter sizes: exploring={exploring_preferred}px, toolset={toolset_preferred}px")
+        logger.debug(f"Initial splitter sizes: exploring={exploring_size}px ({exploring_ratio:.0%}), toolset={toolset_size}px ({toolset_ratio:.0%})")
 
 
     def apply_dynamic_dimensions(self):
@@ -877,7 +878,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Get widget_keys padding and border radius from config
         widget_keys_config = UIConfig.get_config('widget_keys')
-        widget_keys_padding = widget_keys_config.get('padding', 8) if widget_keys_config else 8
+        widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
         
         # Apply to widget keys containers with enhanced styling
         for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
@@ -890,6 +891,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if layout:
                     layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
                                             widget_keys_padding, widget_keys_padding)
+                    layout.setSpacing(0)  # No extra spacing in container
         
         # Apply to frame_exploring with size policy
         if hasattr(self, 'frame_exploring'):
@@ -920,7 +922,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Harmonize dimensions of all checkable pushbuttons across tabs.
         
         Applies consistent sizing to exploring, filtering, and exporting pushbuttons
-        based on the active UI profile (compact/normal) using key_button dimensions
+        based on the active UI profile (compact/normal/hidpi) using key_button dimensions
         from UIConfig.
         """
         try:
@@ -930,17 +932,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Get dynamic dimensions from key_button config
             key_button_config = UIConfig.get_config('key_button')
+            
+            # Profile-aware fallback values
+            current_profile = UIConfig.get_profile()
             if key_button_config:
-                pushbutton_min_size = key_button_config.get('min_size', 32)
-                pushbutton_max_size = key_button_config.get('max_size', 36)
-                pushbutton_icon_size = key_button_config.get('icon_size', 24)
-                button_spacing = key_button_config.get('spacing', 4)
+                pushbutton_min_size = key_button_config.get('min_size', 26)
+                pushbutton_max_size = key_button_config.get('max_size', 32)
+                pushbutton_icon_size = key_button_config.get('icon_size', 16)
+                button_spacing = key_button_config.get('spacing', 2)
             else:
-                # Fallback values if config not available
-                pushbutton_min_size = 32
-                pushbutton_max_size = 36
-                pushbutton_icon_size = 24
-                button_spacing = 4
+                # Fallback values based on profile if config not available
+                if current_profile == DisplayProfile.COMPACT:
+                    pushbutton_min_size = 26
+                    pushbutton_max_size = 32
+                    pushbutton_icon_size = 16
+                    button_spacing = 2
+                elif current_profile == DisplayProfile.HIDPI:
+                    pushbutton_min_size = 36
+                    pushbutton_max_size = 44
+                    pushbutton_icon_size = 24
+                    button_spacing = 6
+                else:  # NORMAL
+                    pushbutton_min_size = 30
+                    pushbutton_max_size = 36
+                    pushbutton_icon_size = 18
+                    button_spacing = 4
             
             # Get all checkable pushbuttons with consistent naming pattern
             checkable_buttons = []
@@ -1029,6 +1045,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             section_spacing = UIConfig.get_config('layout', 'spacing_section') or 8
             main_spacing = UIConfig.get_config('layout', 'spacing_main') or 8
             
+            # Get key button spacing for harmonized key layouts
+            key_button_config = UIConfig.get_config('key_button')
+            button_spacing = key_button_config.get('spacing', 2) if key_button_config else 2
+            
             # Apply main container spacing for better responsiveness
             if hasattr(self, 'verticalLayout_main_content'):
                 self.verticalLayout_main_content.setSpacing(main_spacing)
@@ -1043,35 +1063,34 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if hasattr(self, layout_name):
                     getattr(self, layout_name).setSpacing(layout_spacing)
             
-            # Apply spacing to filtering layouts
-            filtering_layouts = [
-                'verticalLayout_filtering_keys',
-                'verticalLayout_filtering_values'
-            ]
-            for layout_name in filtering_layouts:
-                if hasattr(self, layout_name):
-                    getattr(self, layout_name).setSpacing(content_spacing)
+            # Apply spacing to filtering layouts - keys use button spacing, values use content spacing
+            if hasattr(self, 'verticalLayout_filtering_keys'):
+                self.verticalLayout_filtering_keys.setSpacing(button_spacing)
+            if hasattr(self, 'verticalLayout_filtering_values'):
+                self.verticalLayout_filtering_values.setSpacing(content_spacing)
             
-            # Apply spacing to exporting layouts
-            exporting_layouts = [
-                'verticalLayout_exporting_keys',
-                'verticalLayout_exporting_values'
-            ]
-            for layout_name in exporting_layouts:
-                if hasattr(self, layout_name):
-                    getattr(self, layout_name).setSpacing(content_spacing)
+            # Apply spacing to exporting layouts - keys use button spacing, values use content spacing
+            if hasattr(self, 'verticalLayout_exporting_keys'):
+                self.verticalLayout_exporting_keys.setSpacing(button_spacing)
+            if hasattr(self, 'verticalLayout_exporting_values'):
+                self.verticalLayout_exporting_values.setSpacing(content_spacing)
             
-            # Apply section margins for horizontal layouts (keys/values containers)
-            margins_section = UIConfig.get_config('layout', 'margins_section') or 8
+            # Apply spacing to exploring key layout
+            if hasattr(self, 'verticalLayout_exploring_content'):
+                self.verticalLayout_exploring_content.setSpacing(button_spacing)
+            
+            # Note: Content margins for horizontal_layouts are now handled by _align_key_layouts
+            # to ensure consistent vertical alignment of toolbar bars across all tabs
+            # Only apply spacing here, margins are set to 0 in _align_key_layouts
+            section_spacing_adjusted = UIConfig.get_config('layout', 'spacing_section') or 4
             horizontal_layouts = [
                 'horizontalLayout_filtering_content',
-                'horizontalLayout_exporting_main'
+                'horizontalLayout_exporting_content'
             ]
             for layout_name in horizontal_layouts:
                 if hasattr(self, layout_name):
                     layout = getattr(self, layout_name)
-                    layout.setSpacing(section_spacing)
-                    layout.setContentsMargins(margins_section, 0, margins_section, 0)
+                    layout.setSpacing(section_spacing_adjusted)
             
             # Apply harmonized margins to groupbox layouts
             margins_frame = UIConfig.get_config('layout', 'margins_frame')
@@ -1265,17 +1284,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Align key layouts (exploring/filtering/exporting) for visual consistency.
         
         Sets consistent spacing, margins, and alignment for all key widget layouts
-        and their parent containers.
+        and their parent containers. Harmonizes vertical bars of pushbuttons.
         """
         try:
             from .modules.ui_config import UIConfig
             
-            # Get layout spacing from config
-            layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
+            # Get key button config for harmonized spacing
+            key_button_config = UIConfig.get_config('key_button')
+            button_spacing = key_button_config.get('spacing', 2) if key_button_config else 2
+            
+            # Get widget_keys config for container margins
+            widget_keys_config = UIConfig.get_config('widget_keys')
+            widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
             
             # Apply consistent spacing and alignment to ALL key layouts
             key_layouts = [
-                ('verticalLayout_exploring_keys', 'exploring keys'),
+                ('verticalLayout_exploring_content', 'exploring content'),
                 ('verticalLayout_filtering_keys', 'filtering keys'),
                 ('verticalLayout_exporting_keys', 'exporting keys')
             ]
@@ -1283,14 +1307,51 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for layout_name, description in key_layouts:
                 if hasattr(self, layout_name):
                     layout = getattr(self, layout_name)
-                    # Set consistent spacing between items
-                    layout.setSpacing(layout_spacing)
+                    # Set consistent spacing between items (reduced for compact icons)
+                    layout.setSpacing(button_spacing)
                     # Remove content margins for alignment
                     layout.setContentsMargins(0, 0, 0, 0)
                     # Center buttons vertically within their space
-                    layout.setAlignment(Qt.AlignVCenter)
+                    layout.setAlignment(Qt.AlignVCenter | Qt.AlignHCenter)
+                    
+                    # Center each item horizontally within the layout
+                    for i in range(layout.count()):
+                        item = layout.itemAt(i)
+                        if item and item.widget():
+                            # Re-set alignment for each widget to center horizontally
+                            layout.setAlignment(item.widget(), Qt.AlignHCenter)
             
-            # Apply consistent styling to parent container layouts
+            # Apply consistent styling to parent container layouts (widget_*_keys_container)
+            container_layouts = [
+                ('verticalLayout_exploring_container', 'exploring'),
+                ('verticalLayout_filtering_keys_container', 'filtering'),
+                ('verticalLayout_exporting_keys_container', 'exporting')
+            ]
+            
+            for layout_name, section in container_layouts:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    # Consistent minimal margins: 2px all around
+                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
+                                            widget_keys_padding, widget_keys_padding)
+                    layout.setSpacing(0)
+            
+            # Apply consistent margins to parent horizontal/grid layouts for vertical alignment
+            # This ensures exploring bar aligns with filtering/exporting bars
+            parent_horizontal_layouts = [
+                ('gridLayout_main_actions', 'exploring parent'),
+                ('horizontalLayout_filtering_content', 'filtering parent'),
+                ('horizontalLayout_exporting_content', 'exporting parent')
+            ]
+            
+            for layout_name, description in parent_horizontal_layouts:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    # Consistent left margin (0) to align all vertical bars
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(4)
+            
+            # Apply consistent styling to parent widget containers
             parent_widgets = [
                 ('widget_exploring_keys', 'exploring'),
                 ('widget_filtering_keys', 'filtering'),
@@ -1299,14 +1360,52 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             for widget_name, section in parent_widgets:
                 if hasattr(self, widget_name):
-                    parent_layout = getattr(self, widget_name).layout()
+                    widget = getattr(self, widget_name)
+                    # Get widget_keys dimensions from config
+                    min_width = widget_keys_config.get('min_width', 34) if widget_keys_config else 34
+                    max_width = widget_keys_config.get('max_width', 40) if widget_keys_config else 40
+                    widget.setMinimumWidth(min_width)
+                    widget.setMaximumWidth(max_width)
+                    
+                    parent_layout = widget.layout()
                     if parent_layout:
-                        # Minimal horizontal margins, no vertical margins
-                        parent_layout.setContentsMargins(2, 0, 2, 0)
+                        # Minimal horizontal margins, consistent vertical margins
+                        parent_layout.setContentsMargins(widget_keys_padding, widget_keys_padding, 
+                                                        widget_keys_padding, widget_keys_padding)
                         # Center content
                         parent_layout.setAlignment(Qt.AlignCenter)
             
-            logger.debug(f"Aligned key layouts with {layout_spacing}px spacing")
+            # Apply consistent spacing to content layouts (groupboxes for exploring, values for filtering/exporting)
+            # This ensures vertical alignment between the exploring groupboxes and filtering/exporting widgets
+            content_layouts = [
+                ('verticalLayout_exploring_tabs_content', 'exploring groupboxes'),
+                ('verticalLayout_filtering_values', 'filtering values'),
+                ('verticalLayout_exporting_values', 'exporting values')
+            ]
+            
+            content_spacing = 4  # Consistent spacing between content items
+            for layout_name, description in content_layouts:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    layout.setSpacing(content_spacing)
+                    # Consistent margins for all content layouts
+                    layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Reduce padding on filtering and exporting main layouts to match exploring
+            # These are the top-level horizontal layouts inside the toolbox pages
+            main_page_layouts = [
+                ('horizontalLayout_filtering_main', 'filtering main'),
+                ('horizontalLayout_exporting_main', 'exporting main')
+            ]
+            
+            for layout_name, description in main_page_layouts:
+                if hasattr(self, layout_name):
+                    layout = getattr(self, layout_name)
+                    # Match the exploring section margins (2px all around)
+                    layout.setContentsMargins(2, 2, 2, 2)
+                    layout.setSpacing(4)
+            
+            logger.debug(f"Aligned key layouts with {button_spacing}px spacing, {widget_keys_padding}px padding")
             
         except Exception as e:
             logger.warning(f"Could not align key layouts: {e}")

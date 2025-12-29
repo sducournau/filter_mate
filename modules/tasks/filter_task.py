@@ -181,6 +181,10 @@ class FilterEngineTask(QgsTask):
         self.task_action = task_action
         self.task_parameters = task_parameters
         
+        # THREAD SAFETY FIX v2.5.6: Store warnings from worker thread for display in finished()
+        # Cannot call iface.messageBar() from worker thread - would cause crash
+        self.warning_messages = []
+        
         # Référence au cache partagé (lazy initialization)
         self.geom_cache = FilterEngineTask.get_geometry_cache()
         
@@ -3513,10 +3517,9 @@ class FilterEngineTask(QgsTask):
                     f"⚠️ Buffer négatif ({buffer_dist}m) a complètement érodé toutes les géométries. "
                     f"Total: {feature_count}, Valides: {valid_features}, Érodées: {eroded_features}, Invalides: {invalid_features}"
                 )
-                # Show user-facing message
-                from qgis.utils import iface
-                iface.messageBar().pushWarning(
-                    "FilterMate",
+                # THREAD SAFETY FIX v2.5.6: Store warning for display in finished()
+                # Cannot call iface.messageBar() from worker thread - would cause crash
+                self.warning_messages.append(
                     f"Le buffer négatif de {buffer_dist}m a complètement érodé toutes les géométries. Réduisez la distance du buffer."
                 )
             else:
@@ -4831,6 +4834,7 @@ class FilterEngineTask(QgsTask):
         # Log buffer values being passed to backend
         passed_buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
         passed_buffer_expression = self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
+        
         logger.info(f"📐 _build_backend_expression - Buffer being passed to backend:")
         logger.info(f"  - param_buffer_value: {passed_buffer_value}")
         logger.info(f"  - param_buffer_expression: {passed_buffer_expression}")
@@ -8253,6 +8257,13 @@ class FilterEngineTask(QgsTask):
     def finished(self, result):
         result_action = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
+        
+        # THREAD SAFETY FIX v2.5.6: Display any warnings stored during worker thread execution
+        # These warnings (like negative buffer erosion) could not be displayed from worker thread
+        if hasattr(self, 'warning_messages') and self.warning_messages:
+            for warning_msg in self.warning_messages:
+                iface.messageBar().pushWarning("FilterMate", warning_msg)
+            self.warning_messages = []  # Clear after display
         
         # CANCELLATION FIX v2.3.22: Don't apply pending subset requests if task was canceled
         # This prevents duplicate filter applications when user cancels during parallel execution

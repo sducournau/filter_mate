@@ -6,12 +6,12 @@
   "app": {
     "ui": {
       "profile": {
-        "description": "UI layout profile - auto detects screen size, compact for small screens, normal for large screens",
+        "description": "UI layout profile - auto detects screen size/DPI, compact for small screens, normal for large screens, hidpi for high resolution displays (4K, Retina)",
         "widget_type": "combobox",
         "data_type": "string",
         "validation": {
           "required": true,
-          "allowed_values": ["auto", "compact", "normal"]
+          "allowed_values": ["auto", "compact", "normal", "hidpi"]
         },
         "default": "auto",
         "user_friendly_label": "UI Profile"

@@ -579,6 +579,77 @@ class ConfigMigration:
         
         return 'ok', version, config_data
     
+    def update_ui_profile_options(self) -> Tuple[bool, str]:
+        """
+        Update UI_PROFILE choices and auto_detection_thresholds in config.json
+        to include the 'hidpi' option if missing.
+        
+        This ensures user configs are automatically updated when new profile
+        options are added without requiring a full migration.
+        
+        Returns:
+            Tuple of (updated, message)
+        """
+        if not os.path.exists(self.config_path):
+            return False, "Config file not found"
+        
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        except Exception as e:
+            return False, f"Failed to load config: {e}"
+        
+        updated = False
+        
+        # Navigate to UI_PROFILE in APP.DOCKWIDGET structure
+        ui_profile = None
+        if "APP" in config_data and "DOCKWIDGET" in config_data["APP"]:
+            ui_profile = config_data["APP"]["DOCKWIDGET"].get("UI_PROFILE")
+        
+        if ui_profile is None:
+            return False, "UI_PROFILE not found in config"
+        
+        # Update choices if 'hidpi' is missing
+        if "choices" in ui_profile:
+            if "hidpi" not in ui_profile["choices"]:
+                ui_profile["choices"] = ["auto", "compact", "normal", "hidpi"]
+                updated = True
+        
+        # Update description
+        expected_description = "UI display profile: 'auto' (detect from screen/DPI), 'compact' for small screens, 'normal' for standard displays, 'hidpi' for high resolution displays (4K, Retina)"
+        if ui_profile.get("description") != expected_description:
+            ui_profile["description"] = expected_description
+            updated = True
+        
+        # Update auto_detection_thresholds
+        if "auto_detection_thresholds" in ui_profile:
+            thresholds = ui_profile["auto_detection_thresholds"]
+            if "hidpi_if_device_pixel_ratio_above" not in thresholds:
+                thresholds["hidpi_if_device_pixel_ratio_above"] = 1.5
+                updated = True
+            if "hidpi_if_physical_width_above" not in thresholds:
+                thresholds["hidpi_if_physical_width_above"] = 3840
+                updated = True
+        else:
+            # Add complete thresholds if missing
+            ui_profile["auto_detection_thresholds"] = {
+                "compact_if_width_less_than": 1920,
+                "compact_if_height_less_than": 1080,
+                "hidpi_if_device_pixel_ratio_above": 1.5,
+                "hidpi_if_physical_width_above": 3840
+            }
+            updated = True
+        
+        if updated:
+            try:
+                with open(self.config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=2, ensure_ascii=False)
+                return True, "UI_PROFILE options updated successfully"
+            except Exception as e:
+                return False, f"Failed to save config: {e}"
+        
+        return False, "No updates needed"
+    
     def auto_migrate_if_needed(self, confirm_reset_callback: Optional[callable] = None) -> Tuple[bool, List[str]]:
         """
         Automatically detect and migrate configuration if needed.
@@ -647,7 +718,11 @@ class ConfigMigration:
         # Check if migration is needed
         if not self.needs_migration(config_data):
             print(f"✓ Configuration is up to date (v{self.CURRENT_VERSION})")
-            return False, warnings
+            # Still check for UI_PROFILE updates (new options like hidpi)
+            updated, update_msg = self.update_ui_profile_options()
+            if updated:
+                print(f"✓ {update_msg}")
+            return updated, warnings
         
         current_version = self.detect_version(config_data)
         print(f"⚠ Configuration needs migration from v{current_version} to v{self.CURRENT_VERSION}")

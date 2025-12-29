@@ -18,6 +18,7 @@ class DisplayProfile(Enum):
     """Display profile types for different screen configurations."""
     COMPACT = "compact"
     NORMAL = "normal"
+    HIDPI = "hidpi"
 
 
 class UIConfig:
@@ -50,19 +51,19 @@ class UIConfig:
             
             # Action buttons (filter, export, etc.)
             "action_button": {
-                "height": 38,
-                "icon_size": 28,
-                "padding": {"top": 5, "right": 8, "bottom": 5, "left": 8},
-                "border_radius": 6,
-                "min_width": 38
+                "height": 32,
+                "icon_size": 20,
+                "padding": {"top": 4, "right": 6, "bottom": 4, "left": 6},
+                "border_radius": 5,
+                "min_width": 32
             },
             
             # Tool buttons (identify, zoom, etc.)
             "tool_button": {
-                "height": 42,
-                "icon_size": 30,
-                "padding": {"top": 3, "right": 3, "bottom": 3, "left": 3},
-                "border_radius": 5
+                "height": 34,
+                "icon_size": 22,
+                "padding": {"top": 2, "right": 2, "bottom": 2, "left": 2},
+                "border_radius": 4
             },
             
             # Frame and container dimensions
@@ -84,12 +85,12 @@ class UIConfig:
             "splitter": {
                 "handle_width": 4,
                 "handle_margin": 30,  # Horizontal margin for the handle bar
-                "exploring_stretch": 2,  # Stretch factor for frame_exploring
-                "toolset_stretch": 5,    # Stretch factor for frame_toolset (larger = more priority)
+                "exploring_stretch": 1,  # Stretch factor for frame_exploring (equal)
+                "toolset_stretch": 1,    # Stretch factor for frame_toolset (equal)
                 "collapsible": False,    # Whether frames can be collapsed
                 "opaque_resize": True,   # Whether to show live resize
-                "initial_exploring_ratio": 0.30,  # Initial ratio for exploring (30%)
-                "initial_toolset_ratio": 0.70     # Initial ratio for toolset (70%)
+                "initial_exploring_ratio": 0.50,  # Initial ratio for exploring (50%)
+                "initial_toolset_ratio": 0.50     # Initial ratio for toolset (50%)
             },
             
             # ComboBox dimensions
@@ -157,11 +158,19 @@ class UIConfig:
             
             # Widget keys dimensions - Compact sidebar buttons
             "widget_keys": {
-                "min_width": 42,
-                "max_width": 52,
-                "base_width": 46,
-                "padding": 6,
-                "border_radius": 6
+                "min_width": 34,
+                "max_width": 40,
+                "base_width": 36,
+                "padding": 2,
+                "border_radius": 5
+            },
+            
+            # Key buttons (buttons in widget_*_keys containers) - Compact for small screens
+            "key_button": {
+                "min_size": 26,
+                "max_size": 32,
+                "icon_size": 16,
+                "spacing": 2
             },
             
             # GroupBox dimensions - Compact grouping
@@ -254,27 +263,27 @@ class UIConfig:
             
             # Action buttons (filter, export, etc.) - Larger touch targets
             "action_button": {
-                "height": 46,
-                "icon_size": 32,
-                "padding": {"top": 8, "right": 12, "bottom": 8, "left": 12},
-                "border_radius": 8,
-                "min_width": 46
+                "height": 36,
+                "icon_size": 24,
+                "padding": {"top": 5, "right": 8, "bottom": 5, "left": 8},
+                "border_radius": 6,
+                "min_width": 36
             },
             
             # Tool buttons (identify, zoom, etc.) - Better spacing
             "tool_button": {
-                "height": 46,
-                "icon_size": 32,
-                "padding": {"top": 4, "right": 4, "bottom": 4, "left": 4},
-                "border_radius": 6
+                "height": 38,
+                "icon_size": 26,
+                "padding": {"top": 3, "right": 3, "bottom": 3, "left": 3},
+                "border_radius": 5
             },
             
-            # Key buttons (buttons in widget_*_keys containers) - Larger for big screens
+            # Key buttons (buttons in widget_*_keys containers) - Normal size for bigger screens
             "key_button": {
-                "min_size": 44,
-                "max_size": 52,
-                "icon_size": 32,
-                "spacing": 8
+                "min_size": 30,
+                "max_size": 36,
+                "icon_size": 18,
+                "spacing": 4
             },
             
             # Frame and container dimensions - More padding
@@ -297,12 +306,12 @@ class UIConfig:
             "splitter": {
                 "handle_width": 8,
                 "handle_margin": 50,  # Horizontal margin for the handle bar
-                "exploring_stretch": 2,  # Stretch factor for frame_exploring
-                "toolset_stretch": 5,    # Stretch factor for frame_toolset (larger = more priority)
+                "exploring_stretch": 1,  # Stretch factor for frame_exploring (equal)
+                "toolset_stretch": 1,    # Stretch factor for frame_toolset (equal)
                 "collapsible": False,    # Whether frames can be collapsed
                 "opaque_resize": True,   # Whether to show live resize
-                "initial_exploring_ratio": 0.28,  # Initial ratio for exploring (28%)
-                "initial_toolset_ratio": 0.72,    # Initial ratio for toolset (72%)
+                "initial_exploring_ratio": 0.50,  # Initial ratio for exploring (50%)
+                "initial_toolset_ratio": 0.50,    # Initial ratio for toolset (50%)
                 "min_exploring_height": 180,      # Minimum height for exploring frame
                 "min_toolset_height": 300         # Minimum height for toolset frame
             },
@@ -466,6 +475,235 @@ class UIConfig:
                 "small": 24,
                 "medium": 28,
                 "large": 32
+            }
+        },
+        
+        "hidpi": {
+            "description": "HiDPI layout for high resolution displays (4K, Retina, high DPI)",
+            
+            # Button dimensions - Scaled up for HiDPI screens
+            "button": {
+                "height": 56,
+                "icon_size": 32,
+                "padding": {"top": 12, "right": 18, "bottom": 12, "left": 18},
+                "border_radius": 12,
+                "min_width": 160
+            },
+            
+            # Action buttons (filter, export, etc.) - Larger for HiDPI
+            "action_button": {
+                "height": 42,
+                "icon_size": 28,
+                "padding": {"top": 6, "right": 10, "bottom": 6, "left": 10},
+                "border_radius": 8,
+                "min_width": 42
+            },
+            
+            # Tool buttons (identify, zoom, etc.) - HiDPI optimized
+            "tool_button": {
+                "height": 44,
+                "icon_size": 30,
+                "padding": {"top": 4, "right": 4, "bottom": 4, "left": 4},
+                "border_radius": 6
+            },
+            
+            # Key buttons (buttons in widget_*_keys containers) - HiDPI for big screens
+            "key_button": {
+                "min_size": 36,
+                "max_size": 44,
+                "icon_size": 24,
+                "spacing": 6
+            },
+            
+            # Frame and container dimensions - More padding for HiDPI
+            "frame": {
+                "min_height": 120,
+                "max_height": 280,
+                "padding": 16,
+                "border_width": 2,
+                "border_radius": 10
+            },
+            
+            # Action frame (top buttons area) - HiDPI profile
+            "action_frame": {
+                "min_height": 72,
+                "max_height": 90,
+                "padding": 12
+            },
+            
+            # Splitter dimensions - HiDPI configuration
+            "splitter": {
+                "handle_width": 10,
+                "handle_margin": 60,
+                "exploring_stretch": 1,  # Equal stretch factor
+                "toolset_stretch": 1,    # Equal stretch factor
+                "collapsible": False,
+                "opaque_resize": True,
+                "initial_exploring_ratio": 0.50,  # Equal ratio (50%)
+                "initial_toolset_ratio": 0.50,    # Equal ratio (50%)
+                "min_exploring_height": 200,
+                "min_toolset_height": 350
+            },
+            
+            # ComboBox dimensions - HiDPI readability
+            "combobox": {
+                "height": 44,
+                "padding": {"top": 8, "right": 14, "bottom": 8, "left": 14},
+                "item_height": 44,
+                "icon_size": 28
+            },
+            
+            # SpinBox and input fields - HiDPI for ease of use
+            "input": {
+                "height": 44,
+                "padding": {"top": 10, "right": 14, "bottom": 10, "left": 14},
+                "border_radius": 10
+            },
+            
+            # Header bar dimensions - HiDPI
+            "header": {
+                "height": 40,
+                "min_height": 36,
+                "padding": {"top": 10, "right": 14, "bottom": 10, "left": 14},
+                "title_font_size": 14,
+                "indicator_font_size": 11
+            },
+            
+            # Layout dimensions - Generous spacing for HiDPI screens
+            "layout": {
+                "spacing_main": 14,
+                "spacing_section": 14,
+                "spacing_content": 12,
+                "spacing_buttons": 14,
+                "spacing_frame": 16,
+                "margins_main": 14,
+                "margins_section": 14,
+                "margins_content": 12,
+                "margins_frame": {"left": 16, "top": 14, "right": 16, "bottom": 18},
+                "margins_actions": {"left": 14, "top": 12, "right": 14, "bottom": 18}
+            },
+            
+            # Frame exploring dimensions - HiDPI with responsive size policy
+            "frame_exploring": {
+                "min_height": 200,
+                "base_height": 300,
+                "max_height": 550,
+                "size_policy_h": "Preferred",
+                "size_policy_v": "Minimum",
+                "preferred_height": 320,
+                "stretch_factor": 2
+            },
+            
+            # Frame toolset dimensions - HiDPI more space for content
+            "frame_toolset": {
+                "min_height": 350,
+                "max_height": 16777215,
+                "size_policy_h": "Preferred",
+                "size_policy_v": "Expanding",
+                "preferred_height": 600,
+                "stretch_factor": 5
+            },
+            
+            # Frame filtering dimensions (inside toolset/toolbox)
+            "frame_filtering": {
+                "min_height": 300,
+                "preferred_height": 450
+            },
+            
+            # Widget keys dimensions - HiDPI for large screens (reduced for compact icons)
+            "widget_keys": {
+                "min_width": 50,
+                "max_width": 60,
+                "base_width": 54,
+                "padding": 4,
+                "border_radius": 8
+            },
+            
+            # GroupBox dimensions - HiDPI more padding
+            "groupbox": {
+                "min_height": 70,
+                "padding": 12,
+                "title_padding": 10,
+                "border_radius": 8
+            },
+            
+            # Spacer dimensions - HiDPI generous for visual breathing room
+            "spacer": {
+                "default_size": 16,
+                "section_main": 18,
+                "section_exploring": 14,
+                "section_filtering": 16,
+                "section_exporting": 16,
+                "section_config": 20,
+                "after_actions": 20
+            },
+            
+            # Labels and text - HiDPI better typography
+            "label": {
+                "font_size": 16,
+                "line_height": 26,
+                "padding": 10
+            },
+            
+            # Tree/List widgets - HiDPI more comfortable item height
+            "tree": {
+                "item_height": 44,
+                "indent": 32,
+                "icon_size": 24
+            },
+            
+            # List widget (for custom feature picker)
+            "list": {
+                "min_height": 260,
+                "item_height": 40,
+                "icon_size": 24
+            },
+            
+            # Tab widget - HiDPI
+            "tab": {
+                "height": 48,
+                "padding": {"top": 8, "right": 18, "bottom": 8, "left": 18},
+                "font_size": 15
+            },
+            
+            # Spacing and margins - HiDPI
+            "spacing": {
+                "small": 8,
+                "medium": 14,
+                "large": 24,
+                "extra_large": 36
+            },
+            
+            "margins": {
+                "tight": {"top": 8, "right": 8, "bottom": 8, "left": 8},
+                "normal": {"top": 14, "right": 14, "bottom": 14, "left": 14},
+                "loose": {"top": 24, "right": 24, "bottom": 24, "left": 24}
+            },
+            
+            # Scrollbar dimensions - HiDPI aligned with splitter handle_width
+            "scrollbar": {
+                "width": 8,
+                "handle_min_height": 24
+            },
+            
+            # Dockwidget dimensions - HiDPI generous sizing
+            "dockwidget": {
+                "min_width": 420,
+                "min_height": 700,
+                "preferred_width": 540,
+                "preferred_height": 950,
+                "responsive_breakpoints": {
+                    "small": {"width": 400, "height": 600},
+                    "medium": {"width": 500, "height": 800},
+                    "large": {"width": 600, "height": 1000}
+                }
+            },
+            
+            # Icon size scaling for HiDPI readability
+            "icon_scaling": {
+                "small": 28,
+                "medium": 32,
+                "large": 40
             }
         }
     }
@@ -724,17 +962,19 @@ class UIConfig:
     @classmethod
     def detect_optimal_profile(cls) -> DisplayProfile:
         """
-        Detect optimal UI profile based on screen resolution.
+        Detect optimal UI profile based on screen resolution and DPI scaling.
         
-        Analyzes the primary screen resolution to determine if compact
-        or normal profile should be used.
+        Analyzes the primary screen resolution and devicePixelRatio to determine
+        the best profile for the current display configuration.
         
         Returns:
-            DisplayProfile: COMPACT for small screens, NORMAL for large screens
+            DisplayProfile: COMPACT, NORMAL, or HIDPI based on screen characteristics
         
-        Resolution thresholds:
-            - Width < 1920px OR Height < 1080px → COMPACT
-            - Width ≥ 1920px AND Height ≥ 1080px → NORMAL
+        Detection logic:
+            1. HiDPI detection (devicePixelRatio > 1.5 OR physical resolution ≥ 3840x2160)
+            2. Resolution-based detection:
+               - Width < 1920px OR Height < 1080px → COMPACT
+               - Width ≥ 1920px AND Height ≥ 1080px → NORMAL
         """
         try:
             from qgis.core import QgsApplication
@@ -744,20 +984,46 @@ class UIConfig:
             if app:
                 screen = app.primaryScreen()
                 if screen:
-                    size = screen.size()
-                    width = size.width()
-                    height = size.height()
+                    # Get logical size (what the OS reports after DPI scaling)
+                    logical_size = screen.size()
+                    logical_width = logical_size.width()
+                    logical_height = logical_size.height()
                     
-                    logger.debug(f"Screen resolution detected: {width}x{height}")
+                    # Get physical pixel ratio (DPI scaling factor)
+                    device_pixel_ratio = screen.devicePixelRatio()
                     
-                    # Determine profile based on resolution
-                    # Use compact for laptops and small screens
-                    if width < 1920 or height < 1080:
-                        logger.debug("Small screen detected → COMPACT profile")
+                    # Calculate physical resolution (actual pixels)
+                    physical_width = int(logical_width * device_pixel_ratio)
+                    physical_height = int(logical_height * device_pixel_ratio)
+                    
+                    logger.debug(f"Screen detection: logical={logical_width}x{logical_height}, "
+                                f"physical={physical_width}x{physical_height}, "
+                                f"devicePixelRatio={device_pixel_ratio}")
+                    
+                    # HiDPI detection:
+                    # - High DPI scaling (1.5x or higher) indicates HiDPI display
+                    # - 4K resolution (3840x2160) or higher is HiDPI
+                    # - Very high logical DPI (e.g., Retina displays)
+                    is_hidpi = (
+                        device_pixel_ratio >= 1.5 or
+                        physical_width >= 3840 or
+                        physical_height >= 2160
+                    )
+                    
+                    if is_hidpi:
+                        logger.info(f"HiDPI display detected (ratio={device_pixel_ratio}, "
+                                   f"physical={physical_width}x{physical_height}) → HIDPI profile")
+                        return DisplayProfile.HIDPI
+                    
+                    # Standard resolution detection for non-HiDPI displays
+                    # Use logical resolution for profile selection
+                    if logical_width < 1920 or logical_height < 1080:
+                        logger.debug(f"Small screen detected ({logical_width}x{logical_height}) → COMPACT profile")
                         return DisplayProfile.COMPACT
                     else:
-                        logger.debug("Large screen detected → NORMAL profile")
+                        logger.debug(f"Large screen detected ({logical_width}x{logical_height}) → NORMAL profile")
                         return DisplayProfile.NORMAL
+                        
         except Exception as e:
             logger.debug(f"Could not detect screen resolution: {e}")
         
@@ -788,17 +1054,21 @@ class UIConfig:
                 logger.debug("Auto-detection enabled")
                 detected_profile = cls.detect_optimal_profile()
                 cls.set_profile(detected_profile)
-                logger.debug(f"Auto-selected profile '{detected_profile.value}'")
+                logger.info(f"Auto-selected profile '{detected_profile.value}'")
             elif ui_profile == "compact":
                 cls.set_profile(DisplayProfile.COMPACT)
                 logger.debug("Loaded profile 'compact' from config")
             elif ui_profile == "normal":
                 cls.set_profile(DisplayProfile.NORMAL)
                 logger.debug("Loaded profile 'normal' from config")
+            elif ui_profile == "hidpi":
+                cls.set_profile(DisplayProfile.HIDPI)
+                logger.debug("Loaded profile 'hidpi' from config")
             else:
-                # Unknown value, default to normal
-                cls.set_profile(DisplayProfile.NORMAL)
-                logger.debug(f"Unknown profile '{ui_profile}', using 'normal'")
+                # Unknown value, default to auto-detection
+                logger.debug(f"Unknown profile '{ui_profile}', using auto-detection")
+                detected_profile = cls.detect_optimal_profile()
+                cls.set_profile(detected_profile)
             
         except Exception as e:
             logger.warning(f"Could not load profile from config: {e}")

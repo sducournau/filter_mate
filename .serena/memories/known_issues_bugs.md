@@ -159,6 +159,27 @@ New module (v2.4.x) providing safe wrappers for C++ operations:
 
 ---
 
+## Negative Buffer (Erosion) Handling - v2.5.5
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+### Implementation Details
+
+Both PostgreSQL and Spatialite backends properly handle negative buffers:
+
+1. **Wrap in MakeValid()** - Ensures valid geometry after erosion
+2. **Use ST_IsEmpty()** - Detects all empty geometry types (v2.5.4 fix)
+3. **Return NULL** - Prevents false positive spatial matches
+
+| Backend | Validity Function | Empty Check |
+|---------|-------------------|-------------|
+| PostgreSQL | `ST_MakeValid()` | `ST_IsEmpty(geom)` |
+| Spatialite | `MakeValid()` | `ST_IsEmpty(geom) = 1` |
+
+See: `.serena/memories/negative_buffer_wkt_handling.md` for full documentation.
+
+---
+
 ## Known Remaining Issues
 
 ### Low Priority
