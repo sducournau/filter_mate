@@ -4097,6 +4097,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.debug(f"Could not set height for exporting checkable combobox: {e}")
         
+        # Disable all EXPORTING pushbuttons by default (will be enabled when plugin is initialized)
+        # This matches the behavior of FILTERING tab widgets
+        if hasattr(self, 'pushButton_checkable_exporting_layers'):
+            self.pushButton_checkable_exporting_layers.setEnabled(False)
+        if hasattr(self, 'pushButton_checkable_exporting_projection'):
+            self.pushButton_checkable_exporting_projection.setEnabled(False)
+        if hasattr(self, 'pushButton_checkable_exporting_styles'):
+            self.pushButton_checkable_exporting_styles.setEnabled(False)
+        if hasattr(self, 'pushButton_checkable_exporting_datatype'):
+            self.pushButton_checkable_exporting_datatype.setEnabled(False)
+        if hasattr(self, 'pushButton_checkable_exporting_output_folder'):
+            self.pushButton_checkable_exporting_output_folder.setEnabled(False)
+        if hasattr(self, 'pushButton_checkable_exporting_zip'):
+            self.pushButton_checkable_exporting_zip.setEnabled(False)
+        
         # Configure map canvas selection color
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
 
@@ -6585,6 +6600,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
         """
         Slot appelé lorsque la sélection de la couche change.
+        Synchronise la sélection QGIS avec les widgets FilterMate si is_selecting est activé.
         Si is_tracking est activé, zoom sur les features sélectionnées.
         
         Args:
@@ -6596,7 +6612,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.widgets_initialized is True and self.current_layer is not None:
                 layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
                 
-                if layer_props and layer_props["exploring"].get("is_tracking", False) is True:
+                if not layer_props:
+                    return
+                
+                # SYNCHRONISATION: Update FilterMate widgets when QGIS selection changes
+                if layer_props["exploring"].get("is_selecting", False) is True:
+                    self._sync_widgets_from_qgis_selection()
+                
+                # TRACKING: Zoom to selected features if tracking is enabled
+                if layer_props["exploring"].get("is_tracking", False) is True:
                     # Get currently selected features
                     selected_features = self.current_layer.selectedFeatures()
                     
@@ -6605,6 +6629,142 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.zooming_to_features(selected_features)
         except (AttributeError, KeyError, RuntimeError) as e:
             logger.warning(f"Error in on_layer_selection_changed: {type(e).__name__}: {e}")
+
+    
+    def _sync_widgets_from_qgis_selection(self):
+        """
+        Synchronise UNIQUEMENT la groupbox active de exploring avec la sélection QGIS.
+        
+        Cette méthode est appelée automatiquement quand la sélection QGIS change
+        et que le bouton is_selecting est activé.
+        
+        IMPORTANT: Seule la groupbox actuellement active est synchronisée:
+        - Single selection active: sélectionne la première feature si une seule est sélectionnée
+        - Multiple selection active: coche toutes les features sélectionnées dans QGIS
+        - Custom selection active: pas de synchronisation automatique (basé sur expression)
+        """
+        try:
+            if not self.current_layer or not self.widgets_initialized:
+                return
+            
+            # Verify that we have a valid active groupbox
+            if not hasattr(self, 'current_exploring_groupbox') or not self.current_exploring_groupbox:
+                logger.debug("_sync_widgets_from_qgis_selection: No active exploring groupbox")
+                return
+            
+            # Get selected features from QGIS
+            selected_features = self.current_layer.selectedFeatures()
+            selected_count = len(selected_features)
+            
+            logger.debug(f"_sync_widgets_from_qgis_selection: {selected_count} features selected in QGIS, active groupbox: {self.current_exploring_groupbox}")
+            
+            # Get layer properties
+            layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
+            if not layer_props:
+                return
+            
+            # CRITICAL: Synchronize ONLY the active groupbox
+            if self.current_exploring_groupbox == "single_selection":
+                self._sync_single_selection_from_qgis(selected_features, selected_count)
+                        
+            elif self.current_exploring_groupbox == "multiple_selection":
+                self._sync_multiple_selection_from_qgis(selected_features, selected_count)
+                    
+            # Note: Custom selection mode doesn't sync from QGIS selection
+            # as it's expression-based, not feature-list-based
+            elif self.current_exploring_groupbox == "custom_selection":
+                logger.debug("Custom selection mode active - no automatic synchronization from QGIS")
+            
+        except Exception as e:
+            logger.warning(f"Error in _sync_widgets_from_qgis_selection: {type(e).__name__}: {e}")
+
+    
+    def _sync_single_selection_from_qgis(self, selected_features, selected_count):
+        """
+        Synchronise le widget single selection avec la sélection QGIS.
+        Appelé uniquement quand la groupbox single_selection est active.
+        """
+        try:
+            # Single selection: only sync if exactly 1 feature is selected
+            if selected_count == 1:
+                feature = selected_features[0]
+                feature_picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                
+                # Block signals to prevent recursive updates
+                feature_picker.blockSignals(True)
+                try:
+                    # Set the feature directly by feature ID
+                    feature_picker.setFeature(feature)
+                    logger.debug(f"Single selection: synced feature ID {feature.id()}")
+                finally:
+                    feature_picker.blockSignals(False)
+            elif selected_count == 0:
+                logger.debug("Single selection: no features selected in QGIS")
+            else:
+                logger.debug(f"Single selection: {selected_count} features selected - only syncs with exactly 1 feature")
+                
+        except Exception as e:
+            logger.warning(f"Error in _sync_single_selection_from_qgis: {type(e).__name__}: {e}")
+
+    
+    def _sync_multiple_selection_from_qgis(self, selected_features, selected_count):
+        """
+        Synchronise le widget multiple selection avec la sélection QGIS.
+        Appelé uniquement quand la groupbox multiple_selection est active.
+        
+        IMPORTANT: Cette synchronisation est ADDITIVE uniquement.
+        - Ajoute (coche) les features sélectionnées dans QGIS
+        - Ne décoche PAS les features non sélectionnées (pour permettre la sélection manuelle)
+        - L'utilisateur garde le contrôle total des sélections manuelles
+        """
+        try:
+            # Multiple selection: check all selected features in the widget
+            multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+            
+            if not hasattr(multiple_widget, 'list_widgets') or self.current_layer.id() not in multiple_widget.list_widgets:
+                logger.debug("Multiple selection widget not ready for synchronization")
+                return
+            
+            list_widget = multiple_widget.list_widgets[self.current_layer.id()]
+            
+            # Get selected feature IDs from QGIS
+            selected_ids = {f.id() for f in selected_features}
+            
+            # ADDITIVE synchronization: only CHECK items, never UNCHECK
+            # This allows manual selections to persist
+            checked_count = 0
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                feature_id = item.data(3)  # data(3) contains feature ID
+                
+                # Only CHECK features that are selected in QGIS
+                if feature_id in selected_ids:
+                    if item.checkState() != Qt.Checked:
+                        item.setCheckState(Qt.Checked)
+                        checked_count += 1
+            
+            # If features were checked, update the display
+            if checked_count > 0:
+                logger.debug(f"Multiple selection: added {checked_count} features from QGIS selection")
+                
+                # Manually update the items display and emit signal
+                # (similar to what updateFeatures does in the task)
+                selection_data = []
+                for i in range(list_widget.count()):
+                    item = list_widget.item(i)
+                    if item.checkState() == Qt.Checked:
+                        selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
+                
+                selection_data.sort(key=lambda k: k[0])
+                multiple_widget.items_le.setText(', '.join([data[0] for data in selection_data]))
+                list_widget.setSelectedFeaturesList(selection_data)
+                
+                # Emit the signal to notify exploring_features_changed
+                # This ensures FilterMate updates its internal state
+                multiple_widget.updatingCheckedItemList.emit(selection_data, True)
+                
+        except Exception as e:
+            logger.warning(f"Error in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
 
 
     def exploring_source_params_changed(self, expression=None, groupbox_override=None):
@@ -6806,8 +6966,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 single_widget.blockSignals(False)
                 multiple_widget.blockSignals(False)
 
-            self.current_layer.removeSelection()
-
             # NOTE: Filter application is now ONLY triggered by pushbutton actions (Filter, Unfilter, Reset)
             # This function no longer automatically applies or clears filters when features change.
             # The expression is stored for use by the filter task when the user clicks Filter.
@@ -6818,11 +6976,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             if len(features) == 0:
                 logger.debug("exploring_features_changed: No features to process")
+                # Only clear selection if is_selecting is active
+                if layer_props["exploring"].get("is_selecting", False):
+                    self.current_layer.removeSelection()
                 return []
         
+            # CRITICAL: Synchronize QGIS selection with FilterMate features when is_selecting is active
             if layer_props["exploring"].get("is_selecting", False):
                 self.current_layer.removeSelection()
                 self.current_layer.select([feature.id() for feature in features])
+                logger.debug(f"exploring_features_changed: Synchronized QGIS selection ({len(features)} features)")
 
             if layer_props["exploring"].get("is_tracking", False):
                 logger.debug(f"exploring_features_changed: Tracking {len(features)} features")
@@ -8429,7 +8592,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     continue
                     
                 widget_type = self.widgets[tuple[0].upper()][tuple[1].upper()]["TYPE"]
-                self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(True)
+                
+                # Special handling for output_folder and zip buttons - only enable if layers are selected
+                if tuple[1] in ['has_output_folder_to_export', 'has_zip_to_export']:
+                    # Check if any layers are selected
+                    has_layers_selected = False
+                    if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
+                        for i in range(self.checkableComboBoxLayer_exporting_layers.count()):
+                            if self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked:
+                                has_layers_selected = True
+                                break
+                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(has_layers_selected)
+                else:
+                    self.widgets[tuple[0].upper()][tuple[1].upper()]["WIDGET"].setEnabled(True)
                 
                 # Ensure QgsFieldExpressionWidget is always linked to current layer when enabled
                 if widget_type == 'QgsFieldExpressionWidget' and self.current_layer is not None:
@@ -9382,7 +9557,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Layer selection combos
             (self.comboBox_filtering_current_layer, 'currentTextChanged', lambda: self._update_combo_tooltip(self.comboBox_filtering_current_layer)),
             (self.checkableComboBoxLayer_filtering_layers_to_filter, 'checkedItemsChanged', lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_filtering_layers_to_filter)),
-            (self.checkableComboBoxLayer_exporting_layers, 'checkedItemsChanged', lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers)),
+            (self.checkableComboBoxLayer_exporting_layers, 'checkedItemsChanged', lambda: [self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers), self._update_export_buttons_state()]),
             
             # Expression widgets
             (self.mFieldExpressionWidget_exploring_single_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_single_selection)),
@@ -9442,6 +9617,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     combo_widget.setToolTip(QCoreApplication.translate("FilterMate", "No layers selected"))
         except Exception as e:
             logger.debug(f"FilterMate: Error updating checkable combo tooltip: {e}")
+    
+    def _update_export_buttons_state(self):
+        """Update enabled state of output and zip buttons based on selected layers."""
+        try:
+            # Check if any layers are selected in the export combobox
+            has_layers_selected = False
+            if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
+                for i in range(self.checkableComboBoxLayer_exporting_layers.count()):
+                    if self.checkableComboBoxLayer_exporting_layers.itemCheckState(i) == Qt.Checked:
+                        has_layers_selected = True
+                        break
+            
+            # Enable/disable output and zip buttons
+            if hasattr(self, 'pushButton_checkable_exporting_output_folder'):
+                self.pushButton_checkable_exporting_output_folder.setEnabled(has_layers_selected)
+            if hasattr(self, 'pushButton_checkable_exporting_zip'):
+                self.pushButton_checkable_exporting_zip.setEnabled(has_layers_selected)
+        except Exception as e:
+            logger.debug(f"FilterMate: Error updating export buttons state: {e}")
     
     def _update_expression_tooltip(self, expression_widget):
         """Update tooltip for a QgsFieldExpressionWidget."""

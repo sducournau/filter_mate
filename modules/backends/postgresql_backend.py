@@ -611,14 +611,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             Simple PostGIS expression like:
             ST_Intersects("table"."geom", ST_GeomFromText('POLYGON(...)', 31370))
         """
-        # DIAGNOSTIC v2.5.6: Log buffer value to QGIS MessageLog for visibility
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
-            f"📝 _build_simple_wkt_expression: buffer_value={buffer_value} (type={type(buffer_value).__name__}), source_srid={source_srid}",
-            "FilterMate", Qgis.Info
-        )
+        # DIAGNOSTIC v2.5.6: Log buffer value at DEBUG level
+        self.log_debug(f"📝 _build_simple_wkt_expression: buffer_value={buffer_value} (type={type(buffer_value).__name__}), source_srid={source_srid}")
         
-        self.log_info(f"📝 _build_simple_wkt_expression called:")
+        self.log_debug(f"📝 _build_simple_wkt_expression called:")
         self.log_info(f"  - buffer_value: {buffer_value}")
         self.log_info(f"  - source_srid: {source_srid}")
         self.log_info(f"  - WKT length: {len(source_wkt) if source_wkt else 0}")
@@ -629,12 +625,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Apply buffer if specified (with endcap style)
         # Supports both positive (expand) and negative (shrink/erode) buffers
         # v2.4.22: Handle geographic CRS by transforming to EPSG:3857 for metric buffer
-        # DIAGNOSTIC v2.5.6: Log the exact condition check for debugging
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
+        # DIAGNOSTIC v2.5.6: Log the exact condition check at DEBUG level
+        self.log_debug(
             f"📝 _build_simple_wkt_expression buffer check: buffer_value={buffer_value}, "
-            f"type={type(buffer_value).__name__}, condition_result={(buffer_value and buffer_value != 0)}",
-            "FilterMate", Qgis.Info
+            f"type={type(buffer_value).__name__}, condition_result={(buffer_value is not None and buffer_value != 0)}"
         )
         
         if buffer_value is not None and buffer_value != 0:
@@ -679,26 +673,16 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             else:
                 # Projected CRS: buffer directly in native units
                 source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
-                # DIAGNOSTIC v2.5.6: Log buffer application for projected CRS
+                # DIAGNOSTIC v2.5.6: Log buffer application at DEBUG level
                 buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
-                self.log_info(f"  ✓ Applied ST_Buffer({buffer_value}m, {buffer_type_str}) in native CRS units (SRID={source_srid})")
-                # Log to QGIS MessageLog for visibility
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"📐 Buffer APPLIED: {buffer_value}m ({buffer_type_str}) for SRID={source_srid}",
-                    "FilterMate", Qgis.Info
-                )
+                self.log_debug(f"📐 Buffer APPLIED: {buffer_value}m ({buffer_type_str}) for SRID={source_srid}")
         else:
-            self.log_info(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
+            self.log_debug(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
         
-        # DIAGNOSTIC v2.5.6: Log the final expression for debugging
+        # DIAGNOSTIC v2.5.6: Log the final expression at DEBUG level
         final_expr = f"{predicate_func}({geom_expr}, {source_geom_sql})"
-        # Log first 500 chars to QGIS MessageLog for visibility
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
-            f"📝 _build_simple_wkt_expression FINAL: {final_expr[:500]}...",
-            "FilterMate", Qgis.Info
-        )
+        # Log first 200 chars at debug level
+        self.log_debug(f"📝 _build_simple_wkt_expression FINAL: {final_expr[:200]}...")
         return final_expr
 
     def build_expression(
@@ -1005,14 +989,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Combine predicates with OR
         if predicate_expressions:
             combined = " OR ".join(predicate_expressions)
-            self.log_debug(f"Built expression: {combined[:100]}...")
-            
-            # DIAGNOSTIC v2.5.6: Log final expression to QGIS Message Panel
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"PostgreSQL FINAL expression ({len(combined)} chars): {combined[:300]}...",
-                "FilterMate", Qgis.Info
-            )
+            # DIAGNOSTIC v2.5.6: Log final expression at DEBUG level only
+            self.log_debug(f"PostgreSQL FINAL expression ({len(combined)} chars): {combined[:200]}...")
             
             return combined
         

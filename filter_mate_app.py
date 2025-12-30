@@ -2398,12 +2398,9 @@ class FilterMateApp:
         """
         from qgis.core import QgsMessageLog, Qgis
         
-        # DIAGNOSTIC v2.4.17: Log incoming features to detect duplicates (visible in QGIS message panel)
+        # DIAGNOSTIC v2.4.17: Log incoming features at DEBUG level
         feat_count = len(features) if features else 0
-        QgsMessageLog.logMessage(
-            f"_build_common_task_params: {feat_count} features received, expression='{expression}'",
-            "FilterMate", Qgis.Info
-        )
+        logger.debug(f"_build_common_task_params: {feat_count} features received, expression='{expression}'")
         
         # FIX v2.4.19: Deduplicate features by ID to prevent processing same feature twice
         # This can happen when features are passed from multiple sources (e.g., selection + expression)
@@ -2423,11 +2420,11 @@ class FilterMateApp:
                     deduplicated_features.append(feat)
         
         if len(deduplicated_features) != feat_count:
-            logger.info(f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}")
-            QgsMessageLog.logMessage(
-                f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}",
-                "FilterMate", Qgis.Warning
-            )
+            # Log at WARNING only if significant deduplication (>10% difference)
+            if feat_count - len(deduplicated_features) > max(1, feat_count * 0.1):
+                logger.warning(f"  ⚠️ Deduplicated features: {feat_count} → {len(deduplicated_features)}")
+            else:
+                logger.debug(f"  Deduplicated features: {feat_count} → {len(deduplicated_features)}")
             features = deduplicated_features
         
         logger.info(f"=== _build_common_task_params DIAGNOSTIC ===")

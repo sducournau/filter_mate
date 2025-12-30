@@ -3882,11 +3882,10 @@ class FilterEngineTask(QgsTask):
             layer = self._create_memory_layer_from_features(valid_task_features_early, layer.crs(), "source_from_task")
             if layer:
                 logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
-                # Log combined extent
+                # Log extent at DEBUG level
                 extent = layer.extent()
-                QgsMessageLog.logMessage(
-                    f"  Memory layer extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})",
-                    "FilterMate", Qgis.Info
+                logger.debug(
+                    f"  Memory layer extent: ({extent.xMinimum():.1f},{extent.yMinimum():.1f})-({extent.xMaximum():.1f},{extent.yMaximum():.1f})"
                 )
             else:
                 logger.error(f"  ✗ Failed to create memory layer from task features, using original layer")
