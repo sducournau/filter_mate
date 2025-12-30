@@ -310,52 +310,73 @@ def sqlite_execute_with_retry(operation_func, operation_name="database operation
         raise last_exception
 
 
-def get_best_metric_crs(project, source_crs):
+# =============================================================================
+# CRS Functions - Now delegating to crs_utils module
+# =============================================================================
+
+def get_best_metric_crs(project, source_crs, extent=None):
     """
     Détermine le meilleur CRS métrique à utiliser pour les calculs.
+    
+    Cette fonction délègue maintenant au module crs_utils pour une meilleure
+    gestion des CRS et le support des zones UTM.
+    
     Priorité:
     1. CRS du projet s'il est métrique
-    2. CRS suggéré par QGIS basé sur l'emprise
+    2. Zone UTM optimale basée sur l'emprise (si extent fourni)
     3. EPSG:3857 (Web Mercator) par défaut
     
     Args:
         project: QgsProject instance
         source_crs: QgsCoordinateReferenceSystem du layer source
+        extent: QgsRectangle (optionnel) - emprise pour calcul UTM optimal
     
     Returns:
-        str: authid du CRS métrique optimal (ex: 'EPSG:3857')
+        str: authid du CRS métrique optimal (ex: 'EPSG:3857', 'EPSG:32631')
+    """
+    try:
+        from ..crs_utils import get_optimal_metric_crs
+        return get_optimal_metric_crs(
+            project=project,
+            source_crs=source_crs,
+            extent=extent,
+            prefer_utm=True
+        )
+    except ImportError:
+        # Fallback to legacy implementation if crs_utils not available
+        logger.warning("crs_utils module not available, using legacy get_best_metric_crs")
+        return _legacy_get_best_metric_crs(project, source_crs)
+
+
+def _legacy_get_best_metric_crs(project, source_crs):
+    """
+    Legacy implementation of get_best_metric_crs.
+    Used as fallback if crs_utils module is not available.
     """
     # 1. Vérifier le CRS du projet
     project_crs = project.crs()
     if project_crs and not project_crs.isGeographic():
-        # Le CRS du projet est métrique, l'utiliser
         map_units = project_crs.mapUnits()
         if map_units not in [QgsUnitTypes.DistanceUnit.Degrees, QgsUnitTypes.DistanceUnit.Unknown]:
             logger.info(f"Using project CRS for metric calculations: {project_crs.authid()}")
             return project_crs.authid()
     
-    # 2. Essayer d'obtenir un CRS suggéré basé sur l'emprise
+    # 2. Essayer d'obtenir un CRS UTM basé sur l'emprise
     if source_crs and hasattr(QgsCoordinateReferenceSystem, 'createFromWkt'):
         try:
-            # Obtenir les limites du layer
             extent = None
             if hasattr(source_crs, 'bounds'):
                 extent = source_crs.bounds()
             
-            # Si possible, obtenir un CRS UTM approprié basé sur la longitude centrale
             if extent and extent.isFinite():
                 center_lon = (extent.xMinimum() + extent.xMaximum()) / 2
                 center_lat = (extent.yMinimum() + extent.yMaximum()) / 2
                 
-                # Calculer la zone UTM
                 utm_zone = int((center_lon + 180) / 6) + 1
                 
-                # Déterminer si hémisphère nord ou sud
                 if center_lat >= 0:
-                    # Hémisphère nord
                     utm_epsg = 32600 + utm_zone
                 else:
-                    # Hémisphère sud
                     utm_epsg = 32700 + utm_zone
                 
                 utm_crs = QgsCoordinateReferenceSystem(f"EPSG:{utm_epsg}")
@@ -365,7 +386,7 @@ def get_best_metric_crs(project, source_crs):
         except Exception as e:
             logger.debug(f"Could not calculate optimal UTM CRS: {e}")
     
-    # 3. Par défaut, utiliser Web Mercator (EPSG:3857)
+    # 3. Par défaut, Web Mercator
     logger.info("Using default Web Mercator (EPSG:3857) for metric calculations")
     return "EPSG:3857"
 
@@ -373,6 +394,8 @@ def get_best_metric_crs(project, source_crs):
 def should_reproject_layer(layer, target_crs_authid):
     """
     Détermine si un layer doit être reprojeté vers le CRS cible.
+    
+    Utilise crs_utils pour une meilleure détection des CRS géographiques.
     
     Args:
         layer: QgsVectorLayer à vérifier
@@ -386,23 +409,58 @@ def should_reproject_layer(layer, target_crs_authid):
     
     layer_crs = layer.sourceCrs()
     
-    # Vérifier si les CRS sont différents
+    # Vérifier si les CRS sont identiques
     if layer_crs.authid() == target_crs_authid:
         logger.debug(f"Layer {layer.name()} already in target CRS {target_crs_authid}")
         return False
     
-    # Vérifier si le CRS du layer est géographique
-    if layer_crs.isGeographic():
-        logger.info(f"Layer {layer.name()} has geographic CRS {layer_crs.authid()}, will reproject to {target_crs_authid}")
-        return True
-    
-    # Vérifier les unités de distance
-    map_units = layer_crs.mapUnits()
-    if map_units in [QgsUnitTypes.DistanceUnit.Degrees, QgsUnitTypes.DistanceUnit.Unknown]:
-        logger.info(f"Layer {layer.name()} has non-metric units, will reproject to {target_crs_authid}")
-        return True
+    # Utiliser crs_utils pour une meilleure détection
+    try:
+        from ..crs_utils import is_geographic_crs, is_metric_crs
+        
+        if is_geographic_crs(layer_crs):
+            logger.info(f"Layer {layer.name()} has geographic CRS {layer_crs.authid()}, will reproject to {target_crs_authid}")
+            return True
+        
+        if not is_metric_crs(layer_crs):
+            logger.info(f"Layer {layer.name()} has non-metric units, will reproject to {target_crs_authid}")
+            return True
+            
+    except ImportError:
+        # Fallback sans crs_utils
+        if layer_crs.isGeographic():
+            logger.info(f"Layer {layer.name()} has geographic CRS {layer_crs.authid()}, will reproject to {target_crs_authid}")
+            return True
+        
+        map_units = layer_crs.mapUnits()
+        if map_units in [QgsUnitTypes.DistanceUnit.Degrees, QgsUnitTypes.DistanceUnit.Unknown]:
+            logger.info(f"Layer {layer.name()} has non-metric units, will reproject to {target_crs_authid}")
+            return True
     
     # Le layer est déjà dans un CRS métrique mais différent
-    # Pour la cohérence, reprojetons quand même vers le CRS cible commun
     logger.info(f"Layer {layer.name()} will be reprojected from {layer_crs.authid()} to {target_crs_authid} for consistency")
     return True
+
+
+def needs_metric_conversion(crs):
+    """
+    Vérifie si un CRS nécessite une conversion vers un CRS métrique.
+    
+    Args:
+        crs: QgsCoordinateReferenceSystem à vérifier
+    
+    Returns:
+        bool: True si le CRS nécessite une conversion pour les opérations métriques
+    """
+    if not crs or not crs.isValid():
+        return True  # Par sécurité, convertir si invalide
+    
+    try:
+        from ..crs_utils import is_geographic_crs, is_metric_crs
+        return is_geographic_crs(crs) or not is_metric_crs(crs)
+    except ImportError:
+        # Fallback
+        if crs.isGeographic():
+            return True
+        map_units = crs.mapUnits()
+        return map_units in [QgsUnitTypes.DistanceUnit.Degrees, QgsUnitTypes.DistanceUnit.Unknown]

@@ -118,6 +118,7 @@ from .task_utils import (
     ensure_db_directory_exists,
     get_best_metric_crs,
     should_reproject_layer,
+    needs_metric_conversion,
     SQLITE_TIMEOUT,
     SQLITE_MAX_RETRIES,
     MESSAGE_TASKS_CATEGORIES
@@ -130,6 +131,8 @@ from ..geometry_safety import (
     safe_as_geometry_collection,
     safe_as_polygon,
     safe_buffer,
+    safe_buffer_metric,
+    safe_buffer_with_crs_check,
     safe_unary_union,
     safe_collect_geometry,
     safe_convert_to_multi_polygon,
@@ -138,6 +141,22 @@ from ..geometry_safety import (
     get_geometry_type_name,
     create_geos_safe_layer
 )
+
+# Import CRS utilities (v2.5.7 - improved CRS compatibility)
+try:
+    from ..crs_utils import (
+        is_geographic_crs,
+        is_metric_crs,
+        get_optimal_metric_crs,
+        CRSTransformer,
+        create_metric_buffer,
+        get_crs_units,
+        get_layer_crs_info
+    )
+    CRS_UTILS_AVAILABLE = True
+except ImportError:
+    CRS_UTILS_AVAILABLE = False
+    logger.warning("crs_utils module not available - using legacy CRS handling")
 
 # Import geometry cache (Phase 3a extraction)
 from .geometry_cache import SourceGeometryCache
@@ -454,27 +473,59 @@ class FilterEngineTask(QgsTask):
         """
         Configure CRS for metric calculations, reprojecting if necessary.
         
+        IMPROVED v2.5.7: Uses crs_utils module for better CRS detection and
+        optimal metric CRS selection (including UTM zones).
+        
         Sets has_to_reproject_source_layer flag and updates source_layer_crs_authid
         if the source CRS is geographic or non-metric.
         """
-        source_crs_distance_unit = self.source_crs.mapUnits()
-        
-        # Check if CRS is geographic or non-metric
-        is_non_metric = (
-            source_crs_distance_unit in ['DistanceUnit.Degrees', 'DistanceUnit.Unknown'] 
-            or self.source_crs.isGeographic()
-        )
-        
-        if is_non_metric:
-            self.has_to_reproject_source_layer = True
-            # Get optimal metric CRS for layer extent
-            self.source_layer_crs_authid = get_best_metric_crs(self.PROJECT, self.source_crs)
-            logger.info(
-                f"Source layer will be reprojected to {self.source_layer_crs_authid} "
-                "for metric calculations"
-            )
+        # Use crs_utils if available for better CRS handling
+        if CRS_UTILS_AVAILABLE:
+            is_non_metric = is_geographic_crs(self.source_crs) or not is_metric_crs(self.source_crs)
+            
+            if is_non_metric:
+                self.has_to_reproject_source_layer = True
+                
+                # Get optimal metric CRS using layer extent for better accuracy
+                layer_extent = self.source_layer.extent() if self.source_layer else None
+                self.source_layer_crs_authid = get_optimal_metric_crs(
+                    project=self.PROJECT,
+                    source_crs=self.source_crs,
+                    extent=layer_extent,
+                    prefer_utm=True
+                )
+                
+                # Log CRS conversion info
+                crs_info = get_layer_crs_info(self.source_layer)
+                logger.info(
+                    f"Source layer CRS: {crs_info.get('authid', 'unknown')} "
+                    f"(units: {crs_info.get('units', 'unknown')}, "
+                    f"geographic: {crs_info.get('is_geographic', False)})"
+                )
+                logger.info(
+                    f"Source layer will be reprojected to {self.source_layer_crs_authid} "
+                    "for metric calculations"
+                )
+            else:
+                logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
         else:
-            logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
+            # Legacy CRS handling (fallback)
+            source_crs_distance_unit = self.source_crs.mapUnits()
+            
+            is_non_metric = (
+                source_crs_distance_unit in ['DistanceUnit.Degrees', 'DistanceUnit.Unknown'] 
+                or self.source_crs.isGeographic()
+            )
+            
+            if is_non_metric:
+                self.has_to_reproject_source_layer = True
+                self.source_layer_crs_authid = get_best_metric_crs(self.PROJECT, self.source_crs)
+                logger.info(
+                    f"Source layer will be reprojected to {self.source_layer_crs_authid} "
+                    "for metric calculations"
+                )
+            else:
+                logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
 
     def _organize_layers_to_filter(self):
         """
@@ -2138,14 +2189,18 @@ class FilterEngineTask(QgsTask):
         if not expression:
             return expression
         
+        # Get the actual geometry column name from the layer (default to 'geometry' if not set)
+        geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
+        
         # 1. Convert QGIS spatial functions to PostGIS
+        # Use the actual geometry column name from the layer
         spatial_conversions = {
-            '$area': 'ST_Area(geometry)',
-            '$length': 'ST_Length(geometry)',
-            '$perimeter': 'ST_Perimeter(geometry)',
-            '$x': 'ST_X(geometry)',
-            '$y': 'ST_Y(geometry)',
-            '$geometry': 'geometry',
+            '$area': f'ST_Area("{geom_col}")',
+            '$length': f'ST_Length("{geom_col}")',
+            '$perimeter': f'ST_Perimeter("{geom_col}")',
+            '$x': f'ST_X("{geom_col}")',
+            '$y': f'ST_Y("{geom_col}")',
+            '$geometry': f'"{geom_col}"',
             'buffer': 'ST_Buffer',
             'area': 'ST_Area',
             'length': 'ST_Length',

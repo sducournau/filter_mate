@@ -1531,7 +1531,20 @@ class ListWidgetWrapper(QListWidget):
         return self.limit
     
     def sortFeaturesListByDisplayExpression(self, nonSubset_features_list=[]):
-        self.features_list.sort(key=lambda k: (k[1] not in nonSubset_features_list, k[0]))
+        """
+        Sort features list by display expression.
+        
+        FIX v2.5.7: Handle None values in sort key to prevent TypeError
+        when comparing str with NoneType.
+        """
+        def safe_sort_key(k):
+            # k[0] is the display expression value, k[1] is the feature id
+            # Handle None values by converting to empty string for comparison
+            display_value = k[0] if k[0] is not None else ""
+            is_in_subset = k[1] not in nonSubset_features_list
+            return (is_in_subset, display_value)
+        
+        self.features_list.sort(key=safe_sort_key)
 
 
 class QgsCheckableComboBoxLayer(QComboBox):

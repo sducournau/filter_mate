@@ -22,9 +22,10 @@ from .base_backend import GeometricFilterBackend
 from .postgresql_backend import PostgreSQLGeometricFilter, POSTGRESQL_AVAILABLE
 from .spatialite_backend import SpatialiteGeometricFilter
 from .ogr_backend import OGRGeometricFilter
+from .memory_backend import MemoryGeometricFilter
 from ..logging_config import get_tasks_logger
 from ..constants import (
-    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR,
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
     SMALL_DATASET_THRESHOLD, DEFAULT_SMALL_DATASET_OPTIMIZATION,
     FACTORY_CACHE_MAX_AGE
 )
@@ -381,6 +382,13 @@ class BackendFactory:
                     return (backend, None, False)
                 return backend
             
+            elif forced_backend == 'memory':
+                backend = MemoryGeometricFilter(task_params)
+                logger.info(f"✓ Using Memory backend as forced for '{layer.name()}'")
+                if return_memory_info:
+                    return (backend, None, False)
+                return backend
+            
             else:
                 logger.warning(
                     f"⚠️ Unknown forced backend '{forced_backend}' for '{layer.name()}', "
@@ -389,15 +397,25 @@ class BackendFactory:
         
         # PRIORITY 2: Auto-selection logic
         # Check for small PostgreSQL dataset optimization
+        # PRIORITY 2.1: Native memory layers - use optimized Memory backend
+        if layer_provider_type == PROVIDER_MEMORY or layer.providerType() == 'memory':
+            logger.info(f"🧠 Using Memory backend for native memory layer '{layer.name()}'")
+            backend = MemoryGeometricFilter(task_params)
+            if return_memory_info:
+                return (backend, None, False)
+            return backend
+        
+        # PRIORITY 2.2: Small PostgreSQL dataset optimization
         if should_use_memory_optimization(layer, layer_provider_type):
             memory_layer = BackendFactory.get_memory_layer(layer)
             if memory_layer:
                 use_optimization = True
                 logger.info(
-                    f"⚡ Using OGR memory optimization for small PostgreSQL layer "
+                    f"⚡ Using Memory backend optimization for small PostgreSQL layer "
                     f"'{layer.name()}' ({layer.featureCount()} features)"
                 )
-                backend = OGRGeometricFilter(task_params)
+                # Use MemoryBackend instead of OGR for better performance
+                backend = MemoryGeometricFilter(task_params)
                 # Store memory layer reference in backend for spatial operations
                 backend._memory_layer = memory_layer
                 backend._original_layer = layer
@@ -496,7 +514,9 @@ class BackendFactory:
         Returns:
             Backend instance
         """
-        if provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
+        if provider_type == PROVIDER_MEMORY:
+            return MemoryGeometricFilter(task_params)
+        elif provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
             return PostgreSQLGeometricFilter(task_params)
         elif provider_type == PROVIDER_SPATIALITE:
             return SpatialiteGeometricFilter(task_params)

@@ -827,3 +827,166 @@ def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Opti
         # Ultimate fallback: return original layer
         logger.warning("create_geos_safe_layer: Exception occurred, falling back to original layer")
         return layer
+
+
+# =============================================================================
+# CRS-Aware Buffer Operations
+# =============================================================================
+
+def safe_buffer_metric(
+    geom: Optional[QgsGeometry],
+    distance_meters: float,
+    source_crs,
+    segments: int = 8,
+    project = None
+) -> Optional[QgsGeometry]:
+    """
+    Safe buffer operation with automatic CRS conversion for metric accuracy.
+    
+    CRITICAL: This function ensures buffer distances are always in meters,
+    regardless of the source CRS. For geographic CRS (lat/lon), it automatically
+    converts to EPSG:3857 (Web Mercator) or the optimal UTM zone, applies
+    the buffer, and converts back.
+    
+    Combines geometry validation from geometry_safety with CRS handling
+    from crs_utils for a complete safe buffer solution.
+    
+    Args:
+        geom: QgsGeometry to buffer
+        distance_meters: Buffer distance in meters (can be negative for erosion)
+        source_crs: QgsCoordinateReferenceSystem of the input geometry
+        segments: Number of segments for curved buffers (default 8)
+        project: QgsProject for transform context (optional)
+        
+    Returns:
+        QgsGeometry or None: Buffered geometry in source CRS, or None on failure
+        
+    Example:
+        >>> from qgis.core import QgsGeometry, QgsPointXY, QgsCoordinateReferenceSystem
+        >>> from modules.geometry_safety import safe_buffer_metric
+        >>> 
+        >>> # Buffer a point in WGS84 by 100 meters
+        >>> geom = QgsGeometry.fromPointXY(QgsPointXY(2.3522, 48.8566))  # Paris
+        >>> crs = QgsCoordinateReferenceSystem("EPSG:4326")
+        >>> buffered = safe_buffer_metric(geom, 100, crs)
+        >>> # Result is a polygon ~100m around the point, in WGS84
+    """
+    # Validate input geometry using existing safe_buffer validation
+    if not validate_geometry(geom):
+        logger.debug("safe_buffer_metric: Invalid input geometry")
+        return None
+    
+    # Validate distance
+    try:
+        distance_meters = float(distance_meters)
+    except (ValueError, TypeError):
+        logger.error(f"safe_buffer_metric: Invalid distance value: {distance_meters}")
+        return None
+    
+    # Log negative buffer (erosion) operations
+    if distance_meters < 0:
+        logger.debug(f"safe_buffer_metric: Applying negative buffer (erosion) of {distance_meters}m")
+    
+    # Check if CRS requires conversion
+    try:
+        from .crs_utils import create_metric_buffer
+        
+        # Use crs_utils for CRS-aware buffering
+        result = create_metric_buffer(
+            geom=geom,
+            distance_meters=distance_meters,
+            source_crs=source_crs,
+            segments=segments,
+            project=project
+        )
+        
+        if result is not None:
+            return result
+        else:
+            # Fall through to fallback if create_metric_buffer returned None
+            if distance_meters < 0:
+                logger.debug(f"safe_buffer_metric: Negative buffer ({distance_meters}m) produced empty geometry (complete erosion)")
+            return None
+            
+    except ImportError:
+        # crs_utils not available, use fallback
+        logger.debug("safe_buffer_metric: crs_utils not available, using fallback")
+    except Exception as e:
+        logger.warning(f"safe_buffer_metric: create_metric_buffer failed: {e}, trying fallback")
+    
+    # Fallback: Use safe_buffer directly (assumes CRS is already metric)
+    # This is less accurate for geographic CRS but better than nothing
+    from qgis.core import QgsCoordinateReferenceSystem
+    
+    if source_crs and hasattr(source_crs, 'isGeographic') and source_crs.isGeographic():
+        logger.warning(
+            f"safe_buffer_metric: Geographic CRS detected ({source_crs.authid()}) "
+            f"but crs_utils not available. Buffer will be in degrees, not meters!"
+        )
+        # Rough approximation: 1 degree ≈ 111km at equator
+        # This is VERY approximate and should not be relied upon
+        distance_degrees = distance_meters / 111000.0
+        return safe_buffer(geom, distance_degrees, segments)
+    else:
+        return safe_buffer(geom, distance_meters, segments)
+
+
+def safe_buffer_with_crs_check(
+    geom: Optional[QgsGeometry],
+    distance: float,
+    crs,
+    segments: int = 5,
+    auto_convert: bool = True,
+    project = None
+) -> Optional[QgsGeometry]:
+    """
+    Safe buffer with CRS validation and optional automatic conversion.
+    
+    This function checks if the CRS is suitable for metric operations
+    and either:
+    - Proceeds directly if CRS is metric
+    - Converts to metric CRS, buffers, and converts back if auto_convert=True
+    - Raises an error if auto_convert=False and CRS is geographic
+    
+    Args:
+        geom: QgsGeometry to buffer
+        distance: Buffer distance (in CRS units unless auto_convert=True, then meters)
+        crs: QgsCoordinateReferenceSystem of the geometry
+        segments: Number of buffer segments
+        auto_convert: If True, automatically handle geographic CRS conversion
+        project: QgsProject for transform context
+        
+    Returns:
+        QgsGeometry or None: Buffered geometry
+        
+    Raises:
+        ValueError: If CRS is geographic and auto_convert=False
+    """
+    if not validate_geometry(geom):
+        return None
+    
+    # Check CRS type
+    is_geographic = False
+    if crs:
+        try:
+            from .crs_utils import is_geographic_crs
+            is_geographic = is_geographic_crs(crs)
+        except ImportError:
+            is_geographic = crs.isGeographic() if hasattr(crs, 'isGeographic') else False
+    
+    if is_geographic:
+        if auto_convert:
+            # Use metric buffer with automatic conversion
+            return safe_buffer_metric(geom, distance, crs, segments, project)
+        else:
+            logger.error(
+                f"safe_buffer_with_crs_check: Geographic CRS ({crs.authid()}) "
+                "detected but auto_convert=False. Cannot apply metric buffer."
+            )
+            raise ValueError(
+                f"Cannot apply metric buffer to geographic CRS ({crs.authid()}). "
+                "Either set auto_convert=True or reproject your data first."
+            )
+    else:
+        # CRS is already metric (or unknown), apply buffer directly
+        return safe_buffer(geom, distance, segments)

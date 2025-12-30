@@ -137,7 +137,22 @@ from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_
 from .modules.ui_styles import StyleLoader, QGISThemeWatcher
 from .modules.feedback_utils import show_info, show_warning, show_error, show_success
 from .modules.config_helpers import set_config_value
+from .modules.exploring_cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
+
+# Import CRS utilities for improved CRS compatibility (v2.5.7)
+try:
+    from .modules.crs_utils import (
+        is_geographic_crs,
+        get_optimal_metric_crs,
+        CRSTransformer,
+        get_crs_units,
+        DEFAULT_METRIC_CRS
+    )
+    CRS_UTILS_AVAILABLE = True
+except ImportError:
+    CRS_UTILS_AVAILABLE = False
+    DEFAULT_METRIC_CRS = "EPSG:3857"
 
 # Import icon utilities for dark mode support
 try:
@@ -259,6 +274,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.backend_indicator_label = None
         self.plugin_title_label = None
         self.frame_header = None
+
+        # Initialize exploring features cache for flash/zoom/identify operations
+        # Cache stores selected features and pre-computed bounding boxes per groupbox
+        self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
+        logger.debug("Initialized exploring features cache")
 
         self.predicates = None
         self.buffer_property_has_been_init = False
@@ -6170,6 +6190,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             groupbox (str): Selected groupbox ('single_selection', 'multiple_selection', or 'custom_selection')
         """
         if self.widgets_initialized is True:
+            # CACHE INVALIDATION: When groupbox changes, invalidate cache for the previous groupbox
+            # because the user is switching to a different selection mode
+            if hasattr(self, '_exploring_cache') and self.current_layer:
+                layer_id = self.current_layer.id()
+                old_groupbox = self.current_exploring_groupbox
+                if old_groupbox and old_groupbox != groupbox:
+                    self._exploring_cache.invalidate(layer_id, old_groupbox)
+                    logger.debug(f"exploring_groupbox_changed: Invalidated cache for {layer_id[:8]}.../{old_groupbox}")
+            
             # Get the widget that was clicked
             triggering_widget = None
             if groupbox == "single_selection":
@@ -6200,10 +6229,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def exploring_identify_clicked(self):
-
-        features = []
-        expression = None
-
+        """
+        Flash the currently selected features on the map canvas.
+        
+        This method uses cached feature IDs when available for optimal performance.
+        The flash animation highlights the selected features with a red pulse effect.
+        """
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
@@ -6216,16 +6247,56 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer = None
                 return
 
+            layer_id = self.current_layer.id()
+            groupbox_type = self.current_exploring_groupbox
+            
+            # OPTIMIZATION: Try to get cached feature IDs directly for fast flash
+            if hasattr(self, '_exploring_cache') and groupbox_type:
+                feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
+                if feature_ids:
+                    logger.debug(f"exploring_identify_clicked: Using cached feature_ids ({len(feature_ids)} features)")
+                    self.iface.mapCanvas().flashFeatureIds(
+                        self.current_layer, 
+                        feature_ids, 
+                        startColor=QColor(235, 49, 42, 255), 
+                        endColor=QColor(237, 97, 62, 25), 
+                        flashes=6, 
+                        duration=400
+                    )
+                    return
+            
+            # Fallback: get features from widgets (will also populate cache)
             features, expression = self.get_current_features()
             
             if len(features) == 0:
                 return
             else:
-                self.iface.mapCanvas().flashFeatureIds(self.current_layer, [feature.id() for feature in features], startColor=QColor(235, 49, 42, 255), endColor=QColor(237, 97, 62, 25), flashes=6, duration=400)
+                self.iface.mapCanvas().flashFeatureIds(
+                    self.current_layer, 
+                    [feature.id() for feature in features], 
+                    startColor=QColor(235, 49, 42, 255), 
+                    endColor=QColor(237, 97, 62, 25), 
+                    flashes=6, 
+                    duration=400
+                )
 
 
-    def get_current_features(self):
-
+    def get_current_features(self, use_cache: bool = True):
+        """
+        Get the currently selected features based on the active exploring groupbox.
+        
+        This method retrieves features from the appropriate widget (single selection,
+        multiple selection, or custom expression) and caches them for subsequent
+        operations like flash, zoom, and identify.
+        
+        Args:
+            use_cache: If True, return cached features if available (default: True).
+                       Set to False to force refresh from widgets.
+        
+        Returns:
+            tuple: (features, expression) where features is a list of QgsFeature
+                   and expression is the QGIS expression string used for selection.
+        """
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
@@ -6237,6 +6308,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except (RuntimeError, TypeError):
                 self.current_layer = None
                 return [], ''
+
+            layer_id = self.current_layer.id()
+            groupbox_type = self.current_exploring_groupbox
+            
+            # CACHE CHECK: Try to get cached features if use_cache is True
+            if use_cache and hasattr(self, '_exploring_cache') and groupbox_type:
+                cached = self._exploring_cache.get(layer_id, groupbox_type)
+                if cached:
+                    logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
+                    return cached['features'], cached['expression'] or ''
 
             features = []    
             expression = ''
@@ -6285,6 +6366,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             else:
                 logger.warning(f"   ⚠️ current_exploring_groupbox '{self.current_exploring_groupbox}' does not match any known groupbox!")
+            
+            # CACHE UPDATE: Store features in cache for subsequent operations
+            if features and hasattr(self, '_exploring_cache') and groupbox_type:
+                self._exploring_cache.put(layer_id, groupbox_type, features, expression)
+                logger.debug(f"get_current_features: Cached {len(features)} features for {layer_id[:8]}.../{groupbox_type}")
                 
             return features, expression
         
@@ -6293,7 +6379,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
 
     def exploring_zoom_clicked(self, features=[], expression=None):
-
+        """
+        Zoom the map canvas to the currently selected features.
+        
+        This method uses cached bounding boxes when available for optimal performance.
+        If the bounding box is cached, the zoom is nearly instantaneous.
+        
+        Args:
+            features: Optional list of features to zoom to (if empty, uses current selection)
+            expression: Optional expression string associated with the features
+        """
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
@@ -6306,10 +6401,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer = None
                 return
 
-            if not features or len(features) == 0:   
+            layer_id = self.current_layer.id()
+            groupbox_type = self.current_exploring_groupbox
+            
+            # OPTIMIZATION: Try to use cached bounding box for instant zoom
+            if not features or len(features) == 0:
+                if hasattr(self, '_exploring_cache') and groupbox_type:
+                    cached_bbox = self._exploring_cache.get_bbox(layer_id, groupbox_type)
+                    if cached_bbox and not cached_bbox.isEmpty():
+                        logger.debug(f"exploring_zoom_clicked: Using cached bbox for instant zoom")
+                        # Apply padding to bbox (10% or minimum 5 units)
+                        width_padding = max(cached_bbox.width() * 0.1, 5)
+                        height_padding = max(cached_bbox.height() * 0.1, 5)
+                        padded_bbox = QgsRectangle(cached_bbox)
+                        padded_bbox.grow(max(width_padding, height_padding))
+                        
+                        # Transform to canvas CRS if needed
+                        layer_crs = self.current_layer.crs()
+                        canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
+                        if layer_crs != canvas_crs:
+                            transform = QgsCoordinateTransform(layer_crs, canvas_crs, QgsProject.instance())
+                            padded_bbox = transform.transformBoundingBox(padded_bbox)
+                        
+                        self.iface.mapCanvas().zoomToFeatureExtent(padded_bbox)
+                        self.iface.mapCanvas().refresh()
+                        return
+                
+                # Fallback: get features from widgets (will also populate cache)
                 features, expression = self.get_current_features()
             
-
             self.zooming_to_features(features, expression)
 
 
@@ -6555,16 +6675,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Get CRS information
                     layer_crs = self.current_layer.crs()
                     canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
-                    is_geographic = layer_crs.isGeographic()
                     
-                    # CRITICAL: For geographic coordinates, switch to EPSG:3857 for metric calculations
+                    # IMPROVED v2.5.7: Use crs_utils for better CRS detection
+                    if CRS_UTILS_AVAILABLE:
+                        is_geographic = is_geographic_crs(layer_crs)
+                    else:
+                        is_geographic = layer_crs.isGeographic()
+                    
+                    # CRITICAL: For geographic coordinates, switch to a metric CRS for buffer calculations
                     # This ensures accurate buffer distances in meters instead of imprecise degrees
                     if is_geographic:
-                        # Transform to Web Mercator (EPSG:3857) for metric-based buffer
-                        work_crs = QgsCoordinateReferenceSystem("EPSG:3857")
+                        # IMPROVED v2.5.7: Use optimal metric CRS (UTM or Web Mercator)
+                        if CRS_UTILS_AVAILABLE:
+                            metric_crs_authid = get_optimal_metric_crs(
+                                project=QgsProject.instance(),
+                                source_crs=layer_crs,
+                                extent=geom.boundingBox(),
+                                prefer_utm=True
+                            )
+                            work_crs = QgsCoordinateReferenceSystem(metric_crs_authid)
+                            logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs_authid} for zoom buffer")
+                        else:
+                            # Fallback to Web Mercator
+                            work_crs = QgsCoordinateReferenceSystem(DEFAULT_METRIC_CRS)
+                            logger.debug(f"FilterMate: Using Web Mercator ({DEFAULT_METRIC_CRS}) for zoom buffer")
+                        
                         to_metric = QgsCoordinateTransform(layer_crs, work_crs, QgsProject.instance())
                         geom.transform(to_metric)
-                        logger.debug(f"FilterMate: Switched from {layer_crs.authid()} to EPSG:3857 for metric buffer")
                     else:
                         # Already in projected coordinates, use layer CRS
                         work_crs = layer_crs
@@ -6973,6 +7110,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             preserve_filter_if_empty: DEPRECATED - no longer needed since filters aren't auto-applied
         """
         if self.widgets_initialized is True and self.current_layer is not None and isinstance(self.current_layer, QgsVectorLayer):
+            
+            # CACHE INVALIDATION: Selection is changing, invalidate cache for current groupbox
+            # This ensures that subsequent flash/zoom operations use fresh data
+            if hasattr(self, '_exploring_cache') and self.current_exploring_groupbox:
+                layer_id = self.current_layer.id()
+                self._exploring_cache.invalidate(layer_id, self.current_exploring_groupbox)
+                logger.debug(f"exploring_features_changed: Invalidated cache for {layer_id[:8]}.../{self.current_exploring_groupbox}")
             
             # Update buffer validation when source features/layer changes
             try:
@@ -8013,6 +8157,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # CRITICAL: Check lock BEFORE any processing
         if self._updating_current_layer:
             return
+        
+        # CACHE INVALIDATION: When changing layers, we don't need to invalidate 
+        # the cache for the old layer (it stays valid for when we switch back).
+        # The cache key includes layer_id, so each layer has its own cache entries.
+        # This is intentional: cached features remain valid until selection changes.
         
         # STABILITY FIX: If plugin is busy (loading project, etc.), defer the layer change
         if self._plugin_busy:
@@ -9570,6 +9719,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo on close: {e}")
             
+            # Clean up exploring cache
+            try:
+                if hasattr(self, '_exploring_cache'):
+                    stats = self._exploring_cache.get_stats()
+                    logger.info(f"Exploring cache stats on close: {stats}")
+                    self._exploring_cache.invalidate_all()
+            except Exception as e:
+                logger.debug(f"FilterMate: Error cleaning up exploring cache: {e}")
+            
             # Clean up theme watcher
             try:
                 if self._theme_watcher is not None:
@@ -9580,6 +9738,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             self.closingPlugin.emit()
             event.accept()
+
+    def get_exploring_cache_stats(self):
+        """
+        Get statistics about the exploring features cache.
+        
+        Returns:
+            dict: Cache statistics including hits, misses, hit ratio, and entry counts.
+                  Returns empty dict if cache is not initialized.
+        
+        Example:
+            >>> stats = self.get_exploring_cache_stats()
+            >>> print(f"Cache hit ratio: {stats['hit_ratio']}")
+        """
+        if hasattr(self, '_exploring_cache'):
+            return self._exploring_cache.get_stats()
+        return {}
+    
+    def invalidate_exploring_cache(self, layer_id=None, groupbox_type=None):
+        """
+        Invalidate the exploring features cache.
+        
+        Args:
+            layer_id: Optional layer ID to invalidate. If None, invalidates all layers.
+            groupbox_type: Optional groupbox type ('single_selection', 'multiple_selection', 
+                          'custom_selection'). If None with layer_id, invalidates all 
+                          groupboxes for that layer.
+        
+        Example:
+            >>> self.invalidate_exploring_cache()  # Clear all
+            >>> self.invalidate_exploring_cache(layer.id())  # Clear specific layer
+            >>> self.invalidate_exploring_cache(layer.id(), 'single_selection')  # Clear specific
+        """
+        if hasattr(self, '_exploring_cache'):
+            if layer_id is None:
+                self._exploring_cache.invalidate_all()
+                logger.debug("Exploring cache: invalidated all entries")
+            elif groupbox_type is None:
+                self._exploring_cache.invalidate_layer(layer_id)
+                logger.debug(f"Exploring cache: invalidated layer {layer_id[:8]}...")
+            else:
+                self._exploring_cache.invalidate(layer_id, groupbox_type)
+                logger.debug(f"Exploring cache: invalidated {layer_id[:8]}.../{groupbox_type}")
 
     def launchTaskEvent(self, state, task_name):
 

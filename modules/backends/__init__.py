@@ -6,6 +6,7 @@ This package contains the backend implementations for different data providers:
 - PostgreSQL (optimized for performance with large datasets)
 - Spatialite (good performance for small to medium datasets)
 - OGR (fallback for various file formats)
+- Memory (optimized for QGIS memory layers)
 
 Each backend implements the GeometricFilterBackend interface.
 
@@ -13,12 +14,18 @@ v2.4.0 Optimization Modules:
 - MVRegistry: Automatic cleanup of PostgreSQL materialized views
 - WKTCache: LRU cache for WKT geometries in Spatialite
 - SpatialIndexManager: Automatic spatial index creation for OGR layers
+
+v2.5.8: Memory Backend
+- Dedicated backend for QGIS memory layers
+- Uses QgsSpatialIndex for O(log n) spatial queries
+- Accurate feature counting with iteration fallback
 """
 
 from .base_backend import GeometricFilterBackend
 from .postgresql_backend import PostgreSQLGeometricFilter
 from .spatialite_backend import SpatialiteGeometricFilter
 from .ogr_backend import OGRGeometricFilter
+from .memory_backend import MemoryGeometricFilter
 from .factory import BackendFactory
 
 # v2.4.0 Optimization modules
@@ -46,6 +53,7 @@ __all__ = [
     'PostgreSQLGeometricFilter',
     'SpatialiteGeometricFilter',
     'OGRGeometricFilter',
+    'MemoryGeometricFilter',
     'BackendFactory',
     # v2.4.0 Optimization modules
     'MVRegistry',

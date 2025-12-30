@@ -1,7 +1,7 @@
 # Backend Architecture - FilterMate
 
-**Last Updated:** December 29, 2025
-**Current Version:** 2.5.5
+**Last Updated:** December 30, 2025
+**Current Version:** 2.5.8
 
 ## Multi-Backend System
 
@@ -30,6 +30,7 @@ modules/backends/
   ├── postgresql_backend.py  # PostgreSQL/PostGIS implementation
   ├── spatialite_backend.py  # Spatialite implementation
   ├── ogr_backend.py         # Universal OGR fallback
+  ├── memory_backend.py      # Optimized QGIS memory layer backend (v2.5.8)
   └── factory.py             # Automatic backend selection logic
 ```
 
@@ -75,7 +76,32 @@ modules/backends/
 - Exponential backoff (0.1s base delay)
 - Automatic connection cleanup
 
-### 3. OGR Backend (Universal Fallback)
+### 3. Memory Backend (Native Memory Layers) - v2.5.8
+
+**Conditions:**
+- Layer provider type is `memory`
+- OR small PostgreSQL datasets (< 5000 features) optimization
+
+**Features:**
+- Uses `QgsSpatialIndex` for O(log n) spatial queries
+- Direct DataProvider operations (no signals overhead)
+- Accurate feature counting with iteration fallback
+- Cached spatial indices per layer
+- No disk/network I/O
+
+**Key Methods:**
+- `get_accurate_feature_count()`: Reliable counting for memory layers
+- `_get_or_create_spatial_index()`: LRU-cached QgsSpatialIndex
+- `_perform_spatial_selection()`: Two-phase spatial selection (broad + narrow)
+- `_test_predicates()`: Direct geometry predicate testing
+
+**Performance:**
+- Best for: < 100,000 features (in RAM)
+- Query time: < 0.5s for 50k features with spatial index
+- Memory usage: High (all data in RAM)
+- Requires: Nothing (built-in)
+
+### 4. OGR Backend (Universal Fallback)
 
 **Conditions:**
 - Layer provider type is `ogr` (Shapefiles, GeoPackage, etc.)
@@ -127,8 +153,10 @@ BackendFactory.get_backend()
 
 **Priority System:**
 1. **FORCED**: User explicitly selected backend via UI
-2. **FALLBACK**: PostgreSQL unavailable → OGR fallback
-3. **AUTO**: Automatic detection based on provider type
+2. **MEMORY**: Native memory layers → Memory backend (v2.5.8)
+3. **SMALL_PG**: Small PostgreSQL datasets → Memory backend optimization
+4. **FALLBACK**: PostgreSQL unavailable → OGR fallback
+5. **AUTO**: Automatic detection based on provider type
 
 ## Factory Pattern Implementation
 
@@ -207,6 +235,13 @@ class BaseBackend(ABC):
 - **Query time:** 1-10s for 100k features
 - **Memory usage:** Moderate (temp tables)
 - **Requires:** Nothing (built-in)
+
+### Memory Backend (v2.5.8)
+- **Best for:** < 100,000 features (native memory layers)
+- **Query time:** < 0.5s for 50k features (with spatial index)
+- **Memory usage:** High (all data in RAM)
+- **Requires:** Nothing (built-in)
+- **Special:** Accurate featureCount() with iteration fallback
 
 ### OGR Backend
 - **Best for:** < 10,000 features
