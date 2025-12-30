@@ -6,28 +6,28 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.5.5
+version=2.5.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.5.5 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection
+about=FilterMate v2.5.6 - Auto Focus avec Outil de Sélection
 
- CRITICAL FIX in v2.5.5:
+ NEW in v2.5.6:
+ - ✨ AUTO FOCUS WITH SELECTING: Sélection QGIS ↔ widgets parfaitement synchronisée quand is_selecting activé
+ - 🔄 Multiple Selection: sync complète (coche ET décoche) au lieu d'additive
+ - 🎯 UX améliorée: canvas et widgets toujours cohérents pendant is_selecting
+ - 🛡️ Protection anti-boucles infinies avec flag _syncing_from_qgis
+ 
+ Previous fixes (v2.5.5):
  - 🐛 FIXED: PostgreSQL backend now correctly detects ALL empty geometry types from negative buffers
  - 🔧 Uses ST_IsEmpty() instead of NULLIF to detect POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
  - 🎨 NEW: HiDPI UI profile for 4K/Retina displays with auto-detection
  - 🖼️ UI improvements: Compact sidebar, harmonized button spacing across all tabs
  - ✅ Thread safety: Warning messages stored for main thread display
  
- Previous fixes (v2.5.4):
+ v2.5.4 fixes:
  - 🐛 FIXED: OGR backend now correctly counts features in memory layers
  - 🔧 Added intelligent feature counting that handles memory layer refresh delays
- 
- v2.5.0 highlights:
- - 🎉 Major milestone: Consolidates all 2.4.x stability fixes
- - 🛡️ GeoPackage: Correct GeomFromGPB() function for GPB geometry conversion
- - 🔒 Thread Safety: Defer setSubsetString() to main thread via queue callback
- - 🗄️ Session Isolation: Multi-client materialized view naming with session_id prefix
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)

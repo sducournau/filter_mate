@@ -2,6 +2,62 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.5.6] - 2025-12-30 - Synchronisation Bidirectionnelle Améliorée
+
+### ✨ Nouvelles Fonctionnalités
+
+- **SYNCHRONISATION BIDIRECTIONNELLE COMPLÈTE: Les widgets de sélection sont désormais parfaitement synchronisés avec le canvas QGIS quand `is_selecting` est activé**
+  - **QGIS → Widgets**: Synchronisation complète quand is_selecting activé
+    - Single Selection: affiche la feature si exactement 1 sélectionnée
+    - Multiple Selection: reflète EXACTEMENT la sélection QGIS
+      - Avant: additive seulement (cochait mais ne décochait jamais)
+      - Maintenant: complète (coche ET décoche selon sélection QGIS)
+  - **Widgets → QGIS**: Inchangé (déjà fonctionnel)
+  - **Protection anti-boucles infinies**: Nouveau flag `_syncing_from_qgis`
+    - Empêche récursions lors de synchronisation bidirectionnelle
+    - Garantit stabilité même avec sélections rapides multiples
+
+### 🔧 Améliorations UX
+
+- **Synchronisation bidirectionnelle**: Canvas et widgets parfaitement cohérents quand is_selecting activé
+- **Workflow simplifié**: Sélectionner dans canvas → voir dans widget → filtrer/exporter
+- **Logging amélioré**: Messages clairs pour identifier synchronisation
+- **Performance optimisée**: Vérifications pour éviter mises à jour inutiles
+
+### 📝 Changements de Comportement
+
+- **Mode Multiple Selection**: Passage de synchronisation ADDITIVE à COMPLÈTE
+  - Avant: ajoutait les features (cochait) mais ne les supprimait jamais
+  - Maintenant: reflète EXACTEMENT la sélection QGIS (coche ET décoche)
+- **Bouton is_selecting**: Rôle clarifié
+  - Active la synchronisation bidirectionnelle complète
+  - Widgets ↔ QGIS : synchronisation dans les deux sens
+
+### 🐛 Corrections de Bugs
+
+- **Protection contre boucles infinies**: Flag `_syncing_from_qgis` empêche récursions
+- **Gestion d'état robuste**: Vérifications systématiques widgets_initialized et couches valides
+- **Updates intelligentes**: Évite mises à jour inutiles via comparaison feature.id()
+
+### 📊 Fichiers Modifiés
+
+- `filter_mate_dockwidget.py`: 
+  - Ajout flag `_syncing_from_qgis` dans `__init__`
+  - Modification `on_layer_selection_changed()` - vérification is_selecting
+  - Amélioration `_sync_widgets_from_qgis_selection()` - documentation
+  - Update `_sync_single_selection_from_qgis()` - vérifications optimisées
+  - Refonte `_sync_multiple_selection_from_qgis()` - sync complète
+  - Protection `exploring_features_changed()` - anti-boucles
+
+### 📚 Documentation
+
+- Ajout `docs/RELEASE_NOTES_v2.5.6.md` - Documentation complète de la fonctionnalité
+- Schéma d'architecture de synchronisation
+- Tests recommandés et cas d'usage
+- Guide de migration depuis v2.5.5
+
+---
+
 ## [2.5.5] - 2025-12-29 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection
 
 ### 🐛 Bug Fixes

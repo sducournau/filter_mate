@@ -7,7 +7,29 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection
+## 🎉 What's New in v2.5.6 - Auto Focus with Native QGIS Selection Tool
+
+This release introduces seamless bidirectional synchronization between FilterMate widgets and QGIS native selection tools, making the workflow more intuitive and efficient.
+
+### 🎯 Auto Focus with Selecting
+
+| Feature                         | Description                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
+| **Bidirectional Sync**          | Select with QGIS native tools → FilterMate widgets auto-update |
+| **Complete Synchronization**    | Check AND uncheck widgets based on QGIS selection            |
+| **Anti-Loop Protection**        | Robust flag system prevents infinite recursion               |
+| **Improved Workflow**           | Select in canvas → filter in widget → export seamlessly      |
+
+### 🔄 How It Works
+
+When `is_selecting` button is enabled:
+- **QGIS → Widgets**: Select features in canvas with native QGIS selection tool → widgets automatically reflect selection
+- **Widgets → QGIS**: Check/uncheck in widgets → canvas selection updates (already functional)
+- **Perfect Consistency**: Canvas and widgets always in sync during selection mode
+
+### Previous Releases
+
+## 🔧 v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection
 
 This release fixes a critical bug in the PostgreSQL backend where negative buffers (erosion) could produce incorrect filtering results due to incomplete empty geometry detection.
 

@@ -196,6 +196,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._signals_connected = False
         self._pending_layers_update = False  # Flag to track if layers were updated before widgets_initialized
         self._plugin_busy = False  # Global flag to block operations during critical changes (project load, etc.)
+        self._syncing_from_qgis = False  # Flag to prevent infinite recursion in QGIS ↔ widgets synchronization
         
         # Flag to track if LAYER_TREE_VIEW signal is connected (for bidirectional sync)
         self._layer_tree_view_signal_connected = False
@@ -6607,8 +6608,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             selected: List of added feature IDs
             deselected: List of removed feature IDs  
             clearAndSelect: Boolean indicating if selection was cleared
+            
+        Note:
+            La synchronisation QGIS → widgets n'est active QUE si is_selecting est coché.
+            Cela garantit une synchronisation bidirectionnelle cohérente.
         """
         try:
+            # CRITICAL: Prevent infinite recursion - skip if we're the ones updating QGIS
+            if self._syncing_from_qgis:
+                logger.debug("on_layer_selection_changed: Skipping (sync in progress)")
+                return
+            
             if self.widgets_initialized is True and self.current_layer is not None:
                 layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
                 
@@ -6616,6 +6626,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     return
                 
                 # SYNCHRONISATION: Update FilterMate widgets when QGIS selection changes
+                # Active SEULEMENT si is_selecting est coché pour synchronisation bidirectionnelle
                 if layer_props["exploring"].get("is_selecting", False) is True:
                     self._sync_widgets_from_qgis_selection()
                 
@@ -6633,15 +6644,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _sync_widgets_from_qgis_selection(self):
         """
-        Synchronise UNIQUEMENT la groupbox active de exploring avec la sélection QGIS.
+        Synchronise la groupbox active de exploring avec la sélection QGIS.
         
-        Cette méthode est appelée automatiquement quand la sélection QGIS change
-        et que le bouton is_selecting est activé.
+        Cette méthode est appelée quand la sélection QGIS change ET que is_selecting est activé.
+        Cela permet une synchronisation bidirectionnelle cohérente.
         
         IMPORTANT: Seule la groupbox actuellement active est synchronisée:
         - Single selection active: sélectionne la première feature si une seule est sélectionnée
-        - Multiple selection active: coche toutes les features sélectionnées dans QGIS
+        - Multiple selection active: synchronisation complète (coche/décoche toutes les features)
         - Custom selection active: pas de synchronisation automatique (basé sur expression)
+        
+        Note:
+            Le bouton is_selecting active la synchronisation bidirectionnelle:
+            - widgets → QGIS : sélection dans QGIS quand widget change
+            - QGIS → widgets : mise à jour widget quand sélection QGIS change
         """
         try:
             if not self.current_layer or not self.widgets_initialized:
@@ -6682,7 +6698,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _sync_single_selection_from_qgis(self, selected_features, selected_count):
         """
         Synchronise le widget single selection avec la sélection QGIS.
-        Appelé uniquement quand la groupbox single_selection est active.
+        Appelé AUTOMATIQUEMENT quand la groupbox single_selection est active.
+        
+        Comportement:
+        - 1 feature sélectionnée : synchronise le widget avec cette feature
+        - 0 ou >1 features : ne modifie pas le widget (garde la valeur actuelle)
         """
         try:
             # Single selection: only sync if exactly 1 feature is selected
@@ -6690,18 +6710,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 feature = selected_features[0]
                 feature_picker = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 
+                # Vérifier si la feature est déjà sélectionnée pour éviter des mises à jour inutiles
+                current_feature = feature_picker.feature()
+                if current_feature and current_feature.isValid() and current_feature.id() == feature.id():
+                    logger.debug(f"Single selection: feature ID {feature.id()} already selected, skipping sync")
+                    return
+                
                 # Block signals to prevent recursive updates
                 feature_picker.blockSignals(True)
                 try:
                     # Set the feature directly by feature ID
                     feature_picker.setFeature(feature)
-                    logger.debug(f"Single selection: synced feature ID {feature.id()}")
+                    logger.debug(f"Single selection: synced feature ID {feature.id()} from QGIS (is_selecting active)")
                 finally:
                     feature_picker.blockSignals(False)
             elif selected_count == 0:
-                logger.debug("Single selection: no features selected in QGIS")
+                logger.debug("Single selection: no features selected in QGIS - widget unchanged")
             else:
-                logger.debug(f"Single selection: {selected_count} features selected - only syncs with exactly 1 feature")
+                logger.debug(f"Single selection: {selected_count} features selected - widget unchanged (requires exactly 1)")
                 
         except Exception as e:
             logger.warning(f"Error in _sync_single_selection_from_qgis: {type(e).__name__}: {e}")
@@ -6709,13 +6735,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     def _sync_multiple_selection_from_qgis(self, selected_features, selected_count):
         """
-        Synchronise le widget multiple selection avec la sélection QGIS.
-        Appelé uniquement quand la groupbox multiple_selection est active.
+        Synchronise AUTOMATIQUEMENT le widget multiple selection avec la sélection QGIS.
+        Appelé automatiquement quand la groupbox multiple_selection est active.
         
-        IMPORTANT: Cette synchronisation est ADDITIVE uniquement.
-        - Ajoute (coche) les features sélectionnées dans QGIS
-        - Ne décoche PAS les features non sélectionnées (pour permettre la sélection manuelle)
-        - L'utilisateur garde le contrôle total des sélections manuelles
+        Comportement de synchronisation COMPLÈTE (v2.5.6+):
+        - COCHE les features sélectionnées dans QGIS
+        - DÉCOCHE les features NON sélectionnées dans QGIS
+        - Synchronisation bidirectionnelle complète pour refléter exactement l'état QGIS
+        
+        Note:
+            Contrairement aux versions précédentes qui étaient additives,
+            cette synchronisation reflète maintenant EXACTEMENT la sélection QGIS.
         """
         try:
             # Multiple selection: check all selected features in the widget
@@ -6730,38 +6760,55 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Get selected feature IDs from QGIS
             selected_ids = {f.id() for f in selected_features}
             
-            # ADDITIVE synchronization: only CHECK items, never UNCHECK
-            # This allows manual selections to persist
+            # SYNCHRONISATION COMPLÈTE: reflète exactement la sélection QGIS
+            # - COCHE les features sélectionnées dans QGIS
+            # - DÉCOCHE les features NON sélectionnées dans QGIS
             checked_count = 0
+            unchecked_count = 0
             for i in range(list_widget.count()):
                 item = list_widget.item(i)
                 feature_id = item.data(3)  # data(3) contains feature ID
                 
-                # Only CHECK features that are selected in QGIS
                 if feature_id in selected_ids:
+                    # CHECK features sélectionnées dans QGIS
                     if item.checkState() != Qt.Checked:
                         item.setCheckState(Qt.Checked)
                         checked_count += 1
-            
-            # If features were checked, update the display
-            if checked_count > 0:
-                logger.debug(f"Multiple selection: added {checked_count} features from QGIS selection")
-                
-                # Manually update the items display and emit signal
-                # (similar to what updateFeatures does in the task)
-                selection_data = []
-                for i in range(list_widget.count()):
-                    item = list_widget.item(i)
+                else:
+                    # UNCHECK features NON sélectionnées dans QGIS
                     if item.checkState() == Qt.Checked:
-                        selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
+                        item.setCheckState(Qt.Unchecked)
+                        unchecked_count += 1
+            
+            # Update display if any changes were made
+            if checked_count > 0 or unchecked_count > 0:
+                logger.debug(f"Multiple selection: synced from QGIS (is_selecting active) - checked:{checked_count}, unchecked:{unchecked_count}")
                 
-                selection_data.sort(key=lambda k: k[0])
-                multiple_widget.items_le.setText(', '.join([data[0] for data in selection_data]))
-                list_widget.setSelectedFeaturesList(selection_data)
-                
-                # Emit the signal to notify exploring_features_changed
-                # This ensures FilterMate updates its internal state
-                multiple_widget.updatingCheckedItemList.emit(selection_data, True)
+                # Set sync flag BEFORE updating to prevent recursion
+                self._syncing_from_qgis = True
+                try:
+                    # Manually update the items display and emit signal
+                    # (similar to what updateFeatures does in the task)
+                    selection_data = []
+                    for i in range(list_widget.count()):
+                        item = list_widget.item(i)
+                        if item.checkState() == Qt.Checked:
+                            selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
+                    
+                    selection_data.sort(key=lambda k: k[0])
+                    multiple_widget.items_le.setText(', '.join([data[0] for data in selection_data]))
+                    list_widget.setSelectedFeaturesList(selection_data)
+                    
+                    # Emit the signal to notify exploring_features_changed
+                    # This ensures FilterMate updates its internal state
+                    # NOTE: This could trigger exploring_features_changed which might update QGIS selection
+                    # if is_selecting is active. The _syncing_from_qgis flag prevents infinite loops.
+                    multiple_widget.updatingCheckedItemList.emit(selection_data, True)
+                finally:
+                    # Always clear the sync flag
+                    self._syncing_from_qgis = False
+            else:
+                logger.debug("Multiple selection: already in sync with QGIS selection")
                 
         except Exception as e:
             logger.warning(f"Error in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
@@ -6976,13 +7023,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             if len(features) == 0:
                 logger.debug("exploring_features_changed: No features to process")
-                # Only clear selection if is_selecting is active
-                if layer_props["exploring"].get("is_selecting", False):
+                # Only clear selection if is_selecting is active AND we're not syncing from QGIS
+                if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
                     self.current_layer.removeSelection()
                 return []
         
             # CRITICAL: Synchronize QGIS selection with FilterMate features when is_selecting is active
-            if layer_props["exploring"].get("is_selecting", False):
+            # Skip if we're currently syncing FROM QGIS to prevent infinite loops
+            if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
                 self.current_layer.removeSelection()
                 self.current_layer.select([feature.id() for feature in features])
                 logger.debug(f"exploring_features_changed: Synchronized QGIS selection ({len(features)} features)")
