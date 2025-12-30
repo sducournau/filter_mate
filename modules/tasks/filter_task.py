@@ -2294,13 +2294,30 @@ class FilterEngineTask(QgsTask):
             # This is simpler and more efficient than creating a _dump view
             source_table = self.param_source_table
             source_schema = self.param_source_schema
-            self.postgresql_source_geom = 'ST_Buffer("{source_schema}"."{source_table}"."{source_geom}", {buffer_value})'.format(
+            
+            # Build base ST_Buffer expression
+            base_buffer_expr = 'ST_Buffer("{source_schema}"."{source_table}"."{source_geom}", {buffer_value})'.format(
                 source_schema=source_schema,
                 source_table=source_table,
                 source_geom=self.param_source_geom,
                 buffer_value=self.param_buffer_value
             )
-            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m")     
+            
+            # CRITICAL FIX v2.5.6: Handle negative buffers (erosion) properly
+            # Negative buffers can produce empty geometries which must be handled
+            # with ST_MakeValid() and ST_IsEmpty() to prevent matching issues
+            if self.param_buffer_value < 0:
+                logger.info(f"📐 Applying NEGATIVE buffer (erosion): {self.param_buffer_value}m")
+                logger.info(f"  🛡️ Wrapping in ST_MakeValid() + ST_IsEmpty check for empty geometry handling")
+                validated_expr = f"ST_MakeValid({base_buffer_expr})"
+                self.postgresql_source_geom = f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
+                logger.info(f"  📝 Generated expression: {self.postgresql_source_geom[:150]}...")
+            else:
+                self.postgresql_source_geom = base_buffer_expr
+            
+            buffer_type_str = "expansion" if self.param_buffer_value > 0 else "erosion"
+            logger.info(f"✓ PostgreSQL source geom prepared with {self.param_buffer_value}m buffer ({buffer_type_str})")
+            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m ({buffer_type_str})")     
 
         
 

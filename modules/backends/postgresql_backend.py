@@ -163,13 +163,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         
         # Log negative buffer usage for visibility
         if buffer_value < 0:
-            self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
-            # DIAGNOSTIC v2.5.6: Log to QGIS MessageLog for guaranteed visibility
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"🛡️ _build_st_buffer_with_style: NEGATIVE buffer_value = {buffer_value}m",
-                "FilterMate", Qgis.Info
-            )
+            self.log_debug(f"📐 Using negative buffer (erosion): {buffer_value}m")
         
         # Build base buffer expression
         if endcap_style == 'round':
@@ -271,11 +265,32 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         endcap_style = self._get_buffer_endcap_style()
         
         def build_buffer_expr(geom_ref: str, buffer_value: str) -> str:
-            """Build ST_Buffer expression with appropriate endcap style."""
+            """
+            Build ST_Buffer expression with appropriate endcap style.
+            
+            CRITICAL FIX v2.5.6: Handle negative buffers (erosion) properly.
+            Negative buffers can produce empty geometries which must be handled
+            with ST_MakeValid() and ST_IsEmpty() to prevent matching issues.
+            """
+            # Build base buffer expression
             if endcap_style == 'round':
-                return f'ST_Buffer({geom_ref}, {buffer_value})'
+                buffer_expr = f'ST_Buffer({geom_ref}, {buffer_value})'
             else:
-                return f"ST_Buffer({geom_ref}, {buffer_value}, 'endcap={endcap_style}')"
+                buffer_expr = f"ST_Buffer({geom_ref}, {buffer_value}, 'endcap={endcap_style}')"
+            
+            # CRITICAL FIX v2.5.6: Wrap negative buffers in ST_MakeValid() + ST_IsEmpty check
+            # Try to parse buffer_value as float to detect negative values
+            try:
+                buffer_float = float(buffer_value.strip())
+                if buffer_float < 0:
+                    # Negative buffer (erosion): wrap in ST_MakeValid and return NULL if empty
+                    validated_expr = f"ST_MakeValid({buffer_expr})"
+                    return f"CASE WHEN ST_IsEmpty({validated_expr}) THEN NULL ELSE {validated_expr} END"
+            except (ValueError, TypeError):
+                # buffer_value is an expression, not a numeric literal - can't determine sign
+                pass
+            
+            return buffer_expr
         
         # Pattern 1: ST_Buffer("schema"."table"."geom", value) - 3-part with buffer
         buffer_pattern_3part = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^)]+)\)'
@@ -611,13 +626,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             Simple PostGIS expression like:
             ST_Intersects("table"."geom", ST_GeomFromText('POLYGON(...)', 31370))
         """
-        # DIAGNOSTIC v2.5.6: Log buffer value at DEBUG level
-        self.log_debug(f"📝 _build_simple_wkt_expression: buffer_value={buffer_value} (type={type(buffer_value).__name__}), source_srid={source_srid}")
-        
-        self.log_debug(f"📝 _build_simple_wkt_expression called:")
-        self.log_info(f"  - buffer_value: {buffer_value}")
-        self.log_info(f"  - source_srid: {source_srid}")
-        self.log_info(f"  - WKT length: {len(source_wkt) if source_wkt else 0}")
+        self.log_debug(f"📝 _build_simple_wkt_expression: buffer_value={buffer_value}, source_srid={source_srid}")
         
         # Build source geometry from WKT
         source_geom_sql = f"ST_GeomFromText('{source_wkt}', {source_srid})"
@@ -625,14 +634,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Apply buffer if specified (with endcap style)
         # Supports both positive (expand) and negative (shrink/erode) buffers
         # v2.4.22: Handle geographic CRS by transforming to EPSG:3857 for metric buffer
-        # DIAGNOSTIC v2.5.6: Log the exact condition check at DEBUG level
-        self.log_debug(
-            f"📝 _build_simple_wkt_expression buffer check: buffer_value={buffer_value}, "
-            f"type={type(buffer_value).__name__}, condition_result={(buffer_value is not None and buffer_value != 0)}"
-        )
-        
         if buffer_value is not None and buffer_value != 0:
-            self.log_info(f"  ✓ Applying buffer: {buffer_value}m")
+            self.log_debug(f"  ✓ Applying buffer: {buffer_value}m")
             
             # Check if source CRS is geographic (SRID 4326 or similar)
             # Geographic CRS use degrees, so buffer in meters requires transformation
@@ -673,15 +676,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             else:
                 # Projected CRS: buffer directly in native units
                 source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
-                # DIAGNOSTIC v2.5.6: Log buffer application at DEBUG level
                 buffer_type_str = "expansion" if buffer_value > 0 else "erosion (shrink)"
                 self.log_debug(f"📐 Buffer APPLIED: {buffer_value}m ({buffer_type_str}) for SRID={source_srid}")
         else:
             self.log_debug(f"  ℹ️ No buffer applied (buffer_value={buffer_value})")
         
-        # DIAGNOSTIC v2.5.6: Log the final expression at DEBUG level
         final_expr = f"{predicate_func}({geom_expr}, {source_geom_sql})"
-        # Log first 200 chars at debug level
         self.log_debug(f"📝 _build_simple_wkt_expression FINAL: {final_expr[:200]}...")
         return final_expr
 
@@ -718,18 +718,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         Returns:
             PostGIS SQL expression string
         """
-        self.log_debug(f"Building PostgreSQL expression for {layer_props.get('layer_name', 'unknown')}")
-        
-        # Log buffer parameters for debugging negative buffer issues
-        self.log_info(f"📐 Buffer parameters received:")
-        self.log_info(f"  - buffer_value: {buffer_value} (type: {type(buffer_value).__name__})")
-        self.log_info(f"  - buffer_expression: {buffer_expression}")
-        if buffer_value is not None and buffer_value < 0:
-            self.log_info(f"  ⚠️ NEGATIVE BUFFER (erosion) requested: {buffer_value}m")
-        elif buffer_value is not None and buffer_value > 0:
-            self.log_info(f"  ✓ Positive buffer (expansion): {buffer_value}m")
-        else:
-            self.log_info(f"  ℹ️ No buffer applied (value is 0 or None)")
+        self.log_debug(f"Building PostgreSQL expression for {layer_props.get('layer_name', 'unknown')}, buffer={buffer_value}")
         
         # Extract layer properties
         schema = layer_props.get("layer_schema", "public")
@@ -787,9 +776,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         )
         
         if use_simple_wkt:
-            self.log_info(f"📝 Using SIMPLE WKT mode for {layer_props.get('layer_name', 'unknown')}")
-            self.log_info(f"  - Source features: {source_feature_count} (≤ {self.SIMPLE_WKT_THRESHOLD} threshold)")
-            self.log_info(f"  - WKT length: {len(source_wkt)} chars, SRID: {source_srid}")
+            self.log_debug(f"📝 Using SIMPLE WKT mode for {layer_props.get('layer_name', 'unknown')}")
+            self.log_debug(f"  - Source features: {source_feature_count} (≤ {self.SIMPLE_WKT_THRESHOLD} threshold)")
         
         # Build predicate expressions with OPTIMIZED order
         # Sort predicates for better query performance:
@@ -932,8 +920,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     # The spatial predicate MUST be the first clause in the WHERE clause
                     spatial_predicate = f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"
                     where_clauses = [spatial_predicate]
-                    self.log_info(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
-                    self.log_info(f"  - Source filter provided: {source_filter is not None}")
+                    self.log_debug(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
                     
                     if source_filter:
                         # CRITICAL FIX: Validate source_filter before using
@@ -989,9 +976,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Combine predicates with OR
         if predicate_expressions:
             combined = " OR ".join(predicate_expressions)
-            # DIAGNOSTIC v2.5.6: Log final expression at DEBUG level only
             self.log_debug(f"PostgreSQL FINAL expression ({len(combined)} chars): {combined[:200]}...")
-            
             return combined
         
         return ""
