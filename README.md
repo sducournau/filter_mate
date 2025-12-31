@@ -79,25 +79,63 @@
 
 ## 🎬 Video Tutorials
 
-### Overview
+### 📺 Overview
 
-https://www.youtube.com/watch?v=2gOEPrdl2Bo
+<div align="center">
 
-### Explore your dataset intuitively & filter layers from multiple selection
+[![FilterMate Overview](https://img.youtube.com/vi/2gOEPrdl2Bo/maxresdefault.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
 
-https://youtu.be/YwEalDjgEdY
+**▶️ Click to watch: Complete FilterMate Overview**
 
-### Deeply explore road data and filter connected areas
+</div>
 
-https://youtu.be/svElL8cDpWE
+---
 
-### Export to GeoPackage with styles (negative buffer example on Toulouse)
+### 🔍 Explore your dataset intuitively & filter layers from multiple selection
 
-https://youtu.be/gPLi2OudKcI
+<div align="center">
 
-### Negative buffer (-500m) with multiple attribute selection on BD Topo IGN
+[![Dataset Exploration](https://img.youtube.com/vi/YwEalDjgEdY/maxresdefault.jpg)](https://youtu.be/YwEalDjgEdY)
 
-https://youtu.be/9rZb-9A-tko
+**▶️ Click to watch: Intuitive Dataset Exploration**
+
+</div>
+
+---
+
+### 🛣️ Deeply explore road data and filter connected areas
+
+<div align="center">
+
+[![Road Data Filtering](https://img.youtube.com/vi/svElL8cDpWE/maxresdefault.jpg)](https://youtu.be/svElL8cDpWE)
+
+**▶️ Click to watch: Road Network Filtering**
+
+</div>
+
+---
+
+### 📦 Export to GeoPackage with styles (negative buffer example on Toulouse)
+
+<div align="center">
+
+[![GeoPackage Export](https://img.youtube.com/vi/gPLi2OudKcI/maxresdefault.jpg)](https://youtu.be/gPLi2OudKcI)
+
+**▶️ Click to watch: GeoPackage Export with Styles**
+
+</div>
+
+---
+
+### 📐 Negative buffer (-500m) with multiple attribute selection on BD Topo IGN
+
+<div align="center">
+
+[![Negative Buffer](https://img.youtube.com/vi/9rZb-9A-tko/maxresdefault.jpg)](https://youtu.be/9rZb-9A-tko)
+
+**▶️ Click to watch: Advanced Negative Buffer Tutorial**
+
+</div>
 
 ---
 
