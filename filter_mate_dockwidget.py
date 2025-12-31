@@ -6856,6 +6856,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Comportement v2.5.9+:
         - ≥1 feature sélectionnée : synchronise le widget avec la PREMIÈRE feature
         - 0 features : ne modifie pas le widget (garde la valeur actuelle)
+        
+        IMPORTANT: On n'utilise PAS blockSignals() car cela empêche aussi la mise à jour
+        visuelle interne du widget. Le flag _syncing_from_qgis est utilisé dans
+        exploring_features_changed() pour éviter les boucles infinies.
         """
         try:
             # Single selection: sync with first feature if at least 1 is selected
@@ -6869,15 +6873,28 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 current_feature = feature_picker.feature()
                 
                 if current_feature and current_feature.isValid() and current_feature.id() == feature_id:
+                    logger.debug(f"_sync_single_selection_from_qgis: Feature {feature_id} already selected, skipping")
                     return
                 
-                # Block signals to prevent recursive updates
-                feature_picker.blockSignals(True)
+                logger.info(f"_sync_single_selection_from_qgis: Syncing widget to feature ID {feature_id} (first of {selected_count} selected)")
+                
+                # CRITICAL FIX: Set _syncing_from_qgis flag to prevent infinite loops
+                # The signal featureChanged will be emitted and call exploring_features_changed,
+                # but that function checks _syncing_from_qgis and won't update QGIS selection
+                self._syncing_from_qgis = True
                 try:
-                    # Set the feature by ID (not QgsFeature object)
+                    # Set the feature by ID - this triggers internal model update and visual refresh
+                    # DO NOT use blockSignals() as it prevents the widget's internal visual update
                     feature_picker.setFeature(feature_id)
                 finally:
-                    feature_picker.blockSignals(False)
+                    self._syncing_from_qgis = False
+                
+                # Verify the update worked
+                updated_feature = feature_picker.feature()
+                if updated_feature and updated_feature.isValid():
+                    logger.info(f"_sync_single_selection_from_qgis: Widget now shows feature ID {updated_feature.id()}")
+                else:
+                    logger.warning(f"_sync_single_selection_from_qgis: Widget update may have failed - feature() returned invalid")
                 
         except Exception as e:
             logger.warning(f"Error in _sync_single_selection_from_qgis: {type(e).__name__}: {e}")
@@ -6902,9 +6919,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
             
             if not hasattr(multiple_widget, 'list_widgets'):
+                logger.debug("_sync_multiple_selection_from_qgis: No list_widgets attribute")
                 return
                 
             if self.current_layer.id() not in multiple_widget.list_widgets:
+                logger.debug(f"_sync_multiple_selection_from_qgis: Layer {self.current_layer.id()} not in list_widgets")
                 return
             
             list_widget = multiple_widget.list_widgets[self.current_layer.id()]
@@ -6914,18 +6933,42 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             pk_field_name = layer_props.get("infos", {}).get("primary_key_name", None)
             
             if not pk_field_name:
+                logger.warning("_sync_multiple_selection_from_qgis: No primary_key_name found")
                 return
+            
+            # Also get the identifier field name from the widget itself for comparison
+            widget_identifier_field = list_widget.getIdentifierFieldName() if hasattr(list_widget, 'getIdentifierFieldName') else None
+            
+            logger.info(f"_sync_multiple_selection_from_qgis: pk_field_name={pk_field_name}, widget_identifier_field={widget_identifier_field}, selected_count={selected_count}")
+            
+            # CRITICAL: Use the widget's identifier field name if it differs from pk_field_name
+            # The widget stores data using its own identifier_field_name setting
+            effective_pk_field = widget_identifier_field if widget_identifier_field else pk_field_name
             
             # Get selected PRIMARY KEY VALUES from QGIS (NOT feature IDs!)
             # data(3) in the widget stores primary key values, not feature.id()
+            # CRITICAL: Convert to strings for consistent comparison since widget stores string values
             selected_pk_values = set()
             for f in selected_features:
                 try:
-                    pk_value = f[pk_field_name]
-                    selected_pk_values.add(pk_value)
-                except (KeyError, IndexError):
+                    pk_value = f[effective_pk_field]
+                    # Convert to string for consistent comparison with widget data
+                    selected_pk_values.add(str(pk_value) if pk_value is not None else pk_value)
+                    logger.debug(f"  Selected feature: {effective_pk_field}={pk_value} (type: {type(pk_value).__name__})")
+                except (KeyError, IndexError) as e:
                     # Fallback to feature ID if attribute not found
-                    selected_pk_values.add(f.id())
+                    logger.warning(f"  Could not get field '{effective_pk_field}' from feature (available: {[field.name() for field in f.fields()]}): {e}")
+                    selected_pk_values.add(str(f.id()))
+            
+            logger.info(f"_sync_multiple_selection_from_qgis: selected_pk_values={selected_pk_values}")
+            
+            # DEBUG: Show first few widget items for comparison
+            if list_widget.count() > 0:
+                sample_items = []
+                for i in range(min(3, list_widget.count())):
+                    item = list_widget.item(i)
+                    sample_items.append(f"'{item.data(0)}': pk={item.data(3)} (type={type(item.data(3)).__name__})")
+                logger.info(f"_sync_multiple_selection_from_qgis: Widget sample items: {sample_items}")
             
             # SYNCHRONISATION COMPLÈTE: reflète exactement la sélection QGIS
             # - COCHE les features dont la PK est sélectionnée dans QGIS
@@ -6935,19 +6978,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             found_pk_values = set()
             for i in range(list_widget.count()):
                 item = list_widget.item(i)
-                item_pk_value = item.data(3)  # data(3) contains PRIMARY KEY value (not feature ID!)
-                found_pk_values.add(item_pk_value)
+                item_pk_value = item.data(3)  # data(3) contains PRIMARY KEY value
+                # Convert to string for consistent comparison
+                item_pk_str = str(item_pk_value) if item_pk_value is not None else item_pk_value
+                found_pk_values.add(item_pk_str)
                 
-                if item_pk_value in selected_pk_values:
+                if item_pk_str in selected_pk_values:
                     # CHECK features sélectionnées dans QGIS
                     if item.checkState() != Qt.Checked:
                         item.setCheckState(Qt.Checked)
                         checked_count += 1
+                        logger.debug(f"  CHECKING item: {item.data(0)} (pk={item_pk_str})")
                 else:
                     # UNCHECK features NON sélectionnées dans QGIS
                     if item.checkState() == Qt.Checked:
                         item.setCheckState(Qt.Unchecked)
                         unchecked_count += 1
+                        logger.debug(f"  UNCHECKING item: {item.data(0)} (pk={item_pk_str})")
+            
+            logger.info(f"_sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
             
             # Update display if any changes were made
             if checked_count > 0 or unchecked_count > 0:
