@@ -6,24 +6,23 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.5.9
+version=2.5.7
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.5.9 - Fix Sélection Exploring
+about=FilterMate v2.5.7 - Amélioration Compatibilité CRS
 
- NEW in v2.5.9:
- - 🐛 FIX EXPLORING SELECTION: Fixed issue where feature selection was interrupted by unnecessary widget refreshes
- - ⚡ OPTIMIZED LINK WIDGETS: Only update filter expressions when they actually change
- - 🔄 REDUCED WIDGET REFRESH: exploring_link_widgets() now called only when is_linking is enabled
- - 🎯 CANVAS TRACKING FIX: Zoom now works correctly when selecting features on canvas with tracking enabled
+ NEW in v2.5.7:
+ - 🌍 IMPROVED CRS COMPATIBILITY: Automatic conversion to EPSG:3857 when metric calculations needed
+ - 📐 OPTIMAL UTM ZONES: Calculates best UTM zone based on data extent for more accurate metric operations
+ - 🔄 CRS TRANSFORMER: New utility class for reliable geometry transformations between CRS
+ - 🛠️ NEW MODULE: crs_utils.py with is_geographic_crs(), get_optimal_metric_crs(), CRSTransformer
+ - 🔧 METRIC BUFFER: safe_buffer_metric() handles CRS conversion automatically
  
- Previous version (v2.5.8):
- - 🧠 NEW MEMORY BACKEND: Dedicated optimized backend for QGIS memory layers
- - ⚡ SPATIAL INDEX: Uses QgsSpatialIndex for O(log n) spatial queries
- - 🔄 SMALL PG OPTIMIZATION: Small PostgreSQL datasets now use Memory backend (2-10× faster)
- - ✨ AUTO FOCUS WITH SELECTING: Sélection QGIS ↔ widgets parfaitement synchronisée quand is_selecting activé
- - 🔄 Multiple Selection: sync complète (coche ET décoche) au lieu d'additive
+ Previous version (v2.5.6):
+ - ✨ AUTO FOCUS WITH SELECTING: QGIS selection ↔ widgets perfectly synchronized when is_selecting enabled
+ - 🔄 Complete Multiple Selection: sync (check AND uncheck) instead of additive
+ - 🛡️ Anti-loop protection with _syncing_from_qgis flag
  
  Previous fixes (v2.5.5):
  - 🐛 FIXED: PostgreSQL backend now correctly detects ALL empty geometry types from negative buffers

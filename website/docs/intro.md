@@ -7,27 +7,37 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.5.6 - Auto Focus with Native QGIS Selection Tool
+## 🎉 What's New in v2.5.7 - Improved CRS Compatibility
 
-This release introduces seamless bidirectional synchronization between FilterMate widgets and QGIS native selection tools, making the workflow more intuitive and efficient.
+This release significantly improves the compatibility between different coordinate reference systems (CRS) in FilterMate. It ensures that metric operations (like buffers) work correctly regardless of the source CRS.
 
-### 🎯 Auto Focus with Selecting
+### 🌍 CRS Improvements
 
 | Feature                         | Description                                                  |
 | ------------------------------- | ------------------------------------------------------------ |
-| **Bidirectional Sync**          | Select with QGIS native tools → FilterMate widgets auto-update |
-| **Complete Synchronization**    | Check AND uncheck widgets based on QGIS selection            |
-| **Anti-Loop Protection**        | Robust flag system prevents infinite recursion               |
-| **Improved Workflow**           | Select in canvas → filter in widget → export seamlessly      |
+| **Automatic Conversion**        | Auto-converts to EPSG:3857 when metric calculations needed   |
+| **Optimal UTM Zones**           | Calculates best UTM zone based on data extent               |
+| **CRSTransformer**              | New utility class for reliable geometry transformations      |
+| **New Module**                  | `crs_utils.py` with detection and transformation functions   |
 
-### 🔄 How It Works
+### 🛠️ New Functions
 
-When `is_selecting` button is enabled:
-- **QGIS → Widgets**: Select features in canvas with native QGIS selection tool → widgets automatically reflect selection
-- **Widgets → QGIS**: Check/uncheck in widgets → canvas selection updates (already functional)
-- **Perfect Consistency**: Canvas and widgets always in sync during selection mode
+```python
+from modules.crs_utils import (
+    is_geographic_crs,      # Detects geographic CRS (lat/lon)
+    get_optimal_metric_crs, # Finds best metric CRS
+    CRSTransformer,         # Utility class for transformations
+    create_metric_buffer    # Buffer with automatic CRS conversion
+)
+```
 
 ### Previous Releases
+
+## 🎯 v2.5.6 - Auto Focus with Native QGIS Selection Tool
+
+- **Bidirectional Sync**: Select with QGIS native tools → FilterMate widgets auto-update
+- **Complete Synchronization**: Check AND uncheck widgets based on QGIS selection
+- **Anti-Loop Protection**: Robust `_syncing_from_qgis` flag prevents infinite recursion
 
 ## 🔧 v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection
 

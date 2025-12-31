@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.5.6** | December 2025 | **Production-Ready**
+**Version 2.5.7** | December 2025 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,13 +27,20 @@
 
 ## 📋 Recent Changes
 
+### v2.5.7 - Improved CRS Compatibility (December 2025)
+
+- 🌍 **IMPROVED CRS COMPATIBILITY**: Automatic conversion to EPSG:3857 when metric calculations needed
+- 📐 **OPTIMAL UTM ZONES**: Calculates best UTM zone based on data extent for more accurate metric operations
+- 🔄 **CRS TRANSFORMER**: New utility class for reliable geometry transformations between CRS
+- 🛠️ **NEW MODULE**: `crs_utils.py` with `is_geographic_crs()`, `get_optimal_metric_crs()`, `CRSTransformer`
+- 🔧 **METRIC BUFFER**: `safe_buffer_metric()` handles CRS conversion automatically
+- 🧪 **TESTS**: New `test_crs_utils.py` for comprehensive CRS validation
+
 ### v2.5.6 - Auto Focus with Native QGIS Selection Tool (December 2025)
 
-- 🎯 **AUTO FOCUS WITH SELECTING**: FilterMate widgets now perfectly sync with QGIS native selection tool when `is_selecting` is enabled
+- 🎯 **AUTO FOCUS WITH SELECTING**: FilterMate widgets now perfectly sync with QGIS native selection tool
 - 🔄 **Bidirectional Sync**: Select features with native QGIS tools → see them in FilterMate widgets automatically
 - ✨ **Complete Multiple Selection**: Full synchronization (check AND uncheck) instead of additive-only behavior
-- 🛡️ **Anti-Loop Protection**: Robust `_syncing_from_qgis` flag prevents infinite recursion
-- 🚀 **Improved Workflow**: Select in canvas → filter in widget → export seamlessly
 
 ### v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection (December 2025)
 

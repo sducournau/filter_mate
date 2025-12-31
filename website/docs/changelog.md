@@ -6,6 +6,46 @@ sidebar_position: 100
 
 All notable changes to FilterMate are documented here.
 
+## [2.5.7] - December 31, 2025 - Improved CRS Compatibility
+
+### ✨ New Features
+
+- **NEW MODULE crs_utils.py** - Dedicated CRS management module
+  - `is_geographic_crs()`: Detects geographic CRS (lat/lon)
+  - `is_metric_crs()`: Detects metric CRS
+  - `get_optimal_metric_crs()`: Finds best metric CRS (UTM or Web Mercator)
+  - `CRSTransformer`: Utility class for geometry transformations
+  - `calculate_utm_zone()`: Calculates optimal UTM zone based on extent
+
+- **AUTOMATIC CRS CONVERSION** - When metric calculations are needed
+  - Automatic conversion to EPSG:3857 (Web Mercator) or optimal UTM zone
+  - Intelligent detection of geographic vs metric CRS
+
+### 🔧 Technical Improvements
+
+- **safe_buffer_metric()**: New function for buffers with automatic CRS conversion
+- **Improved Zoom**: Uses optimal CRS instead of forcing Web Mercator
+- **Edge Case Handling**: Antimeridian, polar regions, invalid coordinates
+
+### 🐛 Bug Fixes
+
+- **Buffer on Geographic CRS**: Buffers now work correctly with WGS84 data
+- **Zoom on Geographic Features**: Zoom uses optimal CRS
+- **CRS Warnings**: Clearer messages when geographic CRS detected
+
+---
+
+## [2.5.6] - December 30, 2025 - Bidirectional Sync with QGIS Selection
+
+### ✨ New Features
+
+- **AUTO FOCUS WITH SELECTING**: FilterMate widgets sync with QGIS native selection tool
+- **Bidirectional Sync**: Select features in canvas → widgets auto-update
+- **Complete Multiple Selection**: Full synchronization (check AND uncheck)
+- **Anti-Loop Protection**: `_syncing_from_qgis` flag prevents infinite recursion
+
+---
+
 ## [2.5.5] - December 29, 2025 - Critical PostgreSQL Negative Buffer Fix
 
 ### 🐛 Critical Bug Fix

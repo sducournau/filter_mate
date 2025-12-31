@@ -2,107 +2,40 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [2.5.9] - 2025-12-31 - Fix Sélection Exploring + Sync Canvas
-
-### 🆕 Nouvelles Fonctionnalités
-
-- **SYNCHRONISATION CANVAS → WIDGETS**: Quand `is_selecting` est activé et que l'outil de sélection QGIS est utilisé sur le canvas:
-  - Le widget **Single Feature** est synchronisé avec la PREMIÈRE feature sélectionnée
-  - Le widget **Multiple Feature** coche/décoche TOUTES les features pour refléter la sélection QGIS
-  - Les DEUX widgets sont maintenant synchronisés simultanément (pas seulement la groupbox active)
-
-### 🐛 Corrections de Bugs
-
-- **CORRECTION SÉLECTION EXPLORING**: Résolution du problème où la sélection de features ne fonctionnait plus dans le mode Exploring
-  - Le widget `QgsFeaturePickerWidget` était rafraîchi inutilement à chaque changement
-  - `exploring_link_widgets()` appelait `setFilterExpression` même quand le filtre n'avait pas changé
-  - Le refresh du widget interrompait la sélection en cours de l'utilisateur
-
-- **AMÉLIORATION TRACKING/SELECTING CANVAS**: Correction du zoom automatique lors de la sélection sur le canvas
-  - Récupération explicite des features avec géométrie via `QgsFeatureRequest().setFilterFids()`
-  - Amélioration du debug pour diagnostiquer les problèmes de tracking
-  - Le zoom fonctionne maintenant correctement quand `is_selecting` et `is_tracking` sont activés
-
-### 🔧 Améliorations Techniques
-
-- **Optimisation `exploring_link_widgets()`**:
-  - Nouvelle fonction helper `_safe_set_single_filter()` qui vérifie si le filtre a changé avant de l'appliquer
-  - Ne plus appeler `setFilterExpression('')` si le filtre est déjà vide
-  - Évite les refreshes redondants du widget qui perturbent l'UX
-
-- **Optimisation `exploring_features_changed()`**:
-  - `exploring_link_widgets()` n'est appelé que si `is_linking` est activé
-  - Réduit considérablement les appels inutiles lors de la sélection normale
-
-- **Amélioration `on_layer_selection_changed()`**:
-  - Fetch explicite des features sélectionnées avec leur géométrie
-  - Logs plus détaillés pour le diagnostic
-
-- **Amélioration `_sync_widgets_from_qgis_selection()`**:
-  - Synchronise maintenant les DEUX widgets (single ET multiple) quelle que soit la groupbox active
-  - Single selection prend la première feature si plusieurs sont sélectionnées
-
-### 📊 Fichiers Modifiés
-
-- `filter_mate_dockwidget.py`:
-  - `exploring_link_widgets()`: Ajout helper `_safe_set_single_filter()`, vérification avant clearing filters
-  - `exploring_features_changed()`: Condition sur `is_linking` avant appel à `exploring_link_widgets()`
-  - `on_layer_selection_changed()`: Fetch explicite des features avec géométrie pour le tracking
-  - `_sync_widgets_from_qgis_selection()`: Sync des deux widgets (single + multiple)
-  - `_sync_single_selection_from_qgis()`: Accepte ≥1 feature (prend la première)
-
----
-
-## [2.5.8] - 2025-12-30 - Memory Backend Optimisé
+## [2.5.7] - 2025-12-31 - Amélioration Compatibilité CRS
 
 ### ✨ Nouvelles Fonctionnalités
 
-- **NOUVEAU BACKEND MEMORY**: Backend dédié et optimisé pour les couches en mémoire QGIS
+- **NOUVEAU MODULE crs_utils.py**: Module dédié à la gestion des CRS
+  - `is_geographic_crs()`: Détecte les CRS géographiques (lat/lon)
+  - `is_metric_crs()`: Détecte les CRS métriques
+  - `get_optimal_metric_crs()`: Trouve le meilleur CRS métrique (UTM ou Web Mercator)
+  - `CRSTransformer`: Classe utilitaire pour les transformations de géométries
+  - `calculate_utm_zone()`: Calcule la zone UTM optimale basée sur l'étendue
 
-  - Détection automatique des couches `memory` natives
-  - Utilisation de `QgsSpatialIndex` pour des requêtes spatiales O(log n)
-  - Cache des indices spatiaux par couche pour réutilisation
-  - Comptage précis des features avec fallback par itération
-
-- **OPTIMISATION SMALL POSTGRESQL**: Les petits datasets PostgreSQL utilisent maintenant le Memory backend
-  - Seuil configurable (par défaut 5000 features)
-  - Évite les latences réseau pour les petits jeux de données
-  - 2-10× plus rapide que les requêtes PostgreSQL directes
+- **CONVERSION AUTOMATIQUE CRS**: Quand des calculs métriques sont nécessaires (buffer, distances)
+  - Conversion automatique vers EPSG:3857 (Web Mercator) ou zone UTM optimale
+  - Détection intelligente des CRS géographiques vs métriques
 
 ### 🔧 Améliorations Techniques
 
-- **Architecture Backend Étendue**:
-  - Nouveau fichier `modules/backends/memory_backend.py`
-  - Classe `MemoryGeometricFilter` avec interface complète
-  - Intégration dans `BackendFactory` avec priorité native memory
-- **Sélection Spatiale Optimisée**:
+- **safe_buffer_metric()**: Nouvelle fonction pour les buffers avec conversion CRS automatique
+- **Zoom amélioré**: Utilise le CRS optimal au lieu de forcer Web Mercator
+- **Gestion des cas limites**: Antiméridien, régions polaires, coordonnées invalides
 
-  - Phase broad: filtrage par bounding box via spatial index
-  - Phase narrow: test exact des prédicats géométriques
-  - Support complet: intersects, within, contains, overlaps, crosses, touches, disjoint, equals
+### 🐛 Corrections de Bugs
 
-- **Résolution du problème featureCount()**:
-  - `featureCount()` peut retourner 0 après création memory layer
-  - Méthode `get_accurate_feature_count()` avec fallback itération
-  - Diagnostic automatique des différences de comptage
+- **Buffer sur CRS géographique**: Les buffers fonctionnent maintenant correctement avec des données WGS84
+- **Zoom sur features géographiques**: Le zoom utilise le CRS optimal
+- **Avertissements CRS**: Messages plus clairs quand un CRS géographique est détecté
 
 ### 📊 Fichiers Modifiés
 
-- `modules/backends/memory_backend.py`: **NOUVEAU** - Backend Memory complet
-- `modules/backends/factory.py`: Intégration Memory backend dans sélection
-- `modules/backends/__init__.py`: Export MemoryGeometricFilter
-
-### 🏗️ Architecture Backend
-
-```
-Priority de sélection:
-1. FORCED: Backend forcé par utilisateur
-2. MEMORY: Couches memory natives → MemoryBackend
-3. SMALL_PG: Petits PostgreSQL → MemoryBackend (optimization)
-4. POSTGRES: PostgreSQL → PostgreSQLBackend
-5. SPATIALITE: Spatialite/GPKG → SpatialiteBackend
-6. OGR: Fallback universel → OGRBackend
-```
+- `modules/crs_utils.py`: **NOUVEAU** - Module utilitaire CRS
+- `modules/geometry_safety.py`: Ajout de `safe_buffer_metric()` et `safe_buffer_with_crs_check()`
+- `modules/tasks/filter_task.py`: Utilisation du nouveau module CRS
+- `filter_mate_dockwidget.py`: Zoom amélioré avec CRS optimal
+- `tests/test_crs_utils.py`: **NOUVEAU** - Tests unitaires CRS
 
 ---
 
