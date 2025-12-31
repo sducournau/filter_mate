@@ -2,6 +2,57 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.5.9] - 2025-12-31 - Fix Sélection Exploring + Sync Canvas
+
+### 🆕 Nouvelles Fonctionnalités
+
+- **SYNCHRONISATION CANVAS → WIDGETS**: Quand `is_selecting` est activé et que l'outil de sélection QGIS est utilisé sur le canvas:
+  - Le widget **Single Feature** est synchronisé avec la PREMIÈRE feature sélectionnée
+  - Le widget **Multiple Feature** coche/décoche TOUTES les features pour refléter la sélection QGIS
+  - Les DEUX widgets sont maintenant synchronisés simultanément (pas seulement la groupbox active)
+
+### 🐛 Corrections de Bugs
+
+- **CORRECTION SÉLECTION EXPLORING**: Résolution du problème où la sélection de features ne fonctionnait plus dans le mode Exploring
+  - Le widget `QgsFeaturePickerWidget` était rafraîchi inutilement à chaque changement
+  - `exploring_link_widgets()` appelait `setFilterExpression` même quand le filtre n'avait pas changé
+  - Le refresh du widget interrompait la sélection en cours de l'utilisateur
+
+- **AMÉLIORATION TRACKING/SELECTING CANVAS**: Correction du zoom automatique lors de la sélection sur le canvas
+  - Récupération explicite des features avec géométrie via `QgsFeatureRequest().setFilterFids()`
+  - Amélioration du debug pour diagnostiquer les problèmes de tracking
+  - Le zoom fonctionne maintenant correctement quand `is_selecting` et `is_tracking` sont activés
+
+### 🔧 Améliorations Techniques
+
+- **Optimisation `exploring_link_widgets()`**:
+  - Nouvelle fonction helper `_safe_set_single_filter()` qui vérifie si le filtre a changé avant de l'appliquer
+  - Ne plus appeler `setFilterExpression('')` si le filtre est déjà vide
+  - Évite les refreshes redondants du widget qui perturbent l'UX
+
+- **Optimisation `exploring_features_changed()`**:
+  - `exploring_link_widgets()` n'est appelé que si `is_linking` est activé
+  - Réduit considérablement les appels inutiles lors de la sélection normale
+
+- **Amélioration `on_layer_selection_changed()`**:
+  - Fetch explicite des features sélectionnées avec leur géométrie
+  - Logs plus détaillés pour le diagnostic
+
+- **Amélioration `_sync_widgets_from_qgis_selection()`**:
+  - Synchronise maintenant les DEUX widgets (single ET multiple) quelle que soit la groupbox active
+  - Single selection prend la première feature si plusieurs sont sélectionnées
+
+### 📊 Fichiers Modifiés
+
+- `filter_mate_dockwidget.py`:
+  - `exploring_link_widgets()`: Ajout helper `_safe_set_single_filter()`, vérification avant clearing filters
+  - `exploring_features_changed()`: Condition sur `is_linking` avant appel à `exploring_link_widgets()`
+  - `on_layer_selection_changed()`: Fetch explicite des features avec géométrie pour le tracking
+  - `_sync_widgets_from_qgis_selection()`: Sync des deux widgets (single + multiple)
+  - `_sync_single_selection_from_qgis()`: Accepte ≥1 feature (prend la première)
+
+---
+
 ## [2.5.8] - 2025-12-30 - Memory Backend Optimisé
 
 ### ✨ Nouvelles Fonctionnalités
