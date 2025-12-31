@@ -1,15 +1,15 @@
-import clsx from 'clsx';
-import Link from '@docusaurus/Link';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import Layout from '@theme/Layout';
-import Heading from '@theme/Heading';
+import clsx from "clsx";
+import Link from "@docusaurus/Link";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import Layout from "@theme/Layout";
+import Heading from "@theme/Heading";
 
-import styles from './index.module.css';
+import styles from "./index.module.css";
 
 function HomepageHeader() {
-  const {siteConfig} = useDocusaurusContext();
+  const { siteConfig } = useDocusaurusContext();
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={clsx("hero hero--primary", styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className="hero__title">
           {siteConfig.title}
@@ -18,13 +18,15 @@ function HomepageHeader() {
         <div className={styles.buttons}>
           <Link
             className="button button--secondary button--lg"
-            to="/docs/installation">
+            to="/docs/installation"
+          >
             Get Started - 5min ⏱️
           </Link>
           <Link
             className="button button--outline button--lg"
             to="/docs/getting-started/quick-start"
-            style={{marginLeft: '10px'}}>
+            style={{ marginLeft: "10px" }}
+          >
             Quick Start Tutorial
           </Link>
         </div>
@@ -33,10 +35,10 @@ function HomepageHeader() {
   );
 }
 
-function Feature({title, description, icon}) {
+function Feature({ title, description, icon }) {
   return (
-    <div className={clsx('col col--4')}>
-      <div className="text--center" style={{fontSize: '3rem'}}>
+    <div className={clsx("col col--4")}>
+      <div className="text--center" style={{ fontSize: "3rem" }}>
         {icon}
       </div>
       <div className="text--center padding-horiz--md">
@@ -50,34 +52,40 @@ function Feature({title, description, icon}) {
 function HomepageFeatures() {
   const features = [
     {
-      title: '🚀 Fast Performance',
-      description: 'Multi-backend architecture with PostgreSQL, Spatialite, and OGR support. Up to 50× faster on large datasets.',
-      icon: '⚡',
+      title: "🚀 Fast Performance",
+      description:
+        "Multi-backend architecture with PostgreSQL, Spatialite, and OGR support. Up to 50× faster on large datasets.",
+      icon: "⚡",
     },
     {
-      title: '🔍 Intuitive Filtering',
-      description: 'Combine attribute and geometric filters with spatial predicates and buffer operations. Easy-to-use interface.',
-      icon: '🎯',
+      title: "🔍 Intuitive Filtering",
+      description:
+        "Combine attribute and geometric filters with spatial predicates and buffer operations. Easy-to-use interface.",
+      icon: "🎯",
     },
     {
-      title: '🌍 Universal Compatibility',
-      description: 'Works with ANY data source: PostgreSQL, Spatialite, Shapefile, GeoPackage, and more. Automatic CRS reprojection.',
-      icon: '🗺️',
+      title: "🌍 Universal Compatibility",
+      description:
+        "Works with ANY data source: PostgreSQL, Spatialite, Shapefile, GeoPackage, and more. Automatic CRS reprojection.",
+      icon: "🗺️",
     },
     {
-      title: '📝 Filter History',
-      description: 'Full undo/redo support. Never lose your work. Review and restore previous filters with one click.',
-      icon: '⏮️',
+      title: "📝 Filter History",
+      description:
+        "Full undo/redo support. Never lose your work. Review and restore previous filters with one click.",
+      icon: "⏮️",
     },
     {
-      title: '🎨 Adaptive UI',
-      description: 'Dynamic interface that adjusts to screen resolution. Theme synchronization with QGIS. Layer-specific widgets.',
-      icon: '💎',
+      title: "🎨 Adaptive UI",
+      description:
+        "Dynamic interface that adjusts to screen resolution. Theme synchronization with QGIS. Layer-specific widgets.",
+      icon: "💎",
     },
     {
-      title: '📤 Smart Export',
-      description: 'Export filtered features to GeoPackage, Shapefile, PostGIS, and more. Customizable CRS and options.',
-      icon: '💾',
+      title: "📤 Smart Export",
+      description:
+        "Export filtered features to GeoPackage, Shapefile, PostGIS, and more. Customizable CRS and options.",
+      icon: "💾",
     },
   ];
 
@@ -103,13 +111,11 @@ function VideoSection() {
           <p>Watch our 5-minute demo to see how easy filtering can be</p>
           <div className={styles.videoWrapper}>
             <iframe
-              width="560"
-              height="315"
-              src="https://www.youtube.com/embed/2gOEPrdl2Bo"
-              title="FilterMate Demo"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              src="https://www.youtube-nocookie.com/embed/2gOEPrdl2Bo?rel=0&modestbranding=1"
+              title="FilterMate Demo - Complete Walkthrough"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
+              loading="lazy"
             />
           </div>
         </div>
@@ -171,11 +177,12 @@ function WhyFilterMate() {
 }
 
 export default function Home() {
-  const {siteConfig} = useDocusaurusContext();
+  const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
       title={`${siteConfig.title} - Advanced QGIS Filtering`}
-      description="FilterMate is a production-ready QGIS plugin for advanced filtering and export. Multi-backend support with PostgreSQL, Spatialite, and OGR.">
+      description="FilterMate is a production-ready QGIS plugin for advanced filtering and export. Multi-backend support with PostgreSQL, Spatialite, and OGR."
+    >
       <HomepageHeader />
       <main>
         <HomepageFeatures />

@@ -13,11 +13,11 @@ Cette version corrige un bug critique dans le backend OGR qui causait l'échec d
 
 ### 🐛 Corrections critiques
 
-| Problème | Solution |
-|----------|----------|
+| Problème                  | Solution                                                      |
+| ------------------------- | ------------------------------------------------------------- |
 | **Comptage Memory Layer** | Mécanisme de réessai intelligent pour le comptage des entités |
-| **Faux "0 entités"** | Diagnostics et validation améliorés |
-| **Échecs filtres OGR** | Empêche le rejet prématuré des couches valides |
+| **Faux "0 entités"**      | Diagnostics et validation améliorés                           |
+| **Échecs filtres OGR**    | Empêche le rejet prématuré des couches valides                |
 
 ### Versions précédentes
 
@@ -28,6 +28,7 @@ Cette version consolide toutes les corrections de stabilité de la série 2.4.x 
 ## 🎉 v2.2.5 - Gestion automatique des SCR géographiques
 
 ### Améliorations majeures
+
 - ✅ **Conversion automatique en EPSG:3857** - Les SCR géographiques (EPSG:4326, etc.) sont automatiquement convertis pour les opérations métriques
   - Fonctionnalité : Détecte automatiquement les systèmes de coordonnées géographiques
   - Impact : Un tampon de 50m fait toujours 50 mètres, quelle que soit la latitude (plus d'erreurs de 30-50% !)
@@ -44,6 +45,7 @@ Cette version consolide toutes les corrections de stabilité de la série 2.4.x 
 ## Mises à jour précédentes
 
 ### v2.2.4 - Harmonisation des couleurs et accessibilité (8 décembre 2025)
+
 - ✅ **Harmonisation des couleurs** - Distinction visuelle améliorée avec +300% de contraste des cadres
 - ✅ **Conformité WCAG 2.1** - Normes d'accessibilité AA/AAA pour tout le texte
   - Texte principal : ratio de contraste 17.4:1 (AAA)
@@ -55,6 +57,7 @@ Cette version consolide toutes les corrections de stabilité de la série 2.4.x 
 - ✅ **Tests automatisés** - Suite de validation de conformité WCAG
 
 ### v2.2.2 - Réactivité de la configuration (8 décembre 2025)
+
 - ✅ **Mises à jour de configuration en temps réel** - Les modifications de l'arborescence JSON s'appliquent instantanément sans redémarrage
 - ✅ **Changement dynamique de l'interface** - Basculez entre les modes compact/normal/auto à la volée
 - ✅ **Mises à jour d'icônes en direct** - Les modifications de configuration se reflètent immédiatement
@@ -63,6 +66,7 @@ Cette version consolide toutes les corrections de stabilité de la série 2.4.x 
 - ✅ **Sauvegarde automatique** - Toutes les modifications de configuration sont enregistrées automatiquement
 
 ### v2.2.1 - Maintenance (7 décembre 2025)
+
 - ✅ **Stabilité améliorée** - Prévention améliorée des plantages de la vue JSON Qt
 - ✅ **Meilleure récupération d'erreur** - Gestion robuste des widgets d'onglets et des thèmes
 - ✅ **Améliorations de la construction** - Automatisation améliorée et gestion des versions
@@ -88,12 +92,14 @@ Cette version consolide toutes les corrections de stabilité de la série 2.4.x 
 ## Fonctionnalités clés
 
 ### Filtrage avancé
+
 - Filtrage d'attributs avec expressions QGIS
 - Filtrage géométrique (intersecte, contient, dans, etc.)
 - Opérations de tampon avec conversion automatique du SCR
 - Support multi-couches
 
 ### Backends multiples
+
 - **PostgreSQL** : Idéal pour les grands jeux de données (`>50k` entités) - 10 à 50× plus rapide
 - **Spatialite** : Bon pour les jeux de données moyens (`<50k` entités)
 - **OGR** : Compatibilité universelle (Shapefiles, GeoPackage, etc.)
@@ -101,6 +107,7 @@ Cette version consolide toutes les corrections de stabilité de la série 2.4.x 
 **FilterMate choisit automatiquement le meilleur backend** pour votre source de données - aucune configuration nécessaire ! En savoir plus dans l'[Aperçu des backends](/docs/backends/overview).
 
 ### Capacités d'export
+
 - Formats multiples : GPKG, SHP, GeoJSON, KML, CSV, PostGIS
 - Transformation du SCR à l'export
 - Export de style (QML, SLD, ArcGIS)
@@ -142,6 +149,7 @@ Certaines sections de la documentation ne sont pas encore disponibles en frança
 - **[Backends](/docs/backends/overview)** - Comprendre les backends de sources de données
 
 ### v2.2.0 et antérieures
+
 - ✅ **Multi-Backend complet** - Implémentations PostgreSQL, Spatialite et OGR
 - ✅ **Interface dynamique** - Interface adaptative qui s'ajuste à la résolution de l'écran
 - ✅ **Gestion d'erreur robuste** - Réparation automatique de géométrie et mécanismes de nouvelle tentative
@@ -171,7 +179,16 @@ Certaines sections de la documentation ne sont pas encore disponibles en frança
 
 Regardez FilterMate en action :
 
-[![Démo FilterMate](https://img.youtube.com/vi/2gOEPrdl2Bo/0.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+<div style={{position: 'relative', width: '100%', maxWidth: '800px', margin: '1.5rem auto', paddingBottom: '56.25%', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'}}>
+  <iframe
+    style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none'}}
+    src="https://www.youtube-nocookie.com/embed/2gOEPrdl2Bo?rel=0&modestbranding=1"
+    title="Démo FilterMate"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowFullScreen
+    loading="lazy"
+  />
+</div>
 
 ## Commencer
 

@@ -9,18 +9,22 @@ Welcome to FilterMate! These tutorials will help you become productive quickly.
 ## Tutorials in This Section
 
 ### [Quick Start](/docs/getting-started/quick-start)
+
 **Time: 5 minutes**
 
 Learn the essential workflow:
+
 - Opening FilterMate and selecting layers
 - Creating your first attribute filter
 - Understanding backend selection
 - Exporting filtered results
 
 ### [Your First Filter](/docs/getting-started/first-filter)
+
 **Time: 10-15 minutes**
 
 Complete step-by-step tutorial:
+
 - Setting up a geometric filter
 - Using buffer operations
 - Working with spatial predicates
@@ -46,7 +50,16 @@ For best results with large datasets:
 
 Prefer video learning? Watch our complete walkthrough:
 
-[![FilterMate Demo](https://img.youtube.com/vi/2gOEPrdl2Bo/0.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+<div style={{position: 'relative', width: '100%', maxWidth: '800px', margin: '1.5rem auto', paddingBottom: '56.25%', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'}}>
+  <iframe
+    style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none'}}
+    src="https://www.youtube-nocookie.com/embed/2gOEPrdl2Bo?rel=0&modestbranding=1"
+    title="FilterMate Demo - Complete Walkthrough"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowFullScreen
+    loading="lazy"
+  />
+</div>
 
 ## Next Steps
 

@@ -13,11 +13,11 @@ Esta versão corrige um bug crítico no backend OGR que causava a falha de todos
 
 ### 🐛 Correções críticas
 
-| Problema | Solução |
-|----------|----------|
+| Problema                  | Solução                                                     |
+| ------------------------- | ----------------------------------------------------------- |
 | **Contagem Memory Layer** | Mecanismo de repetição inteligente para contagem de feições |
-| **Falso "0 feições"** | Diagnósticos e validação aprimorados |
-| **Falhas filtros OGR** | Evita a rejeição prematura de camadas válidas |
+| **Falso "0 feições"**     | Diagnósticos e validação aprimorados                        |
+| **Falhas filtros OGR**    | Evita a rejeição prematura de camadas válidas               |
 
 ### Versões anteriores
 
@@ -28,6 +28,7 @@ Esta versão consolida todas as correções de estabilidade da série 2.4.x em u
 ## 🎉 v2.2.5 - Manipulação automática de SRC geográfico
 
 ### Melhorias principais
+
 - ✅ **Conversão automática para EPSG:3857** - SRC geográfico (EPSG:4326, etc.) convertido automaticamente para operações métricas
   - Recurso: Detecta sistemas de coordenadas geográficas automaticamente
   - Impacto: Buffer de 50m é sempre 50 metros, independentemente da latitude (sem mais erros de 30-50%!)
@@ -44,6 +45,7 @@ Esta versão consolida todas as correções de estabilidade da série 2.4.x em u
 ## Atualizações anteriores
 
 ### v2.2.4 - Harmonização de cores e acessibilidade (8 de dezembro de 2025)
+
 - ✅ **Harmonização de cores** - Distinção visual aprimorada com +300% de contraste de quadro
 - ✅ **Conformidade WCAG 2.1** - Padrões de acessibilidade AA/AAA para todo o texto
   - Texto principal: taxa de contraste 17.4:1 (AAA)
@@ -55,6 +57,7 @@ Esta versão consolida todas as correções de estabilidade da série 2.4.x em u
 - ✅ **Testes automatizados** - Conjunto de validação de conformidade WCAG
 
 ### v2.2.2 - Reatividade de configuração (8 de dezembro de 2025)
+
 - ✅ **Atualizações de configuração em tempo real** - Mudanças na visualização em árvore JSON aplicadas instantaneamente sem reiniciar
 - ✅ **Alternância dinâmica de UI** - Alterne entre os modos compacto/normal/automático em tempo real
 - ✅ **Atualizações de ícone ao vivo** - Mudanças de configuração refletidas imediatamente
@@ -63,6 +66,7 @@ Esta versão consolida todas as correções de estabilidade da série 2.4.x em u
 - ✅ **Salvamento automático** - Todas as alterações de configuração salvas automaticamente
 
 ### v2.2.1 - Manutenção (7 de dezembro de 2025)
+
 - ✅ **Estabilidade aprimorada** - Prevenção aprimorada de falhas na visualização JSON Qt
 - ✅ **Melhor recuperação de erro** - Manipulação robusta de widget de guia e tema
 - ✅ **Melhorias de compilação** - Automação aprimorada e gerenciamento de versão
@@ -88,12 +92,14 @@ Esta versão consolida todas as correções de estabilidade da série 2.4.x em u
 ## Recursos principais
 
 ### Filtragem avançada
+
 - Filtragem de atributos com expressões QGIS
 - Filtragem geométrica (intersecta, contém, dentro, etc.)
 - Operações de buffer com conversão automática de SRC
 - Suporte a múltiplas camadas
 
 ### Múltiplos backends
+
 - **PostgreSQL**: Melhor para grandes conjuntos de dados (`>50k` feições) - 10-50× mais rápido
 - **Spatialite**: Bom para conjuntos de dados médios (`<50k` feições)
 - **OGR**: Compatibilidade universal (Shapefiles, GeoPackage, etc.)
@@ -101,6 +107,7 @@ Esta versão consolida todas as correções de estabilidade da série 2.4.x em u
 **FilterMate escolhe automaticamente o melhor backend** para sua fonte de dados - nenhuma configuração necessária! Saiba mais na [Visão geral dos backends](/docs/backends/overview).
 
 ### Capacidades de exportação
+
 - Múltiplos formatos: GPKG, SHP, GeoJSON, KML, CSV, PostGIS
 - Transformação de SRC na exportação
 - Exportação de estilo (QML, SLD, ArcGIS)
@@ -142,6 +149,7 @@ Algumas seções da documentação ainda não estão disponíveis em português.
 :::
 
 ### v2.2.0 e anteriores
+
 - ✅ **Multi-Backend completo** - Implementações PostgreSQL, Spatialite e OGR
 - ✅ **Interface dinâmica** - Interface adaptativa que se ajusta à resolução da tela
 - ✅ **Manipulação robusta de erros** - Reparação automática de geometria e mecanismos de nova tentativa
@@ -171,7 +179,16 @@ Algumas seções da documentação ainda não estão disponíveis em português.
 
 Veja o FilterMate em ação:
 
-[![Demonstração FilterMate](https://img.youtube.com/vi/2gOEPrdl2Bo/0.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+<div style={{position: 'relative', width: '100%', maxWidth: '800px', margin: '1.5rem auto', paddingBottom: '56.25%', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'}}>
+  <iframe
+    style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none'}}
+    src="https://www.youtube-nocookie.com/embed/2gOEPrdl2Bo?rel=0&modestbranding=1"
+    title="Demonstração FilterMate"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowFullScreen
+    loading="lazy"
+  />
+</div>
 
 ## Começar
 

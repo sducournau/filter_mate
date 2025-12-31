@@ -9,18 +9,22 @@ Bem-vindo ao FilterMate! Estes tutoriais ajudarão você a se tornar produtivo r
 ## Tutoriais nesta seção
 
 ### [Início rápido](/docs/getting-started/quick-start)
+
 **Tempo: 5 minutos**
 
 Aprenda o fluxo de trabalho essencial:
+
 - Abrir o FilterMate e selecionar camadas
 - Criar seu primeiro filtro de atributos
 - Entender a seleção de backend
 - Exportar resultados filtrados
 
 ### [Seu primeiro filtro](/docs/getting-started/first-filter)
+
 **Tempo: 10-15 minutos**
 
 Tutorial completo passo a passo:
+
 - Configurar um filtro geométrico
 - Usar operações de buffer
 - Trabalhar com predicados espaciais
@@ -46,7 +50,16 @@ Para melhores resultados com grandes conjuntos de dados:
 
 Prefere aprender com vídeo? Assista ao nosso passo a passo completo:
 
-[![Demonstração FilterMate](https://img.youtube.com/vi/2gOEPrdl2Bo/0.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+<div style={{position: 'relative', width: '100%', maxWidth: '800px', margin: '1.5rem auto', paddingBottom: '56.25%', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'}}>
+  <iframe
+    style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none'}}
+    src="https://www.youtube-nocookie.com/embed/2gOEPrdl2Bo?rel=0&modestbranding=1"
+    title="Demonstração FilterMate - Tutorial completo"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowFullScreen
+    loading="lazy"
+  />
+</div>
 
 ## Próximos passos
 

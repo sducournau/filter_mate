@@ -13,12 +13,12 @@ This release significantly improves the compatibility between different coordina
 
 ### 🌍 CRS Improvements
 
-| Feature                         | Description                                                  |
-| ------------------------------- | ------------------------------------------------------------ |
-| **Automatic Conversion**        | Auto-converts to EPSG:3857 when metric calculations needed   |
-| **Optimal UTM Zones**           | Calculates best UTM zone based on data extent               |
-| **CRSTransformer**              | New utility class for reliable geometry transformations      |
-| **New Module**                  | `crs_utils.py` with detection and transformation functions   |
+| Feature                  | Description                                                |
+| ------------------------ | ---------------------------------------------------------- |
+| **Automatic Conversion** | Auto-converts to EPSG:3857 when metric calculations needed |
+| **Optimal UTM Zones**    | Calculates best UTM zone based on data extent              |
+| **CRSTransformer**       | New utility class for reliable geometry transformations    |
+| **New Module**           | `crs_utils.py` with detection and transformation functions |
 
 ### 🛠️ New Functions
 
@@ -376,7 +376,16 @@ New to FilterMate? Follow this path:
 
 Watch FilterMate in action:
 
-[![FilterMate Demo](https://img.youtube.com/vi/2gOEPrdl2Bo/0.jpg)](https://www.youtube.com/watch?v=2gOEPrdl2Bo)
+<div style={{position: 'relative', width: '100%', maxWidth: '800px', margin: '1.5rem auto', paddingBottom: '56.25%', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'}}>
+  <iframe
+    style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none'}}
+    src="https://www.youtube-nocookie.com/embed/2gOEPrdl2Bo?rel=0&modestbranding=1"
+    title="FilterMate Demo"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowFullScreen
+    loading="lazy"
+  />
+</div>
 
 ## Get Started
 
