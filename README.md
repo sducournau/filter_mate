@@ -77,9 +77,27 @@
 
 ---
 
-## 🎬 Preview
+## 🎬 Video Tutorials
+
+### Overview
 
 https://www.youtube.com/watch?v=2gOEPrdl2Bo
+
+### Explore your dataset intuitively & filter layers from multiple selection
+
+https://youtu.be/YwEalDjgEdY
+
+### Deeply explore road data and filter connected areas
+
+https://youtu.be/svElL8cDpWE
+
+### Export to GeoPackage with styles (negative buffer example on Toulouse)
+
+https://youtu.be/gPLi2OudKcI
+
+### Negative buffer (-500m) with multiple attribute selection on BD Topo IGN
+
+https://youtu.be/9rZb-9A-tko
 
 ---
 
