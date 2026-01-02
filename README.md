@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.5.7** | December 2025 | **Production-Ready**
+**Version 2.6.1** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,14 +27,31 @@
 
 ## 📋 Recent Changes
 
-### v2.5.7 - Improved CRS Compatibility (December 2025)
+### v2.6.1 - Performance: Optimized Materialized Views & Source Tables (January 2026)
 
-- 🌍 **IMPROVED CRS COMPATIBILITY**: Automatic conversion to EPSG:3857 when metric calculations needed
-- 📐 **OPTIMAL UTM ZONES**: Calculates best UTM zone based on data extent for more accurate metric operations
-- 🔄 **CRS TRANSFORMER**: New utility class for reliable geometry transformations between CRS
-- 🛠️ **NEW MODULE**: `crs_utils.py` with `is_geographic_crs()`, `get_optimal_metric_crs()`, `CRSTransformer`
-- 🔧 **METRIC BUFFER**: `safe_buffer_metric()` handles CRS conversion automatically
-- 🧪 **TESTS**: New `test_crs_utils.py` for comprehensive CRS validation
+- 🚀 **POSTGRESQL LIGHTWEIGHT MVs**: Stores only ID + geometry instead of all columns (3-5× smaller)
+- 📦 **SPATIALITE R-TREE SOURCE TABLES**: Permanent tables with spatial index for datasets >10k features
+- ⚡ **PRE-COMPUTED BUFFER**: `geom_buffered` stored in MV/source table avoids recalculation
+- 🎯 **BUFFER SEGMENTS UI**: New spinbox control for buffer precision (1-100 segments per quarter circle)
+- 🧹 **AUTO CLEANUP**: Old source tables automatically removed after 1 hour
+- 🌍 **21 LANGUAGES**: Buffer segments tooltip translated in all supported languages
+
+### v2.6.0 - Major Release: Performance & Stability (January 2026)
+
+- 🚀 **PROGRESSIVE FILTERING**: Two-phase filtering (bbox + full predicate) for complex PostgreSQL queries
+- 📊 **QUERY COMPLEXITY ESTIMATOR**: Dynamic SQL analysis with automatic strategy selection
+- 🔄 **MULTI-BACKEND CANVAS REFRESH**: Extended refresh system to Spatialite/OGR backends
+- 🌍 **CRS UTILITIES MODULE**: Automatic metric CRS conversion with optimal UTM zone detection
+- ⚡ **ENHANCED CACHE**: TTL support, result count caching, complexity score caching
+- 🛡️ **POSTGRESQL TIMEOUT**: Statement timeout protection (120s) with automatic OGR fallback
+- 🎯 **AUTO STRATEGY**: DIRECT → MATERIALIZED → TWO_PHASE → PROGRESSIVE based on complexity
+
+### v2.5.x Series - Stability Improvements (December 2025 - January 2026)
+
+- 🔄 **Bidirectional Sync**: QGIS selection ↔ widgets perfectly synchronized
+- 🐛 **PostgreSQL ST_IsEmpty**: Correctly detects ALL empty geometry types from negative buffers
+- 🎨 **HiDPI Profile**: New UI profile for 4K/Retina displays with auto-detection
+- 🛡️ **Thread Safety**: Robust layer variable access with anti-loop protection
 
 ### v2.5.6 - Auto Focus with Native QGIS Selection Tool (December 2025)
 

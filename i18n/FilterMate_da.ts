@@ -139,6 +139,10 @@ Genstart QGIS for at anvende alle ændringer.</translation>
         <source>Mode batch</source>
         <translation>Batch-tilstand</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Antal segmenter for bufferpræcision</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

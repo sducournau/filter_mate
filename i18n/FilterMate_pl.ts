@@ -139,6 +139,10 @@ Uruchom ponownie QGIS, aby zastosować wszystkie zmiany.</translation>
         <source>Mode batch</source>
         <translation>Tryb wsadowy</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Liczba segmentów dla precyzji bufora</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

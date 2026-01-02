@@ -233,6 +233,10 @@ Please restart QGIS to apply the changes.</translation>
         <source>Mode batch</source>
         <translation>Paketni način</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Število segmentov za natančnost medpomnilnika</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

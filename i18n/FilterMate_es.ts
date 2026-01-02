@@ -139,6 +139,10 @@ Por favor, reinicie QGIS para aplicar todos los cambios.</translation>
         <source>Mode batch</source>
         <translation>Modo por lotes</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Número de segmentos para precisión del búfer</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

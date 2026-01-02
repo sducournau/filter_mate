@@ -139,6 +139,10 @@ Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</t
         <source>Mode batch</source>
         <translation>Toplu işlem modu</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Tampon hassasiyeti için segment sayısı</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

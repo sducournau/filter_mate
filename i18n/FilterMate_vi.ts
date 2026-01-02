@@ -139,6 +139,10 @@ Vui lòng khởi động lại QGIS để áp dụng tất cả các thay đổi
         <source>Mode batch</source>
         <translation>Chế độ batch</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Số đoạn cho độ chính xác đệm</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

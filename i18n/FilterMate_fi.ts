@@ -139,6 +139,10 @@ Käynnistä QGIS uudelleen ottaaksesi kaikki muutokset käyttöön.</translation
         <source>Mode batch</source>
         <translation>Eräkäsittely-tila</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Segmenttien määrä puskurin tarkkuudelle</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

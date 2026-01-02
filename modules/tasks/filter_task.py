@@ -229,6 +229,7 @@ class FilterEngineTask(QgsTask):
         self.param_buffer_expression = None
         self.param_buffer_value = None
         self.param_buffer_type = 0  # Default: Round (0), Flat (1), Square (2)
+        self.param_buffer_segments = 5  # Default: 5 segments for buffer precision
         self.param_source_schema = None
         self.param_source_table = None
         self.param_source_layer_id = None
@@ -1809,9 +1810,13 @@ class FilterEngineTask(QgsTask):
         if has_buffer_type:
             self.param_buffer_type = buffer_type_mapping.get(buffer_type_str, 0)
             logger.info(f"  ✓ Buffer type set: {buffer_type_str} (END_CAP_STYLE={self.param_buffer_type})")
+            # Extract buffer_segments configuration
+            self.param_buffer_segments = self.task_parameters["filtering"].get("buffer_segments", 5)
+            logger.info(f"  ✓ Buffer segments set: {self.param_buffer_segments}")
         else:
             self.param_buffer_type = 0  # Default to Round
-            logger.info(f"  ℹ️  Buffer type not configured, using default: Round (END_CAP_STYLE=0)")
+            self.param_buffer_segments = 5  # Default segments
+            logger.info(f"  ℹ️  Buffer type not configured, using default: Round (END_CAP_STYLE=0), segments=5")
         
         if has_buffer is True:
             buffer_property = self.task_parameters["filtering"]["buffer_value_property"]
@@ -2581,12 +2586,24 @@ class FilterEngineTask(QgsTask):
             source_table = self.param_source_table
             source_schema = self.param_source_schema
             
-            # Build base ST_Buffer expression
-            base_buffer_expr = 'ST_Buffer("{source_schema}"."{source_table}"."{source_geom}", {buffer_value})'.format(
+            # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
+            buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
+            buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
+            endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+            quad_segs = self.param_buffer_segments
+            
+            # Build style string for PostGIS ST_Buffer
+            style_params = f"quad_segs={quad_segs}"
+            if endcap_style != 'round':
+                style_params += f" endcap={endcap_style}"
+            
+            # Build base ST_Buffer expression with style parameters
+            base_buffer_expr = "ST_Buffer(\"{source_schema}\".\"{source_table}\".\"{source_geom}\", {buffer_value}, '{style_params}')".format(
                 source_schema=source_schema,
                 source_table=source_table,
                 source_geom=self.param_source_geom,
-                buffer_value=self.param_buffer_value
+                buffer_value=self.param_buffer_value,
+                style_params=style_params
             )
             
             # CRITICAL FIX v2.5.6: Handle negative buffers (erosion) properly
@@ -2601,9 +2618,9 @@ class FilterEngineTask(QgsTask):
             else:
                 self.postgresql_source_geom = base_buffer_expr
             
-            buffer_type_str = "expansion" if self.param_buffer_value > 0 else "erosion"
-            logger.info(f"✓ PostgreSQL source geom prepared with {self.param_buffer_value}m buffer ({buffer_type_str})")
-            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m ({buffer_type_str})")     
+            buffer_type_desc = "expansion" if self.param_buffer_value > 0 else "erosion"
+            logger.info(f"✓ PostgreSQL source geom prepared with {self.param_buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={quad_segs})")
+            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m ({buffer_type_desc})")     
 
         
 
@@ -3454,7 +3471,7 @@ class FilterEngineTask(QgsTask):
             'INPUT': layer,
             'JOIN_STYLE': int(0),
             'MITER_LIMIT': float(2),
-            'SEGMENTS': int(5),
+            'SEGMENTS': int(self.param_buffer_segments),  # Use configured buffer segments (default: 5)
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
         }
         
@@ -3692,7 +3709,9 @@ class FilterEngineTask(QgsTask):
             try:
                 # STABILITY FIX: Use safe_buffer wrapper instead of direct buffer()
                 # This handles invalid geometries gracefully and prevents GEOS crashes
-                buffered_geom = safe_buffer(geom, buffer_dist, 5)
+                # Use param_buffer_segments for precision (default: 5)
+                segments = getattr(self, 'param_buffer_segments', 5)
+                buffered_geom = safe_buffer(geom, buffer_dist, segments)
                 
                 if buffered_geom is not None:
                     geometries.append(buffered_geom)
@@ -5167,12 +5186,22 @@ class FilterEngineTask(QgsTask):
             buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
             provider_type = backend.get_backend_name().lower()
             
+            # v2.5.19: Include source_filter hash in cache key for PostgreSQL EXISTS mode
+            # This ensures cache invalidation when source filter changes (e.g., refiltering)
+            # Without this, cached expressions would use stale source filters in EXISTS queries
+            source_filter_hash = None
+            if source_filter:
+                import hashlib
+                source_filter_hash = hashlib.md5(source_filter.encode()).hexdigest()[:16]
+                logger.debug(f"  Cache: source_filter_hash={source_filter_hash} (filter length: {len(source_filter)})")
+            
             cache_key = self.expr_cache.get_cache_key(
                 layer_id=layer_id,
                 predicates=self.current_predicates,
                 buffer_value=buffer_value,
                 source_geometry_hash=source_hash,
-                provider_type=provider_type
+                provider_type=provider_type,
+                source_filter_hash=source_filter_hash  # v2.5.19: Include for refilter cache invalidation
             )
             
             # Try to get cached expression
@@ -7428,11 +7457,22 @@ class FilterEngineTask(QgsTask):
             else str(self.param_buffer_value)
         )
         
+        # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
+        buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
+        buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
+        endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+        quad_segs = self.param_buffer_segments
+        
+        # Build style string for Spatialite ST_Buffer
+        style_params = f"quad_segs={quad_segs}"
+        if endcap_style != 'round':
+            style_params += f" endcap={endcap_style}"
+        
         # Build Spatialite SELECT (similar to PostgreSQL CREATE MATERIALIZED VIEW)
         # Note: Spatialite uses same ST_Buffer syntax as PostGIS
         query = f"""
             SELECT 
-                ST_Buffer({geom_key_name}, {buffer_expr}) as {geom_key_name},
+                ST_Buffer({geom_key_name}, {buffer_expr}, '{style_params}') as {geom_key_name},
                 {primary_key_name},
                 {buffer_expr} as buffer_value
             FROM {table_name}
@@ -7671,8 +7711,19 @@ class FilterEngineTask(QgsTask):
         if self.has_to_reproject_source_layer:
             postgresql_source_geom = f'ST_Transform({postgresql_source_geom}, {self.source_layer_crs_authid.split(":")[1]})'
         
+        # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
+        buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
+        buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
+        endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+        quad_segs = self.param_buffer_segments
+        
+        # Build style string for PostGIS ST_Buffer
+        style_params = f"quad_segs={quad_segs}"
+        if endcap_style != 'round':
+            style_params += f" endcap={endcap_style}"
+        
         template = '''CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."mv_{name}" TABLESPACE pg_default AS 
-            SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}) as {geometry_field}, 
+            SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}, '{style_params}') as {geometry_field}, 
                    "{table_source}"."{primary_key_name}", 
                    {where_clause_fields}, 
                    {param_buffer_expression} as buffer_value 
@@ -7692,7 +7743,8 @@ class FilterEngineTask(QgsTask):
             where_clause_fields=','.join(where_clause_fields_arr).replace('mv_', ''),
             param_buffer_expression=self.param_buffer.replace('mv_', ''),
             source_new_subset=sql_subset_string,
-            where_expression=' OR '.join(self._parse_where_clauses()).replace('mv_', '')
+            where_expression=' OR '.join(self._parse_where_clauses()).replace('mv_', ''),
+            style_params=style_params
         )
 
 
@@ -8690,6 +8742,132 @@ class FilterEngineTask(QgsTask):
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
 
+    def _is_complex_filter(self, subset: str, provider_type: str) -> bool:
+        """
+        Check if a filter expression is complex (requires longer refresh delay).
+        
+        FIX v2.5.21: Used to determine appropriate refresh timing after filter application.
+        Complex filters include:
+        - PostgreSQL: EXISTS, ST_Buffer, ST_Intersects, __source, large IN clauses
+        - Spatialite: ST_*, Intersects, Contains, Within functions
+        - OGR: Large IN clauses (>50 IDs) or expressions > 1000 chars
+        
+        Args:
+            subset: The filter expression string
+            provider_type: Layer provider type (postgres, spatialite, ogr)
+            
+        Returns:
+            True if filter is complex, False otherwise
+        """
+        if not subset:
+            return False
+            
+        subset_upper = subset.upper()
+        
+        if provider_type == 'postgres':
+            return (
+                'EXISTS' in subset_upper or
+                'ST_BUFFER' in subset_upper or
+                'ST_INTERSECTS' in subset_upper or
+                'ST_CONTAINS' in subset_upper or
+                'ST_WITHIN' in subset_upper or
+                '__source' in subset.lower() or
+                (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
+            )
+        elif provider_type == 'spatialite':
+            return (
+                'ST_BUFFER' in subset_upper or
+                'ST_INTERSECTS' in subset_upper or
+                'ST_CONTAINS' in subset_upper or
+                'ST_WITHIN' in subset_upper or
+                'INTERSECTS(' in subset_upper or
+                'CONTAINS(' in subset_upper or
+                'WITHIN(' in subset_upper or
+                (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
+            )
+        elif provider_type == 'ogr':
+            return (
+                (subset_upper.count(',') > 50 and ' IN (' in subset_upper) or
+                len(subset) > 1000
+            )
+        return False
+
+    def _single_canvas_refresh(self):
+        """
+        Perform a single comprehensive canvas refresh after filter application.
+        
+        FIX v2.5.21: Replaces the previous multi-refresh approach that caused
+        overlapping refreshes to cancel each other, leaving the canvas white.
+        
+        This method:
+        1. Stops any ongoing rendering to avoid conflicts
+        2. Forces reload for layers with complex filters
+        3. Updates extents and triggers repaint for all filtered layers
+        4. Performs a single final canvas refresh
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            canvas = iface.mapCanvas()
+            
+            # Step 1: Stop any ongoing rendering to get a clean slate
+            canvas.stopRendering()
+            
+            layers_reloaded = 0
+            layers_repainted = 0
+            
+            # Step 2: Process all vector layers
+            for layer_id, layer in QgsProject.instance().mapLayers().items():
+                try:
+                    if layer.type() != 0:  # Not a vector layer
+                        continue
+                    
+                    subset = layer.subsetString() or ''
+                    if not subset:
+                        continue  # Skip unfiltered layers
+                    
+                    provider_type = layer.providerType()
+                    
+                    # Force reload for layers with complex filters
+                    if self._is_complex_filter(subset, provider_type):
+                        try:
+                            # For complex filters, force provider to clear cache
+                            layer.dataProvider().reloadData()
+                            layers_reloaded += 1
+                        except Exception as reload_err:
+                            logger.debug(f"reloadData() failed for {layer.name()}: {reload_err}")
+                            try:
+                                layer.reload()
+                            except Exception:
+                                pass
+                    else:
+                        # Simple filter - just reload layer
+                        try:
+                            layer.reload()
+                        except Exception:
+                            pass
+                    
+                    # Update extents and trigger repaint
+                    layer.updateExtents()
+                    layer.triggerRepaint()
+                    layers_repainted += 1
+                    
+                except Exception as layer_err:
+                    logger.debug(f"Layer refresh failed: {layer_err}")
+            
+            # Step 3: Single final canvas refresh
+            canvas.refresh()
+            
+            logger.debug(f"Single canvas refresh: reloaded {layers_reloaded}, repainted {layers_repainted} layers")
+            
+        except Exception as e:
+            logger.debug(f"Single canvas refresh failed: {e}")
+            # Last resort fallback
+            try:
+                iface.mapCanvas().refresh()
+            except Exception:
+                pass
+
     def _delayed_canvas_refresh(self):
         """
         Perform a delayed canvas refresh for all filtered layers.
@@ -9044,22 +9222,43 @@ class FilterEngineTask(QgsTask):
             # Avoid processEvents() which can cause reentrancy issues and freezes
             # Use a QTimer for delayed refresh to allow PostgreSQL provider to update
             # FIX v2.5.19: Increased delay and added second refresh for complex filters
+            # FIX v2.5.21: Avoid multiple overlapping refreshes that cancel each other
+            # The problem was: refreshAllLayers() -> _delayed_canvas_refresh(800ms) -> _final_canvas_refresh(2s)
+            # Each refresh cancels pending rendering tasks, causing "Building features list was canceled"
+            # Solution: Single delayed refresh with proper wait time for complex filters
             try:
-                # First immediate refresh
-                iface.mapCanvas().refreshAllLayers()
-                logger.debug("Canvas refresh triggered after applying all subset requests")
-                
-                # Schedule a delayed second refresh for PostgreSQL layers
-                # This allows the provider to complete its data refresh
-                # FIX v2.5.19: Increased delay to 800ms for complex filters with EXISTS
                 from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(800, lambda: self._delayed_canvas_refresh())
                 
-                # FIX v2.5.19: Schedule a third refresh at 2s for very complex filters
-                # This catches cases where PostgreSQL is slow to return data
-                QTimer.singleShot(2000, lambda: self._final_canvas_refresh())
+                # FIX v2.5.21: Skip immediate refreshAllLayers() - layers already got triggerRepaint()
+                # This avoids starting a render that will be cancelled by the delayed refresh
+                logger.debug("Skipping immediate refresh - layers already triggered repaint")
+                
+                # FIX v2.5.21: Single delayed refresh with adaptive timing
+                # Check if any filter is complex (EXISTS, large IN clause, ST_*)
+                # We need to check before clearing _pending_subset_requests
+                from qgis.core import QgsProject
+                has_complex_filter = False
+                for layer_id, layer in QgsProject.instance().mapLayers().items():
+                    if layer.type() == 0:  # Vector layer
+                        subset = layer.subsetString() or ''
+                        if subset and self._is_complex_filter(subset, layer.providerType()):
+                            has_complex_filter = True
+                            break
+                
+                # Use longer delay for complex filters
+                refresh_delay = 1500 if has_complex_filter else 500
+                
+                # Schedule single comprehensive refresh
+                QTimer.singleShot(refresh_delay, lambda: self._single_canvas_refresh())
+                logger.debug(f"Scheduled single canvas refresh in {refresh_delay}ms (complex={has_complex_filter})")
+                
             except Exception as canvas_err:
-                logger.warning(f"Failed to refresh canvas: {canvas_err}")
+                logger.warning(f"Failed to schedule canvas refresh: {canvas_err}")
+                # Fallback: immediate refresh
+                try:
+                    iface.mapCanvas().refresh()
+                except Exception:
+                    pass
         
         # CRITICAL FIX v2.3.13: Only cleanup MVs on reset/unfilter actions, NOT on filter
         # When filtering, materialized views are referenced by the layer's subsetString.

@@ -139,6 +139,10 @@ Please restart QGIS to apply all changes.</source>
         <source>Mode batch</source>
         <translation>批处理模式</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>缓冲区精度的段数</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

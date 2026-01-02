@@ -1,6 +1,6 @@
-# Repository Structure - FilterMate v2.5.5
+# Repository Structure - FilterMate v2.6.0
 
-**Last Updated:** December 29, 2025
+**Last Updated:** January 2, 2026
 
 ## Overview
 
@@ -96,10 +96,17 @@ modules/
 ├── tasks/                  # Async task modules
 │   ├── __init__.py
 │   ├── README.md
-│   ├── task_utils.py       # Common utilities
-│   ├── geometry_cache.py   # Geometry caching
+│   ├── task_utils.py           # Common utilities
+│   ├── geometry_cache.py       # Geometry caching
 │   ├── layer_management_task.py
-│   └── filter_task.py
+│   ├── filter_task.py
+│   ├── expression_evaluation_task.py  # Expression evaluation
+│   ├── multi_step_filter.py    # Multi-step filtering
+│   ├── parallel_executor.py    # Parallel execution
+│   ├── progressive_filter.py   # Progressive/two-phase filtering (v2.5.9)
+│   ├── query_cache.py          # Query caching with TTL
+│   ├── query_complexity_estimator.py  # SQL complexity analysis (v2.5.9)
+│   └── result_streaming.py     # Streaming exports
 └── qt_json_view/           # JSON tree view widgets
     ├── __init__.py
     ├── CHANGELOG.md
@@ -162,17 +169,19 @@ tests/
 Documentation:
 ```
 docs/
+├── EXPRESSION_LOADING_OPTIMIZATION.md        # Expression loading optimizations
 ├── FIX_MEMORY_LAYER_COUNT_2025-12.md         # Memory layer feature count fix
 ├── FIX_NEGATIVE_BUFFER_2025-12.md            # Negative buffer handling fix
 ├── NEGATIVE_BUFFER_FIX_README.md             # Negative buffer documentation
+├── PERFORMANCE_OPTIMIZATION_v2.5.10.md       # v2.5.10 performance optimizations
 ├── RELEASE_NOTES_v2.5.3.md                   # v2.5.3 release notes
 ├── RELEASE_NOTES_v2.5.4.md                   # v2.5.4 release notes
 ├── RELEASE_NOTES_v2.5.5.md                   # v2.5.5 release notes (CRITICAL)
+├── RELEASE_NOTES_v2.5.6.md                   # v2.5.6 release notes
+├── RELEASE_NOTES_v2.5.7.md                   # v2.5.7 release notes
+├── SYNC_ARCHITECTURE_v2.5.6.md               # Bidirectional sync architecture
 ├── TRANSLATION_PLAN_2025-12.md               # Translation planning
 ├── archive/                                   # Historical documentation
-│   ├── CODEBASE_QUALITY_AUDIT_*.md
-│   ├── IMPLEMENTATION_STATUS_*.md
-│   ├── UNDO_REDO_*.md
 │   └── ... (archived docs)
 └── fixes/                                     # Bug fix documentation (legacy)
     └── ... (older fix documentation)

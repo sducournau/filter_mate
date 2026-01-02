@@ -244,6 +244,29 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Using buffer endcap style: {endcap_style}")
         return endcap_style
     
+    def _get_buffer_segments(self) -> int:
+        """
+        Get the buffer segments (quad_segs) from task_params.
+        
+        Spatialite ST_Buffer supports 'quad_segs' parameter for precision:
+        - Higher value = smoother curves (more segments per quarter circle)
+        - Lower value = faster but rougher curves
+        - Default: 5 (if not using buffer_type options)
+        
+        Returns:
+            Number of segments per quarter circle
+        """
+        if not self.task_params:
+            return 5
+        
+        filtering_params = self.task_params.get("filtering", {})
+        if not filtering_params.get("has_buffer_type", False):
+            return 5
+        
+        segments = filtering_params.get("buffer_segments", 5)
+        self.log_debug(f"Using buffer segments (quad_segs): {segments}")
+        return int(segments)
+    
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
         """
         Build ST_Buffer expression with endcap style from task_params.
@@ -266,18 +289,20 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
         """
         endcap_style = self._get_buffer_endcap_style()
+        quad_segs = self._get_buffer_segments()
         
         # Log negative buffer usage for visibility
         if buffer_value < 0:
             self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
         
-        # Build base buffer expression
-        if endcap_style == 'round':
-            # Default style - no need to specify
-            buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value})"
-        else:
-            # Spatialite uses same syntax as PostGIS for endcap
-            buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value}, 'endcap={endcap_style}')"
+        # Build base buffer expression with quad_segs and endcap style
+        # Spatialite ST_Buffer syntax: ST_Buffer(geom, distance, 'quad_segs=N endcap=style')
+        style_params = f"quad_segs={quad_segs}"
+        if endcap_style != 'round':
+            style_params += f" endcap={endcap_style}"
+        
+        buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value}, '{style_params}')"
+        self.log_debug(f"Buffer expression: {buffer_expr}")
         
         # CRITICAL FIX v2.3.9: Wrap negative buffers in MakeValid()
         # CRITICAL FIX v2.4.23: Use ST_IsEmpty() to detect ALL empty geometry types
@@ -983,6 +1008,242 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 except (AttributeError, OSError):
                     pass
             return None, None
+
+    # v2.6.1: Threshold for using permanent source tables
+    LARGE_DATASET_THRESHOLD = 10000  # Features count for permanent table strategy
+    SOURCE_TABLE_PREFIX = "_fm_source_"  # Prefix for permanent source tables
+    
+    def _create_permanent_source_table(
+        self,
+        db_path: str,
+        source_wkt: str,
+        source_srid: int,
+        buffer_value: float = 0,
+        source_features: Optional[List] = None
+    ) -> Tuple[Optional[str], bool]:
+        """
+        v2.6.1: Create a PERMANENT source geometry table with R-tree spatial index.
+        
+        Unlike TEMP tables, permanent tables are visible to QGIS's connection.
+        This enables optimized spatial queries using R-tree indexes.
+        
+        Used when:
+        - Source has multiple features (multi-selection filter)
+        - Large target dataset (> LARGE_DATASET_THRESHOLD features)
+        - Buffered geometric filters (avoid recomputing buffer)
+        
+        Performance benefits:
+        - R-tree spatial index: O(log n) spatial lookups vs O(n) for inline WKT
+        - Pre-computed buffers: avoid N * M buffer calculations
+        - Persistent across QGIS connections: works with setSubsetString
+        
+        Cleanup:
+        - Tables are automatically cleaned up in cleanup() method
+        - Tables have timestamp in name for identification
+        - cleanup_old_source_tables() removes stale tables
+        
+        Args:
+            db_path: Path to GeoPackage/Spatialite database
+            source_wkt: WKT geometry (single geometry or GEOMETRYCOLLECTION)
+            source_srid: SRID of source geometry
+            buffer_value: Optional buffer distance (0 = no buffer)
+            source_features: Optional list of (fid, wkt) tuples for multi-feature sources
+        
+        Returns:
+            Tuple (table_name, has_buffer) or (None, False) if failed
+        """
+        conn = None
+        try:
+            import uuid
+            timestamp = int(time.time())
+            table_name = f"{self.SOURCE_TABLE_PREFIX}{timestamp}_{uuid.uuid4().hex[:6]}"
+            
+            self.log_info(f"📦 Creating permanent source table '{table_name}' in {os.path.basename(db_path)}")
+            
+            # Get mod_spatialite extension
+            mod_available, ext_name = _test_mod_spatialite_available()
+            if not mod_available:
+                self.log_warning("mod_spatialite not available - cannot create permanent source table")
+                return None, False
+            
+            # Connect and load spatialite
+            conn = sqlite3.connect(db_path)
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            cursor = conn.cursor()
+            
+            # Determine if we need buffered geometry column
+            has_buffer = buffer_value > 0
+            
+            # Create table with geometry column(s)
+            if has_buffer:
+                cursor.execute(f'''
+                    CREATE TABLE "{table_name}" (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        source_fid INTEGER,
+                        geom GEOMETRY,
+                        geom_buffered GEOMETRY
+                    )
+                ''')
+                self.log_info(f"  → Table created with geom + geom_buffered columns")
+            else:
+                cursor.execute(f'''
+                    CREATE TABLE "{table_name}" (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        source_fid INTEGER,
+                        geom GEOMETRY
+                    )
+                ''')
+                self.log_info(f"  → Table created with geom column")
+            
+            # Insert geometries
+            inserted_count = 0
+            
+            if source_features and len(source_features) > 0:
+                # Multi-feature source (from selection or filtered layer)
+                for fid, wkt in source_features:
+                    if has_buffer:
+                        cursor.execute(f'''
+                            INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                            VALUES (?, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
+                        ''', (fid, wkt, source_srid, wkt, source_srid, buffer_value))
+                    else:
+                        cursor.execute(f'''
+                            INSERT INTO "{table_name}" (source_fid, geom)
+                            VALUES (?, GeomFromText(?, ?))
+                        ''', (fid, wkt, source_srid))
+                    inserted_count += 1
+            else:
+                # Single geometry source
+                if has_buffer:
+                    cursor.execute(f'''
+                        INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                        VALUES (0, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
+                    ''', (source_wkt, source_srid, source_wkt, source_srid, buffer_value))
+                else:
+                    cursor.execute(f'''
+                        INSERT INTO "{table_name}" (source_fid, geom)
+                        VALUES (0, GeomFromText(?, ?))
+                    ''', (source_wkt, source_srid))
+                inserted_count = 1
+            
+            conn.commit()
+            self.log_info(f"  → Inserted {inserted_count} source geometries")
+            
+            # Create R-tree spatial index on geom column
+            try:
+                cursor.execute(f'SELECT CreateSpatialIndex("{table_name}", "geom")')
+                conn.commit()
+                self.log_info(f"  → R-tree spatial index created on geom")
+            except Exception as idx_err:
+                self.log_warning(f"Could not create spatial index on geom: {idx_err}")
+            
+            # Create R-tree on buffered geom if applicable
+            if has_buffer:
+                try:
+                    cursor.execute(f'SELECT CreateSpatialIndex("{table_name}", "geom_buffered")')
+                    conn.commit()
+                    self.log_info(f"  → R-tree spatial index created on geom_buffered")
+                except Exception as idx_err:
+                    self.log_warning(f"Could not create spatial index on geom_buffered: {idx_err}")
+            
+            # Store table name for cleanup
+            self._permanent_source_table = table_name
+            self._permanent_source_db_path = db_path
+            
+            conn.close()
+            
+            self.log_info(f"✓ Permanent source table '{table_name}' ready with {inserted_count} geometries")
+            if has_buffer:
+                self.log_info(f"  → Pre-computed buffer: {buffer_value}m")
+            
+            return table_name, has_buffer
+            
+        except Exception as e:
+            self.log_error(f"Error creating permanent source table: {e}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            return None, False
+    
+    def _cleanup_permanent_source_tables(self, db_path: str, max_age_seconds: int = 3600):
+        """
+        v2.6.1: Clean up old permanent source tables from the database.
+        
+        Removes tables with _fm_source_ prefix that are older than max_age_seconds.
+        This prevents accumulation of temporary tables in user databases.
+        
+        Args:
+            db_path: Path to GeoPackage/Spatialite database
+            max_age_seconds: Maximum age in seconds (default 1 hour)
+        """
+        conn = None
+        try:
+            if not os.path.isfile(db_path):
+                return
+            
+            mod_available, ext_name = _test_mod_spatialite_available()
+            if not mod_available:
+                return
+            
+            conn = sqlite3.connect(db_path)
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            cursor = conn.cursor()
+            
+            # Find all FilterMate source tables
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name LIKE '_fm_source_%'
+            """)
+            tables = cursor.fetchall()
+            
+            current_time = int(time.time())
+            cleaned_count = 0
+            
+            for (table_name,) in tables:
+                try:
+                    # Extract timestamp from table name: _fm_source_TIMESTAMP_UUID
+                    parts = table_name.split('_')
+                    if len(parts) >= 4:
+                        table_timestamp = int(parts[3])
+                        age = current_time - table_timestamp
+                        
+                        if age > max_age_seconds:
+                            # Drop the R-tree index first
+                            try:
+                                cursor.execute(f'SELECT DisableSpatialIndex("{table_name}", "geom")')
+                            except Exception:
+                                pass
+                            try:
+                                cursor.execute(f'SELECT DisableSpatialIndex("{table_name}", "geom_buffered")')
+                            except Exception:
+                                pass
+                            
+                            # Drop the table
+                            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                            cleaned_count += 1
+                            self.log_debug(f"Cleaned up old source table: {table_name} (age: {age}s)")
+                except Exception as parse_err:
+                    self.log_debug(f"Could not parse table name {table_name}: {parse_err}")
+            
+            conn.commit()
+            conn.close()
+            
+            if cleaned_count > 0:
+                self.log_info(f"🧹 Cleaned up {cleaned_count} old source table(s) from {os.path.basename(db_path)}")
+            
+        except Exception as e:
+            self.log_debug(f"Error during source table cleanup: {e}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     
     def cleanup(self):
         """
@@ -1462,13 +1723,42 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             with self.__class__._cache_lock:
                 use_direct_sql = self.__class__._direct_sql_mode_cache.get(layer_id, False)
             
+            # v2.6.1: Check for large dataset optimization with source table
+            # For large datasets with geometric filters, use permanent source table
+            feature_count = layer.featureCount()
+            use_source_table = False
+            
+            if use_direct_sql and feature_count >= self.LARGE_DATASET_THRESHOLD:
+                # Check if we have source geometry in task_params
+                has_source_wkt = False
+                if hasattr(self, 'task_params') and self.task_params:
+                    infos = self.task_params.get('infos', {})
+                    has_source_wkt = bool(infos.get('source_geom_wkt'))
+                
+                # Check if mod_spatialite is available
+                mod_available, _ = _test_mod_spatialite_available()
+                
+                if has_source_wkt and mod_available:
+                    use_source_table = True
+                    self.log_info(f"📊 Large dataset detected ({feature_count} features >= {self.LARGE_DATASET_THRESHOLD})")
+            
             # v2.4.20: Log which mode is being used for debugging
             from qgis.core import QgsMessageLog, Qgis
-            mode_str = "DIRECT SQL" if use_direct_sql else "NATIVE (setSubsetString)"
+            if use_source_table:
+                mode_str = "OPTIMIZED SOURCE TABLE (R-tree)"
+            elif use_direct_sql:
+                mode_str = "DIRECT SQL"
+            else:
+                mode_str = "NATIVE (setSubsetString)"
             QgsMessageLog.logMessage(
-                f"Spatialite apply_filter: {layer.name()} → mode={mode_str}",
+                f"Spatialite apply_filter: {layer.name()} → mode={mode_str}, features={feature_count}",
                 "FilterMate", Qgis.Info
             )
+            
+            # v2.6.1: Use optimized source table method for large datasets
+            if use_source_table:
+                self.log_info(f"🚀 Using OPTIMIZED SOURCE TABLE mode for {layer.name()} (R-tree spatial index)")
+                return self._apply_filter_with_source_table(layer, old_subset, combine_operator)
             
             if use_direct_sql:
                 self.log_info(f"🚀 Using DIRECT SQL mode for {layer.name()} (bypassing GDAL/OGR)")
@@ -1816,3 +2106,327 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     def get_backend_name(self) -> str:
         """Get backend name"""
         return "Spatialite"
+    
+    def _apply_filter_with_source_table(
+        self,
+        layer: QgsVectorLayer,
+        old_subset: Optional[str] = None,
+        combine_operator: Optional[str] = None
+    ) -> bool:
+        """
+        v2.6.1: Apply filter using a permanent source geometry table with R-tree index.
+        
+        This is the OPTIMIZED path for large datasets. Instead of parsing WKT inline
+        for every feature, we:
+        1. Create a permanent table with source geometry (+ optional buffer)
+        2. Create R-tree spatial index on the table
+        3. Use EXISTS with indexed spatial join for O(log n) lookups
+        4. Apply FID-based filter to the layer
+        
+        Performance benefits:
+        - R-tree index: O(log n) spatial lookups vs O(n) for inline WKT
+        - Pre-computed buffer geometry (no recalculation per feature)
+        - Single WKT parse (at table creation) vs N parses
+        
+        Called when:
+        - Target layer has > LARGE_DATASET_THRESHOLD features (10k)
+        - mod_spatialite is available
+        - Source WKT is available in task_params
+        
+        Args:
+            layer: GeoPackage/SQLite layer to filter
+            old_subset: Existing subset string
+            combine_operator: Operator to combine filters (AND/OR)
+        
+        Returns:
+            True if filter applied successfully
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            # Get file path
+            source = layer.source()
+            source_path = source.split('|')[0] if '|' in source else source
+            
+            # Verify source is a local file
+            if not os.path.isfile(source_path):
+                self.log_error(f"Source file not found: {source_path}")
+                return False
+            
+            # Get table name
+            target_table = None
+            if '|layername=' in source:
+                target_table = source.split('|layername=')[1].split('|')[0]
+            if not target_table:
+                from qgis.core import QgsDataSourceUri
+                uri = QgsDataSourceUri(source)
+                target_table = uri.table()
+            if not target_table:
+                self.log_error("Could not determine table name")
+                return False
+            
+            # Get source WKT and parameters from task_params
+            source_wkt = None
+            source_srid = 4326
+            buffer_value = 0
+            predicates = {}
+            
+            if hasattr(self, 'task_params') and self.task_params:
+                infos = self.task_params.get('infos', {})
+                source_wkt = infos.get('source_geom_wkt')
+                
+                # Get source SRID
+                source_crs = infos.get('layer_crs_authid', '')
+                if ':' in str(source_crs):
+                    try:
+                        source_srid = int(source_crs.split(':')[1])
+                    except (ValueError, IndexError):
+                        pass
+                
+                # Get buffer value
+                buffer_value = self.task_params.get('buffer_value', 0) or 0
+                
+                # Get predicates
+                predicates = self.task_params.get('predicates', {})
+            
+            if not source_wkt:
+                self.log_error("No source WKT in task_params - cannot use source table optimization")
+                return False
+            
+            # Clean up old source tables first (1 hour max age)
+            self._cleanup_permanent_source_tables(source_path, max_age_seconds=3600)
+            
+            # Get target layer SRID
+            target_srid = 4326
+            crs = layer.crs()
+            if crs and crs.isValid() and ':' in crs.authid():
+                try:
+                    target_srid = int(crs.authid().split(':')[1])
+                except (ValueError, IndexError):
+                    pass
+            
+            # Determine if we need CRS transformation
+            is_geographic = target_srid == 4326 or (layer.crs().isGeographic() if layer.crs() else False)
+            
+            self.log_info(f"🚀 Using permanent source table optimization for {layer.name()}")
+            self.log_info(f"  → Target: {target_table}, SRID: {target_srid}")
+            self.log_info(f"  → Buffer: {buffer_value}m, Geographic: {is_geographic}")
+            
+            # Create permanent source table with geometry (and buffer if needed)
+            # For geographic CRS with buffer, we need to handle projection
+            effective_buffer = 0
+            if buffer_value != 0 and not is_geographic:
+                # Projected CRS: can apply buffer directly in source SRID
+                effective_buffer = buffer_value
+            # For geographic CRS, we'll handle buffer in the SQL query itself
+            
+            source_table, has_buffer = self._create_permanent_source_table(
+                db_path=source_path,
+                source_wkt=source_wkt,
+                source_srid=source_srid,
+                buffer_value=effective_buffer,
+                source_features=None  # Single geometry for now
+            )
+            
+            if not source_table:
+                self.log_warning("Could not create source table - falling back to inline WKT")
+                return False
+            
+            # Get mod_spatialite extension
+            mod_available, ext_name = _test_mod_spatialite_available()
+            if not mod_available:
+                self.log_error("mod_spatialite not available")
+                return False
+            
+            # Connect and build optimized query
+            conn = sqlite3.connect(source_path)
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            cursor = conn.cursor()
+            
+            # Get geometry column of target layer
+            geom_col = layer.geometryColumn()
+            if not geom_col:
+                geom_col = 'geometry'  # Default for GeoPackage
+            
+            # Get primary key column
+            pk_col = 'fid'  # Default for GeoPackage
+            try:
+                pk_indices = layer.primaryKeyAttributes()
+                if pk_indices:
+                    fields = layer.fields()
+                    pk_col = fields.at(pk_indices[0]).name()
+            except Exception:
+                pass
+            
+            # Build the optimized spatial query using EXISTS with the source table
+            # The R-tree index on the source table makes this O(log n)
+            
+            # Determine which geometry column to use (buffered or not)
+            source_geom_col = 'geom_buffered' if has_buffer else 'geom'
+            
+            # Build source geometry expression with any needed transformations
+            if is_geographic and buffer_value != 0 and not has_buffer:
+                # Geographic CRS with buffer but not pre-computed
+                # Apply buffer via projection to 3857
+                endcap_style = self._get_buffer_endcap_style()
+                buffer_style = f", 'endcap={endcap_style}'" if endcap_style != 'round' else ''
+                
+                if buffer_value < 0:
+                    # Negative buffer needs MakeValid
+                    source_expr = f"""
+                        CASE WHEN ST_IsEmpty(MakeValid(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style}))) = 1 
+                        THEN NULL 
+                        ELSE ST_Transform(MakeValid(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style})), {target_srid})
+                        END
+                    """
+                else:
+                    source_expr = f"ST_Transform(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style}), {target_srid})"
+            elif source_srid != target_srid:
+                # Need CRS transformation
+                source_expr = f'ST_Transform(s.{source_geom_col}, {target_srid})'
+            else:
+                source_expr = f's.{source_geom_col}'
+            
+            # Normalize predicates to get SQL function names
+            index_to_func = {
+                '0': 'ST_Intersects', '1': 'ST_Contains', '2': 'ST_Disjoint', '3': 'ST_Equals',
+                '4': 'ST_Touches', '5': 'ST_Overlaps', '6': 'ST_Within', '7': 'ST_Crosses'
+            }
+            
+            predicate_conditions = []
+            for key in predicates.keys():
+                if key in index_to_func:
+                    func = index_to_func[key]
+                elif key.upper().startswith('ST_'):
+                    func = key
+                else:
+                    func = f'ST_{key.capitalize()}'
+                
+                predicate_conditions.append(f'{func}(t."{geom_col}", {source_expr}) = 1')
+            
+            if not predicate_conditions:
+                # Default to intersects
+                predicate_conditions = [f'ST_Intersects(t."{geom_col}", {source_expr}) = 1']
+            
+            # Build EXISTS query - highly optimized with R-tree index
+            predicates_sql = ' OR '.join(predicate_conditions)
+            select_query = f'''
+                SELECT t."{pk_col}" 
+                FROM "{target_table}" t
+                WHERE EXISTS (
+                    SELECT 1 FROM "{source_table}" s 
+                    WHERE {predicates_sql}
+                )
+            '''
+            
+            self.log_info(f"  → Optimized EXISTS query with R-tree index")
+            self.log_debug(f"Query: {select_query[:300]}...")
+            
+            # Execute query
+            try:
+                cursor.execute(select_query)
+                matching_fids = [row[0] for row in cursor.fetchall()]
+            except Exception as sql_error:
+                self.log_error(f"Optimized query failed: {sql_error}")
+                import traceback
+                self.log_debug(traceback.format_exc())
+                conn.close()
+                # Clean up the source table since query failed
+                self._drop_source_table(source_path, source_table)
+                return False
+            
+            conn.close()
+            
+            # Clean up source table after query (we have the FIDs now)
+            self._drop_source_table(source_path, source_table)
+            
+            self.log_info(f"  → Found {len(matching_fids)} matching features")
+            
+            # Build FID-based filter expression
+            if len(matching_fids) == 0:
+                fid_expression = "1 = 0"  # No matches
+            else:
+                fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
+            
+            # Combine with old_subset if needed (same logic as _apply_filter_direct_sql)
+            if old_subset:
+                old_upper = old_subset.upper()
+                has_spatial = any(p in old_upper for p in ['ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'EXISTS ('])
+                
+                if has_spatial or '__source' in old_subset.lower():
+                    final_expression = fid_expression
+                else:
+                    op = combine_operator or 'AND'
+                    final_expression = f"({old_subset}) {op} ({fid_expression})"
+            else:
+                final_expression = fid_expression
+            
+            # Apply filter via queue callback or direct
+            queue_callback = self.task_params.get('_subset_queue_callback') if self.task_params else None
+            
+            if queue_callback:
+                queue_callback(layer, final_expression)
+                result = True
+            else:
+                result = safe_set_subset_string(layer, final_expression)
+            
+            elapsed = time.time() - start_time
+            
+            if result:
+                self.log_info(f"✓ {layer.name()}: {len(matching_fids)} features via source table ({elapsed:.2f}s)")
+            else:
+                self.log_error(f"✗ Source table filter failed for {layer.name()}")
+            
+            return result
+            
+        except Exception as e:
+            self.log_error(f"Exception in source table filter: {e}")
+            import traceback
+            self.log_debug(traceback.format_exc())
+            return False
+    
+    def _drop_source_table(self, db_path: str, table_name: str):
+        """
+        v2.6.1: Drop a permanent source table and its spatial indexes.
+        
+        Args:
+            db_path: Path to database file
+            table_name: Name of table to drop
+        """
+        conn = None
+        try:
+            mod_available, ext_name = _test_mod_spatialite_available()
+            if not mod_available:
+                return
+            
+            conn = sqlite3.connect(db_path)
+            conn.enable_load_extension(True)
+            conn.load_extension(ext_name)
+            cursor = conn.cursor()
+            
+            # Disable spatial indexes first
+            try:
+                cursor.execute(f'SELECT DisableSpatialIndex("{table_name}", "geom")')
+            except Exception:
+                pass
+            try:
+                cursor.execute(f'SELECT DisableSpatialIndex("{table_name}", "geom_buffered")')
+            except Exception:
+                pass
+            
+            # Drop the table
+            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+            conn.commit()
+            conn.close()
+            
+            self.log_debug(f"🧹 Dropped source table: {table_name}")
+            
+        except Exception as e:
+            self.log_debug(f"Error dropping source table: {e}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass

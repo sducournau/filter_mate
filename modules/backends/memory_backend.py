@@ -411,21 +411,23 @@ class MemoryGeometricFilter(GeometricFilterBackend):
             return source_layer
         
         try:
-            # Get buffer type from task params
+            # Get buffer type and segments from task params
             buffer_type = 0  # Default: Round
+            buffer_segments = 5  # Default: 5 segments
             if self.task_params:
                 filtering_params = self.task_params.get("filtering", {})
                 if filtering_params.get("has_buffer_type", False):
                     buffer_type_str = filtering_params.get("buffer_type", "Round")
                     buffer_type_mapping = {"Round": 0, "Flat": 1, "Square": 2}
                     buffer_type = buffer_type_mapping.get(buffer_type_str, 0)
+                    buffer_segments = filtering_params.get("buffer_segments", 5)
             
-            self.log_debug(f"Applying buffer {buffer_value} to {source_layer.name()}")
+            self.log_debug(f"Applying buffer {buffer_value} to {source_layer.name()} (type={buffer_type}, segments={buffer_segments})")
             
             result = processing.run("native:buffer", {
                 'INPUT': source_layer,
                 'DISTANCE': buffer_value,
-                'SEGMENTS': 8,
+                'SEGMENTS': int(buffer_segments),
                 'END_CAP_STYLE': buffer_type,
                 'JOIN_STYLE': 0,  # Round
                 'MITER_LIMIT': 2,

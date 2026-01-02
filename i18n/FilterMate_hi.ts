@@ -139,6 +139,10 @@ Please restart QGIS to apply all changes.</source>
         <source>Mode batch</source>
         <translation>बैच मोड</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>बफर सटीकता के लिए सेगमेंट की संख्या</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

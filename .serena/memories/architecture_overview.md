@@ -1,8 +1,8 @@
-# Architecture Overview - FilterMate v2.5.5
+# Architecture Overview - FilterMate v2.6.0
 
-**Last Updated:** December 29, 2025
-**Current Version:** 2.5.5 (Production)
-**Key Features:** Multi-backend filtering, Negative buffer handling, HiDPI support, Thread safety
+**Last Updated:** January 2, 2026
+**Current Version:** 2.6.0 (Production - Major Release)
+**Key Features:** Multi-backend filtering, Progressive filtering, Query complexity estimation, Multi-backend canvas refresh, Thread safety
 
 ## System Architecture
 
@@ -139,6 +139,13 @@ FilterMate follows a layered architecture with clear separation of concerns:
 - `layer_management_task.py`: LayersManagementEngineTask (~1125 lines)
 - `task_utils.py`: Common utilities (~328 lines)
 - `geometry_cache.py`: SourceGeometryCache (~146 lines)
+- `expression_evaluation_task.py`: Expression evaluation task
+- `multi_step_filter.py`: Multi-step filtering logic
+- `parallel_executor.py`: Parallel execution with ThreadPoolExecutor (~300 lines)
+- `progressive_filter.py`: Progressive/two-phase filtering (~750 lines) - NEW v2.5.9
+- `query_cache.py`: Enhanced query cache with TTL (~280 lines)
+- `query_complexity_estimator.py`: SQL complexity analysis (~450 lines) - NEW v2.5.9
+- `result_streaming.py`: Streaming exports (~350 lines)
 
 **Key Classes:**
 
@@ -268,6 +275,53 @@ FilterMateApp.apply_subset_filter()
     └─ layer.setSubsetString(expression)
     ↓
 Layer filtered in QGIS map canvas
+```
+
+### Progressive Filtering Flow (v2.5.9)
+```
+Complex PostgreSQL query detected
+    ↓
+QueryComplexityEstimator.estimate_complexity(expression)
+    ├─ Parse SQL for costly operations
+    ├─ Calculate complexity score
+    └─ Recommend strategy (DIRECT/MATERIALIZED/TWO_PHASE/PROGRESSIVE)
+    ↓
+ProgressiveFilterExecutor.filter_with_strategy()
+    ├─ DIRECT (score < 50): Standard query
+    ├─ MATERIALIZED (50-150): Use materialized view
+    ├─ TWO_PHASE (150-500): 
+    │   ├─ Phase 1: Bbox pre-filter (geom && ST_Envelope)
+    │   └─ Phase 2: Full predicate on candidates
+    └─ PROGRESSIVE (> 500): Lazy cursor streaming
+    ↓
+LazyResultIterator (for large datasets > 50k)
+    ├─ Server-side cursor (PostgreSQL DECLARE)
+    ├─ Chunk-based iteration (5000 IDs/chunk)
+    └─ Memory-efficient processing
+    ↓
+Filter result applied to layer
+```
+
+### Multi-Backend Canvas Refresh Flow (v2.5.19-v2.5.20)
+```
+Filter operation completed
+    ↓
+Detect filter complexity
+    ├─ PostgreSQL: EXISTS, ST_BUFFER, __source patterns
+    ├─ Spatialite: ST_*, Intersects(), Contains(), Within()
+    └─ OGR: Large IN clauses (> 50 commas)
+    ↓
+_delayed_canvas_refresh() (800ms delay)
+    ├─ Force dataProvider().reloadData() if complex
+    ├─ updateExtents() for all filtered layers
+    └─ triggerRepaint() for canvas refresh
+    ↓
+_final_canvas_refresh() (2000ms delay)
+    ├─ Iterate all filtered vector layers
+    ├─ triggerRepaint() + updateExtents() per layer
+    └─ Full canvas refresh
+    ↓
+Correct display guaranteed
 ```
 
 ### Configuration Update Flow (v2.2.2)

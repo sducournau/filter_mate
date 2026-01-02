@@ -1,6 +1,6 @@
-# Performance Optimizations - FilterMate v2.5.9
+# Performance Optimizations - FilterMate v2.6.0
 
-**Last Updated:** December 29, 2025
+**Last Updated:** January 2, 2026
 
 ## Overview
 
@@ -848,12 +848,14 @@ LAZY_CURSOR_THRESHOLD = 50000         # Features for streaming cursor
 
 ## Version History
 
-- **v2.5.9** (Jan 2025): Progressive filtering, complexity estimation, enhanced cache
+- **v2.5.20** (Jan 3, 2026): Multi-backend extended canvas refresh
+- **v2.5.19** (Jan 3, 2026): PostgreSQL complex filter display fix
+- **v2.5.9** (Dec 31, 2025): Progressive filtering, complexity estimation, enhanced cache
+- **v2.5.7** (Dec 31, 2025): CRS utilities module, automatic metric conversion
+- **v2.5.6** (Dec 30, 2025): Bidirectional selection sync
+- **v2.5.5** (Dec 29, 2025): PostgreSQL ST_IsEmpty fix for all empty geometry types
 - **v2.4.1** (Dec 17, 2025): PostgreSQL init optimization (5-50× gain)
 - **v2.3.5** (Dec 17, 2025): GeoPackage Spatialite routing (10× gain)
-- **v2.3.4** (Dec 16, 2025): PostgreSQL 2-part table reference fix
-- **v2.3.0** (Dec 13, 2025): Primary key detection optimization
-- **v2.1.0** (Dec 04, 2025): Predicate ordering, spatial indexes, geometry cache
 - **v2.3.4** (Dec 16, 2025): PostgreSQL 2-part table reference fix
 - **v2.3.0** (Dec 13, 2025): Primary key detection optimization
 - **v2.1.0** (Dec 04, 2025): Predicate ordering, spatial indexes, geometry cache

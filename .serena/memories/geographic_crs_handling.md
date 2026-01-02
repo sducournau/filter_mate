@@ -1,7 +1,38 @@
-# Geographic CRS Handling - FilterMate v2.2.5
+# Geographic CRS Handling - FilterMate v2.5.7+
 
 **Created:** December 10, 2025  
-**Feature:** Automatic EPSG:3857 conversion for metric-based operations
+**Last Updated:** January 3, 2026  
+**Feature:** Automatic metric CRS conversion with dedicated utilities module
+
+## v2.5.7 Enhancement: New CRS Utilities Module
+
+**NEW MODULE:** `modules/crs_utils.py`
+
+Provides dedicated CRS handling functions:
+```python
+from modules.crs_utils import (
+    is_geographic_crs,      # Check if CRS uses lat/lon
+    is_metric_crs,          # Check if CRS uses metric units
+    get_optimal_metric_crs, # Get best UTM zone or Web Mercator
+    CRSTransformer,         # Utility class for transformations
+    calculate_utm_zone      # Calculate optimal UTM zone from extent
+)
+
+# Example: Get optimal metric CRS for a layer
+if is_geographic_crs(layer.crs()):
+    metric_crs = get_optimal_metric_crs(layer.extent(), layer.crs())
+    # Returns appropriate UTM zone or EPSG:3857
+```
+
+**Key Functions:**
+- `is_geographic_crs(crs)`: Returns True for lat/lon coordinate systems
+- `is_metric_crs(crs)`: Returns True for projected metric CRS
+- `get_optimal_metric_crs(extent, source_crs)`: Finds best UTM zone or uses Web Mercator
+- `calculate_utm_zone(extent)`: Calculates optimal UTM zone from extent center
+
+---
+
+## Original Feature (v2.2.5): EPSG:3857 Conversion
 
 ## Problem Solved
 

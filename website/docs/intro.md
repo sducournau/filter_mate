@@ -7,29 +7,53 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.5.7 - Improved CRS Compatibility
+## 🎉 What's New in v2.6.1 - Performance: Optimized MVs & Source Tables
 
-This release significantly improves the compatibility between different coordinate reference systems (CRS) in FilterMate. It ensures that metric operations (like buffers) work correctly regardless of the source CRS.
+This release brings significant performance improvements for both PostgreSQL and Spatialite backends through optimized materialized views and source tables.
 
-### 🌍 CRS Improvements
+### 🚀 PostgreSQL: Lightweight Materialized Views
 
-| Feature                  | Description                                                |
-| ------------------------ | ---------------------------------------------------------- |
-| **Automatic Conversion** | Auto-converts to EPSG:3857 when metric calculations needed |
-| **Optimal UTM Zones**    | Calculates best UTM zone based on data extent              |
-| **CRSTransformer**       | New utility class for reliable geometry transformations    |
-| **New Module**           | `crs_utils.py` with detection and transformation functions |
+| Feature                 | Description                                                      |
+| ----------------------- | ---------------------------------------------------------------- |
+| **ID + Geometry Only**  | MVs now store only pk + geom instead of SELECT \* (3-5× smaller) |
+| **Pre-computed Buffer** | `geom_buffered` column avoids recalculating ST_Buffer            |
+| **Dual GIST Index**     | Indexes on both `geom` and `geom_buffered` for fast lookups      |
+| **EXISTS Optimization** | Final query uses `EXISTS (SELECT 1 FROM mv WHERE pk = ...)`      |
 
-### 🛠️ New Functions
+### 📦 Spatialite: R-tree Source Tables
 
-```python
-from modules.crs_utils import (
-    is_geographic_crs,      # Detects geographic CRS (lat/lon)
-    get_optimal_metric_crs, # Finds best metric CRS
-    CRSTransformer,         # Utility class for transformations
-    create_metric_buffer    # Buffer with automatic CRS conversion
-)
-```
+| Feature                     | Description                                               |
+| --------------------------- | --------------------------------------------------------- |
+| **Permanent Source Tables** | `_fm_source_{timestamp}_{uuid}` with R-tree spatial index |
+| **O(log n) Lookups**        | R-tree index vs O(n) for inline WKT parsing               |
+| **Pre-computed Buffer**     | Buffer geometry stored once, reused for all features      |
+| **Auto Cleanup**            | Tables older than 1 hour automatically removed            |
+
+### 🎯 Buffer Segments Control
+
+| Feature                 | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| **New UI Spinbox**      | Control buffer precision (1-100 segments)      |
+| **quad_segs Parameter** | Passed to ST_Buffer for smoother/faster curves |
+| **21 Languages**        | Tooltip translated in all supported languages  |
+
+### 📊 Performance Gains
+
+| Backend    | Optimization            | Improvement                      |
+| ---------- | ----------------------- | -------------------------------- |
+| PostgreSQL | Lightweight MVs         | **3-5× less RAM**                |
+| PostgreSQL | Pre-computed buffer     | **N× fewer calculations**        |
+| Spatialite | R-tree source tables    | **5-20× faster** (>10k features) |
+| All        | Buffer segments control | **Precision vs speed tradeoff**  |
+
+### Previous Release: v2.6.0
+
+## 🎯 v2.6.0 - Major Release: Performance & Stability
+
+- **Progressive Filtering**: Two-phase filtering (bbox + full predicate) for complex queries
+- **Query Complexity Estimator**: Dynamic SQL analysis with automatic strategy selection
+- **Multi-Backend Canvas Refresh**: Extended refresh system to Spatialite/OGR backends
+- **CRS Utilities Module**: Automatic metric CRS conversion with optimal UTM zone detection
 
 ### Previous Releases
 

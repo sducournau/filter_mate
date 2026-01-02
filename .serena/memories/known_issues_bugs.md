@@ -1,8 +1,38 @@
 # Known Issues & Bug Fixes - FilterMate
 
-**Last Updated:** December 29, 2025
+**Last Updated:** January 3, 2026
 
-## Critical Bug Fixes (v2.5.x Series - December 2025)
+## Critical Bug Fixes (v2.5.x Series - December 2025 / January 2026)
+
+### v2.5.20 - Multi-Backend Extended Canvas Refresh (January 3, 2026)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Spatialite/OGR layers with complex spatial filters not displaying correctly
+- OGR fallback from PostgreSQL/Spatialite showing stale data
+
+**Solution:**
+- Extended deferred refresh system to all backends
+- Spatialite: Detection of ST_*, Intersects(), Contains(), Within(), GeomFromText patterns
+- OGR: Detection of large IN clauses (> 50 commas)
+- Aggressive refresh with `updateExtents()`, `reload()`, `dataProvider().reloadData()`
+- Universal `_final_canvas_refresh()` at 2000ms delay
+
+---
+
+### v2.5.19 - PostgreSQL Complex Filter Display Fix (January 3, 2026)
+**Status:** ✅ FIXED
+
+**Problem:**
+- Display issues after multi-step filtering with EXISTS/ST_BUFFER expressions
+- PostgreSQL provider cache stale after complex spatial queries
+
+**Solution:**
+- `_delayed_canvas_refresh()` forces `dataProvider().reloadData()` for PostgreSQL
+- Pattern detection for EXISTS, ST_BUFFER, __source markers
+- Double-pass refresh (800ms + 2000ms) for reliable display
+
+---
 
 ### v2.5.5 - PostgreSQL Negative Buffer Empty Geometry Detection (December 29, 2025)
 **Status:** ✅ FIXED

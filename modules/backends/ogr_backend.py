@@ -773,13 +773,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 # Get buffer_type from task_params (default: 0 = Round)
                 buffer_type = 0  # Default: Round
+                buffer_segments = 5  # Default: 5 segments
                 if self.task_params:
                     filtering_params = self.task_params.get("filtering", {})
                     if filtering_params.get("has_buffer_type", False):
                         buffer_type_str = filtering_params.get("buffer_type", "Round")
                         buffer_type_mapping = {"Round": 0, "Flat": 1, "Square": 2}
                         buffer_type = buffer_type_mapping.get(buffer_type_str, 0)
-                        self.log_debug(f"Using buffer type: {buffer_type_str} (END_CAP_STYLE={buffer_type})")
+                        buffer_segments = filtering_params.get("buffer_segments", 5)
+                        self.log_debug(f"Using buffer type: {buffer_type_str} (END_CAP_STYLE={buffer_type}, segments={buffer_segments})")
                 
                 # Log layer details for debugging
                 self.log_debug(f"Buffer source layer: {source_layer.name()}, "
@@ -810,7 +812,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 buffer_result = processing.run("native:buffer", {
                     'INPUT': fixed_layer,
                     'DISTANCE': buffer_dist,
-                    'SEGMENTS': int(5),
+                    'SEGMENTS': int(buffer_segments),  # Use configured buffer segments
                     'END_CAP_STYLE': int(buffer_type),  # Use configured buffer type
                     'JOIN_STYLE': int(0),  # Round
                     'MITER_LIMIT': float(2.0),

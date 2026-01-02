@@ -18,33 +18,92 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
 ## Current Status
-- **Version**: 2.5.18 (January 2, 2026)
-- **Status**: Production - Stable with PostgreSQL timeout protection
+- **Version**: 2.6.0 (January 2, 2026)
+- **Status**: Production - Stable with multi-backend refresh system
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
-- **Recent Focus (v2.5.x)**: Negative buffer handling, empty geometry detection, HiDPI support
+- **Recent Focus (v2.5.x)**: Progressive filtering, query complexity estimation, multi-backend canvas refresh
 - **Languages Supported**: 21 languages (including Slovenian, Filipino, Amharic)
 
-## Recent Development (January 2, 2026)
+## Recent Development (January 3, 2026)
 
-### v2.5.18 - CRITICAL FIX: PostgreSQL Statement Timeout & OGR Fallback (✅ Complete)
-**Date**: January 2, 2026
+### v2.5.20 - Multi-Backend Extended Canvas Refresh (✅ Complete)
+**Date**: January 3, 2026
+
+**Improvements:**
+- Extended deferred refresh system to Spatialite and OGR backends
+- Spatialite: Detection of complex filters (ST_*, Intersects(), Contains(), Within(), GeomFromText)
+- OGR: Detection of large IN clauses (> 50 commas) typical of selectbylocation fallback
+- Aggressive refresh with `updateExtents()`, `reload()`, `dataProvider().reloadData()`
+- Universal final refresh: `_final_canvas_refresh()` repaints all filtered vector layers
+- 2-second delay after initial refresh (800ms) using `triggerRepaint()` and `updateExtents()`
+
+---
+
+### v2.5.19 - PostgreSQL Complex Filter Display Fix (✅ Complete)
+**Date**: January 3, 2026
 
 **Problem Solved:**
-- QGIS freezes ("Ne répond pas") during geometric filtering with PostgreSQL
-- Complex EXISTS queries with ST_Intersects on large source datasets block indefinitely
-- No automatic fallback when PostgreSQL query takes too long
+- Display issues after multi-step filtering with EXISTS/ST_BUFFER expressions
+- PostgreSQL provider cache stale after complex spatial queries
+- `triggerRepaint()` alone insufficient for data reload
 
 **Solutions Implemented:**
-- Added `statement_timeout = 120s` to all PostgreSQL connections (pooled and direct)
-- Intelligent timeout detection in materialized view creation
-- Automatic OGR fallback when PostgreSQL query times out
-- Enhanced logging with user-visible warnings in QGIS message panel
+- Aggressive PostgreSQL refresh system for complex filters
+- `_delayed_canvas_refresh()` forces `dataProvider().reloadData()` for PostgreSQL layers
+- Pattern detection: EXISTS, ST_BUFFER, __source markers
+- Double-pass refresh guarantees correct display
 
-**Files Modified:**
-- `modules/connection_pool.py` - Added DEFAULT_STATEMENT_TIMEOUT (120s)
-- `modules/appUtils.py` - Added timeout to get_datasource_connexion_from_layer()
-- `modules/backends/postgresql_backend.py` - Timeout detection in exception handler
-- `modules/tasks/filter_task.py` - OGR fallback for PostgreSQL failures
+---
+
+### v2.5.9 - Advanced PostgreSQL Optimizations (✅ Complete)
+**Date**: December 31, 2025
+
+**New Features:**
+- **Progressive Filtering**: Two-phase filtering (bbox + full predicate) for complex queries
+- **Query Complexity Estimator**: Dynamic SQL analysis with automatic strategy selection
+- **Lazy Cursor Streaming**: Server-side cursors for memory-efficient large dataset processing
+- **Enhanced Cache**: TTL support, result count caching, complexity score caching
+- **Auto Strategy**: DIRECT → MATERIALIZED → TWO_PHASE → PROGRESSIVE based on complexity
+
+**New Modules:**
+- `modules/tasks/progressive_filter.py` (~750 lines)
+- `modules/tasks/query_complexity_estimator.py` (~450 lines)
+
+---
+
+### v2.5.7 - CRS Compatibility Improvements (✅ Complete)
+**Date**: December 31, 2025
+
+**New Module:** `modules/crs_utils.py`
+- `is_geographic_crs()`: Detect geographic CRS (lat/lon)
+- `is_metric_crs()`: Detect metric CRS
+- `get_optimal_metric_crs()`: Find best metric CRS (UTM or Web Mercator)
+- Automatic CRS conversion for buffer operations
+
+---
+
+### v2.5.6 - Bidirectional Selection Sync (✅ Complete)
+**Date**: December 30, 2025
+
+**Features:**
+- QGIS ↔ widgets perfectly synchronized when is_selecting enabled
+- Complete sync (check AND uncheck) instead of additive
+- Anti-loop protection with _syncing_from_qgis flag
+
+---
+
+### v2.5.5 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection (✅ Complete)
+**Date**: December 29, 2025
+
+**Problem Solved:**
+- PostgreSQL backend incorrectly detected empty geometries from negative buffers
+- `NULLIF(geom, 'GEOMETRYCOLLECTION EMPTY'::geometry)` only detected that exact type
+- Did NOT detect `POLYGON EMPTY`, `MULTIPOLYGON EMPTY`, `LINESTRING EMPTY`, etc.
+
+**Solutions Implemented:**
+- Replaced `NULLIF(...)` with `CASE WHEN ST_IsEmpty(...) THEN NULL ELSE ... END`
+- `ST_IsEmpty()` detects ALL empty geometry types (PostGIS standard)
+- Applied in: `_build_st_buffer_with_style()`, `_build_simple_wkt_expression()`, `build_expression()`
 
 ---
 
@@ -379,7 +438,7 @@ pytest --cov=modules --cov-report=html
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.5.18
+- **Current Plugin Version**: 2.6.0
 
 ## BMAD Documentation
 

@@ -233,6 +233,10 @@ O&apos;zgarishlarni qo&apos;llash uchun QGIS ni qayta ishga tushiring.</translat
         <source>Mode batch</source>
         <translation>Ommaviy rejim</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Bufer aniqligi uchun segmentlar soni</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

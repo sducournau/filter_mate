@@ -1,9 +1,11 @@
-# Code Style Conventions - FilterMate
+# Code Style Conventions - FilterMate v2.6.0
+
+**Last Updated:** January 2, 2026
 
 ## Python Standards
 
 ### PEP 8 Compliance
-- **Current Status**: 95% compliance (as of December 10, 2025)
+- **Current Status**: 95% compliance (as of January 2026)
 - Follow PEP 8 conventions strictly
 - Use 4 spaces for indentation (no tabs)
 - Maximum line length: 120 characters
@@ -304,7 +306,36 @@ def test_field_name_quotes_preserved():
     assert '"HOMECOUNT"' in converted
 ```
 
-### 7. Geographic CRS Handling (v2.2.5 CRITICAL)
+### 7. CRS Utilities (v2.5.7 - NEW MODULE)
+
+**Use the new `crs_utils` module** for CRS operations:
+
+```python
+from modules.crs_utils import (
+    is_geographic_crs,
+    is_metric_crs,
+    get_optimal_metric_crs,
+    CRSTransformer,
+    calculate_utm_zone
+)
+
+# Check CRS type
+if is_geographic_crs(layer.crs()):
+    # Convert to metric for buffer operations
+    metric_crs = get_optimal_metric_crs(layer.extent(), layer.crs())
+    
+# Use CRSTransformer for geometry operations
+transformer = CRSTransformer(source_crs, target_crs, project)
+transformed_geom = transformer.transform(geometry)
+```
+
+**Key Functions:**
+- `is_geographic_crs(crs)`: Returns True for lat/lon coordinate systems
+- `is_metric_crs(crs)`: Returns True for projected metric CRS
+- `get_optimal_metric_crs(extent, source_crs)`: Returns best UTM zone or EPSG:3857
+- `calculate_utm_zone(extent)`: Calculate optimal UTM zone from extent
+
+### 8. Geographic CRS Handling (v2.2.5 CRITICAL)
 
 **NEW**: Automatic EPSG:3857 conversion for geographic coordinate systems:
 
@@ -447,7 +478,59 @@ with SignalBlockerGroup(widgets):
 - Reduces UI flicker
 - Improves performance
 
-### 11. WCAG Color Contrast (v2.2.3+)
+### 11. Canvas Refresh for Complex Filters (v2.5.19-v2.5.20)
+
+**For PostgreSQL/Spatialite/OGR backends with complex spatial filters:**
+
+```python
+from qgis.PyQt.QtCore import QTimer
+
+def _delayed_canvas_refresh(self, layer, filter_expression):
+    """Delayed refresh for complex filter expressions."""
+    
+    def do_refresh():
+        # Check if layer still valid
+        if not layer or not layer.isValid():
+            return
+            
+        # Detect complex filters that need aggressive refresh
+        needs_aggressive = self._is_complex_filter(filter_expression, layer.providerType())
+        
+        if needs_aggressive:
+            # Force data provider reload
+            layer.dataProvider().reloadData()
+            layer.updateExtents()
+        
+        layer.triggerRepaint()
+        iface.mapCanvas().refresh()
+    
+    # Schedule delayed refresh
+    QTimer.singleShot(800, do_refresh)
+    
+    # Schedule final refresh for reliability
+    QTimer.singleShot(2000, self._final_canvas_refresh)
+
+def _is_complex_filter(self, expr, provider_type):
+    """Detect filters that need aggressive refresh."""
+    expr_upper = expr.upper()
+    
+    if provider_type == 'postgres':
+        return any(p in expr_upper for p in ['EXISTS', 'ST_BUFFER', '__SOURCE'])
+    elif provider_type == 'spatialite':
+        return any(p in expr_upper for p in ['ST_', 'INTERSECTS(', 'CONTAINS(', 'WITHIN('])
+    elif provider_type == 'ogr':
+        # Large IN clauses from selectbylocation fallback
+        return expr.count(',') > 50
+    return False
+```
+
+**Key Points:**
+- Use 800ms initial delay for provider sync
+- Use 2000ms final delay for reliability
+- Force `dataProvider().reloadData()` for complex filters
+- Always call `updateExtents()` after data changes
+
+### 12. WCAG Color Contrast (v2.2.3+)
 
 When defining colors, ensure WCAG compliance:
 
@@ -472,6 +555,55 @@ assert calculate_contrast(PRIMARY_TEXT, WIDGET_BG) >= 7.0  # AAA
 ```
 
 **Test File:** `tests/test_color_contrast.py`
+
+### 13. Progressive Filtering (v2.5.9 - PostgreSQL Optimization)
+
+**For complex PostgreSQL queries, use the progressive filtering system:**
+
+```python
+from modules.tasks.query_complexity_estimator import QueryComplexityEstimator
+from modules.tasks.progressive_filter import (
+    ProgressiveFilterExecutor, LazyResultIterator, TwoPhaseFilter
+)
+
+# Estimate query complexity
+estimator = QueryComplexityEstimator()
+result = estimator.estimate_complexity(sql_expression)
+
+print(f"Score: {result.total_score}")           # e.g., 185
+print(f"Strategy: {result.recommended_strategy}")  # e.g., "TWO_PHASE"
+
+# Execute with appropriate strategy
+executor = ProgressiveFilterExecutor(connection, query_cache)
+filter_result = executor.filter_with_strategy(
+    layer_props=layer_props,
+    source_geometry=source_geom,
+    buffer_value=buffer_value,
+    predicates=predicates,
+    feature_count=layer.featureCount(),
+    complexity_score=result.total_score
+)
+
+# For very large datasets (> 50k features), use lazy cursor
+with LazyResultIterator(connection, sql_query, chunk_size=5000) as iterator:
+    for batch in iterator:
+        process_batch(batch)  # Yields chunks of IDs
+```
+
+**Strategy Thresholds:**
+- `score < 50`: DIRECT - Simple query, standard execution
+- `50 ≤ score < 150`: MATERIALIZED - Use materialized view
+- `150 ≤ score < 500`: TWO_PHASE - Bbox pre-filter + full predicate
+- `score ≥ 500`: PROGRESSIVE - Lazy cursor streaming
+
+**Operation Costs (for complexity estimation):**
+| Operation | Cost | Reason |
+|-----------|------|--------|
+| ST_Buffer | 12 | Creates new geometry |
+| ST_Transform | 10 | Coordinate reprojection |
+| ST_Intersects | 5 | Can use GIST index |
+| EXISTS | 20 | Subquery execution |
+| IN (subquery) | 15 | Subquery + lookup |
 
 ## Backend Implementation Patterns
 
@@ -956,9 +1088,37 @@ Before submitting code:
 ❌ **DON'T** assume buffer values are in correct units
 ✅ **DO** check geographic CRS and convert to EPSG:3857 (v2.2.5)
 
+❌ **DON'T** rely on `triggerRepaint()` alone for complex filters
+✅ **DO** use `dataProvider().reloadData()` + delayed refresh (v2.5.19)
+
+❌ **DON'T** run complex PostgreSQL queries without complexity estimation
+✅ **DO** use `QueryComplexityEstimator` for strategy selection (v2.5.9)
+
+❌ **DON'T** load all results at once for large PostgreSQL datasets
+✅ **DO** use `LazyResultIterator` for > 50k features (v2.5.9)
+
 ## Version-Specific Patterns
 
-### v2.3.0-alpha (Current Development - Phase 5a Complete)
+### v2.5.20 (Current - January 2026)
+- **Multi-backend canvas refresh**: Use `_delayed_canvas_refresh()` with pattern detection
+- **Spatialite/OGR refresh**: Detect complex filters and force `dataProvider().reloadData()`
+- **Double-pass refresh**: 800ms + 2000ms for guaranteed display
+
+### v2.5.9+ (Production)
+- **Progressive filtering**: Use `QueryComplexityEstimator` for PostgreSQL
+- **Lazy cursors**: Use `LazyResultIterator` for > 50k features
+- **Two-phase filtering**: Bbox pre-filter for complex expressions
+- **Enhanced cache**: TTL support, result count caching
+
+### v2.5.7+ (Production)
+- **CRS utilities**: Use `modules/crs_utils.py` for CRS operations
+- **Automatic metric conversion**: Use `get_optimal_metric_crs()` for buffers
+
+### v2.5.6+ (Production)
+- **Bidirectional sync**: Widgets ↔ QGIS selection with anti-loop protection
+- **Complete sync**: Check AND uncheck based on selection state
+
+### v2.3.0-alpha (Phase 5a Complete)
 - **Task Module**: Import utilities from `modules/tasks/task_utils.py`
 - **Geometry Cache**: Use `SourceGeometryCache` for multi-layer operations
 - **Layer Management**: `LayersManagementEngineTask` now in separate file

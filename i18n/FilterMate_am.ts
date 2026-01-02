@@ -233,6 +233,10 @@ Please restart QGIS to apply the changes.</translation>
         <source>Mode batch</source>
         <translation>የባች ሁነታ</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>ለቋት ትክክለኛነት የክፍሎች ቁጥር</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

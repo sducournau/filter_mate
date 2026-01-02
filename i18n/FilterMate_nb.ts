@@ -139,6 +139,10 @@ Start QGIS på nytt for å bruke alle endringene.</translation>
         <source>Mode batch</source>
         <translation>Batch-modus</translation>
     </message>
+    <message>
+        <source>Number of segments for buffer precision</source>
+        <translation>Antall segmenter for bufferpresisjon</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

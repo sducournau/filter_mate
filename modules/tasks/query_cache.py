@@ -133,7 +133,8 @@ class QueryExpressionCache:
         predicates: Dict[str, str],
         buffer_value: Optional[float],
         source_geometry_hash: str,
-        provider_type: str
+        provider_type: str,
+        source_filter_hash: Optional[str] = None
     ) -> Tuple:
         """
         Generate a unique cache key for a query expression.
@@ -144,6 +145,8 @@ class QueryExpressionCache:
             buffer_value: Buffer distance or None
             source_geometry_hash: Hash of source geometry data
             provider_type: Backend type ('postgresql', 'spatialite', 'ogr')
+            source_filter_hash: Optional hash of source layer filter (for PostgreSQL EXISTS)
+                               This ensures cache invalidation when source filter changes
         
         Returns:
             Tuple: Unique cache key
@@ -156,7 +159,8 @@ class QueryExpressionCache:
             pred_tuple,
             buffer_value,
             source_geometry_hash,
-            provider_type
+            provider_type,
+            source_filter_hash  # v2.5.19: Include source filter for cache invalidation on refilter
         )
     
     def compute_source_hash(self, source_geometry: Any) -> str:

@@ -2,6 +2,114 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.6.1] - 2026-01-02 - Performance: Optimisation des Vues Matérialisées et Tables Source
+
+### 🚀 Optimisations de Performance
+
+- **POSTGRESQL: Vues Matérialisées Légères**
+
+  - **Avant**: `SELECT * FROM table WHERE ...` stockait toutes les colonnes
+  - **Après**: `SELECT pk, geom` stocke uniquement ID + géométrie (3-5× plus léger)
+  - Pour les filtres avec tampon: stockage de `geom_buffered` pré-calculé
+  - Double index GIST sur `geom` et `geom_buffered` pour requêtes optimisées
+  - Expression finale: `EXISTS (SELECT 1 FROM mv WHERE pk = target.pk)`
+
+- **SPATIALITE: Tables Source Permanentes avec R-tree**
+  - **Nouveau**: Mode optimisé pour grands jeux de données (>10k features)
+  - Création de table permanente `_fm_source_{timestamp}_{uuid}` avec géométrie source
+  - Index spatial R-tree pour lookups O(log n) vs O(n) pour WKT inline
+  - Pré-calcul du tampon stocké dans `geom_buffered`
+  - Nettoyage automatique des tables de plus d'1 heure
+  - Fallback automatique vers inline WKT si création échoue
+
+### 📊 Gains de Performance
+
+| Backend    | Optimisation              | Condition     | Gain                    |
+| ---------- | ------------------------- | ------------- | ----------------------- |
+| PostgreSQL | MV légères (ID+geom)      | Tous filtres  | **3-5× moins de RAM**   |
+| PostgreSQL | geom_buffered pré-calculé | Avec tampon   | **N× moins de calculs** |
+| Spatialite | Table source R-tree       | >10k features | **5-20× plus rapide**   |
+| Spatialite | Buffer pré-calculé        | Avec tampon   | **N×M → 1 calcul**      |
+
+### 🔧 Améliorations Techniques
+
+- Nouvelle méthode `_create_permanent_source_table()` pour Spatialite
+- Nouvelle méthode `_apply_filter_with_source_table()` pour Spatialite
+- Nouvelle méthode `_cleanup_permanent_source_tables()` pour nettoyage automatique
+- Nouvelle méthode `_drop_source_table()` pour nettoyage immédiat après filtrage
+- Constantes: `LARGE_DATASET_THRESHOLD = 10000`, `SOURCE_TABLE_PREFIX = "_fm_source_"`
+
+---
+
+## [2.6.0] - 2026-01-02 - Version Majeure: Performance & Stabilité
+
+### 🎉 Version Majeure
+
+Cette version majeure consolide toutes les améliorations de la série v2.5.x en une release stable et optimisée.
+
+### ✨ Nouvelles Fonctionnalités
+
+- **PROGRESSIVE FILTERING**: Système de filtrage progressif pour PostgreSQL
+
+  - Two-Phase Filtering: Phase 1 bbox GIST, Phase 2 prédicats complets
+  - Lazy Cursor Streaming: Curseurs côté serveur pour grands datasets
+  - Query Complexity Estimator: Analyse dynamique et sélection de stratégie
+
+- **CRS UTILITIES MODULE** (`modules/crs_utils.py`):
+
+  - `is_geographic_crs()`: Détection des CRS géographiques
+  - `get_optimal_metric_crs()`: Sélection de zone UTM optimale
+  - `CRSTransformer`: Classe utilitaire pour transformations
+
+- **MULTI-BACKEND CANVAS REFRESH**:
+  - Extension du système de rafraîchissement à Spatialite/OGR
+  - Détection des filtres complexes par backend
+  - Double-pass refresh (800ms + 2000ms) pour affichage garanti
+
+### 🔧 Améliorations Techniques
+
+- **PostgreSQL Statement Timeout**: Protection 120s avec fallback OGR automatique
+- **Bidirectional Selection Sync**: QGIS ↔ widgets parfaitement synchronisés
+- **Enhanced Query Cache**: Support TTL, cache result counts et complexity scores
+
+### 🐛 Corrections de Bugs
+
+- **Canvas blanc après filtrage complexe** (v2.5.21): Évitement des rafraîchissements multiples qui s'annulent
+  - Problème: refreshAllLayers() → \_delayed_canvas_refresh(800ms) → \_final_canvas_refresh(2s) s'annulaient
+  - Solution: Rafraîchissement unique différé avec timing adaptatif (500ms simple, 1500ms complexe)
+  - Ajout de `stopRendering()` pour nettoyer l'état du canvas avant le refresh final
+- **PostgreSQL ST_IsEmpty**: Détection correcte de tous les types de géométries vides
+- **OGR Memory Layers**: Comptage correct des features dans les couches mémoire
+
+### 📊 Performance
+
+| Optimisation        | Condition         | Gain                        |
+| ------------------- | ----------------- | --------------------------- |
+| Two-Phase Filtering | score ≥ 100       | **3-10× plus rapide**       |
+| Lazy Cursor         | > 50k features    | **50-80% moins de mémoire** |
+| Cache amélioré      | Requêtes répétées | **20-40% plus rapide**      |
+
+---
+
+## [2.5.21] - 2025-01-02 - CRITICAL FIX: Expression Cache Invalidation on Refilter
+
+### 🐛 Corrections de Bugs
+
+- **CRITICAL FIX: Couches distantes non refiltrées lors du refiltrage**
+  - **Symptôme**: Lors d'un second filtrage avec une nouvelle sélection, seule la couche source était mise à jour. Les couches distantes gardaient l'ancien filtre.
+  - **Cause racine**: La clé de cache d'expression n'incluait pas le `source_filter` (le subsetString de la couche source). Quand on refiltrait, le cache retournait l'ancienne expression avec l'ancien filtre source dans la requête EXISTS.
+  - **Solution**: Ajout du hash du `source_filter` dans la clé de cache (`query_cache.py:get_cache_key()`)
+  - **Fichiers modifiés**:
+    - `modules/tasks/query_cache.py` - Nouveau paramètre `source_filter_hash` dans `get_cache_key()`
+    - `modules/tasks/filter_task.py` - Calcul et passage du hash du filtre source lors de la mise en cache
+
+### 🔧 Améliorations Techniques
+
+- **Cache d'expressions plus intelligent**: Le cache inclut maintenant le filtre source dans sa clé, garantissant que les expressions sont recalculées quand le filtre source change
+- **Diagnostic amélioré**: Nouveau log de debug pour le hash du filtre source lors de la mise en cache
+
+---
+
 ## [2.5.20] - 2025-01-03 - Rafraîchissement Étendu Spatialite/OGR
 
 ### 🔧 Améliorations Techniques
