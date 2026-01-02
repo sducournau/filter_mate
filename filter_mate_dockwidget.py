@@ -7129,8 +7129,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Custom selection: pas de synchronisation automatique (basé sur expression)
         
         COMPORTEMENT v2.5.11+:
-        - Si plusieurs features sont sélectionnées depuis le canvas ET que le groupbox actif
-          est 'single_selection', bascule automatiquement vers 'multiple_selection'
+        - Auto-switch groupbox basé sur le nombre de features sélectionnées depuis le canvas:
+          - 1 feature sélectionnée ET groupbox = multiple_selection → bascule vers single_selection
+          - > 1 features sélectionnées ET groupbox = single_selection → bascule vers multiple_selection
         - Cela garantit que get_current_features() utilise le bon widget
         
         Note:
@@ -7151,15 +7152,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not layer_props:
                 return
             
-            # FIX v2.5.11: Auto-switch to multiple_selection groupbox when multiple features
-            # are selected from the canvas while in single_selection mode.
+            # FIX v2.5.11+: Auto-switch groupbox based on selection count from canvas
             # This ensures get_current_features() reads from the correct widget.
-            if selected_count > 1 and self.current_exploring_groupbox == "single_selection":
+            # - 1 feature selected → switch to single_selection
+            # - > 1 features selected → switch to multiple_selection
+            if selected_count == 1 and self.current_exploring_groupbox == "multiple_selection":
+                logger.info(f"_sync_widgets_from_qgis_selection: 1 feature selected, "
+                           f"switching from multiple_selection to single_selection groupbox")
+                # Switch groupbox to single_selection
+                self._syncing_from_qgis = True
+                try:
+                    self._force_exploring_groupbox_exclusive("single_selection")
+                    self._configure_single_selection_groupbox()
+                finally:
+                    self._syncing_from_qgis = False
+            elif selected_count > 1 and self.current_exploring_groupbox == "single_selection":
                 logger.info(f"_sync_widgets_from_qgis_selection: {selected_count} features selected, "
                            f"switching from single_selection to multiple_selection groupbox")
                 # Switch groupbox to multiple_selection
-                # Use _syncing_from_qgis flag to prevent recursive QGIS selection updates
-                # during the groupbox configuration
                 self._syncing_from_qgis = True
                 try:
                     self._force_exploring_groupbox_exclusive("multiple_selection")

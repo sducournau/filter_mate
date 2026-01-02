@@ -1119,10 +1119,10 @@
                      <bool>true</bool>
                     </property>
                     <property name="checked">
-                     <bool>false</bool>
+                     <bool>true</bool>
                     </property>
                     <property name="collapsed">
-                     <bool>true</bool>
+                     <bool>false</bool>
                     </property>
                     <property name="saveCollapsedState">
                      <bool>true</bool>
@@ -1439,7 +1439,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>415</width>
-                 <height>414</height>
+                 <height>411</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -2272,11 +2272,6 @@
                         </property>
                         <item>
                          <property name="text">
-                          <string/>
-                         </property>
-                        </item>
-                        <item>
-                         <property name="text">
                           <string>AND</string>
                          </property>
                         </item>
@@ -2316,11 +2311,6 @@
                         <property name="tabletTracking">
                          <bool>true</bool>
                         </property>
-                        <item>
-                         <property name="text">
-                          <string/>
-                         </property>
-                        </item>
                         <item>
                          <property name="text">
                           <string>AND</string>
@@ -2604,7 +2594,7 @@
                         <property name="value">
                          <number>5</number>
                         </property>
-                        <property name="showClearButton" stdset="0">
+                        <property name="showClearButton">
                          <bool>false</bool>
                         </property>
                        </widget>
@@ -2622,8 +2612,8 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>230</width>
-                 <height>290</height>
+                 <width>415</width>
+                 <height>411</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3454,8 +3444,8 @@
                 <rect>
                  <x>0</x>
                  <y>0</y>
-                 <width>166</width>
-                 <height>31</height>
+                 <width>415</width>
+                 <height>411</height>
                 </rect>
                </property>
                <attribute name="icon">
