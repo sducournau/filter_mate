@@ -1089,8 +1089,14 @@ class FilterMateApp:
                                 except RuntimeError:
                                     logger.warning("Cannot show message: iface may be destroyed")
                 
-                def ensure_ui_enabled_final():
-                    """Final safety check after recovery attempt."""
+                def ensure_ui_enabled_final(retry_count=0):
+                    """Final safety check after recovery attempt.
+                    
+                    Args:
+                        retry_count: Number of retries already attempted (max 5 = 15s additional wait)
+                    """
+                    MAX_RETRIES = 5  # Maximum 5 retries of 3s each = 15s additional wait
+                    
                     # CRITICAL: Check if self still exists
                     try:
                         if not hasattr(self, 'dockwidget'):
@@ -1106,6 +1112,13 @@ class FilterMateApp:
                         logger.info("Final safety timer: Layers loaded, refreshing UI")
                         self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
                     else:
+                        # Check if tasks are still running - if so, don't show error yet
+                        if self._pending_add_layers_tasks > 0 and retry_count < MAX_RETRIES:
+                            logger.info(f"Final safety timer: {self._pending_add_layers_tasks} task(s) still running, deferring check (retry {retry_count + 1}/{MAX_RETRIES})")
+                            # Reschedule check for later with incremented retry count
+                            QTimer.singleShot(3000, lambda: ensure_ui_enabled_final(retry_count + 1))
+                            return
+                        
                         logger.error("Final safety timer: Failed to load layers after recovery attempt")
                         
                         # DIAGNOSTIC: Gather detailed information about the failure
@@ -1831,9 +1844,11 @@ class FilterMateApp:
             logger.info(f"Backend detection: selected provider_type={provider_type}")
             
             # Check if PostgreSQL layer is using OGR fallback (no connection available)
+            # CRITICAL FIX v2.5.14: Default to True for PostgreSQL layers - they're always
+            # filterable via QGIS native API (setSubsetString). Only explicitly False means fallback.
             is_fallback = (
                 provider_type == 'postgresql' and 
-                not task_parameters["infos"].get("postgresql_connection_available", False)
+                task_parameters["infos"].get("postgresql_connection_available", True) is False
             )
             
             # Check if Spatialite functions are available for the distant layers
@@ -2639,6 +2654,30 @@ class FilterMateApp:
                         task_parameters["filtering"] = {}
                     task_parameters["filtering"]["buffer_value"] = current_spinbox_buffer
                     self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_value"] = current_spinbox_buffer
+
+            # CRITICAL FIX v2.5.11: Synchronize buffer_segments spinbox value to PROJECT_LAYERS
+            # Same issue as buffer_value - the spinbox valueChanged signal may not have updated PROJECT_LAYERS yet
+            if self.dockwidget and hasattr(self.dockwidget, 'mQgsSpinBox_filtering_buffer_segments'):
+                current_spinbox_segments = self.dockwidget.mQgsSpinBox_filtering_buffer_segments.value()
+                stored_segments = task_parameters.get("filtering", {}).get("buffer_segments", 5)
+                if current_spinbox_segments != stored_segments:
+                    logger.info(f"SYNC buffer_segments: spinbox={current_spinbox_segments}, stored={stored_segments} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["buffer_segments"] = current_spinbox_segments
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_segments"] = current_spinbox_segments
+
+            # CRITICAL FIX v2.5.11: Synchronize buffer_type combobox value to PROJECT_LAYERS
+            # Same issue - the combobox currentTextChanged signal may not have updated PROJECT_LAYERS yet
+            if self.dockwidget and hasattr(self.dockwidget, 'comboBox_filtering_buffer_type'):
+                current_buffer_type = self.dockwidget.comboBox_filtering_buffer_type.currentText()
+                stored_buffer_type = task_parameters.get("filtering", {}).get("buffer_type", "Round")
+                if current_buffer_type != stored_buffer_type:
+                    logger.info(f"SYNC buffer_type: combobox={current_buffer_type}, stored={stored_buffer_type} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["buffer_type"] = current_buffer_type
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_type"] = current_buffer_type
 
             if current_layer.subsetString() != '':
                 self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True

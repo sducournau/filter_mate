@@ -88,12 +88,13 @@ from .task_utils import (
 # Import type utilities
 from ..type_utils import can_cast, return_typed_value
 
-# Conditional import for PostgreSQL support
+# Import PostgreSQL availability flags from centralized appUtils
+# POSTGRESQL_AVAILABLE = True (always, QGIS native support)
+# PSYCOPG2_AVAILABLE = depends on psycopg2 import (for advanced features)
+from ..appUtils import POSTGRESQL_AVAILABLE, PSYCOPG2_AVAILABLE
 try:
     import psycopg2
-    POSTGRESQL_AVAILABLE = True
 except ImportError:
-    POSTGRESQL_AVAILABLE = False
     psycopg2 = None
 
 # Import connection pool for optimized PostgreSQL operations
@@ -655,30 +656,47 @@ class LayersManagementEngineTask(QgsTask):
         source_table_name = get_source_table_name(layer)
         
         # Check PostgreSQL connection availability for PostgreSQL layers
-        # PERFORMANCE: Use cached connection status per datasource to avoid repeated connection tests
+        # CRITICAL FIX v2.5.19: PostgreSQL layers are ALWAYS available for basic filtering
+        # via QGIS native API (setSubsetString) - this works without psycopg2!
+        # psycopg2 is only needed for ADVANCED features (materialized views, custom indexes)
+        # 
+        # Two flags:
+        # - postgresql_connection_available: True for all valid PostgreSQL layers (basic filtering works)
+        # - psycopg2_connection_available: True only if psycopg2 can connect (for advanced features)
         postgresql_connection_available = False
+        psycopg2_connection_available = False
+        
         if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
-            # Extract datasource key for caching (host:port:dbname)
-            try:
-                from qgis.core import QgsDataSourceUri
-                uri = QgsDataSourceUri(layer.source())
-                cache_key = f"{uri.host()}:{uri.port()}:{uri.database()}"
-                
-                if cache_key in self._postgresql_connection_cache:
-                    postgresql_connection_available = self._postgresql_connection_cache[cache_key]
-                    logger.debug(f"PostgreSQL connection for {layer.name()}: using cached result ({postgresql_connection_available})")
-                else:
-                    # Test connection once per datasource
-                    conn, _ = get_datasource_connexion_from_layer(layer)
-                    if conn is not None:
-                        postgresql_connection_available = True
-                        conn.close()
+            # PostgreSQL layer is valid and loaded in QGIS = basic filtering ALWAYS works
+            # via setSubsetString() which uses QGIS native PostgreSQL provider
+            postgresql_connection_available = True
+            logger.debug(f"PostgreSQL layer {layer.name()}: basic filtering available via QGIS native API")
+            
+            # Only test psycopg2 connection for advanced features (if psycopg2 is available)
+            if PSYCOPG2_AVAILABLE:
+                try:
+                    from qgis.core import QgsDataSourceUri
+                    uri = QgsDataSourceUri(layer.source())
+                    cache_key = f"{uri.host()}:{uri.port()}:{uri.database()}"
+                    
+                    if cache_key in self._postgresql_connection_cache:
+                        psycopg2_connection_available = self._postgresql_connection_cache[cache_key]
+                        logger.debug(f"PostgreSQL connection for {layer.name()}: using cached psycopg2 result ({psycopg2_connection_available})")
                     else:
-                        logger.warning(f"PostgreSQL layer {layer.name()} will use OGR fallback (no connection)")
-                    # Cache the result for other layers from same database
-                    self._postgresql_connection_cache[cache_key] = postgresql_connection_available
-            except Exception as e:
-                logger.warning(f"PostgreSQL connection test failed for {layer.name()}: {e}, will use OGR fallback")
+                        # Test connection once per datasource
+                        conn, _ = get_datasource_connexion_from_layer(layer)
+                        if conn is not None:
+                            psycopg2_connection_available = True
+                            conn.close()
+                            logger.debug(f"PostgreSQL layer {layer.name()}: psycopg2 connection available (advanced features enabled)")
+                        else:
+                            logger.info(f"PostgreSQL layer {layer.name()}: psycopg2 connection unavailable (advanced features disabled, basic filtering still works)")
+                        # Cache the result for other layers from same database
+                        self._postgresql_connection_cache[cache_key] = psycopg2_connection_available
+                except Exception as e:
+                    logger.info(f"PostgreSQL psycopg2 connection test failed for {layer.name()}: {e} (advanced features disabled, basic filtering still works)")
+            else:
+                logger.debug(f"PostgreSQL layer {layer.name()}: psycopg2 not installed (advanced features disabled, basic filtering still works)")
         
         # Build properties from JSON templates
         # CRITICAL: Escape all string values to prevent JSON parsing errors
@@ -701,8 +719,11 @@ class LayersManagementEngineTask(QgsTask):
             )
         )
         
-        # Add PostgreSQL connection availability flag
+        # Add PostgreSQL connection availability flags
+        # postgresql_connection_available: True = basic filtering via QGIS API works
+        # psycopg2_connection_available: True = advanced features (MVs, indexes) available
         new_layer_variables["infos"]["postgresql_connection_available"] = postgresql_connection_available
+        new_layer_variables["infos"]["psycopg2_connection_available"] = psycopg2_connection_available
         
         # Determine the best display field for exploring expressions
         # Use descriptive text fields when available instead of just primary key
@@ -760,10 +781,12 @@ class LayersManagementEngineTask(QgsTask):
             layer_provider_type = detect_layer_provider_type(layer)
         
         if layer_provider_type == PROVIDER_POSTGRES:
-            # Check if PostgreSQL connection is available
-            postgresql_connection_available = layer_props.get("infos", {}).get("postgresql_connection_available", False)
+            # Check if psycopg2 connection is available for creating spatial indexes
+            # Note: Spatial index creation requires direct database access via psycopg2
+            # Basic filtering via setSubsetString works without this
+            psycopg2_connection_available = layer_props.get("infos", {}).get("psycopg2_connection_available", False)
             
-            if postgresql_connection_available:
+            if psycopg2_connection_available:
                 try:
                     self.create_spatial_index_for_postgresql_layer(layer, layer_props)
                 except (AttributeError, KeyError) as e:
@@ -778,8 +801,9 @@ class LayersManagementEngineTask(QgsTask):
                     # Fallback to QGIS spatial index
                     self.create_spatial_index_for_layer(layer)
             else:
-                # PostgreSQL layer but no connection - use QGIS spatial index (OGR fallback)
-                logger.info(f"Using QGIS spatial index for PostgreSQL layer {layer.name()} (no DB connection)")
+                # PostgreSQL layer but no psycopg2 connection - use QGIS spatial index
+                # Note: Basic filtering via setSubsetString still works fine
+                logger.info(f"Using QGIS spatial index for PostgreSQL layer {layer.name()} (psycopg2 unavailable)")
                 self.create_spatial_index_for_layer(layer)
         else:
             self.create_spatial_index_for_layer(layer)

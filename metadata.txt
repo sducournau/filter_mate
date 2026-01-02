@@ -6,19 +6,22 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.6.1
+version=2.6.3
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.6.1 - Performance: Optimized Materialized Views & Source Tables
+about=FilterMate v2.6.3 - PostgreSQL Transaction Fix & Memory Backend Improvements
 
- NEW in v2.6.1:
+ NEW in v2.6.3:
+ - 🐛 FIX: PostgreSQL "current transaction is aborted" errors now properly handled
+ - 🔧 FIX: Memory backend now correctly stores source geometry for spatial filtering
+ - 📋 NEW: Memory backend explicitly recognized in filter task (no more "Unknown backend" warnings)
+ - 🔄 IMPROVE: Transaction rollback before connection close prevents cascade failures
+
+ Previous version (v2.6.2):
  - 🚀 POSTGRESQL LIGHTWEIGHT MVs: Stores only ID + geometry (3-5× smaller)
  - 📦 SPATIALITE R-TREE SOURCE TABLES: Permanent tables with spatial index for large datasets
  - ⚡ PRE-COMPUTED BUFFER: geom_buffered stored in MV/source table for faster queries
- - 🎯 BUFFER SEGMENTS: New UI control for buffer precision (1-100 segments)
- - 🧹 AUTO CLEANUP: Old source tables automatically removed after 1 hour
- - 🌍 TRANSLATIONS: Added buffer segments tooltip in 21 languages
  
  Previous version (v2.5.x):
  - 🛡️ PostgreSQL statement timeout protection with OGR fallback

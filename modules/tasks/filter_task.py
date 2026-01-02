@@ -68,14 +68,14 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Import conditionnel de psycopg2 pour support PostgreSQL optionnel
+# Import PostgreSQL availability flags from centralized appUtils
+# POSTGRESQL_AVAILABLE = True (always, QGIS native support)
+# PSYCOPG2_AVAILABLE = depends on psycopg2 import (for advanced features)
+from ..appUtils import POSTGRESQL_AVAILABLE, PSYCOPG2_AVAILABLE
 try:
     import psycopg2
-    POSTGRESQL_AVAILABLE = True
 except ImportError:
-    POSTGRESQL_AVAILABLE = False
     psycopg2 = None
-    logger.warning("PostgreSQL support disabled (psycopg2 not found)")
 
 # Import constants
 from ..constants import (
@@ -579,15 +579,18 @@ class FilterEngineTask(QgsTask):
                 layer_props["_forced_backend"] = True
             else:
                 # PRIORITY 2: Check if PostgreSQL connection is available
-                # If not, use OGR fallback which works with all layer types via QGIS processing
+                # CRITICAL FIX v2.5.14: PostgreSQL layers loaded in QGIS are ALWAYS filterable
+                # via QGIS native API (setSubsetString). Default to True for PostgreSQL layers.
                 if provider_type == PROVIDER_POSTGRES:
-                    postgresql_connection_available = layer_props.get("postgresql_connection_available", False)
+                    postgresql_connection_available = layer_props.get("postgresql_connection_available", True)
                     if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
                         logger.warning(f"  PostgreSQL layer '{layer_name}' has no connection available - using OGR fallback")
                         provider_type = PROVIDER_OGR
                         # Mark in layer_props for later reference
                         layer_props["_effective_provider_type"] = PROVIDER_OGR
                         layer_props["_postgresql_fallback"] = True
+                    else:
+                        logger.debug(f"  PostgreSQL layer '{layer_name}': using native PostgreSQL backend")
                 
                 # PRIORITY 3: Verify provider_type is correct by detecting it from actual layer
                 # This ensures GeoPackage layers are correctly identified as 'spatialite'
@@ -908,15 +911,23 @@ class FilterEngineTask(QgsTask):
         else:
             self._source_forced_backend = False
             # PRIORITY 2: Check PostgreSQL connection availability for source layer
-            # If PostgreSQL layer but no connection, use OGR fallback which works with all layer types
+            # CRITICAL FIX v2.5.14: PostgreSQL layers loaded in QGIS are ALWAYS filterable
+            # via QGIS native API (setSubsetString). The postgresql_connection_available flag
+            # should default to True for PostgreSQL layers, not False.
+            # 
+            # The flag was intended to detect if psycopg2 connection works, but basic filtering
+            # NEVER requires psycopg2 - it works via QGIS native PostgreSQL provider.
+            # Only advanced features (materialized views) need psycopg2.
             if self.param_source_provider_type == PROVIDER_POSTGRES:
-                postgresql_connection_available = infos.get("postgresql_connection_available", False)
+                # Default to True for PostgreSQL layers - they're always filterable via QGIS API
+                postgresql_connection_available = infos.get("postgresql_connection_available", True)
                 if not postgresql_connection_available or not POSTGRESQL_AVAILABLE:
                     logger.warning(f"Source layer is PostgreSQL but connection unavailable - using OGR fallback")
                     self.param_source_provider_type = PROVIDER_OGR
                     self._source_postgresql_fallback = True
                 else:
                     self._source_postgresql_fallback = False
+                    logger.debug(f"Source layer PostgreSQL: using native PostgreSQL backend (postgresql_connection_available={postgresql_connection_available})")
             else:
                 self._source_postgresql_fallback = False
         
@@ -1358,6 +1369,10 @@ class FilterEngineTask(QgsTask):
         - Si aucun opérateur n'est spécifié, utilise AND par défaut
         - Cela garantit que les filtres ne sont jamais perdus lors du changement de couche
         
+        OPTIMIZATION v2.5.13: Detects and removes duplicate IN clauses
+        - Multi-step filtering can generate duplicate "fid IN (...)" clauses
+        - These duplicates are detected and merged for optimal query performance
+        
         Returns:
             str: Combined expression
         """
@@ -1370,7 +1385,6 @@ class FilterEngineTask(QgsTask):
         def normalize_expr(expr):
             if not expr:
                 return ""
-            import re
             expr = expr.strip()
             # Normalize whitespace: replace multiple spaces with single space
             expr = re.sub(r'\s+', ' ', expr)
@@ -1394,6 +1408,117 @@ class FilterEngineTask(QgsTask):
                 else:
                     break
             return expr
+        
+        def extract_in_clauses(expr):
+            """
+            Extract all IN clauses from expression for deduplication.
+            Returns dict mapping field names to sets of IDs.
+            
+            OPTIMIZATION v2.5.13: Detect duplicate IN clauses for same field
+            """
+            in_clauses = {}
+            # Pattern to match "field" IN (id1, id2, ...) or "table"."field" IN (...)
+            pattern = r'"([^"]+)"(?:\."([^"]+)")?\s+IN\s*\(([^)]+)\)'
+            matches = re.finditer(pattern, expr, re.IGNORECASE)
+            
+            for match in matches:
+                if match.group(2):
+                    # Qualified name: "table"."field"
+                    field_key = f'"{match.group(1)}"."{match.group(2)}"'
+                else:
+                    # Simple name: "field"
+                    field_key = f'"{match.group(1)}"'
+                
+                # Parse IDs from the IN clause
+                ids_str = match.group(3)
+                ids = set()
+                for id_part in ids_str.split(','):
+                    id_part = id_part.strip().strip("'\"")
+                    if id_part:
+                        ids.add(id_part)
+                
+                if field_key not in in_clauses:
+                    in_clauses[field_key] = ids
+                else:
+                    # Check if this is a duplicate IN clause for same field
+                    existing_ids = in_clauses[field_key]
+                    if ids == existing_ids:
+                        # Identical IN clause - flag as duplicate
+                        logger.debug(f"FilterMate: Detected duplicate IN clause for {field_key} with {len(ids)} IDs")
+                    else:
+                        # Different IDs - intersection for AND, union for OR
+                        in_clauses[field_key] = existing_ids & ids  # AND = intersection
+            
+            return in_clauses
+        
+        def optimize_expression(expr):
+            """
+            Remove duplicate IN clauses from expression.
+            
+            OPTIMIZATION v2.5.13: Multi-step filtering generates duplicate clauses like:
+            (A AND fid IN (1,2,3)) AND (fid IN (1,2,3)) AND (fid IN (1,2,3))
+            
+            This function detects and removes the duplicates, keeping only ONE IN clause.
+            """
+            # Count IN clauses for same field
+            pattern = r'"([^"]+)"(?:\."([^"]+)")?\s+IN\s*\([^)]+\)'
+            matches = list(re.finditer(pattern, expr, re.IGNORECASE))
+            
+            if len(matches) <= 1:
+                return expr  # No duplicates possible
+            
+            # Group matches by field name
+            field_matches = {}
+            for match in matches:
+                if match.group(2):
+                    field_key = f'"{match.group(1)}"."{match.group(2)}"'
+                else:
+                    field_key = f'"{match.group(1)}"'
+                
+                if field_key not in field_matches:
+                    field_matches[field_key] = []
+                field_matches[field_key].append(match)
+            
+            # Check for duplicates (more than one IN clause for same field)
+            for field_key, field_match_list in field_matches.items():
+                if len(field_match_list) > 1:
+                    logger.info(f"FilterMate: OPTIMIZATION - Found {len(field_match_list)} duplicate IN clauses for {field_key}")
+                    
+                    # Keep only the first occurrence, remove the rest
+                    # We need to remove from end to start to preserve indices
+                    for match in reversed(field_match_list[1:]):
+                        start, end = match.span()
+                        # Find the surrounding AND/OR operator to remove
+                        before_context = expr[max(0, start-10):start]
+                        
+                        # Remove " AND (" before the duplicate clause
+                        if ' AND (' in before_context or ' AND(' in before_context:
+                            # Find the actual start of " AND ("
+                            and_pos = expr.rfind(' AND (', 0, start)
+                            if and_pos != -1:
+                                # Find matching closing paren
+                                depth = 0
+                                close_pos = end
+                                for i in range(and_pos, len(expr)):
+                                    if expr[i] == '(':
+                                        depth += 1
+                                    elif expr[i] == ')':
+                                        depth -= 1
+                                        if depth == 0:
+                                            close_pos = i + 1
+                                            break
+                                # Remove " AND ( ... IN (...) )"
+                                expr = expr[:and_pos] + expr[close_pos:]
+                                logger.debug(f"FilterMate: Removed duplicate AND clause at positions {and_pos}-{close_pos}")
+            
+            # Clean up any resulting double spaces or orphaned operators
+            expr = re.sub(r'\s+', ' ', expr)
+            expr = re.sub(r'\(\s*\)', '', expr)  # Remove empty parens
+            expr = re.sub(r'AND\s+AND', 'AND', expr)  # Fix double ANDs
+            expr = re.sub(r'\(\s*AND\s*', '(', expr)  # Remove leading AND in parens
+            expr = re.sub(r'\s*AND\s*\)', ')', expr)  # Remove trailing AND in parens
+            
+            return expr.strip()
         
         normalized_new = normalize_expr(expression)
         normalized_old = normalize_expr(self.param_source_old_subset)
@@ -1472,6 +1597,16 @@ class FilterEngineTask(QgsTask):
             f'{param_source_old_subset} {param_old_subset_where} '
             f'{combine_operator} ( {expression} )'
         )
+        
+        # OPTIMIZATION v2.5.13: Remove duplicate IN clauses from multi-step filtering
+        # This prevents expressions like: (A AND fid IN (...)) AND (fid IN (...)) AND (fid IN (...))
+        optimized = optimize_expression(combined)
+        if optimized != combined:
+            original_len = len(combined)
+            optimized_len = len(optimized)
+            savings = original_len - optimized_len
+            logger.info(f"FilterMate: OPTIMIZATION - Reduced expression size from {original_len} to {optimized_len} bytes ({savings} bytes saved, {100*savings/original_len:.1f}% reduction)")
+            return optimized
         
         return combined
 
@@ -1558,8 +1693,112 @@ class FilterEngineTask(QgsTask):
                 f'( {old_subset_to_combine} ) '
                 f'{combine_operator} ( {expression} )'
             )
+            
+            # OPTIMIZATION v2.5.13: Check for duplicate IN clauses
+            # Multi-step filtering can create redundant: (old AND fid IN(...)) AND (fid IN(...))
+            expression = self._optimize_duplicate_in_clauses(expression)
         
         return expression
+    
+    def _optimize_duplicate_in_clauses(self, expression):
+        """
+        Remove duplicate IN clauses from an expression.
+        
+        OPTIMIZATION v2.5.13: Multi-step filtering generates duplicate clauses like:
+        (A AND fid IN (1,2,3)) AND (fid IN (1,2,3)) AND (fid IN (1,2,3))
+        
+        This function detects and removes the duplicates, keeping only ONE IN clause per field.
+        
+        Args:
+            expression: SQL expression potentially containing duplicate IN clauses
+            
+        Returns:
+            str: Optimized expression with duplicate IN clauses removed
+        """
+        if not expression:
+            return expression
+        
+        # Pattern to match "field" IN (...) or "table"."field" IN (...)
+        pattern = r'"([^"]+)"(?:\."([^"]+)")?\s+IN\s*\([^)]+\)'
+        matches = list(re.finditer(pattern, expression, re.IGNORECASE))
+        
+        if len(matches) <= 1:
+            return expression  # No duplicates possible
+        
+        # Group matches by field name
+        field_matches = {}
+        for match in matches:
+            if match.group(2):
+                field_key = f'"{match.group(1)}"."{match.group(2)}"'
+            else:
+                field_key = f'"{match.group(1)}"'
+            
+            if field_key not in field_matches:
+                field_matches[field_key] = []
+            field_matches[field_key].append(match)
+        
+        # Check for duplicates (more than one IN clause for same field)
+        has_duplicates = False
+        for field_key, field_match_list in field_matches.items():
+            if len(field_match_list) > 1:
+                has_duplicates = True
+                logger.info(f"FilterMate: OPTIMIZATION - Found {len(field_match_list)} duplicate IN clauses for {field_key}")
+        
+        if not has_duplicates:
+            return expression
+        
+        # Remove duplicates - keep first occurrence, remove subsequent ones
+        result = expression
+        for field_key, field_match_list in field_matches.items():
+            if len(field_match_list) <= 1:
+                continue
+                
+            # Process from end to start to preserve indices
+            for match in reversed(field_match_list[1:]):
+                start, end = match.span()
+                
+                # Find the surrounding AND operator and parentheses
+                # Look for " AND (" before the match
+                search_start = max(0, start - 20)
+                before = result[search_start:start]
+                
+                # Pattern: " AND (" or " AND " before the IN clause
+                and_pattern = r'\s+AND\s+\(\s*$'
+                and_match = re.search(and_pattern, before, re.IGNORECASE)
+                
+                if and_match:
+                    # Find corresponding closing paren after the IN clause
+                    actual_start = search_start + and_match.start()
+                    depth = 0
+                    close_pos = end
+                    
+                    for i, char in enumerate(result[actual_start:], actual_start):
+                        if char == '(':
+                            depth += 1
+                        elif char == ')':
+                            depth -= 1
+                            if depth == 0:
+                                close_pos = i + 1
+                                break
+                    
+                    # Remove " AND ( ... IN (...) )"
+                    result = result[:actual_start] + result[close_pos:]
+                    logger.debug(f"FilterMate: Removed duplicate clause for {field_key}")
+        
+        # Clean up any double spaces or malformed syntax
+        result = re.sub(r'\s+', ' ', result)
+        result = re.sub(r'\(\s*\)', '', result)  # Remove empty parens
+        result = re.sub(r'AND\s+AND', 'AND', result, flags=re.IGNORECASE)
+        result = re.sub(r'\(\s*AND', '(', result, flags=re.IGNORECASE)
+        result = re.sub(r'AND\s*\)', ')', result, flags=re.IGNORECASE)
+        
+        # Log optimization results
+        if len(result) < len(expression):
+            savings = len(expression) - len(result)
+            pct = 100 * savings / len(expression)
+            logger.info(f"FilterMate: OPTIMIZATION - Reduced expression by {savings} bytes ({pct:.1f}% reduction)")
+        
+        return result.strip()
 
     def _apply_filter_and_update_subset(self, expression):
         """
@@ -1913,16 +2152,18 @@ class FilterEngineTask(QgsTask):
         
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
             # Check if SOURCE layer is PostgreSQL with connection
+            # CRITICAL FIX v2.5.14: Default to True for PostgreSQL layers
             source_is_postgresql_with_connection = (
                 self.param_source_provider_type == PROVIDER_POSTGRES and
-                self.task_parameters.get("infos", {}).get("postgresql_connection_available", False)
+                self.task_parameters.get("infos", {}).get("postgresql_connection_available", True)
             )
             
             # Check if any DISTANT PostgreSQL layer has connection available
             has_distant_postgresql_with_connection = False
             if hasattr(self, 'layers') and 'postgresql' in self.layers:
                 for layer, layer_props in self.layers['postgresql']:
-                    if layer_props.get('postgresql_connection_available', False):
+                    # CRITICAL FIX v2.5.14: Default to True for PostgreSQL layers
+                    if layer_props.get('postgresql_connection_available', True):
                         has_distant_postgresql_with_connection = True
                     # CRITICAL FIX: Check if this layer uses OGR fallback
                     if layer_props.get('_postgresql_fallback', False):
@@ -5465,6 +5706,11 @@ class FilterEngineTask(QgsTask):
                 # PostgreSQL backend needs SQL expression
                 geometry_provider = PROVIDER_POSTGRES
                 logger.info(f"  → Backend is PostgreSQL - using SQL expression geometry format")
+            elif backend_name == 'memory':
+                # Memory backend uses OGR-style geometry (QgsVectorLayer)
+                # v2.5.11: Added explicit memory backend handling
+                geometry_provider = PROVIDER_OGR
+                logger.info(f"  → Backend is Memory - using OGR geometry format (QgsVectorLayer)")
             else:
                 # Fallback: use effective provider type
                 geometry_provider = effective_provider_type

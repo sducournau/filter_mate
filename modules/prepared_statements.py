@@ -190,7 +190,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
             if stmt_name not in self._prepared_names:
                 query = """
                     INSERT INTO fm_subset_history 
-                    (id, timestamp, fk_project, layer_id, layer_source_id, seq_order, subset_string)
+                    (id, _updated_at, fk_project, layer_id, layer_source_id, seq_order, subset_string)
                     VALUES ($1, NOW(), $2, $3, $4, $5, $6)
                 """
                 self._prepare_statement(stmt_name, query)
@@ -465,7 +465,7 @@ class SpatialitePreparedStatements(PreparedStatementManager):
         """
         query = """
             INSERT INTO fm_subset_history 
-            (id, timestamp, fk_project, layer_id, layer_source_id, seq_order, subset_string)
+            (id, _updated_at, fk_project, layer_id, layer_source_id, seq_order, subset_string)
             VALUES (?, datetime('now'), ?, ?, ?, ?, ?)
         """
         

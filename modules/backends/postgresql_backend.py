@@ -30,6 +30,7 @@ from ..appUtils import (
     safe_set_subset_string, 
     get_datasource_connexion_from_layer, 
     POSTGRESQL_AVAILABLE,
+    PSYCOPG2_AVAILABLE,
     apply_postgresql_type_casting
 )
 import time
@@ -289,50 +290,71 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         Check if this backend supports the given layer.
         
-        Tests both provider type AND connection availability. If the layer
-        is PostgreSQL but connection fails (wrong credentials, server down, etc.),
-        returns False to allow fallback to OGR backend.
+        v2.5.x: PostgreSQL layers are now ALWAYS supported via QGIS native API.
+        psycopg2 is only required for advanced features (materialized views).
+        
+        When psycopg2 is not available:
+        - Simple filtering via setSubsetString still works
+        - Advanced features (MVs, spatial indexes) are disabled
         
         Args:
             layer: QGIS vector layer to check
         
         Returns:
-            True if layer is from PostgreSQL provider AND connection works
+            True if layer is from PostgreSQL provider (QGIS handles connection)
         """
-        if not POSTGRESQL_AVAILABLE:
-            self.log_warning("psycopg2 not available, PostgreSQL backend disabled")
-            return False
-        
         if layer.providerType() != 'postgres':
             return False
         
-        # CRITICAL: Test actual connection - may fail with authcfg or network issues
-        # PERFORMANCE v2.4.0: Use connection pooling if available
-        try:
-            if CONNECTION_POOL_AVAILABLE and pooled_connection_from_layer:
-                # Use pooled connection (more efficient for repeated checks)
-                with pooled_connection_from_layer(layer) as (conn, source_uri):
-                    if conn is None:
-                        self.log_warning(f"PostgreSQL connection failed for layer {layer.name()} (pooled), will use OGR fallback")
-                        return False
-                    # Test connection with simple query
-                    with conn.cursor() as cursor:
-                        cursor.execute("SELECT 1")
-                    return True
-            else:
-                # Fallback to non-pooled connection
-                conn, source_uri = get_datasource_connexion_from_layer(layer)
-                if conn is None:
-                    self.log_warning(f"PostgreSQL connection failed for layer {layer.name()}, will use OGR fallback")
-                    return False
-                # Test connection with simple query
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                conn.close()
-                return True
-        except Exception as e:
-            self.log_warning(f"PostgreSQL connection test failed for layer {layer.name()}: {e}, will use OGR fallback")
+        # v2.5.x: QGIS native PostgreSQL support - no psycopg2 required for basic operations
+        # The layer is already loaded in QGIS, so connection works
+        if not layer.isValid():
+            self.log_warning(f"PostgreSQL layer '{layer.name()}' is not valid")
             return False
+        
+        # If psycopg2 is available, optionally test connection for advanced features
+        if PSYCOPG2_AVAILABLE:
+            try:
+                if CONNECTION_POOL_AVAILABLE and pooled_connection_from_layer:
+                    # Use pooled connection (more efficient for repeated checks)
+                    with pooled_connection_from_layer(layer) as (conn, source_uri):
+                        if conn is None:
+                            self.log_info(
+                                f"PostgreSQL psycopg2 connection failed for layer {layer.name()}, "
+                                f"advanced features disabled but basic filtering available via QGIS API"
+                            )
+                            # Still return True - basic filtering via setSubsetString works
+                        else:
+                            # Test connection with simple query
+                            with conn.cursor() as cursor:
+                                cursor.execute("SELECT 1")
+                            self.log_debug(f"PostgreSQL psycopg2 connection OK for layer {layer.name()}")
+                else:
+                    # Fallback to non-pooled connection
+                    conn, source_uri = get_datasource_connexion_from_layer(layer)
+                    if conn is None:
+                        self.log_info(
+                            f"PostgreSQL psycopg2 connection failed for layer {layer.name()}, "
+                            f"advanced features disabled but basic filtering available via QGIS API"
+                        )
+                    else:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT 1")
+                        conn.close()
+                        self.log_debug(f"PostgreSQL psycopg2 connection OK for layer {layer.name()}")
+            except Exception as e:
+                self.log_info(
+                    f"PostgreSQL psycopg2 connection test failed for layer {layer.name()}: {e}, "
+                    f"advanced features disabled but basic filtering available via QGIS API"
+                )
+        else:
+            self.log_info(
+                f"psycopg2 not available - PostgreSQL layer '{layer.name()}' will use "
+                f"QGIS native API (setSubsetString). Materialized views disabled."
+            )
+        
+        # Always return True for valid PostgreSQL layers - basic filtering always works
+        return True
 
     def _parse_source_table_reference(self, source_geom: str) -> Optional[Dict]:
         """
@@ -1073,8 +1095,37 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
                                 self.log_warning(f"  → Reason: MV references cannot be adapted for subquery")
                         
+                        # CRITICAL FIX v2.5.20: Also detect external table references
+                        # If source filter contains references to tables OTHER than the source table,
+                        # these cannot be adapted and would cause "missing FROM-clause entry" errors.
+                        # Example: filter with "commune"."fid" when source table is "troncon_de_route"
+                        if not skip_filter:
+                            # Pattern to find ANY table references in the filter: "table"."column" or "schema"."table"."column"
+                            external_table_pattern = re.compile(r'"([^"]+)"\s*\.\s*"([^"]+)"')
+                            matches = external_table_pattern.findall(source_filter)
+                            
+                            for match in matches:
+                                # match is (schema_or_table, table_or_column) or (table, column)
+                                potential_table = match[0]
+                                
+                                # Check if this reference is NOT to the source table
+                                # It could be: "schema"."table" or "table"."column"
+                                # We need to check if potential_table is the source table or source schema
+                                if (potential_table.lower() != source_table_name.lower() and 
+                                    potential_table.lower() != source_schema_name.lower()):
+                                    # This could be an external table reference
+                                    # Check if second part is also not the source table (for "schema"."table"."col" pattern)
+                                    second_part = match[1]
+                                    if second_part.lower() != source_table_name.lower():
+                                        # Definitely an external table reference
+                                        skip_filter = True
+                                        self.log_warning(f"  ⚠️ Source filter contains EXTERNAL TABLE reference: '{potential_table}'")
+                                        self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
+                                        self.log_warning(f"  → Reason: External table cannot be referenced in EXISTS subquery")
+                                        break
+                        
                         if skip_filter:
-                            self.log_warning(f"  ⚠️ Source filter contains __source, EXISTS, or MV reference - SKIPPING")
+                            self.log_warning(f"  ⚠️ Source filter contains __source, EXISTS, MV, or external table reference - SKIPPING")
                             self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
                         else:
                             # CRITICAL: Replace table references with __source alias
@@ -1087,10 +1138,18 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 source_schema_name, 
                                 source_table_name
                             )
-                            # Add the adapted filter to WHERE clause
-                            where_clauses.append(f"({adapted_filter})")
-                            self.log_info(f"  - Adapted: '{adapted_filter[:100]}'...")
-                            self.log_info(f"  ✓ EXISTS will filter source to match QGIS view")
+                            
+                            # CRITICAL FIX v2.5.20: Verify adapted filter doesn't have residual table references
+                            # After adaptation, there should be no "table"."column" patterns left (except __source)
+                            residual_table_refs = re.findall(r'"(?!__source)([^"]+)"\s*\.\s*"([^"]+)"', adapted_filter)
+                            if residual_table_refs:
+                                self.log_warning(f"  ⚠️ Adapted filter still has table references: {residual_table_refs}")
+                                self.log_warning(f"  → Skipping filter to avoid SQL error")
+                            else:
+                                # Add the adapted filter to WHERE clause
+                                where_clauses.append(f"({adapted_filter})")
+                                self.log_info(f"  - Adapted: '{adapted_filter[:100]}'...")
+                                self.log_info(f"  ✓ EXISTS will filter source to match QGIS view")
                     
                     where_clause = ' AND '.join(where_clauses)
                     
@@ -1271,11 +1330,20 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 final_expression = expression
             
             # Decide strategy based on dataset size, complexity, and primary key availability
+            # v2.5.x: Also check PSYCOPG2_AVAILABLE for advanced features (MVs, progressive filter)
             if uses_ctid:
                 # No primary key (using ctid) - MUST use direct method
                 self.log_info(
                     f"PostgreSQL: Layer without PRIMARY KEY (using ctid). "
                     f"Using direct filtering (materialized views disabled)."
+                )
+                return self._apply_direct(layer, final_expression)
+            
+            # v2.5.x: If psycopg2 not available, always use direct method (QGIS native API)
+            elif not PSYCOPG2_AVAILABLE:
+                self.log_info(
+                    f"PostgreSQL: psycopg2 not available - using QGIS native API (setSubsetString). "
+                    f"MVs and progressive filtering disabled. Feature count: {feature_count:,}"
                 )
                 return self._apply_direct(layer, final_expression)
             
@@ -1829,6 +1897,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         Returns:
             Estimated feature count
         """
+        cursor = None
         try:
             cursor = conn.cursor()
             source_uri = QgsDataSourceUri(layer.source())
@@ -1858,6 +1927,20 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 
         except Exception as e:
             self.log_debug(f"Error getting fast count: {e}, falling back to featureCount()")
+            # CRITICAL FIX v2.5.21: Rollback the aborted transaction before continuing
+            # If cursor.execute() fails, the connection is left in an aborted state
+            # and all subsequent commands will fail with "current transaction is aborted"
+            try:
+                conn.rollback()
+                self.log_debug("Transaction rolled back after fast count error")
+            except Exception as rollback_err:
+                self.log_debug(f"Rollback in fast count failed: {rollback_err}")
+            finally:
+                if cursor:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
             return layer.featureCount()
     
     def _apply_direct(self, layer: QgsVectorLayer, expression: str) -> bool:
@@ -2076,20 +2159,54 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 command_names.append("ANALYZE")
             
             # Execute commands with timing
+            # CRITICAL FIX v2.5.21: Add per-command error handling
+            # If any command fails (especially CREATE MV), we need to:
+            # 1. Rollback the transaction to clear the aborted state
+            # 2. For critical commands (CREATE MV), abort entirely
+            # 3. For non-critical commands (INDEX, ANALYZE), log and continue
             total_steps = len(commands)
             step_times = []
+            critical_commands = ["CREATE MV (optimized)", "DROP MV"]  # Commands that must succeed
             
             for i, (cmd, cmd_name) in enumerate(zip(commands, command_names)):
                 step_start = time.time()
                 self.log_debug(f"Executing {cmd_name} ({i+1}/{total_steps})")
-                cursor.execute(cmd)
-                conn.commit()
-                step_time = time.time() - step_start
-                step_times.append((cmd_name, step_time))
                 
-                # Log slow operations
-                if step_time > 1.0:
-                    self.log_debug(f"  ⏱️ {cmd_name} took {step_time:.2f}s")
+                try:
+                    cursor.execute(cmd)
+                    conn.commit()
+                    step_time = time.time() - step_start
+                    step_times.append((cmd_name, step_time))
+                    
+                    # Log slow operations
+                    if step_time > 1.0:
+                        self.log_debug(f"  ⏱️ {cmd_name} took {step_time:.2f}s")
+                        
+                except Exception as cmd_error:
+                    error_str = str(cmd_error).lower()
+                    step_time = time.time() - step_start
+                    
+                    # Rollback to clear the aborted transaction state
+                    try:
+                        conn.rollback()
+                        self.log_debug(f"  Transaction rolled back after {cmd_name} failure")
+                    except Exception as rollback_err:
+                        self.log_debug(f"  Rollback failed: {rollback_err}")
+                    
+                    # Check if this is a critical command (must succeed)
+                    is_critical = cmd_name in critical_commands
+                    
+                    if is_critical:
+                        # Critical command failed - abort MV creation
+                        self.log_error(f"Critical command {cmd_name} failed: {cmd_error}")
+                        raise cmd_error  # Re-raise to trigger fallback
+                    else:
+                        # Non-critical command failed - log and continue
+                        # INDEX and ANALYZE failures don't prevent filtering from working
+                        self.log_warning(f"  ⚠️ Non-critical command {cmd_name} failed: {cmd_error}")
+                        self.log_warning(f"  → Continuing without {cmd_name} (filter will still work)")
+                        step_times.append((f"{cmd_name} (FAILED)", step_time))
+                        continue
             
             # v2.6.1: Update layer to use materialized view with optimized column reference
             layer_subset = f'"{key_column}" IN (SELECT "pk" FROM {full_mv_name})'
@@ -2187,10 +2304,18 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Traceback: {traceback.format_exc()}")
             
             # Cleanup and fallback
+            # CRITICAL FIX v2.5.11: Rollback the aborted transaction before closing
+            # This prevents "current transaction is aborted" errors on subsequent operations
             try:
-                if 'cursor' in locals():
+                if 'conn' in locals() and conn:
+                    try:
+                        conn.rollback()
+                        self.log_debug("Transaction rolled back after error")
+                    except Exception as rollback_err:
+                        self.log_debug(f"Rollback failed (connection may be closed): {rollback_err}")
+                if 'cursor' in locals() and cursor:
                     cursor.close()
-                if 'conn' in locals():
+                if 'conn' in locals() and conn:
                     conn.close()
             except (OSError, AttributeError, Exception) as cleanup_err:
                 self.log_debug(f"Cleanup error (non-fatal): {cleanup_err}")

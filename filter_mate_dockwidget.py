@@ -7311,37 +7311,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # SYNCHRONISATION COMPLÈTE: reflète exactement la sélection QGIS
             # - COCHE les features dont la PK est sélectionnée dans QGIS
             # - DÉCOCHE les features dont la PK n'est PAS sélectionnée dans QGIS
-            checked_count = 0
-            unchecked_count = 0
-            found_pk_values = set()
-            for i in range(list_widget.count()):
-                item = list_widget.item(i)
-                item_pk_value = item.data(3)  # data(3) contains PRIMARY KEY value
-                # Convert to string for consistent comparison
-                item_pk_str = str(item_pk_value) if item_pk_value is not None else item_pk_value
-                found_pk_values.add(item_pk_str)
-                
-                if item_pk_str in selected_pk_values:
-                    # CHECK features sélectionnées dans QGIS
-                    if item.checkState() != Qt.Checked:
-                        item.setCheckState(Qt.Checked)
-                        checked_count += 1
-                        logger.debug(f"  CHECKING item: {item.data(0)} (pk={item_pk_str})")
-                else:
-                    # UNCHECK features NON sélectionnées dans QGIS
-                    if item.checkState() == Qt.Checked:
-                        item.setCheckState(Qt.Unchecked)
-                        unchecked_count += 1
-                        logger.debug(f"  UNCHECKING item: {item.data(0)} (pk={item_pk_str})")
             
-            logger.info(f"_sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
+            # CRITICAL FIX: Set sync flag BEFORE modifying checkStates to prevent infinite recursion
+            # setCheckState() can trigger signals that call exploring_features_changed → select() → 
+            # on_layer_selection_changed → _sync_multiple_selection_from_qgis (infinite loop)
+            self._syncing_from_qgis = True
             
-            # Update display if any changes were made
-            if checked_count > 0 or unchecked_count > 0:
+            try:
+                checked_count = 0
+                unchecked_count = 0
+                found_pk_values = set()
+                for i in range(list_widget.count()):
+                    item = list_widget.item(i)
+                    item_pk_value = item.data(3)  # data(3) contains PRIMARY KEY value
+                    # Convert to string for consistent comparison
+                    item_pk_str = str(item_pk_value) if item_pk_value is not None else item_pk_value
+                    found_pk_values.add(item_pk_str)
+                    
+                    if item_pk_str in selected_pk_values:
+                        # CHECK features sélectionnées dans QGIS
+                        if item.checkState() != Qt.Checked:
+                            item.setCheckState(Qt.Checked)
+                            checked_count += 1
+                            logger.debug(f"  CHECKING item: {item.data(0)} (pk={item_pk_str})")
+                    else:
+                        # UNCHECK features NON sélectionnées dans QGIS
+                        if item.checkState() == Qt.Checked:
+                            item.setCheckState(Qt.Unchecked)
+                            unchecked_count += 1
+                            logger.debug(f"  UNCHECKING item: {item.data(0)} (pk={item_pk_str})")
                 
-                # Set sync flag BEFORE updating to prevent recursion
-                self._syncing_from_qgis = True
-                try:
+                logger.info(f"_sync_multiple_selection_from_qgis: checked={checked_count}, unchecked={unchecked_count}")
+                
+                # Update display if any changes were made
+                if checked_count > 0 or unchecked_count > 0:
                     # Manually update the items display and emit signal
                     # (similar to what updateFeatures does in the task)
                     selection_data = []
@@ -7359,11 +7362,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # NOTE: This could trigger exploring_features_changed which might update QGIS selection
                     # if is_selecting is active. The _syncing_from_qgis flag prevents infinite loops.
                     multiple_widget.updatingCheckedItemList.emit(selection_data, True)
-                finally:
-                    # Always clear the sync flag
-                    self._syncing_from_qgis = False
+            finally:
+                # Always clear the sync flag
+                self._syncing_from_qgis = False
                 
         except Exception as e:
+            # Make sure to reset sync flag even on error
+            self._syncing_from_qgis = False
             print(f"[FilterMate] ERROR in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
             logger.warning(f"Error in _sync_multiple_selection_from_qgis: {type(e).__name__}: {e}")
 

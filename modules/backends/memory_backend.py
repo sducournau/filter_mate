@@ -233,7 +233,7 @@ class MemoryGeometricFilter(GeometricFilterBackend):
         Args:
             layer_props: Layer properties dictionary
             predicates: Dictionary of spatial predicates
-            source_geom: Source geometry WKT (optional)
+            source_geom: Source geometry WKT (optional) - actually a QgsVectorLayer for OGR/Memory backends
             buffer_value: Buffer distance (optional)
             buffer_expression: Dynamic buffer expression (optional)
             source_filter: Source filter expression (optional)
@@ -242,6 +242,15 @@ class MemoryGeometricFilter(GeometricFilterBackend):
         Returns:
             QGIS expression string or feature ID list as string
         """
+        # v2.5.11: Store source_geom, predicates, and buffer for later use in apply_filter
+        # This is the same pattern used by OGR backend
+        self.source_geom = source_geom
+        self.predicates = predicates
+        self.buffer_value = buffer_value
+        
+        self.log_debug(f"Memory build_expression: stored source_geom={type(source_geom).__name__ if source_geom else None}, "
+                      f"predicates={predicates}, buffer={buffer_value}")
+        
         # Memory layers use QGIS expressions, not SQL
         # For simple attribute filtering, return the expression as-is
         if not predicates and not source_geom:

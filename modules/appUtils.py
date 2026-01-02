@@ -13,17 +13,21 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Import conditionnel de psycopg2 pour support PostgreSQL optionnel
+# QGIS PostgreSQL backend always available via native provider
+# psycopg2 is only needed for advanced features (materialized views, etc.)
+POSTGRESQL_AVAILABLE = True  # QGIS native PostgreSQL support always available
+
+# Import conditionnel de psycopg2 pour fonctionnalités avancées PostgreSQL
 try:
     import psycopg2
-    POSTGRESQL_AVAILABLE = True
+    PSYCOPG2_AVAILABLE = True
 except ImportError:
-    POSTGRESQL_AVAILABLE = False
+    PSYCOPG2_AVAILABLE = False
     psycopg2 = None
-    logger.warning(
-        "PostgreSQL support disabled (psycopg2 not found). "
-        "Plugin will work with local files (Shapefile, GeoPackage, etc.) and Spatialite. "
-        "For better performance with large datasets, consider installing psycopg2."
+    logger.info(
+        "psycopg2 not found - PostgreSQL layers will use QGIS native API (setSubsetString). "
+        "Advanced features (materialized views, spatial indexes) disabled. "
+        "For better performance with large datasets (>10k features), consider installing psycopg2."
     )
 
 from qgis.core import (
@@ -441,18 +445,18 @@ def is_layer_source_available(layer, require_psycopg2: bool = True) -> bool:
 
         # PostgreSQL: verify connectivity
         if provider == 'postgresql':
-            # Check if psycopg2 is available (only if required for the operation)
-            if require_psycopg2 and not POSTGRESQL_AVAILABLE:
-                logger.warning(
-                    f"PostgreSQL layer detected but psycopg2 not available: {layer.name() if layer else 'Unknown'}"
+            # v2.5.x: PostgreSQL layers always available via QGIS native API
+            # psycopg2 is only needed for advanced features (materialized views)
+            if require_psycopg2 and not PSYCOPG2_AVAILABLE:
+                logger.debug(
+                    f"PostgreSQL layer '{layer.name() if layer else 'Unknown'}' - psycopg2 not available, "
+                    f"will use QGIS native API (setSubsetString)"
                 )
-                return False
             
             # For PostgreSQL, we rely on QGIS validity as connection test is expensive
             # The actual connection test will happen in get_datasource_connexion_from_layer()
             # when the layer is actually used for filtering
-            # When require_psycopg2=False, PostgreSQL layers are considered available
-            # for operations that use QGIS API (like export) without direct DB connection
+            # PostgreSQL layers are always considered available - QGIS handles the connection
             return True
 
         # Fallback: trust QGIS validity for unknown provider types
@@ -759,11 +763,19 @@ def geometry_type_to_string(layer):
 
 def get_datasource_connexion_from_layer(layer):        
     """
-    Get PostgreSQL connection from layer (if available).
-    Returns (None, None) if PostgreSQL is not available or layer is not PostgreSQL.
+    Get PostgreSQL connection from layer using psycopg2 (for advanced features).
+    
+    Returns (None, None) if:
+    - psycopg2 is not available (basic filtering still works via QGIS API)
+    - Layer is not PostgreSQL
+    - Connection fails
+    
+    Note: This is only needed for advanced features like materialized views.
+    Basic filtering via setSubsetString() works without psycopg2.
     """
-    # Vérifier si PostgreSQL est disponible
-    if not POSTGRESQL_AVAILABLE:
+    # Vérifier si psycopg2 est disponible (needed for direct DB operations)
+    if not PSYCOPG2_AVAILABLE:
+        logger.debug("psycopg2 not available - cannot create direct PostgreSQL connection")
         return None, None
     
     # Vérifier que c'est bien une source PostgreSQL

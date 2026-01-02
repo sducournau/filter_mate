@@ -2,6 +2,25 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.6.2] - 2026-01-02 - Bugfix: External Table Reference in Geometric Filters
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: Erreur "missing FROM-clause entry for table" avec pré-filtrage commune**
+  - **Problème**: Quand une couche PostgreSQL était pré-filtrée par intersection avec une autre table (ex: commune), puis qu'un filtre géométrique était appliqué, l'erreur SQL "missing FROM-clause entry for table commune" se produisait
+  - **Cause**: Le filtre source contenait des références à des tables externes (ex: `"commune"."fid"`) qui n'étaient pas adaptées pour la sous-requête EXISTS
+  - **Solution**: Détection automatique des références à des tables externes dans le filtre source et exclusion sécurisée de ces filtres problématiques
+  - **Impact**: Les filtres géométriques fonctionnent maintenant correctement sur les couches pré-filtrées par intersection avec d'autres tables
+
+### 🔧 Améliorations Techniques
+
+- Nouvelle détection des références de tables externes avant adaptation du filtre
+- Double vérification: pré-adaptation (détection pattern) + post-adaptation (résidus)
+- Logs améliorés pour le diagnostic: `"Source filter contains EXTERNAL TABLE reference: 'commune'"`
+- Gestion gracieuse: le filtre source est ignoré au lieu de provoquer une erreur SQL
+
+---
+
 ## [2.6.1] - 2026-01-02 - Performance: Optimisation des Vues Matérialisées et Tables Source
 
 ### 🚀 Optimisations de Performance

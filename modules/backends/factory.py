@@ -19,7 +19,7 @@ import time
 from typing import Dict, Optional, Tuple
 from qgis.core import QgsVectorLayer, QgsFeature, QgsFields, QgsWkbTypes, QgsMemoryProviderUtils
 from .base_backend import GeometricFilterBackend
-from .postgresql_backend import PostgreSQLGeometricFilter, POSTGRESQL_AVAILABLE
+from .postgresql_backend import PostgreSQLGeometricFilter, POSTGRESQL_AVAILABLE, PSYCOPG2_AVAILABLE
 from .spatialite_backend import SpatialiteGeometricFilter
 from .ogr_backend import OGRGeometricFilter
 from .memory_backend import MemoryGeometricFilter
@@ -45,10 +45,23 @@ def get_small_dataset_config() -> Tuple[bool, int]:
         
         config_data = ENV_VARS.get('CONFIG_DATA', {})
         config = config_data.get('APP', {}).get('OPTIONS', {}).get('SMALL_DATASET_OPTIMIZATION', {})
-        enabled = config.get('enabled', DEFAULT_SMALL_DATASET_OPTIMIZATION)
-        threshold = config.get('threshold', SMALL_DATASET_THRESHOLD)
         
-        return (enabled, threshold)
+        # Handle nested config objects with 'value' key (v2.0 config format)
+        enabled_config = config.get('enabled', DEFAULT_SMALL_DATASET_OPTIMIZATION)
+        threshold_config = config.get('threshold', SMALL_DATASET_THRESHOLD)
+        
+        # Extract 'value' if it's a dict, otherwise use directly
+        if isinstance(enabled_config, dict):
+            enabled = enabled_config.get('value', DEFAULT_SMALL_DATASET_OPTIMIZATION)
+        else:
+            enabled = enabled_config
+            
+        if isinstance(threshold_config, dict):
+            threshold = threshold_config.get('value', SMALL_DATASET_THRESHOLD)
+        else:
+            threshold = threshold_config
+        
+        return (bool(enabled), int(threshold))
     except Exception:
         # Fallback to defaults
         return (DEFAULT_SMALL_DATASET_OPTIMIZATION, SMALL_DATASET_THRESHOLD)
@@ -336,12 +349,11 @@ class BackendFactory:
             
             # Create the forced backend - RESPECT USER CHOICE strictly
             if forced_backend == 'postgresql':
-                if not POSTGRESQL_AVAILABLE:
-                    logger.warning(
-                        f"⚠️ PostgreSQL backend forced for '{layer.name()}' but psycopg2 not available. "
-                        f"Install psycopg2 to use PostgreSQL backend."
+                if not PSYCOPG2_AVAILABLE:
+                    logger.info(
+                        f"ℹ️ PostgreSQL backend forced for '{layer.name()}' - psycopg2 not available. "
+                        f"Using QGIS native API (setSubsetString). MVs disabled."
                     )
-                    # Still create PostgreSQL backend - it will handle the error gracefully
                 backend = PostgreSQLGeometricFilter(task_params)
                 if not backend.supports_layer(layer):
                     logger.warning(
@@ -430,18 +442,22 @@ class BackendFactory:
                     f"falling back to PostgreSQL backend"
                 )
         
-        # Try PostgreSQL backend if available
-        if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
+        # v2.5.x: PostgreSQL backend - always available via QGIS native API
+        # psycopg2 is only required for advanced features (materialized views)
+        if layer_provider_type == PROVIDER_POSTGRES:
             backend = PostgreSQLGeometricFilter(task_params)
             if backend.supports_layer(layer):
-                logger.info(f"Using PostgreSQL backend for {layer.name()}")
+                if PSYCOPG2_AVAILABLE:
+                    logger.info(f"✓ Using PostgreSQL backend for {layer.name()} (full features with psycopg2)")
+                else:
+                    logger.info(f"✓ Using PostgreSQL backend for {layer.name()} (QGIS native API, MVs disabled)")
                 if return_memory_info:
                     return (backend, None, False)
                 return backend
             else:
-                # PostgreSQL layer but connection failed - fallback to OGR
+                # PostgreSQL layer but validation failed - fallback to OGR
                 # OGR backend uses QGIS processing which works with all layer types
-                logger.warning(f"PostgreSQL connection unavailable for {layer.name()}, falling back to OGR backend")
+                logger.warning(f"PostgreSQL backend validation failed for {layer.name()}, falling back to OGR backend")
                 backend = OGRGeometricFilter(task_params)
                 if return_memory_info:
                     return (backend, None, False)
