@@ -211,10 +211,11 @@ def sqlite_execute_with_retry(operation_func, operation_name="database operation
                                max_retries=SQLITE_MAX_RETRIES, initial_delay=SQLITE_RETRY_DELAY,
                                max_total_time=SQLITE_MAX_RETRY_TIME):
     """
-    Execute a SQLite operation with retry logic for handling database locks.
+    Execute a SQLite operation with exponential backoff retry logic.
     
-    Implements exponential backoff for "database is locked" errors with both
-    retry count and total time limits for robust handling of concurrent access.
+    PERFORMANCE IMPROVEMENT (v2.6.0): Implements true exponential backoff with
+    jitter for better handling of concurrent access scenarios. Reduces contention
+    by randomizing retry timing.
     
     Args:
         operation_func: Callable that performs the database operation. 
@@ -244,6 +245,17 @@ def sqlite_execute_with_retry(operation_func, operation_name="database operation
                 
         sqlite_execute_with_retry(my_insert, "insert properties")
     """
+    import random
+    
+    # Import constants for jitter factor
+    try:
+        from ..constants import SQLITE_JITTER_FACTOR, SQLITE_MAX_DELAY
+        jitter_factor = SQLITE_JITTER_FACTOR
+        max_delay = SQLITE_MAX_DELAY
+    except ImportError:
+        jitter_factor = 0.1
+        max_delay = 5.0
+    
     retry_delay = initial_delay
     last_exception = None
     start_time = time.time()
@@ -270,12 +282,24 @@ def sqlite_execute_with_retry(operation_func, operation_name="database operation
             error_msg = str(e).lower()
             
             # Check for recoverable database lock errors
-            is_locked = "database is locked" in error_msg or "database is busy" in error_msg
+            is_recoverable = any(x in error_msg for x in [
+                "database is locked",
+                "database is busy",
+                "unable to open database file",
+                "disk i/o error",
+                "database table is locked"
+            ])
             
-            if is_locked and attempt < max_retries - 1:
+            if is_recoverable and attempt < max_retries - 1:
                 # Check if we still have time for another retry
                 remaining_time = max_total_time - (time.time() - start_time)
-                actual_delay = min(retry_delay, remaining_time - 0.1)  # Leave 0.1s margin
+                
+                # Calculate delay with exponential backoff
+                base_delay = min(retry_delay * (2 ** attempt), max_delay)
+                
+                # Add jitter to prevent thundering herd
+                jitter = random.uniform(0, base_delay * jitter_factor)
+                actual_delay = min(base_delay + jitter, remaining_time - 0.1)
                 
                 if actual_delay <= 0:
                     logger.error(
@@ -283,15 +307,13 @@ def sqlite_execute_with_retry(operation_func, operation_name="database operation
                     )
                     raise
                 
-                # Database locked - retry with exponential backoff
+                # Database locked - retry with exponential backoff + jitter
                 logger.warning(
-                    f"Database locked during {operation_name}. "
+                    f"SQLite recoverable error during {operation_name}: {error_msg[:50]}... "
                     f"Retry {attempt + 1}/{max_retries} after {actual_delay:.2f}s "
                     f"(elapsed: {time.time() - start_time:.1f}s)"
                 )
                 time.sleep(actual_delay)
-                # Exponential backoff with cap at 5 seconds
-                retry_delay = min(retry_delay * 2, 5.0)
                 continue
             else:
                 # Final attempt failed or different error
@@ -308,6 +330,82 @@ def sqlite_execute_with_retry(operation_func, operation_name="database operation
     # Should not reach here, but just in case
     if last_exception:
         raise last_exception
+
+
+def sqlite_execute_with_exponential_backoff(
+    conn,
+    query: str,
+    params=None,
+    max_retries: int = None,
+    base_delay: float = None,
+    max_delay: float = None
+):
+    """
+    Execute SQL query with exponential backoff for SQLite concurrency.
+    
+    STABILITY IMPROVEMENT (v2.6.0): Dedicated function for executing SQL
+    with proper backoff handling for Spatialite/GeoPackage operations.
+    
+    Args:
+        conn: sqlite3.Connection
+        query: SQL query to execute
+        params: Query parameters (optional)
+        max_retries: Maximum retry attempts (default from constants)
+        base_delay: Base delay in seconds (default from constants)
+        max_delay: Maximum delay in seconds (default from constants)
+    
+    Returns:
+        sqlite3.Cursor: Result cursor
+        
+    Raises:
+        sqlite3.OperationalError: If query fails after all retries
+    """
+    import random
+    
+    # Get defaults from constants
+    try:
+        from ..constants import (
+            SQLITE_MAX_RETRIES, SQLITE_BASE_DELAY, SQLITE_MAX_DELAY, SQLITE_JITTER_FACTOR
+        )
+    except ImportError:
+        SQLITE_MAX_RETRIES = 5
+        SQLITE_BASE_DELAY = 0.1
+        SQLITE_MAX_DELAY = 5.0
+        SQLITE_JITTER_FACTOR = 0.1
+    
+    max_retries = max_retries or SQLITE_MAX_RETRIES
+    base_delay = base_delay or SQLITE_BASE_DELAY
+    max_delay = max_delay or SQLITE_MAX_DELAY
+    
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params or ())
+            return cursor
+            
+        except sqlite3.OperationalError as e:
+            last_error = e
+            error_str = str(e).lower()
+            
+            # Check for recoverable errors
+            is_recoverable = any(x in error_str for x in [
+                'locked', 'busy', 'unable to open', 'disk i/o error'
+            ])
+            
+            if is_recoverable and attempt < max_retries - 1:
+                # Exponential backoff with jitter
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                jitter = random.uniform(0, delay * SQLITE_JITTER_FACTOR)
+                time.sleep(delay + jitter)
+                logger.debug(f"SQLite retry {attempt + 1}/{max_retries} after {delay:.2f}s")
+            else:
+                raise
+    
+    raise sqlite3.OperationalError(
+        f"Failed after {max_retries} retries: {query[:100]}"
+    ) from last_error
 
 
 # =============================================================================

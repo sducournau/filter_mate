@@ -151,7 +151,7 @@
             "IS_SELECTING": "select_black.png",
             "IS_TRACKING": "track.png",
             "IS_LINKING": "link.png",
-            "RESET_ALL_LAYER_PROPERTIES": "save_properties.png"
+            "RESET_ALL_LAYER_PROPERTIES": "reset_properties.png"
           },
           "FILTERING": {
             "AUTO_CURRENT_LAYER": "auto_layer_white.png",
@@ -249,6 +249,57 @@
           "value": "ogr_memory",
           "choices": ["ogr_memory", "qgis_processing"],
           "description": "Backend to use: 'ogr_memory' (fastest) or 'qgis_processing' (compatible)"
+        }
+      },
+      "PROGRESSIVE_FILTERING": {
+        "description": "Progressive/two-phase filtering for complex queries on large PostgreSQL datasets (v2.5.9 optimization)",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable/disable progressive filtering for complex expressions"
+        },
+        "two_phase_enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable two-phase filtering (bbox pre-filter + full predicate)"
+        },
+        "complexity_threshold": {
+          "value": 100,
+          "description": "Minimum query complexity score to trigger two-phase filtering (higher = more selective)"
+        },
+        "lazy_cursor_threshold": {
+          "value": 50000,
+          "description": "Minimum features to use lazy cursor streaming (memory-efficient)"
+        },
+        "chunk_size": {
+          "value": 5000,
+          "description": "Number of IDs per chunk for streaming results"
+        }
+      },
+      "QUERY_CACHE": {
+        "description": "Expression caching to avoid rebuilding identical queries (v2.5.9 enhancement)",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable/disable query expression caching"
+        },
+        "max_size": {
+          "value": 100,
+          "description": "Maximum number of cached expressions"
+        },
+        "ttl_seconds": {
+          "value": 0,
+          "description": "Time-to-live for cache entries in seconds (0 = no expiration)"
+        },
+        "cache_result_counts": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Cache result counts to avoid expensive COUNT queries"
+        },
+        "cache_complexity_scores": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Cache complexity scores to avoid re-analysis"
         }
       },
       "PARALLEL_FILTERING": {

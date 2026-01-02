@@ -18,13 +18,35 @@ FilterMate is a production-ready QGIS plugin that provides advanced filtering an
 - **Architecture**: Multi-backend with factory pattern and automatic selection
 
 ## Current Status
-- **Version**: 2.5.5 (December 29, 2025)
-- **Status**: Production - Stable with critical negative buffer fixes
+- **Version**: 2.5.18 (January 2, 2026)
+- **Status**: Production - Stable with PostgreSQL timeout protection
 - **All Phases Complete**: PostgreSQL, Spatialite, and OGR backends fully operational
 - **Recent Focus (v2.5.x)**: Negative buffer handling, empty geometry detection, HiDPI support
 - **Languages Supported**: 21 languages (including Slovenian, Filipino, Amharic)
 
-## Recent Development (December 29, 2025)
+## Recent Development (January 2, 2026)
+
+### v2.5.18 - CRITICAL FIX: PostgreSQL Statement Timeout & OGR Fallback (✅ Complete)
+**Date**: January 2, 2026
+
+**Problem Solved:**
+- QGIS freezes ("Ne répond pas") during geometric filtering with PostgreSQL
+- Complex EXISTS queries with ST_Intersects on large source datasets block indefinitely
+- No automatic fallback when PostgreSQL query takes too long
+
+**Solutions Implemented:**
+- Added `statement_timeout = 120s` to all PostgreSQL connections (pooled and direct)
+- Intelligent timeout detection in materialized view creation
+- Automatic OGR fallback when PostgreSQL query times out
+- Enhanced logging with user-visible warnings in QGIS message panel
+
+**Files Modified:**
+- `modules/connection_pool.py` - Added DEFAULT_STATEMENT_TIMEOUT (120s)
+- `modules/appUtils.py` - Added timeout to get_datasource_connexion_from_layer()
+- `modules/backends/postgresql_backend.py` - Timeout detection in exception handler
+- `modules/tasks/filter_task.py` - OGR fallback for PostgreSQL failures
+
+---
 
 ### v2.5.5 - CRITICAL FIX: PostgreSQL Negative Buffer Empty Geometry Detection (✅ Complete)
 **Date**: December 29, 2025
@@ -357,7 +379,7 @@ pytest --cov=modules --cov-report=html
 - **License**: See LICENSE file
 - **Author**: imagodata (simon.ducournau+filter_mate@gmail.com)
 - **QGIS Min Version**: 3.0
-- **Current Plugin Version**: 2.5.5
+- **Current Plugin Version**: 2.5.18
 
 ## BMAD Documentation
 

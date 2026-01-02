@@ -75,6 +75,26 @@ except ImportError:
     get_spatial_index_manager = None
     SpatialIndexManager = None
 
+# v2.5.10: Import Multi-Step Optimizer for attribute-first filtering
+try:
+    from .multi_step_optimizer import (
+        MultiStepFilterOptimizer,
+        MultiStepPlanBuilder,
+        BackendFilterStrategy,
+        AttributePreFilter,
+        OGROptimizer,
+        BackendSelectivityEstimator
+    )
+    MULTI_STEP_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    MULTI_STEP_OPTIMIZER_AVAILABLE = False
+    MultiStepFilterOptimizer = None
+    MultiStepPlanBuilder = None
+    BackendFilterStrategy = None
+    AttributePreFilter = None
+    OGROptimizer = None
+    BackendSelectivityEstimator = None
+
 logger = get_tasks_logger()
 
 # Thread safety tracking (v2.3.9)
@@ -256,6 +276,221 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         return should_clear
 
+    def _try_multi_step_filter(
+        self,
+        layer: QgsVectorLayer,
+        attribute_filter: Optional[str],
+        source_layer: QgsVectorLayer,
+        predicates: Dict,
+        buffer_value: Optional[float],
+        old_subset: Optional[str],
+        combine_operator: Optional[str]
+    ) -> Optional[bool]:
+        """
+        Try multi-step filter optimization for large datasets.
+        
+        v2.5.10: Uses attribute-first strategy when beneficial.
+        
+        This method analyzes the filter operation and determines if a multi-step
+        approach would be more efficient than direct spatial filtering:
+        
+        1. If attribute filter is very selective (<30%), apply it first to reduce
+           the number of features that need expensive spatial calculations.
+        2. For very large datasets, use chunked processing.
+        
+        Args:
+            layer: Target layer to filter
+            attribute_filter: Optional attribute expression
+            source_layer: Source layer for spatial filter
+            predicates: Spatial predicates to apply
+            buffer_value: Optional buffer value
+            old_subset: Existing subset string
+            combine_operator: Operator to combine with existing filter
+            
+        Returns:
+            True if filter succeeded, False if failed, None if should fall back to standard
+        """
+        if not MULTI_STEP_OPTIMIZER_AVAILABLE:
+            return None  # Fall back to standard
+        
+        try:
+            feature_count = layer.featureCount()
+            
+            # Only use multi-step for medium-large datasets
+            if feature_count < 5000:
+                return None  # Standard method is fine
+            
+            # Get source extent for selectivity estimation
+            source_extent = source_layer.extent() if source_layer else None
+            
+            # Create optimizer and build plan
+            optimizer = MultiStepFilterOptimizer(layer, self.task_params)
+            plan = optimizer.analyze_and_plan(
+                attribute_filter=attribute_filter,
+                spatial_filter_extent=source_extent,
+                has_spatial_filter=True
+            )
+            
+            # Check if multi-step is beneficial
+            if plan.strategy == BackendFilterStrategy.DIRECT:
+                return None  # Use standard method
+            
+            if plan.strategy == BackendFilterStrategy.ATTRIBUTE_FIRST:
+                self.log_info(
+                    f"🚀 Using ATTRIBUTE-FIRST strategy for {layer.name()} "
+                    f"(selectivity: {plan.estimated_selectivity:.1%})"
+                )
+                
+                # Step 1: Get FIDs matching attribute filter
+                prefiltered_fids = optimizer.execute_attribute_prefilter(attribute_filter)
+                
+                if not prefiltered_fids:
+                    # No matches - apply empty filter
+                    self.log_info("Attribute pre-filter returned 0 matches")
+                    queue_callback = self.task_params.get('_subset_queue_callback')
+                    if queue_callback:
+                        queue_callback(layer, '1 = 0')
+                    else:
+                        from ..appUtils import safe_set_subset_string
+                        safe_set_subset_string(layer, '1 = 0')
+                    return True
+                
+                self.log_info(
+                    f"  → Attribute pre-filter: {len(prefiltered_fids)}/{feature_count} features "
+                    f"({len(prefiltered_fids)/feature_count*100:.1f}%)"
+                )
+                
+                # Step 2: Create a temporary layer with only pre-filtered features
+                # and run spatial filter on that reduced set
+                from qgis.core import QgsFeatureRequest, QgsVectorLayer, QgsMemoryProviderUtils
+                
+                # Build a temporary layer with pre-filtered features
+                request = QgsFeatureRequest()
+                if len(prefiltered_fids) <= 1000:
+                    request.setFilterFids(list(prefiltered_fids))
+                else:
+                    fid_list = ','.join(str(f) for f in sorted(prefiltered_fids))
+                    request.setFilterExpression(f'$id IN ({fid_list})')
+                
+                # Create memory layer copy
+                fields = layer.fields()
+                geom_type = layer.wkbType()
+                crs = layer.crs()
+                
+                temp_layer = QgsMemoryProviderUtils.createMemoryLayer(
+                    f"{layer.name()}_prefiltered",
+                    fields,
+                    geom_type,
+                    crs
+                )
+                
+                if not temp_layer or not temp_layer.isValid():
+                    self.log_warning("Failed to create temp layer, falling back to standard")
+                    return None
+                
+                # Copy features
+                provider = temp_layer.dataProvider()
+                features = [f for f in layer.getFeatures(request)]
+                provider.addFeatures(features)
+                temp_layer.updateExtents()
+                
+                self.log_info(f"  → Created temp layer with {temp_layer.featureCount()} features")
+                
+                # Step 3: Apply spatial filter on reduced set
+                # Apply buffer if needed
+                intersect_layer = self._apply_buffer(source_layer, buffer_value)
+                if intersect_layer is None:
+                    return False
+                
+                # Map predicates
+                predicate_codes = self._map_predicates(predicates)
+                
+                # Run selectbylocation on temp layer
+                if not self._safe_select_by_location(temp_layer, intersect_layer, predicate_codes):
+                    self.log_warning("Spatial selection on temp layer failed")
+                    return None
+                
+                # Get final matching IDs
+                final_matching = set()
+                for feat in temp_layer.selectedFeatures():
+                    # Need to map back to original layer FIDs
+                    # Features in temp layer have same attribute values
+                    final_matching.add(feat.id())
+                
+                # The FIDs in temp_layer match the original because we copied them
+                # But we need to use the attribute values to find original FIDs
+                from ..appUtils import get_primary_key_name
+                pk_field = get_primary_key_name(layer)
+                
+                if pk_field:
+                    # Get PK values from selected temp features
+                    pk_values = []
+                    for feat in temp_layer.selectedFeatures():
+                        pk_val = feat.attribute(pk_field)
+                        if pk_val is not None:
+                            pk_values.append(pk_val)
+                    
+                    if pk_values:
+                        # Build subset expression
+                        from qgis.PyQt.QtCore import QMetaType
+                        field_idx = layer.fields().indexFromName(pk_field)
+                        field_type = layer.fields()[field_idx].type()
+                        
+                        if field_type == QMetaType.Type.QString:
+                            pk_list = ','.join(f"'{str(v).replace(chr(39), chr(39)+chr(39))}'" for v in pk_values)
+                        else:
+                            pk_list = ','.join(str(v) for v in pk_values)
+                        
+                        new_expression = f'"{pk_field}" IN ({pk_list})'
+                    else:
+                        new_expression = '1 = 0'
+                else:
+                    # Fall back to $id
+                    selected_ids = [f.id() for f in temp_layer.selectedFeatures()]
+                    if selected_ids:
+                        id_list = ','.join(str(fid) for fid in selected_ids)
+                        new_expression = f'$id IN ({id_list})'
+                    else:
+                        new_expression = '1 = 0'
+                
+                # Combine with old subset if needed
+                if old_subset and not self._should_clear_old_subset(old_subset):
+                    if not combine_operator:
+                        combine_operator = 'AND'
+                    final_expression = f"({old_subset}) {combine_operator} ({new_expression})"
+                else:
+                    final_expression = new_expression
+                
+                # Apply filter
+                queue_callback = self.task_params.get('_subset_queue_callback')
+                if queue_callback:
+                    queue_callback(layer, final_expression)
+                    self.log_info(f"✓ Multi-step filter queued for {layer.name()}")
+                else:
+                    from ..appUtils import safe_set_subset_string
+                    safe_set_subset_string(layer, final_expression)
+                    self.log_info(f"✓ Multi-step filter applied to {layer.name()}")
+                
+                return True
+            
+            elif plan.strategy == BackendFilterStrategy.PROGRESSIVE_CHUNKS:
+                self.log_info(
+                    f"🔄 Using PROGRESSIVE_CHUNKS strategy for {layer.name()} "
+                    f"(chunk_size: {plan.chunk_size})"
+                )
+                # For now, fall back to standard for chunked processing
+                # TODO: Implement chunked spatial filtering
+                return None
+            
+            # Other strategies: fall back to standard
+            return None
+            
+        except Exception as e:
+            self.log_warning(f"Multi-step filter failed: {e}, falling back to standard")
+            import traceback
+            self.log_debug(traceback.format_exc())
+            return None
+
     def build_expression(
         self,
         layer_props: Dict,
@@ -417,7 +652,23 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 if feature_count >= 100000:
                     self.log_info(f"Large dataset ({feature_count:,} features)")
                 
-                # FIX v2.4.6: Always use standard method for OGR layers
+                # v2.5.10: Try multi-step filter optimization for large datasets
+                # with combined attribute+spatial filters
+                if MULTI_STEP_OPTIMIZER_AVAILABLE and feature_count >= 5000:
+                    # Check if there's an attribute filter we can use for pre-filtering
+                    attribute_filter = old_subset if old_subset and not self._should_clear_old_subset(old_subset) else None
+                    
+                    if attribute_filter or feature_count >= 50000:
+                        multi_result = self._try_multi_step_filter(
+                            layer, attribute_filter, source_layer, predicates,
+                            buffer_value, old_subset, combine_operator
+                        )
+                        
+                        if multi_result is not None:
+                            return multi_result  # True or False
+                        # else: fall through to standard method
+                
+                # FIX v2.4.6: Use standard method for OGR layers
                 # The large dataset optimization (using _fm_match_ temp field) causes
                 # SQLite "unable to open database file" errors when:
                 # - Multiple layers from the same GeoPackage are filtered simultaneously
@@ -1361,19 +1612,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"OGR standard filter: target={layer.name()} ({layer.featureCount()} features), source={source_layer.name()} ({source_layer.featureCount()} features)")
         
         # DIAGNOSTIC v2.4.17: Log source layer geometry details before buffer
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
-            f"_apply_filter_standard: source_layer={source_layer.name()}, features={source_layer.featureCount()}",
-            "FilterMate", Qgis.Info
-        )
-        if source_layer.featureCount() > 0:
+        logger.debug(f"_apply_filter_standard: source_layer={source_layer.name()}, features={source_layer.featureCount()}")
+        # Log first 3 source features at DEBUG level only
+        if source_layer.featureCount() > 0 and logger.isEnabledFor(logging.DEBUG):
             for idx, feat in enumerate(source_layer.getFeatures()):
                 geom = feat.geometry()
                 if geom and not geom.isEmpty():
                     bbox = geom.boundingBox()
-                    QgsMessageLog.logMessage(
-                        f"  Source feature[{idx}]: id={feat.id()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
-                        "FilterMate", Qgis.Info
+                    logger.debug(
+                        f"  Source feature[{idx}]: id={feat.id()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})"
                     )
                 if idx >= 2:  # Only log first 3 features
                     break

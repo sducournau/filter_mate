@@ -48,6 +48,26 @@ try:
 except ImportError:
     WKT_CACHE_AVAILABLE = False
     get_wkt_cache = None
+
+# v2.5.10: Import Multi-Step Optimizer for attribute-first filtering
+try:
+    from .multi_step_optimizer import (
+        MultiStepFilterOptimizer,
+        MultiStepPlanBuilder,
+        BackendFilterStrategy,
+        AttributePreFilter,
+        SpatialiteOptimizer,
+        BackendSelectivityEstimator
+    )
+    MULTI_STEP_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    MULTI_STEP_OPTIMIZER_AVAILABLE = False
+    MultiStepFilterOptimizer = None
+    MultiStepPlanBuilder = None
+    BackendFilterStrategy = None
+    AttributePreFilter = None
+    SpatialiteOptimizer = None
+    BackendSelectivityEstimator = None
     WKTCache = None
 
 

@@ -173,21 +173,62 @@ def safe_log(logger, level, message, exc_info=False):
 
 
 # Pre-configured loggers for common modules
+# Root logger is configured once to ensure all FilterMate.* loggers get SafeStreamHandler
+_root_logger_configured = False
+
+
+def _ensure_root_logger_configured():
+    """
+    Ensure the root FilterMate logger has SafeStreamHandler configured.
+    
+    This is called automatically by all get_*_logger() functions to ensure
+    that child loggers inherit the safe console handler. This prevents
+    "--- Logging error ---" messages during QGIS shutdown.
+    """
+    global _root_logger_configured
+    if _root_logger_configured:
+        return
+    
+    root_logger = logging.getLogger('FilterMate')
+    
+    # Check if a SafeStreamHandler is already attached
+    has_safe_handler = any(
+        isinstance(h, SafeStreamHandler) for h in root_logger.handlers
+    )
+    
+    if not has_safe_handler:
+        # Add SafeStreamHandler to root FilterMate logger
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        console_handler = SafeStreamHandler(sys.stderr)
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(logging.WARNING)
+        root_logger.addHandler(console_handler)
+    
+    _root_logger_configured = True
+
+
 def get_app_logger():
     """Get logger for main application"""
+    _ensure_root_logger_configured()
     return get_logger('FilterMate.App')
 
 
 def get_tasks_logger():
     """Get logger for task execution"""
+    _ensure_root_logger_configured()
     return get_logger('FilterMate.Tasks')
 
 
 def get_utils_logger():
     """Get logger for utilities"""
+    _ensure_root_logger_configured()
     return get_logger('FilterMate.Utils')
 
 
 def get_ui_logger():
     """Get logger for UI components"""
+    _ensure_root_logger_configured()
     return get_logger('FilterMate.UI')

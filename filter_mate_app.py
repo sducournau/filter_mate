@@ -64,13 +64,20 @@ from .modules.object_safety import (
     is_sip_deleted, is_valid_layer, is_valid_qobject, is_qgis_alive,
     safe_disconnect, safe_emit, make_safe_callback,
     safe_set_layer_variable,  # CRASH FIX v2.4.14: Use safe wrapper instead of direct call
-    GdalErrorHandler  # v2.3.12: Suppress transient GDAL warnings during refresh
+    GdalErrorHandler,  # v2.3.12: Suppress transient GDAL warnings during refresh
+    require_valid_layer  # STABILITY v2.6.0: Decorator for layer validation
 )
+# STABILITY v2.6.0: Circuit breaker for PostgreSQL connection protection
+from .modules.circuit_breaker import (
+    get_postgresql_breaker,
+    CircuitOpenError
+)
+from .modules.logging_config import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
 import uuid
 
-# Get FilterMate logger
-logger = logging.getLogger('FilterMate')
+# Get FilterMate logger with SafeStreamHandler to prevent "--- Logging error ---" on shutdown
+logger = get_app_logger()
 
 
 def safe_show_message(level, title, message):
@@ -343,11 +350,20 @@ class FilterMateApp:
         to prevent accumulation of orphaned views in the database.
         
         This is called during cleanup() when the plugin is unloaded.
+        
+        Uses circuit breaker pattern to prevent cascading failures if
+        PostgreSQL connection is unstable.
         """
         if not POSTGRESQL_AVAILABLE:
             return
         
         if not hasattr(self, 'session_id') or not self.session_id:
+            return
+        
+        # STABILITY v2.6.0: Check circuit breaker before attempting PostgreSQL operations
+        pg_breaker = get_postgresql_breaker()
+        if pg_breaker.is_open:
+            logger.debug("Skipping PostgreSQL cleanup - circuit breaker is OPEN")
             return
         
         schema = self.app_postgresql_temp_schema
@@ -394,13 +410,20 @@ class FilterMateApp:
                         connexion.commit()
                         if count > 0:
                             logger.info(f"Cleaned up {count} materialized view(s) for session {self.session_id}")
+                
+                # STABILITY v2.6.0: Record success for circuit breaker
+                pg_breaker.record_success()
             finally:
                 try:
                     connexion.close()
                 except:
                     pass
                     
+        except CircuitOpenError:
+            logger.debug("PostgreSQL cleanup skipped - circuit breaker tripped")
         except Exception as e:
+            # STABILITY v2.6.0: Record failure for circuit breaker
+            pg_breaker.record_failure()
             logger.debug(f"Error during PostgreSQL session cleanup: {e}")
 
 
@@ -1024,7 +1047,7 @@ class FilterMateApp:
                     else:
                         # Task may have failed or not completed - try to reload layers
                         all_layers = list(self.PROJECT.mapLayers().values())
-                        logger.warning(f"Safety timer: PROJECT_LAYERS still empty after 3s, attempting recovery (total layers in project: {len(all_layers)})")
+                        logger.warning(f"Safety timer: PROJECT_LAYERS still empty after 5s, attempting recovery (total layers in project: {len(all_layers)})")
                         current_layers = self._filter_usable_layers(all_layers)
                         
                         logger.info(f"Recovery diagnostic: total_layers={len(all_layers)}, usable_layers={len(current_layers)}, pending_tasks={self._pending_add_layers_tasks}")
@@ -1112,7 +1135,7 @@ class FilterMateApp:
                             diagnostic_msg += f"\n\n⚠️ Erreur base de données: {str(db_err)}"
                             logger.error(f"Database error in final safety check: {db_err}")
                         
-                        iface.messageBar().pushWarning(
+                        self.iface.messageBar().pushWarning(
                             "FilterMate",
                             diagnostic_msg
                         )
@@ -2041,6 +2064,46 @@ class FilterMateApp:
         finally:
             self._processing_queue = False
     
+    def _warm_query_cache_for_layers(self):
+        """Pre-warm query cache for loaded layers to reduce cold-start latency.
+        
+        PERFORMANCE v2.6.0: After layers are added, pre-compute cache keys for
+        common filter predicates (equals, intersects, contains, within).
+        This reduces latency on first filter operations.
+        
+        Called automatically after successful add_layers completion.
+        """
+        try:
+            # Only warm cache if we have layers
+            if not self.PROJECT_LAYERS:
+                return
+            
+            from .modules.tasks.query_cache import warm_cache_for_project
+            
+            # Collect layer info for cache warming
+            layers_info = []
+            for layer_id, layer_info in self.PROJECT_LAYERS.items():
+                layer = layer_info.get('layer')
+                if layer and is_valid_layer(layer):
+                    provider_type = layer_info.get('layer_provider_type', 'unknown')
+                    layers_info.append({
+                        'id': layer_id,
+                        'provider_type': provider_type
+                    })
+            
+            if layers_info:
+                # Warm cache for common predicates
+                common_predicates = ['equals', 'intersects', 'contains', 'within']
+                warmed_count = warm_cache_for_project(layers_info, common_predicates)
+                if warmed_count > 0:
+                    logger.debug(f"PERFORMANCE: Pre-warmed {warmed_count} cache entries for {len(layers_info)} layers")
+        except ImportError:
+            # query_cache module not available - skip warming
+            pass
+        except Exception as e:
+            # Don't fail on cache warming errors
+            logger.debug(f"Cache warming skipped: {e}")
+
     def _is_dockwidget_ready_for_filtering(self):
         """Check if dockwidget is fully ready for filtering operations.
         
@@ -2427,25 +2490,24 @@ class FilterMateApp:
                 logger.debug(f"  Deduplicated features: {feat_count} → {len(deduplicated_features)}")
             features = deduplicated_features
         
-        logger.info(f"=== _build_common_task_params DIAGNOSTIC ===")
-        logger.info(f"  features count: {len(features) if features else 0}")
-        if features:
-            for idx, feat in enumerate(features):
+        logger.debug(f"=== _build_common_task_params DIAGNOSTIC ===")
+        logger.debug(f"  features count: {len(features) if features else 0}")
+        if features and logger.isEnabledFor(logging.DEBUG):
+            # Only log first 3 features to reduce verbosity
+            for idx, feat in enumerate(features[:3]):
                 if hasattr(feat, 'id') and hasattr(feat, 'geometry'):
                     feat_id = feat.id()
                     if feat.hasGeometry():
                         bbox = feat.geometry().boundingBox()
-                        logger.info(f"  feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
-                        QgsMessageLog.logMessage(
-                            f"  Feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})",
-                            "FilterMate", Qgis.Info
-                        )
+                        logger.debug(f"  feature[{idx}]: id={feat_id}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
                     else:
-                        logger.info(f"  feature[{idx}]: id={feat_id}, NO GEOMETRY")
+                        logger.debug(f"  feature[{idx}]: id={feat_id}, NO GEOMETRY")
                 else:
-                    logger.info(f"  feature[{idx}]: type={type(feat).__name__}")
-        logger.info(f"  expression: '{expression}'")
-        logger.info(f"  layers_to_filter count: {len(layers_to_filter)}")
+                    logger.debug(f"  feature[{idx}]: type={type(feat).__name__}")
+            if len(features) > 3:
+                logger.debug(f"  ... and {len(features) - 3} more features")
+        logger.debug(f"  expression: '{expression}'")
+        logger.debug(f"  layers_to_filter count: {len(layers_to_filter)}")
         
         # CRITICAL FIX: Validate that expression is a boolean filter expression, not a display expression
         # Display expressions like coalesce("field",'<NULL>') return values, not boolean
@@ -4080,6 +4142,9 @@ class FilterMateApp:
                 if self._pending_add_layers_tasks > 0:
                     self._pending_add_layers_tasks -= 1
                     logger.debug(f"Completed add_layers task (remaining: {self._pending_add_layers_tasks})")
+                
+                # PERFORMANCE v2.6.0: Warm query cache for loaded layers
+                self._warm_query_cache_for_layers()
                 
                 # Process next queued operation if any
                 if self._add_layers_queue and self._pending_add_layers_tasks == 0:

@@ -151,7 +151,7 @@
             "IS_SELECTING": "select_black.png",
             "IS_TRACKING": "track.png",
             "IS_LINKING": "link.png",
-            "RESET_ALL_LAYER_PROPERTIES": "save_properties.png"
+            "RESET_ALL_LAYER_PROPERTIES": "reset_properties.png"
           },
           "FILTERING": {
             "AUTO_CURRENT_LAYER": "auto_layer_white.png",

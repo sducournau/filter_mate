@@ -178,6 +178,10 @@ PERFORMANCE_THRESHOLD_MEDIUM = 50000     # 10k-50k: Warn if not PostgreSQL
 PERFORMANCE_THRESHOLD_LARGE = 100000     # 50k-100k: Strong warning
 PERFORMANCE_THRESHOLD_XLARGE = 500000    # > 500k: Critical warning
 
+# Query duration thresholds for performance warnings (in seconds)
+LONG_QUERY_WARNING_THRESHOLD = 10.0      # > 10s: Show warning to user
+VERY_LONG_QUERY_WARNING_THRESHOLD = 30.0 # > 30s: Show critical warning
+
 # Small dataset optimization threshold
 # PostgreSQL layers below this threshold will use OGR memory backend for faster filtering
 SMALL_DATASET_THRESHOLD = 5000           # < 5k: Use OGR memory instead of PostgreSQL
@@ -204,6 +208,49 @@ SPATIAL_INDEX_MIN_FEATURES = 1000       # Min features to trigger auto-index
 # Factory Cache settings
 FACTORY_CACHE_MAX_AGE = 300             # Max cache age (5 minutes)
 FACTORY_CACHE_CHECK_INTERVAL = 60       # Check cache validity every minute
+
+# ============================================================================
+# Connection Pool Constants (v2.6.0)
+# ============================================================================
+
+# PostgreSQL Connection Pool settings (optimized)
+CONNECTION_POOL_MIN = 2                 # Minimum connections to keep open
+CONNECTION_POOL_MAX = 15                # Maximum connections allowed (increased from 10)
+CONNECTION_POOL_TIMEOUT = 30            # Seconds to wait for available connection
+CONNECTION_POOL_IDLE_TIMEOUT = 180      # Seconds before closing idle connections (reduced from 300)
+CONNECTION_POOL_HEALTH_CHECK_INTERVAL = 60  # Seconds between health checks
+CONNECTION_POOL_VALIDATION_QUERY = "SELECT 1"  # Query to validate connection
+
+# Circuit Breaker settings
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5   # Failures before opening circuit
+CIRCUIT_BREAKER_SUCCESS_THRESHOLD = 2   # Successes to close circuit
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT = 30.0 # Seconds before testing recovery
+
+# ============================================================================
+# SQLite/Spatialite Retry Constants (v2.6.0)
+# ============================================================================
+
+# Exponential backoff settings for SQLite operations
+SQLITE_MAX_RETRIES = 5                  # Maximum retry attempts
+SQLITE_BASE_DELAY = 0.1                 # Base delay in seconds (100ms)
+SQLITE_MAX_DELAY = 5.0                  # Maximum delay in seconds
+SQLITE_JITTER_FACTOR = 0.1              # Random jitter factor (0.1 = 10%)
+SQLITE_TIMEOUT = 30.0                   # Default timeout in seconds
+
+# ============================================================================
+# Flag Manager Constants (v2.6.0)
+# ============================================================================
+
+# Default flag timeouts in milliseconds
+FLAG_TIMEOUT_LOADING_PROJECT = 30000    # 30 seconds
+FLAG_TIMEOUT_INITIALIZING = 30000       # 30 seconds
+FLAG_TIMEOUT_PROCESSING_QUEUE = 60000   # 60 seconds
+FLAG_TIMEOUT_UPDATING_LAYERS = 15000    # 15 seconds
+FLAG_TIMEOUT_PLUGIN_BUSY = 60000        # 60 seconds
+
+# Maximum queue sizes
+MAX_ADD_LAYERS_QUEUE = 50               # Maximum queued add_layers operations
+MAX_PENDING_TASKS = 10                  # Maximum pending async tasks
 
 # ============================================================================
 # Database Defaults

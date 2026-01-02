@@ -804,6 +804,18 @@ def get_datasource_connexion_from_layer(layer):
             connect_kwargs['sslmode'] = source_uri.encodeSslMode(ssl_mode)
 
         connexion = psycopg2.connect(**connect_kwargs)
+        
+        # CRITICAL FIX v2.5.18: Set statement_timeout to prevent blocking queries
+        # This prevents complex spatial queries (EXISTS with ST_Intersects on large
+        # datasets) from blocking indefinitely and making QGIS appear unresponsive.
+        # Default timeout: 120 seconds (2 minutes)
+        try:
+            with connexion.cursor() as cursor:
+                cursor.execute("SET statement_timeout = 120000")  # 120 seconds in milliseconds
+                connexion.commit()
+        except Exception as timeout_err:
+            logger.warning(f"Could not set statement_timeout: {timeout_err}")
+            
     except Exception as e:
         logger.error(f"PostgreSQL connection failed for layer '{layer.name()}' on {host}:{port}/{dbname}: {e}")
         connexion = None

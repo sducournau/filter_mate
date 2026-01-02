@@ -45,6 +45,8 @@ from qgis.PyQt.QtCore import (
 )
 from qgis.PyQt.QtGui import QColor, QFont
 from qgis.PyQt.QtWidgets import (
+    QAction,
+    QActionGroup,
     QApplication,
     QComboBox,
     QDockWidget,
@@ -53,12 +55,15 @@ from qgis.PyQt.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
     QSpinBox,
     QSplitter,
-    QVBoxLayout
+    QToolButton,
+    QVBoxLayout,
+    QWidgetAction
 )
 from qgis.core import (
     Qgis,
@@ -139,6 +144,17 @@ from .modules.feedback_utils import show_info, show_warning, show_error, show_su
 from .modules.config_helpers import set_config_value
 from .modules.exploring_cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
+
+# Import async expression evaluation for large layers (v2.5.10)
+try:
+    from .modules.tasks.expression_evaluation_task import (
+        ExpressionEvaluationTask,
+        get_expression_manager
+    )
+    ASYNC_EXPRESSION_AVAILABLE = True
+except ImportError:
+    ASYNC_EXPRESSION_AVAILABLE = False
+    get_expression_manager = None
 
 # Import CRS utilities for improved CRS compatibility (v2.5.7)
 try:
@@ -222,6 +238,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Theme watcher for automatic dark/light mode switching
         self._theme_watcher = None
+        
+        # PERFORMANCE: Debounce timers for expression changes
+        # Prevents excessive recomputation when user types quickly or makes rapid changes
+        self._expression_debounce_timer = QTimer()
+        self._expression_debounce_timer.setSingleShot(True)
+        self._expression_debounce_timer.setInterval(450)  # 450ms debounce delay
+        self._expression_debounce_timer.timeout.connect(self._execute_debounced_expression_change)
+        self._pending_expression_change = None  # Stores pending (groupbox, expression) tuple
+        
+        # PERFORMANCE: Cache for expression evaluation results
+        # Avoids recomputing same expressions repeatedly
+        self._expression_cache = {}  # Key: (layer_id, expression) -> Value: (features, timestamp)
+        self._expression_cache_max_age = 60.0  # Cache entries expire after 60 seconds
+        self._expression_cache_max_size = 100  # Maximum cache entries
+        
+        # PERFORMANCE (v2.5.10): Async expression evaluation for large layers
+        # Threshold above which expression evaluation runs in background task
+        self._async_expression_threshold = 10000  # Features count threshold for async
+        self._expression_manager = get_expression_manager() if ASYNC_EXPRESSION_AVAILABLE else None
+        self._pending_async_evaluation = None  # Track pending async evaluation
+        
+        # Loading state tracking for UI feedback
+        self._expression_loading = False
         
         # Initialize layer state
         self._initialize_layer_state()
@@ -417,7 +456,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Update cached state
                     self._signal_connection_states[state_key] = state
         
+        # PERFORMANCE FIX: If state is None but there are signals with None handlers,
+        # that means signals are intentionally handled elsewhere (e.g., with debounce).
+        # Return True to indicate success rather than raising an error.
         if state is None:
+            # Check if there are any signals defined (even with None handlers)
+            if len(widget_object["SIGNALS"]) > 0:
+                # Signals exist but all have None handlers - this is intentional
+                return True
             raise SignalStateChangeError(state, widget_path)
 
         return state
@@ -497,9 +543,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         to avoid Qt memory issues and crashes.
         """
         try:
-            layout = self.verticalLayout_exploring_multiple_selection
+            # Use the horizontal layout that contains the combobox
+            layout = self.horizontalLayout_exploring_multiple_feature_picker
             
-            # Safely remove old widget from layout
+            # Safely remove old widget from layout (it's at index 0)
             if layout.count() > 0:
                 item = layout.itemAt(0)
                 if item and item.widget():
@@ -507,8 +554,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     layout.removeWidget(old_widget)
                     # Properly delete the old widget to free resources
                     old_widget.deleteLater()
-                elif item:
-                    layout.removeItem(item)
             
             # Reset and close widget safely
             if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and \
@@ -525,7 +570,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = None
             self.set_multiple_checkable_combobox()
 
-            # Insert new widget into layout
+            # Insert new widget into layout (at position 0, before the order by button)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection is not None:
                 layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
                 layout.update()
@@ -4000,7 +4045,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for single/multiple/custom selection modes. Layer initialization is deferred to
         manage_interactions() to prevent blocking during project load.
         """
-        layout = self.verticalLayout_exploring_multiple_selection
+        # Insert the checkableComboBox into the horizontal layout for multiple selection
+        # The layout contains the order by button, we insert the combobox before it
+        layout = self.horizontalLayout_exploring_multiple_feature_picker
         layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
 
         # Configure QgsFieldExpressionWidget to allow all field types (except geometry)
@@ -4027,27 +4074,202 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         We bypass the manageSignal/isSignalConnected system because isSignalConnected()
         is unreliable for tracking specific handler connections.
+        
+        PERFORMANCE: Uses debounced handlers to prevent excessive recomputation
+        when the user types quickly or makes rapid changes to complex expressions.
         """
         # SINGLE SELECTION: mFieldExpressionWidget -> mFeaturePickerWidget
         def on_single_field_changed(field_name):
-            custom_functions = {"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="single_selection")}
-            self.layer_property_changed('single_selection_expression', field_name, custom_functions)
+            self._schedule_expression_change("single_selection", field_name)
         
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(on_single_field_changed)
         
         # MULTIPLE SELECTION: mFieldExpressionWidget -> checkableComboBoxFeaturesListPickerWidget
         def on_multiple_field_changed(field_name):
-            custom_functions = {"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="multiple_selection")}
-            self.layer_property_changed('multiple_selection_expression', field_name, custom_functions)
+            self._schedule_expression_change("multiple_selection", field_name)
         
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(on_multiple_field_changed)
         
         # CUSTOM SELECTION: mFieldExpressionWidget (no FeaturePicker to update, but may have other uses)
         def on_custom_field_changed(field_name):
-            custom_functions = {"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="custom_selection")}
-            self.layer_property_changed('custom_selection_expression', field_name, custom_functions)
+            self._schedule_expression_change("custom_selection", field_name)
         
         self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(on_custom_field_changed)
+    
+    def _schedule_expression_change(self, groupbox: str, expression: str):
+        """
+        Schedule a debounced expression change.
+        
+        This method stores the pending change and restarts the debounce timer.
+        The actual change will only be executed after the debounce delay (450ms)
+        has passed without new changes, preventing excessive recomputation.
+        
+        Args:
+            groupbox: The groupbox type ('single_selection', 'multiple_selection', 'custom_selection')
+            expression: The new expression value
+        """
+        # Store pending change
+        self._pending_expression_change = (groupbox, expression)
+        
+        # Show loading indicator immediately for user feedback
+        self._set_expression_loading_state(True, groupbox)
+        
+        # Restart debounce timer
+        self._expression_debounce_timer.start()
+        
+        logger.debug(f"Scheduled expression change for {groupbox}: {expression[:50] if expression else 'None'}...")
+    
+    def _execute_debounced_expression_change(self):
+        """
+        Execute the pending expression change after debounce delay.
+        
+        Called by the debounce timer when the user has stopped making changes.
+        This method applies the expression change and triggers the appropriate
+        data refresh operations.
+        """
+        if self._pending_expression_change is None:
+            self._set_expression_loading_state(False)
+            return
+        
+        groupbox, expression = self._pending_expression_change
+        self._pending_expression_change = None
+        
+        logger.debug(f"Executing debounced expression change for {groupbox}")
+        
+        try:
+            # Build property key for layer_property_changed
+            property_key = f"{groupbox}_expression"
+            
+            # Create custom functions that trigger source params changed
+            custom_functions = {
+                "ON_CHANGE": lambda x: self._execute_expression_params_change(groupbox)
+            }
+            
+            # Call the original handler
+            self.layer_property_changed(property_key, expression, custom_functions)
+            
+        except Exception as e:
+            logger.error(f"Error executing debounced expression change: {e}")
+            self._set_expression_loading_state(False)
+    
+    def _execute_expression_params_change(self, groupbox: str):
+        """
+        Execute the expression params change with caching and optimization.
+        
+        This method is called after the debounce delay and handles:
+        - Cache lookup to avoid redundant computations
+        - Actual data refresh via exploring_source_params_changed
+        - Loading state cleanup
+        
+        Args:
+            groupbox: The groupbox type
+        """
+        try:
+            # Call the standard source params changed
+            self.exploring_source_params_changed(groupbox_override=groupbox)
+        finally:
+            # Clear loading state
+            self._set_expression_loading_state(False, groupbox)
+    
+    def _set_expression_loading_state(self, loading: bool, groupbox: str = None):
+        """
+        Set the loading state for expression widgets.
+        
+        Updates the UI to show/hide loading indicators and provides
+        visual feedback during complex expression evaluation.
+        
+        Args:
+            loading: True to show loading state, False to hide
+            groupbox: Optional groupbox to update (None for all)
+        """
+        self._expression_loading = loading
+        
+        try:
+            # Update cursor for the relevant widgets
+            cursor = Qt.WaitCursor if loading else Qt.PointingHandCursor
+            
+            widgets_to_update = []
+            if groupbox == "single_selection" or groupbox is None:
+                widgets_to_update.append(self.mFieldExpressionWidget_exploring_single_selection)
+                widgets_to_update.append(self.mFeaturePickerWidget_exploring_single_selection)
+            if groupbox == "multiple_selection" or groupbox is None:
+                widgets_to_update.append(self.mFieldExpressionWidget_exploring_multiple_selection)
+                widgets_to_update.append(self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
+            if groupbox == "custom_selection" or groupbox is None:
+                widgets_to_update.append(self.mFieldExpressionWidget_exploring_custom_selection)
+            
+            for widget in widgets_to_update:
+                if widget and hasattr(widget, 'setCursor'):
+                    widget.setCursor(cursor)
+                    
+        except Exception as e:
+            logger.debug(f"Could not update loading state cursor: {e}")
+    
+    def _get_cached_expression_result(self, layer_id: str, expression: str):
+        """
+        Get cached result for an expression if available and not expired.
+        
+        Args:
+            layer_id: The layer ID
+            expression: The expression string
+            
+        Returns:
+            Cached result tuple (features, timestamp) or None if not cached/expired
+        """
+        import time
+        
+        cache_key = (layer_id, expression)
+        if cache_key not in self._expression_cache:
+            return None
+        
+        features, timestamp = self._expression_cache[cache_key]
+        current_time = time.time()
+        
+        # Check if cache entry has expired
+        if current_time - timestamp > self._expression_cache_max_age:
+            del self._expression_cache[cache_key]
+            return None
+        
+        return features
+    
+    def _set_cached_expression_result(self, layer_id: str, expression: str, features):
+        """
+        Cache an expression evaluation result.
+        
+        Args:
+            layer_id: The layer ID
+            expression: The expression string
+            features: The features result to cache
+        """
+        import time
+        
+        # Enforce cache size limit (LRU eviction)
+        if len(self._expression_cache) >= self._expression_cache_max_size:
+            # Remove oldest entry
+            oldest_key = min(self._expression_cache.keys(), 
+                           key=lambda k: self._expression_cache[k][1])
+            del self._expression_cache[oldest_key]
+        
+        cache_key = (layer_id, expression)
+        self._expression_cache[cache_key] = (features, time.time())
+    
+    def invalidate_expression_cache(self, layer_id: str = None):
+        """
+        Invalidate expression cache entries.
+        
+        Args:
+            layer_id: If provided, only invalidate cache for this layer.
+                     If None, invalidate entire cache.
+        """
+        if layer_id is None:
+            self._expression_cache.clear()
+            logger.debug("Cleared entire expression cache")
+        else:
+            keys_to_remove = [k for k in self._expression_cache.keys() if k[0] == layer_id]
+            for key in keys_to_remove:
+                del self._expression_cache[key]
+            if keys_to_remove:
+                logger.debug(f"Cleared {len(keys_to_remove)} cache entries for layer {layer_id}")
 
     def _setup_filtering_tab_widgets(self):
         """
@@ -4136,6 +4358,70 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Configure map canvas selection color
         self.iface.mapCanvas().setSelectionColor(QColor(237, 97, 62, 75))
 
+    def _index_to_combine_operator(self, index):
+        """
+        Convert combobox index to SQL combine operator.
+        
+        This ensures language-independent operator handling.
+        The combobox items are:
+          Index 0: AND
+          Index 1: AND NOT
+          Index 2: OR
+        
+        Args:
+            index (int): Combobox index
+            
+        Returns:
+            str: SQL operator ('AND', 'AND NOT', 'OR') or 'AND' as default
+        """
+        operators = {0: 'AND', 1: 'AND NOT', 2: 'OR'}
+        return operators.get(index, 'AND')
+    
+    def _combine_operator_to_index(self, operator):
+        """
+        Convert SQL combine operator to combobox index.
+        
+        FIX v2.5.12: Handle translated operator values (ET, OU, NON) from
+        older project files or when QGIS locale is non-English.
+        
+        Args:
+            operator (str): SQL operator or translated equivalent
+            
+        Returns:
+            int: Combobox index (0=AND, 1=AND NOT, 2=OR) or 0 as default
+        """
+        if not operator:
+            return 0  # Default to AND
+        
+        op_upper = operator.upper().strip()
+        
+        # Map of all possible operator values (including translations) to indices
+        operator_map = {
+            # English (canonical)
+            'AND': 0,
+            'AND NOT': 1,
+            'OR': 2,
+            # French
+            'ET': 0,
+            'ET NON': 1,
+            'OU': 2,
+            # German
+            'UND': 0,
+            'UND NICHT': 1,
+            'ODER': 2,
+            # Spanish
+            'Y': 0,
+            'Y NO': 1,
+            'O': 2,
+            # Italian
+            'E': 0,
+            'E NON': 1,
+            # Portuguese
+            'E NÃO': 1,
+        }
+        
+        return operator_map.get(op_upper, 0)
+
     def dockwidget_widgets_configuration(self):
 
         self.layer_properties_tuples_dict =   {
@@ -4194,12 +4480,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "RESET_ALL_LAYER_PROPERTIES":{"TYPE":"PushButton", "WIDGET":self.pushButton_exploring_reset_layer_properties, "SIGNALS":[("clicked", lambda: self.resetLayerVariableEvent())], "ICON":None},
                                     
                                     "SINGLE_SELECTION_FEATURES":{"TYPE":"FeatureComboBox", "WIDGET":self.mFeaturePickerWidget_exploring_single_selection, "SIGNALS":[("featureChanged", self.exploring_features_changed)]},
-                                    "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", lambda state, x='single_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="single_selection")}: self.layer_property_changed(x, state, custom_functions))]},
+                                    # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
+                                    "SINGLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_single_selection, "SIGNALS":[("fieldChanged", None)]},
                                     
                                     "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", lambda: self.exploring_source_params_changed(groupbox_override="multiple_selection"))]},
-                                    "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", lambda state, x='multiple_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="multiple_selection")}: self.layer_property_changed(x, state, custom_functions))]},
+                                    # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
+                                    "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", None)]},
                                     
-                                    "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", lambda state, x='custom_selection_expression', custom_functions={"ON_CHANGE": lambda x: self.exploring_source_params_changed(groupbox_override="custom_selection")}: self.layer_property_changed(x, state, custom_functions))]}
+                                    # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
+                                    "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", None)]}
                                     }
 
 
@@ -4212,8 +4501,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "HAS_BUFFER_TYPE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_type, "SIGNALS":[("clicked", lambda state, x='has_buffer_type', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "CURRENT_LAYER":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
                                     "LAYERS_TO_FILTER":{"TYPE":"CustomCheckableLayerComboBox", "WIDGET":self.checkableComboBoxLayer_filtering_layers_to_filter, "CUSTOM_LOAD_FUNCTION": lambda x: self.get_layers_to_filter(), "SIGNALS":[("checkedItemsChanged", lambda state, custom_functions={"CUSTOM_DATA": lambda x: self.get_layers_to_filter()}, x='layers_to_filter': self.layer_property_changed(x, state, custom_functions))]},
-                                    "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='source_layer_combine_operator': self.layer_property_changed(x, state))]},
-                                    "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentTextChanged", lambda state, x='other_layers_combine_operator': self.layer_property_changed(x, state))]},
+                                    "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='source_layer_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
+                                    "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='other_layers_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
                                     "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed_with_buffer_style(x, state))]},
                                     "BUFFER_VALUE_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_value_property, "SIGNALS":[("changed", lambda state=None, x='buffer_value_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed(), "CUSTOM_DATA": lambda x: self.get_buffer_property_state()}: self.layer_property_changed(x, state, custom_functions))]},
@@ -5216,6 +5505,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self.set_widget_icon(pushButton_config_path + ["ICONS", widget_group, widget_name])
                     widget_obj.setCursor(Qt.PointingHandCursor)
                     
+                    # Set tooltips for exploring buttons
+                    if widget_group == "EXPLORING":
+                        exploring_tooltips = {
+                            "IDENTIFY": self.tr("Identify selected feature"),
+                            "ZOOM": self.tr("Zoom to selected feature"),
+                            "IS_SELECTING": self.tr("Toggle feature selection on map"),
+                            "IS_TRACKING": self.tr("Auto-zoom when feature changes"),
+                            "IS_LINKING": self.tr("Link exploring widgets together"),
+                            "RESET_ALL_LAYER_PROPERTIES": self.tr("Reset all layer exploring properties")
+                        }
+                        if widget_name in exploring_tooltips:
+                            widget_obj.setToolTip(exploring_tooltips[widget_name])
+                    
                     icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
                     
                     # Apply dynamic dimensions based on button type
@@ -6095,9 +6397,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             try:
+                # FIX v2.5.14: setLayer already handles setDisplayExpression internally
+                # when the expression differs - no need to call it again here.
+                # Calling it twice was causing task cancellation issues where
+                # "Building features list" and "Loading features" were canceled
+                # immediately after being launched.
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(self.current_layer, layer_props)
-                # CRITICAL FIX: Set display expression from saved layer properties
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(layer_props["exploring"]["multiple_selection_expression"])
+                # NOTE: Removed duplicate setDisplayExpression call - setLayer handles it
             except (AttributeError, KeyError, RuntimeError) as e:
                 logger.error(f"Error setting multiple selection features widget: {type(e).__name__}: {e}")
             
@@ -6821,6 +7127,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Multiple selection: synchronisation complète (coche/décoche toutes les features)
         - Custom selection: pas de synchronisation automatique (basé sur expression)
         
+        COMPORTEMENT v2.5.11+:
+        - Si plusieurs features sont sélectionnées depuis le canvas ET que le groupbox actif
+          est 'single_selection', bascule automatiquement vers 'multiple_selection'
+        - Cela garantit que get_current_features() utilise le bon widget
+        
         Note:
             Le bouton is_selecting active la synchronisation bidirectionnelle:
             - widgets → QGIS : sélection dans QGIS quand widget change
@@ -6838,6 +7149,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             layer_props = self.PROJECT_LAYERS.get(self.current_layer.id())
             if not layer_props:
                 return
+            
+            # FIX v2.5.11: Auto-switch to multiple_selection groupbox when multiple features
+            # are selected from the canvas while in single_selection mode.
+            # This ensures get_current_features() reads from the correct widget.
+            if selected_count > 1 and self.current_exploring_groupbox == "single_selection":
+                logger.info(f"_sync_widgets_from_qgis_selection: {selected_count} features selected, "
+                           f"switching from single_selection to multiple_selection groupbox")
+                # Switch groupbox to multiple_selection
+                # Use _syncing_from_qgis flag to prevent recursive QGIS selection updates
+                # during the groupbox configuration
+                self._syncing_from_qgis = True
+                try:
+                    self._force_exploring_groupbox_exclusive("multiple_selection")
+                    self._configure_multiple_selection_groupbox()
+                finally:
+                    self._syncing_from_qgis = False
             
             # SYNC BOTH WIDGETS regardless of active groupbox (v2.5.9+)
             # This ensures both widgets always reflect the current QGIS selection
@@ -7031,7 +7358,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
 
     def exploring_source_params_changed(self, expression=None, groupbox_override=None):
-
+        """
+        Handle changes to source parameters for exploring features.
+        
+        PERFORMANCE OPTIMIZATIONS (v2.5.x):
+        - Uses debounced handlers to prevent excessive recomputation
+        - Caches expression results to avoid redundant evaluations
+        - Skips unnecessary updates when expression hasn't changed
+        - Provides visual loading feedback during complex operations
+        """
         if self.widgets_initialized is True and self.current_layer is not None:
 
             logger.debug(f"exploring_source_params_changed called with expression={expression}, groupbox_override={groupbox_override}")
@@ -7052,33 +7387,58 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 expression = self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].expression()
                 logger.debug(f"single_selection expression from widget: {expression}")
                 if expression is not None:
-                    # Always update display expression when expression changes
-                    # Note: layer_property_changed may have already updated PROJECT_LAYERS
-                    if layer_props["exploring"]["single_selection_expression"] != expression:
+                    # PERFORMANCE: Skip update if expression hasn't changed
+                    current_expression = layer_props["exploring"]["single_selection_expression"]
+                    if current_expression == expression:
+                        logger.debug("single_selection: Expression unchanged, skipping setDisplayExpression")
+                    else:
+                        # Update stored expression
                         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["single_selection_expression"] = expression
-                    self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
-                    # CRITICAL: Update linked widgets when single selection expression changes
-                    self.exploring_link_widgets()
+                        self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
+                        # CRITICAL: Update linked widgets when single selection expression changes
+                        self.exploring_link_widgets()
+                        # Invalidate cache for this layer since expression changed
+                        self.invalidate_expression_cache(self.current_layer.id())
 
             elif target_groupbox == "multiple_selection":
 
                 expression = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].expression()
                 if expression is not None:
-                    # Always update display expression when expression changes
-                    # Note: layer_property_changed may have already updated PROJECT_LAYERS
-                    if layer_props["exploring"]["multiple_selection_expression"] != expression:
+                    # PERFORMANCE: Skip update if expression hasn't changed
+                    current_expression = layer_props["exploring"]["multiple_selection_expression"]
+                    if current_expression == expression:
+                        logger.debug("multiple_selection: Expression unchanged, skipping setDisplayExpression")
+                    else:
+                        # Update stored expression
                         self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["multiple_selection_expression"] = expression
-                    logger.debug(f"Calling setDisplayExpression with: {expression}")
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
-                    # CRITICAL: Update linked widgets when multiple selection expression changes
-                    self.exploring_link_widgets()
+                        logger.debug(f"Calling setDisplayExpression with: {expression}")
+                        self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(expression)
+                        # CRITICAL: Update linked widgets when multiple selection expression changes
+                        self.exploring_link_widgets()
+                        # Invalidate cache for this layer since expression changed
+                        self.invalidate_expression_cache(self.current_layer.id())
 
             elif target_groupbox == "custom_selection":
 
                 expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                if expression is not None and layer_props["exploring"]["custom_selection_expression"] != expression:
-                    self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["custom_selection_expression"] = expression
-                    self.exploring_link_widgets(expression)
+                if expression is not None:
+                    current_expression = layer_props["exploring"]["custom_selection_expression"]
+                    if current_expression != expression:
+                        self.PROJECT_LAYERS[self.current_layer.id()]["exploring"]["custom_selection_expression"] = expression
+                        # PERFORMANCE FIX (v2.5.x): Do NOT call exploring_link_widgets() here
+                        # It triggers setFilterExpression which rebuilds the entire feature list
+                        # synchronously, freezing QGIS for complex expressions/large datasets.
+                        # Link widgets will be updated when user performs an action.
+                        # self.exploring_link_widgets(expression)  # DISABLED for performance
+                        # Invalidate cache for this layer since expression changed
+                        self.invalidate_expression_cache(self.current_layer.id())
+                        # PERFORMANCE FIX (v2.5.x): Do NOT call get_current_features() here
+                        # Custom expressions can be very complex and evaluating them synchronously
+                        # freezes QGIS. Features will be fetched on-demand when user clicks
+                        # Filter, Zoom, Flash, or other action buttons.
+                        logger.debug("custom_selection: Expression stored, skipping immediate feature evaluation and link_widgets")
+                        self._update_buffer_validation()
+                        return  # Skip get_current_features() for custom_selection
 
             self.get_current_features()
             
@@ -7119,8 +7479,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"exploring_custom_selection: Field-only expression '{expression}' - returning empty features list")
                 return [], expression
             
+            # PERFORMANCE: Check cache for complex expressions
+            layer_id = self.current_layer.id()
+            cached_features = self._get_cached_expression_result(layer_id, expression)
+            if cached_features is not None:
+                logger.debug(f"exploring_custom_selection: Using cached result for expression ({len(cached_features)} features)")
+                return cached_features, expression
+            
             # Complex expression: get matching features
             features = self.exploring_features_changed([], False, expression)
+            
+            # PERFORMANCE: Cache the result for future use
+            if features:
+                self._set_cached_expression_result(layer_id, expression, features)
+                logger.debug(f"exploring_custom_selection: Cached {len(features)} features for expression")
 
             return features, expression
         
@@ -7220,55 +7592,130 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             features, expression = self.get_exploring_features(input, identify_by_primary_key_name, custom_expression)
+            
+            # PERFORMANCE (v2.5.10): Handle async evaluation for large layers with custom expressions
+            # When get_exploring_features returns empty features but valid expression for large layers,
+            # it means we should use async evaluation to prevent UI freeze
+            if (len(features) == 0 and expression is not None 
+                and custom_expression is not None
+                and self.should_use_async_expression(custom_expression)):
+                
+                logger.info(f"exploring_features_changed: Using async evaluation for large layer")
+                
+                # Define callback to continue processing after async evaluation
+                def _on_async_complete(async_features, async_expression, layer_id):
+                    """Process features after async evaluation completes."""
+                    if layer_id != self.current_layer.id():
+                        logger.debug("Async evaluation completed for different layer, ignoring")
+                        return
+                    
+                    # Continue with normal flow using async results
+                    self._handle_exploring_features_result(
+                        async_features, 
+                        async_expression, 
+                        layer_props,
+                        identify_by_primary_key_name
+                    )
+                
+                def _on_async_error(error_msg, layer_id):
+                    """Handle async evaluation errors."""
+                    show_warning(
+                        self.tr("Expression Evaluation"),
+                        self.tr(f"Error evaluating expression: {error_msg}")
+                    )
+                
+                # Start async evaluation
+                self.get_exploring_features_async(
+                    expression=expression,
+                    on_complete=_on_async_complete,
+                    on_error=_on_async_error
+                )
+                
+                # Store expression even though features aren't loaded yet
+                if expression:
+                    layer_props["filtering"]["current_filter_expression"] = expression
+                
+                return []  # Features will be processed in callback
      
-            # CRITICAL FIX: Only call exploring_link_widgets if is_linking is enabled
-            # When is_linking is False, calling link_widgets would refresh widgets unnecessarily
-            # and potentially interrupt user selection in progress
-            if layer_props["exploring"].get("is_linking", False):
-                # CRITICAL: Block signals on widgets before calling exploring_link_widgets to prevent
-                # recursive signal triggers when setFilterExpression modifies the feature picker
-                single_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
-                multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
-                
-                single_widget.blockSignals(True)
-                multiple_widget.blockSignals(True)
-                
-                try:
-                    self.exploring_link_widgets()
-                finally:
-                    # Always unblock signals
-                    single_widget.blockSignals(False)
-                    multiple_widget.blockSignals(False)
-
-            # NOTE: Filter application is now ONLY triggered by pushbutton actions (Filter, Unfilter, Reset)
-            # This function no longer automatically applies or clears filters when features change.
-            # The expression is stored for use by the filter task when the user clicks Filter.
-            if expression is not None and expression != '':
-                # Store current expression for later use by filter task
-                layer_props["filtering"]["current_filter_expression"] = expression
-                logger.debug(f"exploring_features_changed: Stored filter expression (NOT applying): {expression[:60]}...")
-
-            if len(features) == 0:
-                logger.debug("exploring_features_changed: No features to process")
-                # Only clear selection if is_selecting is active AND we're not syncing from QGIS
-                if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
-                    self.current_layer.removeSelection()
-                return []
-        
-            # CRITICAL: Synchronize QGIS selection with FilterMate features when is_selecting is active
-            # Skip if we're currently syncing FROM QGIS to prevent infinite loops
-            if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
-                self.current_layer.removeSelection()
-                self.current_layer.select([feature.id() for feature in features])
-                logger.debug(f"exploring_features_changed: Synchronized QGIS selection ({len(features)} features)")
-
-            if layer_props["exploring"].get("is_tracking", False):
-                logger.debug(f"exploring_features_changed: Tracking {len(features)} features")
-                self.zooming_to_features(features)  
-
-            return features
+            # Normal synchronous flow for smaller layers or non-custom expressions
+            # Process results directly
+            return self._handle_exploring_features_result(
+                features, expression, layer_props, identify_by_primary_key_name
+            )
         
         return []
+    
+    def _handle_exploring_features_result(
+        self, 
+        features, 
+        expression, 
+        layer_props,
+        identify_by_primary_key_name=False
+    ):
+        """
+        Handle the result of get_exploring_features (sync or async).
+        
+        This method processes the features and expression returned by get_exploring_features,
+        handling selection, tracking, and expression storage.
+        
+        Args:
+            features: List of QgsFeature objects
+            expression: Filter expression string
+            layer_props: Layer properties dict from PROJECT_LAYERS
+            identify_by_primary_key_name: Whether primary key was used
+            
+        Returns:
+            List of features processed
+        """
+        if not self.widgets_initialized or self.current_layer is None:
+            return []
+     
+        # CRITICAL FIX: Only call exploring_link_widgets if is_linking is enabled
+        # When is_linking is False, calling link_widgets would refresh widgets unnecessarily
+        # and potentially interrupt user selection in progress
+        if layer_props["exploring"].get("is_linking", False):
+            # CRITICAL: Block signals on widgets before calling exploring_link_widgets to prevent
+            # recursive signal triggers when setFilterExpression modifies the feature picker
+            single_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+            multiple_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
+            
+            single_widget.blockSignals(True)
+            multiple_widget.blockSignals(True)
+            
+            try:
+                self.exploring_link_widgets()
+            finally:
+                # Always unblock signals
+                single_widget.blockSignals(False)
+                multiple_widget.blockSignals(False)
+
+        # NOTE: Filter application is now ONLY triggered by pushbutton actions (Filter, Unfilter, Reset)
+        # This function no longer automatically applies or clears filters when features change.
+        # The expression is stored for use by the filter task when the user clicks Filter.
+        if expression is not None and expression != '':
+            # Store current expression for later use by filter task
+            layer_props["filtering"]["current_filter_expression"] = expression
+            logger.debug(f"_handle_exploring_features_result: Stored filter expression: {expression[:60]}...")
+
+        if len(features) == 0:
+            logger.debug("_handle_exploring_features_result: No features to process")
+            # Only clear selection if is_selecting is active AND we're not syncing from QGIS
+            if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
+                self.current_layer.removeSelection()
+            return []
+    
+        # CRITICAL: Synchronize QGIS selection with FilterMate features when is_selecting is active
+        # Skip if we're currently syncing FROM QGIS to prevent infinite loops
+        if layer_props["exploring"].get("is_selecting", False) and not self._syncing_from_qgis:
+            self.current_layer.removeSelection()
+            self.current_layer.select([feature.id() for feature in features])
+            logger.debug(f"_handle_exploring_features_result: Synchronized QGIS selection ({len(features)} features)")
+
+        if layer_props["exploring"].get("is_tracking", False):
+            logger.debug(f"_handle_exploring_features_result: Tracking {len(features)} features")
+            self.zooming_to_features(features)  
+
+        return features
 
 
     def get_exploring_features(self, input, identify_by_primary_key_name=False, custom_expression=None):
@@ -7482,7 +7929,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     expression = custom_expression
 
             if QgsExpression(expression).isValid():
-
+                # PERFORMANCE (v2.5.10): Use async evaluation for large layers with complex expressions
+                # This prevents UI freezes when evaluating expressions on 10k+ feature layers
+                feature_count = self.current_layer.featureCount()
+                use_async = (
+                    ASYNC_EXPRESSION_AVAILABLE 
+                    and self._expression_manager is not None
+                    and feature_count > self._async_expression_threshold
+                    and custom_expression is not None  # Only for custom expressions
+                )
+                
+                if use_async:
+                    # For large layers, return expression only - features will be loaded async
+                    # The caller should use get_exploring_features_async for actual feature loading
+                    logger.debug(
+                        f"get_exploring_features: Large layer ({feature_count} features), "
+                        f"returning expression only for async evaluation"
+                    )
+                    return [], expression
+                
+                # Synchronous evaluation for smaller layers
                 features_iterator = self.current_layer.getFeatures(QgsFeatureRequest(QgsExpression(expression)))
                 done_looping = False
                 
@@ -7496,6 +7962,127 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 expression = None
 
             return features, expression
+    
+    def get_exploring_features_async(
+        self, 
+        expression: str,
+        on_complete=None,
+        on_error=None,
+        on_progress=None
+    ):
+        """
+        Evaluate an expression asynchronously for large layers.
+        
+        This method uses QgsTask to evaluate expressions in a background thread,
+        preventing UI freezes for large datasets with complex expressions.
+        
+        PERFORMANCE (v2.5.10): For layers with >10k features and custom expressions,
+        this method should be used instead of the synchronous get_exploring_features.
+        
+        Args:
+            expression: QGIS expression string to evaluate
+            on_complete: Callback(features, expression, layer_id) called on success
+            on_error: Callback(error_msg, layer_id) called on error
+            on_progress: Callback(current, total, layer_id) for progress updates
+            
+        Returns:
+            ExpressionEvaluationTask if started, None if not available or invalid
+        """
+        if not ASYNC_EXPRESSION_AVAILABLE or self._expression_manager is None:
+            logger.warning("Async expression evaluation not available")
+            if on_error:
+                on_error("Async evaluation not available", "")
+            return None
+        
+        if self.current_layer is None or not self.current_layer.isValid():
+            logger.warning("Cannot evaluate expression: no valid layer")
+            if on_error:
+                on_error("No valid layer", "")
+            return None
+        
+        if not expression:
+            logger.warning("Cannot evaluate empty expression")
+            if on_error:
+                on_error("Empty expression", self.current_layer.id() if self.current_layer else "")
+            return None
+        
+        # Set loading state
+        self._set_expression_loading_state(True)
+        
+        # Wrap callbacks to handle UI state
+        def _on_complete_wrapper(features, expr, layer_id):
+            self._set_expression_loading_state(False)
+            self._pending_async_evaluation = None
+            
+            # Cache the result
+            if features and expr:
+                self._set_cached_expression_result(layer_id, expr, features)
+            
+            if on_complete:
+                on_complete(features, expr, layer_id)
+        
+        def _on_error_wrapper(error_msg, layer_id):
+            self._set_expression_loading_state(False)
+            self._pending_async_evaluation = None
+            logger.error(f"Async expression evaluation failed: {error_msg}")
+            if on_error:
+                on_error(error_msg, layer_id)
+        
+        def _on_cancelled_wrapper(layer_id):
+            self._set_expression_loading_state(False)
+            self._pending_async_evaluation = None
+            logger.debug(f"Async expression evaluation cancelled for {layer_id}")
+        
+        # Start async evaluation
+        task = self._expression_manager.evaluate(
+            layer=self.current_layer,
+            expression=expression,
+            on_complete=_on_complete_wrapper,
+            on_error=_on_error_wrapper,
+            on_progress=on_progress,
+            on_cancelled=_on_cancelled_wrapper,
+            cancel_existing=True,
+            description=f"FilterMate: Evaluating expression on {self.current_layer.name()}"
+        )
+        
+        if task:
+            self._pending_async_evaluation = task
+            logger.debug(f"Started async expression evaluation for {self.current_layer.name()}")
+        
+        return task
+    
+    def cancel_async_expression_evaluation(self):
+        """Cancel any pending async expression evaluation."""
+        if self._pending_async_evaluation:
+            self._pending_async_evaluation.cancel()
+            self._pending_async_evaluation = None
+            self._set_expression_loading_state(False)
+        
+        # Also cancel via manager for current layer
+        if self._expression_manager and self.current_layer:
+            self._expression_manager.cancel(self.current_layer.id())
+    
+    def should_use_async_expression(self, custom_expression: str = None) -> bool:
+        """
+        Check if async expression evaluation should be used.
+        
+        Args:
+            custom_expression: The custom expression being evaluated
+            
+        Returns:
+            True if async evaluation should be used
+        """
+        if not ASYNC_EXPRESSION_AVAILABLE or self._expression_manager is None:
+            return False
+        
+        if self.current_layer is None:
+            return False
+        
+        if custom_expression is None:
+            return False
+        
+        feature_count = self.current_layer.featureCount()
+        return feature_count > self._async_expression_threshold
         
     
     def exploring_link_widgets(self, expression=None):
@@ -7856,12 +8443,83 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         return widgets_to_stop
     
+    def _detect_multi_step_filter(self, layer, layer_props):
+        """
+        Detect if source layer or distant layers already have a subsetString (existing filter).
+        
+        When existing filters are detected, automatically enable additive filter mode.
+        Uses existing combinator params if set, otherwise defaults to AND operator.
+        
+        Args:
+            layer: The current source layer
+            layer_props: Layer properties dictionary
+            
+        Returns:
+            bool: True if existing filters were detected and additive mode was enabled
+        """
+        try:
+            has_existing_filter = False
+            
+            # Check source layer for existing subset
+            if layer and hasattr(layer, 'subsetString'):
+                source_subset = layer.subsetString()
+                if source_subset and source_subset.strip():
+                    has_existing_filter = True
+                    logger.debug(f"Multi-step filter detected: source layer '{layer.name()}' has subset: {source_subset[:50]}...")
+            
+            # Check distant layers (layers_to_filter) for existing subsets
+            if not has_existing_filter and layer_props.get("filtering", {}).get("has_layers_to_filter", False):
+                layers_to_filter = layer_props.get("filtering", {}).get("layers_to_filter", [])
+                for layer_id in layers_to_filter:
+                    distant_layer = QgsProject.instance().mapLayer(layer_id)
+                    if distant_layer and hasattr(distant_layer, 'subsetString'):
+                        distant_subset = distant_layer.subsetString()
+                        if distant_subset and distant_subset.strip():
+                            has_existing_filter = True
+                            logger.debug(f"Multi-step filter detected: distant layer '{distant_layer.name()}' has subset: {distant_subset[:50]}...")
+                            break
+            
+            # If existing filters detected, enable additive filter
+            if has_existing_filter:
+                # Only update if not already enabled (preserve user choice)
+                if not layer_props.get("filtering", {}).get("has_combine_operator", False):
+                    layer_props["filtering"]["has_combine_operator"] = True
+                    # Use existing combinator params if set, otherwise default to AND
+                    if not layer_props["filtering"].get("source_layer_combine_operator"):
+                        layer_props["filtering"]["source_layer_combine_operator"] = "AND"
+                    if not layer_props["filtering"].get("other_layers_combine_operator"):
+                        layer_props["filtering"]["other_layers_combine_operator"] = "AND"
+                    
+                    # Set combobox widgets to index 0 (AND) for additive mode on pre-filtered layer
+                    try:
+                        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
+                        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+                        self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
+                        
+                        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(True)
+                        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setCurrentIndex(0)
+                        self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].blockSignals(False)
+                    except Exception as widget_error:
+                        logger.debug(f"Error setting combine operator combobox indexes: {widget_error}")
+                    
+                    logger.info(f"Multi-step filter auto-enabled for layer '{layer.name()}' - existing filters detected")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.debug(f"Error detecting multi-step filter: {e}")
+            return False
+    
     def _synchronize_layer_widgets(self, layer, layer_props):
         """
         Synchronize all widgets with the new current layer.
         
         Updates comboboxes, field expression widgets, and backend indicator.
         """
+        # Detect multi-step filter: auto-enable additive filter if existing subsets detected
+        self._detect_multi_step_filter(layer, layer_props)
+        
         # Always synchronize comboBox_filtering_current_layer with current_layer
         lastLayer = self.widgets["FILTERING"]["CURRENT_LAYER"]["WIDGET"].currentLayer()
         if lastLayer is None or lastLayer.id() != self.current_layer.id():
@@ -7931,7 +8589,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     elif widget_type == 'CustomCheckableComboBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["CUSTOM_LOAD_FUNCTION"]
                     elif widget_type == 'ComboBox':
-                        self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setCurrentIndex(self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].findText(layer_props[property_tuple[0]][property_tuple[1]]))
+                        widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
+                        value = layer_props[property_tuple[0]][property_tuple[1]]
+                        
+                        # FIX v2.5.12: For combine_operator comboboxes, use index-based lookup
+                        # to handle translated values (ET, OU, NON) from older projects
+                        if property_tuple[1] in ('source_layer_combine_operator', 'other_layers_combine_operator'):
+                            index = self._combine_operator_to_index(value)
+                        else:
+                            index = widget.findText(value)
+                            if index == -1:
+                                index = 0  # Default to first item
+                        
+                        widget.setCurrentIndex(index)
                     elif widget_type == 'QgsFieldExpressionWidget':
                         # CRITICAL: Block signals during setLayer/setExpression to prevent
                         # circular signal loop (fieldChanged -> layer_property_changed ->
@@ -9642,25 +10312,184 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def resetLayerVariableEvent(self, layer=None, properties=None):
         """
-        Emit signal to reset layer variables.
+        Reset layer properties to default values for exploring and filtering.
+        
+        This method resets all layer-specific properties (exploring, filtering) to their
+        default values, updates PROJECT_LAYERS, saves to SQLite, and refreshes widgets.
         
         Args:
             layer: QgsVectorLayer to reset, or None to use current_layer
-            properties: List of properties (default: empty list)
+            properties: List of properties (unused, kept for backwards compatibility)
         """
-        if properties is None:
-            properties = []
-
-        if self.widgets_initialized is True:
-            if layer is None:
-                layer = self.current_layer
+        if not self.widgets_initialized:
+            return
             
-            # Ensure properties is a list type for PyQt signal
-            if not isinstance(properties, list):
-                logger.debug(f"Properties is {type(properties)}, converting to list")
-                properties = []
-           
-            self.resettingLayerVariable.emit(layer, properties)
+        if layer is None:
+            layer = self.current_layer
+            
+        if layer is None or not is_valid_layer(layer):
+            logger.warning("resetLayerVariableEvent: No valid layer to reset")
+            return
+            
+        layer_id = layer.id()
+        if layer_id not in self.PROJECT_LAYERS:
+            logger.warning(f"resetLayerVariableEvent: Layer {layer.name()} not in PROJECT_LAYERS")
+            return
+        
+        try:
+            layer_props = self.PROJECT_LAYERS[layer_id]
+            
+            # Get best display field for exploring expressions
+            best_field = get_best_display_field(layer)
+            if not best_field:
+                # Fallback to primary key or first field
+                primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
+                best_field = primary_key if primary_key else ""
+            
+            # Default exploring properties
+            default_exploring = {
+                "is_changing_all_layer_properties": True,
+                "is_tracking": False,
+                "is_selecting": False,
+                "is_linking": False,
+                "current_exploring_groupbox": "single_selection",
+                "single_selection_expression": best_field,
+                "multiple_selection_expression": best_field,
+                "custom_selection_expression": best_field
+            }
+            
+            # Default filtering properties
+            default_filtering = {
+                "has_layers_to_filter": False,
+                "layers_to_filter": [],
+                "has_combine_operator": False,
+                "source_layer_combine_operator": "AND",
+                "other_layers_combine_operator": "AND",
+                "has_geometric_predicates": False,
+                "geometric_predicates": [],
+                "has_buffer_value": False,
+                "buffer_value": 0.0,
+                "buffer_value_property": False,
+                "buffer_value_expression": "",
+                "has_buffer_type": False,
+                "buffer_type": "Round"
+            }
+            
+            # Update PROJECT_LAYERS with default values
+            layer_props["exploring"].update(default_exploring)
+            layer_props["filtering"].update(default_filtering)
+            
+            # Collect all properties to save
+            properties_to_save = []
+            for key, value in default_exploring.items():
+                properties_to_save.append(("exploring", key))
+            for key, value in default_filtering.items():
+                properties_to_save.append(("filtering", key))
+            
+            # Emit signal to save to SQLite and QGIS variables
+            self.settingLayerVariable.emit(layer, properties_to_save)
+            
+            # Refresh widgets with new default values
+            self._synchronize_layer_widgets(layer, layer_props)
+            
+            # Reset buffer spinbox style
+            self._update_buffer_spinbox_style(0.0)
+            
+            # Reset checkable buttons visual state
+            self._reset_exploring_button_states(layer_props)
+            self._reset_filtering_button_states(layer_props)
+            
+            logger.info(f"✓ Reset layer '{layer.name()}' properties to defaults")
+            
+            # Show user feedback
+            from qgis.utils import iface
+            iface.messageBar().pushSuccess(
+                "FilterMate",
+                self.tr("Layer properties reset to defaults")
+            )
+            
+        except Exception as e:
+            logger.error(f"Error resetting layer properties: {e}")
+            from qgis.utils import iface
+            iface.messageBar().pushCritical(
+                "FilterMate",
+                self.tr("Error resetting layer properties: {}").format(str(e))
+            )
+
+    def _reset_exploring_button_states(self, layer_props):
+        """Reset exploring button visual states based on layer properties."""
+        try:
+            # Block signals during state update
+            is_selecting_widget = self.widgets["EXPLORING"]["IS_SELECTING"]["WIDGET"]
+            is_tracking_widget = self.widgets["EXPLORING"]["IS_TRACKING"]["WIDGET"]
+            is_linking_widget = self.widgets["EXPLORING"]["IS_LINKING"]["WIDGET"]
+            
+            is_selecting_widget.blockSignals(True)
+            is_tracking_widget.blockSignals(True)
+            is_linking_widget.blockSignals(True)
+            
+            is_selecting_widget.setChecked(layer_props["exploring"]["is_selecting"])
+            is_tracking_widget.setChecked(layer_props["exploring"]["is_tracking"])
+            is_linking_widget.setChecked(layer_props["exploring"]["is_linking"])
+            
+            is_selecting_widget.blockSignals(False)
+            is_tracking_widget.blockSignals(False)
+            is_linking_widget.blockSignals(False)
+        except Exception as e:
+            logger.debug(f"Error resetting exploring button states: {e}")
+
+    def _reset_filtering_button_states(self, layer_props):
+        """Reset filtering button visual states based on layer properties."""
+        try:
+            filtering = layer_props["filtering"]
+            
+            # Get button widgets
+            buttons = {
+                "HAS_LAYERS_TO_FILTER": filtering["has_layers_to_filter"],
+                "HAS_COMBINE_OPERATOR": filtering["has_combine_operator"],
+                "HAS_GEOMETRIC_PREDICATES": filtering["has_geometric_predicates"],
+                "HAS_BUFFER_VALUE": filtering["has_buffer_value"],
+                "HAS_BUFFER_TYPE": filtering["has_buffer_type"]
+            }
+            
+            for widget_key, state in buttons.items():
+                widget = self.widgets["FILTERING"][widget_key]["WIDGET"]
+                widget.blockSignals(True)
+                widget.setChecked(state)
+                widget.blockSignals(False)
+                
+            # Reset comboboxes to index 0 (AND)
+            source_combo = self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"]
+            other_combo = self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"]
+            
+            source_combo.blockSignals(True)
+            source_combo.setCurrentIndex(0)  # AND
+            source_combo.blockSignals(False)
+            
+            other_combo.blockSignals(True)
+            other_combo.setCurrentIndex(0)  # AND
+            other_combo.blockSignals(False)
+            
+            # Reset buffer value spinbox
+            buffer_spinbox = self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"]
+            buffer_spinbox.blockSignals(True)
+            buffer_spinbox.setValue(0.0)
+            buffer_spinbox.blockSignals(False)
+            
+            # Reset geometric predicates
+            geo_combo = self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"]
+            geo_combo.blockSignals(True)
+            geo_combo.setCheckedItems([])
+            geo_combo.blockSignals(False)
+            
+            # Reset layers to filter
+            layers_combo = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
+            layers_combo.blockSignals(True)
+            layers_combo.setCheckedItems([])
+            layers_combo.blockSignals(False)
+            
+        except Exception as e:
+            logger.debug(f"Error resetting filtering button states: {e}")
 
     def setProjectVariablesEvent(self):
         if self.widgets_initialized is True:

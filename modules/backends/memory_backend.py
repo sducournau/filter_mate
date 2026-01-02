@@ -44,6 +44,24 @@ from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
 from ..appUtils import safe_set_subset_string
 
+# v2.5.10: Import Multi-Step Optimizer for attribute-first filtering
+try:
+    from .multi_step_optimizer import (
+        MultiStepFilterOptimizer,
+        BackendFilterStrategy,
+        AttributePreFilter,
+        MemoryOptimizer,
+        BackendSelectivityEstimator
+    )
+    MULTI_STEP_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    MULTI_STEP_OPTIMIZER_AVAILABLE = False
+    MultiStepFilterOptimizer = None
+    BackendFilterStrategy = None
+    AttributePreFilter = None
+    MemoryOptimizer = None
+    BackendSelectivityEstimator = None
+
 logger = get_tasks_logger()
 
 

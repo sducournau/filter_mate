@@ -297,6 +297,96 @@ def safe_layer_access(layer: Any, default: Any = None) -> Callable:
     return decorator
 
 
+def require_valid_layer(default_return=None, log_level: str = 'warning'):
+    """
+    Decorator to validate layer before method execution.
+    
+    Checks if the first argument (after self) is a valid QGIS layer.
+    If invalid, returns default_return without executing the function.
+    Catches RuntimeError during execution for deleted C++ objects.
+    
+    PERFORMANCE & STABILITY IMPROVEMENT (v2.6.0):
+    Centralizes layer validation logic to reduce code duplication and
+    prevent access violations from deleted C++ objects.
+    
+    Args:
+        default_return: Value to return if layer is invalid (default: None)
+        log_level: Logging level for invalid layer messages ('debug', 'warning', 'error')
+        
+    Returns:
+        Decorated function
+        
+    Example:
+        class MyClass:
+            @require_valid_layer(default_return=[])
+            def get_features(self, layer):
+                return list(layer.getFeatures())
+            
+            @require_valid_layer(default_return=False, log_level='debug')
+            def apply_filter(self, layer, expression):
+                return layer.setSubsetString(expression)
+    """
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(self, layer, *args, **kwargs):
+            # Validate layer
+            if not is_valid_layer(layer):
+                msg = f"Skipping {func.__name__}: layer is invalid or deleted"
+                if log_level == 'debug':
+                    logger.debug(msg)
+                elif log_level == 'error':
+                    logger.error(msg)
+                else:
+                    logger.warning(msg)
+                return default_return
+            
+            try:
+                return func(self, layer, *args, **kwargs)
+            except RuntimeError as e:
+                if "deleted" in str(e).lower():
+                    logger.warning(f"{func.__name__}: Layer deleted during operation")
+                    return default_return
+                raise
+            except (OSError, SystemError) as e:
+                # Windows access violations may surface as these
+                logger.warning(f"{func.__name__}: System error during layer operation: {e}")
+                return default_return
+        return wrapper
+    return decorator
+
+
+def require_valid_qobject(default_return=None):
+    """
+    Decorator to validate QObject before method execution.
+    
+    Similar to require_valid_layer but for general QObjects (widgets, etc.).
+    
+    Args:
+        default_return: Value to return if object is invalid
+        
+    Example:
+        @require_valid_qobject(default_return=None)
+        def get_widget_text(self, widget):
+            return widget.text()
+    """
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(self, qobject, *args, **kwargs):
+            if not is_valid_qobject(qobject):
+                logger.debug(f"Skipping {func.__name__}: QObject is invalid")
+                return default_return
+            
+            try:
+                return func(self, qobject, *args, **kwargs)
+            except RuntimeError as e:
+                if "deleted" in str(e).lower():
+                    logger.warning(f"{func.__name__}: QObject deleted during operation")
+                    return default_return
+                raise
+        return wrapper
+    return decorator
+
+
 def safe_disconnect(signal: Any, slot: Optional[Callable] = None) -> bool:
     """
     Safely disconnect a Qt signal, handling already-disconnected or deleted cases.

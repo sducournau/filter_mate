@@ -2,11 +2,110 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.5.20] - 2025-01-03 - Rafraîchissement Étendu Spatialite/OGR
+
+### 🔧 Améliorations Techniques
+
+- **RAFRAÎCHISSEMENT ÉTENDU MULTI-BACKEND**: Extension du système de rafraîchissement différé à tous les backends
+
+  - Spatialite: Détection des filtres complexes (ST\_\*, Intersects(), Contains(), Within(), GeomFromText)
+  - OGR: Détection des grandes clauses IN (> 50 virgules) typiques du fallback selectbylocation
+  - Rafraîchissement agressif avec `updateExtents()`, `reload()`, `dataProvider().reloadData()`
+
+- **RAFRAÎCHISSEMENT FINAL UNIVERSEL**: `_final_canvas_refresh()` repaint maintenant toutes les couches vectorielles filtrées
+  - Délai de 2 secondes après le rafraîchissement initial (800ms)
+  - Utilise `triggerRepaint()` et `updateExtents()` pour chaque couche
+  - Rafraîchissement complet du canvas après traitement individuel
+
+### 🐛 Corrections de Bugs
+
+- **FIX**: Les couches Spatialite avec filtres spatiaux complexes s'affichent maintenant correctement
+- **FIX**: Les couches OGR après fallback depuis PostgreSQL/Spatialite se rafraîchissent correctement
+
+---
+
+## [2.5.19] - 2025-01-03 - Fix Affichage Filtres Complexes PostgreSQL
+
+### 🐛 Corrections de Bugs
+
+- **FIX AFFICHAGE EXISTS/ST_BUFFER**: Résolution du problème d'affichage après multi-step filtering avec expressions complexes
+  - Les requêtes EXISTS avec ST_Intersects et ST_Buffer causaient un cache stale du provider PostgreSQL
+  - `triggerRepaint()` seul était insuffisant pour forcer le rechargement des données
+
+### 🔧 Améliorations Techniques
+
+- **RAFRAÎCHISSEMENT AGRESSIF PostgreSQL**: Nouveau système de rafraîchissement pour filtres complexes
+
+  - `_delayed_canvas_refresh()` force `dataProvider().reloadData()` pour les couches PostgreSQL avec EXISTS/ST_BUFFER
+  - Délai initial augmenté de 500ms à 800ms
+  - Nouveau `_final_canvas_refresh()` à 2000ms pour refresh final
+  - Double-pass refresh garantit l'affichage correct des résultats
+
+- **DÉTECTION FILTRES COMPLEXES**: Identification automatique des expressions problématiques
+  - Patterns détectés: `EXISTS`, `ST_BUFFER`, `__source` (marqueur expressions source)
+  - Application ciblée du reload agressif uniquement si nécessaire
+
+---
+
+## [2.5.9] - 2025-12-31 - Optimisations PostgreSQL Avancées
+
+### ✨ Nouvelles Fonctionnalités
+
+- **PROGRESSIVE FILTERING**: Nouveau système de filtrage progressif pour les grands datasets PostgreSQL
+
+  - **Two-Phase Filtering**: Phase 1 utilise `&&` (bbox GIST) pour pré-filtrer, Phase 2 applique les prédicats complets
+  - **Lazy Cursor Streaming**: Curseurs côté serveur pour éviter la surcharge mémoire (> 50k features)
+  - **Sélection automatique de stratégie**: DIRECT, MATERIALIZED, TWO_PHASE, PROGRESSIVE
+
+- **QUERY COMPLEXITY ESTIMATOR**: Analyse dynamique de la complexité des expressions SQL
+
+  - Estimation des coûts des opérations PostGIS (ST_Buffer=12, EXISTS=20, ST_Intersects=5...)
+  - Recommandation automatique de la stratégie optimale basée sur le score de complexité
+  - Seuils configurables: < 50 → DIRECT, 50-150 → MATERIALIZED, 150-500 → TWO_PHASE, > 500 → PROGRESSIVE
+
+- **ENHANCED QUERY CACHE**: Cache d'expressions amélioré
+  - Support TTL (Time-To-Live) pour l'expiration automatique des entrées
+  - Cache des result counts pour éviter les COUNT coûteux
+  - Cache des scores de complexité pour éviter les ré-analyses
+  - Tracking des "hot entries" (requêtes fréquentes)
+
+### 🔧 Améliorations Techniques
+
+- **Nouveaux modules**:
+
+  - `modules/tasks/progressive_filter.py` (~750 lignes): LazyResultIterator, TwoPhaseFilter, ProgressiveFilterExecutor
+  - `modules/tasks/query_complexity_estimator.py` (~450 lignes): QueryComplexityEstimator, OperationCosts
+
+- **Configuration étendue** (`config.default.json`):
+  - Section `PROGRESSIVE_FILTERING`: enabled, two_phase_enabled, complexity_threshold, lazy_cursor_threshold, chunk_size
+  - Section `QUERY_CACHE`: enabled, max_size, ttl_seconds, cache_result_counts, cache_complexity_scores
+
+### 📊 Performance
+
+| Optimisation        | Condition         | Gain Estimé                 |
+| ------------------- | ----------------- | --------------------------- |
+| Two-Phase Filtering | score ≥ 100       | **3-10× plus rapide**       |
+| Lazy Cursor         | > 50k features    | **50-80% moins de mémoire** |
+| Cache amélioré      | Requêtes répétées | **20-40% plus rapide**      |
+
+### 🧪 Tests
+
+- **35 nouveaux tests** dans `tests/test_progressive_filter.py`
+  - TestQueryComplexityEstimator (10 tests)
+  - TestLazyResultIterator (3 tests)
+  - TestTwoPhaseFilter (3 tests)
+  - TestProgressiveFilterExecutor (5 tests)
+  - TestEnhancedQueryCache (12 tests)
+  - TestFilterResult (2 tests)
+
+---
+
 ## [2.5.7] - 2025-12-31 - Amélioration Compatibilité CRS
 
 ### ✨ Nouvelles Fonctionnalités
 
 - **NOUVEAU MODULE crs_utils.py**: Module dédié à la gestion des CRS
+
   - `is_geographic_crs()`: Détecte les CRS géographiques (lat/lon)
   - `is_metric_crs()`: Détecte les CRS métriques
   - `get_optimal_metric_crs()`: Trouve le meilleur CRS métrique (UTM ou Web Mercator)

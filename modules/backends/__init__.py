@@ -19,6 +19,11 @@ v2.5.8: Memory Backend
 - Dedicated backend for QGIS memory layers
 - Uses QgsSpatialIndex for O(log n) spatial queries
 - Accurate feature counting with iteration fallback
+
+v2.5.10: Multi-Step Filter Optimizer
+- Adaptive multi-step filtering for large datasets
+- Attribute-first strategy for selective attribute filters
+- Selectivity estimation for optimal strategy selection
 """
 
 from .base_backend import GeometricFilterBackend
@@ -47,6 +52,30 @@ except ImportError:
     SpatialIndexManager = None
     get_spatial_index_manager = None
 
+# v2.5.10: Multi-Step Filter Optimizer
+try:
+    from .multi_step_optimizer import (
+        MultiStepFilterOptimizer,
+        MultiStepPlanBuilder,
+        BackendFilterStrategy,
+        AttributePreFilter,
+        ChunkedProcessor,
+        BackendSelectivityEstimator,
+        SpatialiteOptimizer,
+        OGROptimizer,
+        MemoryOptimizer
+    )
+except ImportError:
+    MultiStepFilterOptimizer = None
+    MultiStepPlanBuilder = None
+    BackendFilterStrategy = None
+    AttributePreFilter = None
+    ChunkedProcessor = None
+    BackendSelectivityEstimator = None
+    SpatialiteOptimizer = None
+    OGROptimizer = None
+    MemoryOptimizer = None
+
 __all__ = [
     # Core backends
     'GeometricFilterBackend',
@@ -62,4 +91,14 @@ __all__ = [
     'get_wkt_cache',
     'SpatialIndexManager',
     'get_spatial_index_manager',
+    # v2.5.10 Multi-Step Optimizer
+    'MultiStepFilterOptimizer',
+    'MultiStepPlanBuilder',
+    'BackendFilterStrategy',
+    'AttributePreFilter',
+    'ChunkedProcessor',
+    'BackendSelectivityEstimator',
+    'SpatialiteOptimizer',
+    'OGROptimizer',
+    'MemoryOptimizer',
 ]

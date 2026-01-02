@@ -59,9 +59,67 @@ __all__ = [
     
     # Cache (from geometry_cache.py - Phase 3a - ✅)
     'SourceGeometryCache',
+    
+    # Progressive filtering (v2.5.9)
+    'ProgressiveFilterExecutor',
+    'TwoPhaseFilter',
+    'LazyResultIterator',
+    'FilterStrategy',
+    
+    # Multi-step filtering (v2.5.10)
+    'MultiStepFilterOptimizer',
+    'FilterPlanBuilder',
+    'SelectivityEstimator',
+    
+    # Expression evaluation (v2.5.10)
+    'ExpressionEvaluationTask',
+    'ExpressionEvaluationManager',
+    'get_expression_manager',
 ]
 
+# Import progressive filter components
+try:
+    from .progressive_filter import (
+        ProgressiveFilterExecutor,
+        TwoPhaseFilter,
+        LazyResultIterator,
+        FilterStrategy,
+        LayerProperties,
+        FilterResult
+    )
+except ImportError:
+    ProgressiveFilterExecutor = None
+    TwoPhaseFilter = None
+    LazyResultIterator = None
+    FilterStrategy = None
+
+# Import multi-step filter components (v2.5.10)
+try:
+    from .multi_step_filter import (
+        MultiStepFilterOptimizer,
+        FilterPlanBuilder,
+        SelectivityEstimator,
+        LayerStatistics,
+        get_optimal_filter_plan
+    )
+except ImportError:
+    MultiStepFilterOptimizer = None
+    FilterPlanBuilder = None
+    SelectivityEstimator = None
+
+# Import expression evaluation task (v2.5.10)
+try:
+    from .expression_evaluation_task import (
+        ExpressionEvaluationTask,
+        ExpressionEvaluationManager,
+        get_expression_manager
+    )
+except ImportError:
+    ExpressionEvaluationTask = None
+    ExpressionEvaluationManager = None
+    get_expression_manager = None
+
 # Version info
-__version__ = '2.3.0'
-__phase__ = '3c'
-__status__ = 'FilterEngineTask extracted, all major tasks modularized'
+__version__ = '2.5.10'
+__phase__ = 'performance'
+__status__ = 'Multi-step adaptive filtering for large datasets'

@@ -92,25 +92,35 @@ class PostgreSQLConnectionPool:
     This pool manages a set of reusable connections to avoid the
     ~50-100ms overhead of establishing new connections.
     
+    PERFORMANCE IMPROVEMENTS (v2.6.0):
+    - Increased max connections from 10 to 15
+    - Reduced idle timeout from 300s to 180s
+    - Added periodic health check thread
+    - Integrated with circuit breaker for failure protection
+    
     Features:
     - Thread-safe connection management
     - Automatic connection health checking
+    - Periodic background health checks
     - Configurable pool size (min/max connections)
     - Connection timeout handling
     - Statistics tracking for monitoring
+    - Circuit breaker integration
     
     Configuration:
     - min_connections: Minimum connections to keep open (default: 2)
-    - max_connections: Maximum connections allowed (default: 10)
+    - max_connections: Maximum connections allowed (default: 15)
     - connection_timeout: Seconds to wait for available connection (default: 30)
-    - idle_timeout: Seconds before closing idle connections (default: 300)
+    - idle_timeout: Seconds before closing idle connections (default: 180)
+    - health_check_interval: Seconds between health checks (default: 60)
     """
     
-    # Default configuration
+    # Default configuration - OPTIMIZED v2.6.0
     DEFAULT_MIN_CONNECTIONS = 2
-    DEFAULT_MAX_CONNECTIONS = 10
+    DEFAULT_MAX_CONNECTIONS = 15    # Increased from 10 for better parallelism
     DEFAULT_CONNECTION_TIMEOUT = 30  # seconds
-    DEFAULT_IDLE_TIMEOUT = 300  # seconds (5 minutes)
+    DEFAULT_IDLE_TIMEOUT = 180       # Reduced from 300 for faster cleanup
+    DEFAULT_HEALTH_CHECK_INTERVAL = 60  # New: periodic health check
     
     def __init__(
         self,
@@ -121,7 +131,8 @@ class PostgreSQLConnectionPool:
         password: str,
         min_connections: int = None,
         max_connections: int = None,
-        sslmode: str = None
+        sslmode: str = None,
+        enable_health_check: bool = True
     ):
         """
         Initialize PostgreSQL connection pool.
@@ -133,8 +144,9 @@ class PostgreSQLConnectionPool:
             user: Username
             password: Password
             min_connections: Minimum pool size (default: 2)
-            max_connections: Maximum pool size (default: 10)
+            max_connections: Maximum pool size (default: 15)
             sslmode: SSL mode (optional)
+            enable_health_check: Enable periodic health check (default: True)
         """
         if not POSTGRESQL_AVAILABLE:
             raise RuntimeError("psycopg2 not available - cannot create connection pool")
@@ -157,6 +169,11 @@ class PostgreSQLConnectionPool:
         # Connection tracking for health checks
         self._connection_timestamps: Dict[int, float] = {}
         
+        # Health check thread management
+        self._health_check_enabled = enable_health_check
+        self._health_check_thread: Optional[threading.Thread] = None
+        self._shutdown_event = threading.Event()
+        
         # Statistics
         self.stats = PoolStats()
         
@@ -168,6 +185,110 @@ class PostgreSQLConnectionPool:
         
         # Pre-create minimum connections
         self._initialize_pool()
+        
+        # Start health check thread if enabled
+        if self._health_check_enabled:
+            self._start_health_check_thread()
+    
+    def _start_health_check_thread(self):
+        """Start background thread for periodic health checks."""
+        def health_check_loop():
+            while not self._shutdown_event.is_set():
+                try:
+                    self._perform_health_check()
+                except Exception as e:
+                    logger.debug(f"Health check error: {e}")
+                
+                # Wait for interval or shutdown
+                self._shutdown_event.wait(self.DEFAULT_HEALTH_CHECK_INTERVAL)
+        
+        self._health_check_thread = threading.Thread(
+            target=health_check_loop,
+            name=f"PoolHealthCheck-{self._pool_key}",
+            daemon=True
+        )
+        self._health_check_thread.start()
+        logger.debug(f"Health check thread started for {self._pool_key}")
+    
+    def _perform_health_check(self):
+        """
+        Perform health check on pooled connections.
+        
+        - Removes unhealthy connections
+        - Closes idle connections beyond timeout
+        - Ensures minimum connections are maintained
+        """
+        removed_count = 0
+        
+        # Get all connections from pool
+        connections_to_check = []
+        while True:
+            try:
+                conn = self._pool.get_nowait()
+                connections_to_check.append(conn)
+            except Empty:
+                break
+        
+        # Check each connection
+        for conn in connections_to_check:
+            should_keep = True
+            
+            # Check health
+            if not self._is_connection_healthy(conn):
+                should_keep = False
+                removed_count += 1
+            # Check idle timeout
+            elif self._is_connection_idle_too_long(conn):
+                with self._lock:
+                    if self._active_connections > self.min_connections:
+                        should_keep = False
+                        removed_count += 1
+            
+            if should_keep:
+                try:
+                    self._pool.put_nowait(conn)
+                    self._connection_timestamps[id(conn)] = time.time()
+                except:
+                    self._close_connection(conn)
+            else:
+                self._close_connection(conn)
+        
+        if removed_count > 0:
+            logger.debug(f"Health check: removed {removed_count} connections from {self._pool_key}")
+        
+        # Ensure minimum connections
+        with self._lock:
+            while self._active_connections < self.min_connections:
+                try:
+                    conn = self._create_connection()
+                    if conn:
+                        self._pool.put(conn)
+                        self.stats.current_pool_size += 1
+                except Exception:
+                    break
+    
+    def shutdown(self):
+        """
+        Gracefully shutdown the pool.
+        
+        Stops health check thread and closes all connections.
+        """
+        logger.info(f"Shutting down connection pool {self._pool_key}")
+        
+        # Stop health check thread
+        self._shutdown_event.set()
+        if self._health_check_thread and self._health_check_thread.is_alive():
+            self._health_check_thread.join(timeout=5)
+        
+        # Close all connections
+        while True:
+            try:
+                conn = self._pool.get_nowait()
+                self._close_connection(conn)
+            except Empty:
+                break
+        
+        logger.info(f"Connection pool {self._pool_key} shut down")
     
     def _initialize_pool(self):
         """Pre-create minimum number of connections."""
@@ -180,9 +301,18 @@ class PostgreSQLConnectionPool:
             except Exception as e:
                 logger.warning(f"Failed to pre-create connection: {e}")
     
+    # Statement timeout in seconds for PostgreSQL queries
+    # Prevents queries from blocking indefinitely (e.g., complex ST_Intersects on large datasets)
+    # Default: 120 seconds (2 minutes) - long enough for complex queries, short enough to avoid UI freeze
+    DEFAULT_STATEMENT_TIMEOUT = 120
+    
     def _create_connection(self):
         """
         Create a new database connection.
+        
+        Configures statement_timeout to prevent queries from blocking indefinitely.
+        This is critical for FilterMate because complex spatial queries (EXISTS with
+        ST_Intersects on large datasets) can take very long and block the task thread.
         
         Returns:
             psycopg2 connection or None on failure
@@ -203,6 +333,19 @@ class PostgreSQLConnectionPool:
                 connect_kwargs['sslmode'] = self.sslmode
             
             conn = psycopg2.connect(**connect_kwargs)
+            
+            # CRITICAL FIX v2.5.18: Set statement_timeout to prevent blocking queries
+            # This prevents complex spatial queries from hanging indefinitely and
+            # causing QGIS to appear unresponsive. If timeout is reached, query
+            # is cancelled and fallback to OGR backend can be attempted.
+            try:
+                with conn.cursor() as cursor:
+                    timeout_ms = self.DEFAULT_STATEMENT_TIMEOUT * 1000
+                    cursor.execute(f"SET statement_timeout = {timeout_ms}")
+                    conn.commit()
+                logger.debug(f"Set statement_timeout={self.DEFAULT_STATEMENT_TIMEOUT}s for {self._pool_key}")
+            except Exception as timeout_err:
+                logger.warning(f"Could not set statement_timeout: {timeout_err}")
             
             # Track creation time for idle timeout
             self._connection_timestamps[id(conn)] = time.time()

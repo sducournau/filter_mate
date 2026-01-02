@@ -6,18 +6,18 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.5.7
+version=2.5.9
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.5.7 - Amélioration Compatibilité CRS
+about=FilterMate v2.5.9 - Optimisations PostgreSQL Avancées
 
- NEW in v2.5.7:
- - 🌍 IMPROVED CRS COMPATIBILITY: Automatic conversion to EPSG:3857 when metric calculations needed
- - 📐 OPTIMAL UTM ZONES: Calculates best UTM zone based on data extent for more accurate metric operations
- - 🔄 CRS TRANSFORMER: New utility class for reliable geometry transformations between CRS
- - 🛠️ NEW MODULE: crs_utils.py with is_geographic_crs(), get_optimal_metric_crs(), CRSTransformer
- - 🔧 METRIC BUFFER: safe_buffer_metric() handles CRS conversion automatically
+ NEW in v2.5.9:
+ - 🚀 PROGRESSIVE FILTERING: Two-phase filtering (bbox + full predicate) for complex queries
+ - 📊 QUERY COMPLEXITY ESTIMATOR: Dynamic SQL analysis with automatic strategy selection
+ - 💾 LAZY CURSOR STREAMING: Server-side cursors for memory-efficient large dataset processing
+ - ⚡ ENHANCED CACHE: TTL support, result count caching, complexity score caching
+ - 🎯 AUTO STRATEGY: DIRECT → MATERIALIZED → TWO_PHASE → PROGRESSIVE based on complexity
  
  Previous version (v2.5.6):
  - ✨ AUTO FOCUS WITH SELECTING: QGIS selection ↔ widgets perfectly synchronized when is_selecting enabled

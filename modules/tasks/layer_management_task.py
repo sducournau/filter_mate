@@ -178,9 +178,12 @@ class LayersManagementEngineTask(QgsTask):
         self._deferred_layer_variables = []
 
         # JSON templates for layer properties
+        # NOTE: has_combine_operator defaults to false - additive filter is auto-enabled
+        # when existing subsets are detected on source or distant layers (see _synchronize_layer_widgets)
+        # source_layer_combine_operator and other_layers_combine_operator default to "AND" (index 0)
         self.json_template_layer_infos = '{"layer_geometry_type":"%s","layer_name":"%s","layer_table_name":"%s","layer_id":"%s","layer_schema":"%s","is_already_subset":false,"layer_provider_type":"%s","layer_crs_authid":"%s","primary_key_name":"%s","primary_key_idx":%s,"primary_key_type":"%s","layer_geometry_field":"%s","primary_key_is_numeric":%s,"is_current_layer":false }'
         self.json_template_layer_exploring = '{"is_changing_all_layer_properties":true,"is_tracking":false,"is_selecting":false,"is_linking":false,"current_exploring_groupbox":"single_selection","single_selection_expression":"%s","multiple_selection_expression":"%s","custom_selection_expression":"%s" }'
-        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"","other_layers_combine_operator":"","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round" }'
+        self.json_template_layer_filtering = '{"has_layers_to_filter":false,"layers_to_filter":[],"has_combine_operator":false,"source_layer_combine_operator":"AND","other_layers_combine_operator":"AND","has_geometric_predicates":false,"geometric_predicates":[],"has_buffer_value":false,"buffer_value":0.0,"buffer_value_property":false,"buffer_value_expression":"","has_buffer_type":false,"buffer_type":"Round" }'
         
         global ENV_VARS
         self.PROJECT = ENV_VARS["PROJECT"]

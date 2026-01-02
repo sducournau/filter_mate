@@ -83,7 +83,8 @@ from ..constants import (
     PREDICATE_INTERSECTS, PREDICATE_WITHIN, PREDICATE_CONTAINS,
     PREDICATE_OVERLAPS, PREDICATE_CROSSES, PREDICATE_TOUCHES,
     PREDICATE_DISJOINT, PREDICATE_EQUALS,
-    get_provider_name, should_warn_performance
+    get_provider_name, should_warn_performance,
+    LONG_QUERY_WARNING_THRESHOLD, VERY_LONG_QUERY_WARNING_THRESHOLD
 )
 
 # Import backend architecture
@@ -717,6 +718,9 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if task completed successfully, False otherwise
         """
+        import time
+        run_start_time = time.time()
+        
         try:
             # v2.4.13: Clear Spatialite support cache at the start of each filter task
             # This ensures fresh detection of Spatialite support for GeoPackage layers
@@ -776,7 +780,28 @@ class FilterEngineTask(QgsTask):
             
             # Task completed successfully
             self.setProgress(100)
-            logger.info(f"{self.task_action.capitalize()} task completed successfully")
+            
+            # v2.5.11: Check for long query duration and add warning if needed
+            run_elapsed = time.time() - run_start_time
+            if run_elapsed >= VERY_LONG_QUERY_WARNING_THRESHOLD:
+                # Very long query (>30s): Critical warning
+                warning_msg = (
+                    f"La requête de filtrage a pris {run_elapsed:.1f}s. "
+                    f"Pour de meilleures performances, considérez d'utiliser PostgreSQL/PostGIS "
+                    f"ou de réduire la complexité du filtre (buffer plus petit, moins de couches)."
+                )
+                self.warning_messages.append(warning_msg)
+                logger.warning(f"⚠️ Very long query: {run_elapsed:.1f}s")
+            elif run_elapsed >= LONG_QUERY_WARNING_THRESHOLD:
+                # Long query (>10s): Standard warning
+                warning_msg = (
+                    f"La requête de filtrage a pris {run_elapsed:.1f}s. "
+                    f"Pour les jeux de données volumineux, PostgreSQL offre de meilleures performances."
+                )
+                self.warning_messages.append(warning_msg)
+                logger.warning(f"⚠️ Long query: {run_elapsed:.1f}s")
+            
+            logger.info(f"{self.task_action.capitalize()} task completed successfully in {run_elapsed:.2f}s")
             return True
         
         except Exception as e:
@@ -948,8 +973,19 @@ class FilterEngineTask(QgsTask):
             logger.info(f"FilterMate: Filtre existant détecté sur {self.param_source_table}: {self.param_source_old_subset[:100]}...")
         
         if self.has_combine_operator:
-            self.param_source_layer_combine_operator = self.task_parameters["filtering"]["source_layer_combine_operator"]
-            self.param_other_layers_combine_operator = self.task_parameters["filtering"]["other_layers_combine_operator"]
+            # Combine operators are now always SQL keywords (AND, AND NOT, OR)
+            # thanks to index-based conversion in dockwidget._index_to_combine_operator()
+            self.param_source_layer_combine_operator = self.task_parameters["filtering"].get(
+                "source_layer_combine_operator", "AND"
+            )
+            self.param_other_layers_combine_operator = self.task_parameters["filtering"].get(
+                "other_layers_combine_operator", "AND"
+            )
+            # Ensure valid operator (fallback to AND if empty/invalid)
+            if not self.param_source_layer_combine_operator:
+                self.param_source_layer_combine_operator = "AND"
+            if not self.param_other_layers_combine_operator:
+                self.param_other_layers_combine_operator = "AND"
 
     def _sanitize_subset_string(self, subset_string):
         """
@@ -971,6 +1007,30 @@ class FilterEngineTask(QgsTask):
         import re
         
         sanitized = subset_string
+        
+        # ========================================================================
+        # PHASE 0: Normalize French SQL operators to English
+        # ========================================================================
+        # QGIS expressions support French operators (ET, OU, NON) but PostgreSQL
+        # only understands English operators (AND, OR, NOT). This normalization
+        # ensures compatibility with all SQL backends.
+        # 
+        # FIX v2.5.12: Handle French operators that cause SQL syntax errors like:
+        # "syntax error at or near 'ET'" 
+        
+        french_operators = [
+            (r'\)\s+ET\s+\(', ') AND ('),      # ) ET ( -> ) AND (
+            (r'\)\s+OU\s+\(', ') OR ('),       # ) OU ( -> ) OR (
+            (r'\s+ET\s+', ' AND '),            # ... ET ... -> ... AND ...
+            (r'\s+OU\s+', ' OR '),             # ... OU ... -> ... OR ...
+            (r'\s+ET\s+NON\s+', ' AND NOT '),  # ET NON -> AND NOT
+            (r'\s+NON\s+', ' NOT '),           # NON ... -> NOT ...
+        ]
+        
+        for pattern, replacement in french_operators:
+            if re.search(pattern, sanitized, re.IGNORECASE):
+                logger.info(f"FilterMate: Normalizing French operator '{pattern}' to '{replacement}'")
+                sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
         
         # ========================================================================
         # PHASE 1: Remove non-boolean display expressions
@@ -1006,13 +1066,32 @@ class FilterEngineTask(QgsTask):
         # These are style/display expressions, not filter conditions
         # Match: AND ( case when ... end ) OR AND ( SELECT CASE when ... end )
         # with multiple closing parentheses (malformed)
+        #
+        # CRITICAL FIX v2.5.10: Improved patterns to handle multi-line CASE expressions
+        # like those from rule-based symbology:
+        #   AND ( SELECT CASE 
+        #     WHEN 'AV' = left("table"."field", 2) THEN true
+        #     WHEN 'PL' = left("table"."field", 2) THEN true
+        #     ...
+        #   end )
+        
+        # IMPROVED PATTERN: Match AND ( SELECT CASE ... WHEN ... THEN true/false ... end )
+        # This pattern is more robust for multi-line expressions from QGIS rule-based symbology
+        select_case_pattern = r'\s*AND\s+\(\s*SELECT\s+CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+\s*(?:ELSE\s+.+?)?\s*end\s*\)'
+        
+        match = re.search(select_case_pattern, sanitized, re.IGNORECASE | re.DOTALL)
+        if match:
+            logger.info(f"FilterMate: Removing SELECT CASE style expression: '{match.group()[:80]}...'")
+            sanitized = re.sub(select_case_pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Also check for simpler CASE patterns without SELECT
         case_patterns = [
-            # Standard CASE expression
-            r'(?:^|\s+)AND\s+\(\s*case\s+when\s+.*?\s+end\s*\)+',
-            r'(?:^|\s+)OR\s+\(\s*case\s+when\s+.*?\s+end\s*\)+',
-            # SELECT CASE expression (from rule-based styles)
-            r'(?:^|\s+)AND\s+\(\s*SELECT\s+CASE\s+.*?\s+end\s*\)+',
-            r'(?:^|\s+)OR\s+\(\s*SELECT\s+CASE\s+.*?\s+end\s*\)+',
+            # Standard CASE expression with true/false returns  
+            r'\s*AND\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+',
+            r'\s*OR\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+',
+            # SELECT CASE expression (from rule-based styles) - backup pattern
+            r'\s*AND\s+\(\s*SELECT\s+CASE\s+.+?\s+END\s*\)+',
+            r'\s*OR\s+\(\s*SELECT\s+CASE\s+.+?\s+END\s*\)+',
         ]
         
         for pattern in case_patterns:
@@ -1021,7 +1100,7 @@ class FilterEngineTask(QgsTask):
                 # Verify this is a display/style expression (returns true/false, not a comparison)
                 matched_text = match.group()
                 # Check if it's just "then true/false" without external comparison
-                if re.search(r'\bthen\s+(true|false)\b', matched_text, re.IGNORECASE):
+                if re.search(r'\bTHEN\s+(true|false)\b', matched_text, re.IGNORECASE):
                     logger.info(f"FilterMate: Removing invalid CASE/style expression: '{matched_text[:60]}...'")
                     sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
         
@@ -1067,6 +1146,100 @@ class FilterEngineTask(QgsTask):
             logger.info(f"FilterMate: Subset sanitized from '{subset_string[:80]}...' to '{sanitized[:80]}...'")
         
         return sanitized
+    
+    def _extract_spatial_clauses_for_exists(self, filter_expr, source_table=None):
+        """
+        Extract only spatial clauses (ST_Intersects, etc.) from a filter expression.
+        
+        CRITICAL FIX v2.5.11: For EXISTS subqueries in PostgreSQL, we must include
+        the source layer's spatial filter to ensure we only consider filtered features.
+        However, we must EXCLUDE:
+        - Style-based rules (SELECT CASE ... THEN true/false)
+        - Attribute-only filters (without spatial predicates)
+        - coalesce display expressions
+        
+        This ensures the EXISTS query sees the same filtered source as QGIS.
+        
+        Args:
+            filter_expr: The source layer's current subsetString
+            source_table: Source table name for reference replacement
+            
+        Returns:
+            str: Extracted spatial clauses only, or None if no spatial predicates found
+        """
+        if not filter_expr:
+            return None
+        
+        import re
+        
+        # List of spatial predicates to extract
+        SPATIAL_PREDICATES = [
+            'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches',
+            'ST_Overlaps', 'ST_Crosses', 'ST_Disjoint', 'ST_Equals',
+            'ST_DWithin', 'ST_Covers', 'ST_CoveredBy'
+        ]
+        
+        # Check if filter contains any spatial predicates
+        filter_upper = filter_expr.upper()
+        has_spatial = any(pred.upper() in filter_upper for pred in SPATIAL_PREDICATES)
+        
+        if not has_spatial:
+            logger.debug(f"_extract_spatial_clauses: No spatial predicates in filter")
+            return None
+        
+        # First, remove style-based expressions (SELECT CASE ... THEN true/false)
+        cleaned = filter_expr
+        
+        # Pattern for SELECT CASE style rules (multi-line support)
+        select_case_pattern = r'\s*AND\s+\(\s*SELECT\s+CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+\s*(?:ELSE\s+.+?)?\s*end\s*\)'
+        cleaned = re.sub(select_case_pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Pattern for simple CASE style rules
+        case_pattern = r'\s*AND\s+\(\s*CASE\s+(?:WHEN\s+.+?THEN\s+(?:true|false)\s*)+(?:ELSE\s+.+?)?\s*END\s*\)+'
+        cleaned = re.sub(case_pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Remove coalesce display expressions
+        coalesce_pattern = r'\s*(?:AND|OR)\s+\(coalesce\([^)]*(?:\([^)]*\)[^)]*)*\)\)'
+        cleaned = re.sub(coalesce_pattern, '', cleaned, flags=re.IGNORECASE)
+        
+        # Clean up whitespace and operators
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        cleaned = re.sub(r'\s+(AND|OR)\s*$', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'^\s*(AND|OR)\s+', '', cleaned, flags=re.IGNORECASE)
+        
+        # Remove outer parentheses if present
+        while cleaned.startswith('(') and cleaned.endswith(')'):
+            # Check if these are matching outer parens
+            depth = 0
+            is_outer = True
+            for i, char in enumerate(cleaned):
+                if char == '(':
+                    depth += 1
+                elif char == ')':
+                    depth -= 1
+                    if depth == 0 and i < len(cleaned) - 1:
+                        is_outer = False
+                        break
+            if is_outer and depth == 0:
+                cleaned = cleaned[1:-1].strip()
+            else:
+                break
+        
+        # Verify cleaned expression still contains spatial predicates
+        cleaned_upper = cleaned.upper()
+        has_spatial_after_clean = any(pred.upper() in cleaned_upper for pred in SPATIAL_PREDICATES)
+        
+        if not has_spatial_after_clean:
+            logger.debug(f"_extract_spatial_clauses: Spatial predicates removed during cleaning")
+            return None
+        
+        # Validate parentheses are balanced
+        if cleaned.count('(') != cleaned.count(')'):
+            logger.warning(f"_extract_spatial_clauses: Unbalanced parentheses after extraction")
+            return None
+        
+        logger.info(f"_extract_spatial_clauses: Extracted spatial filter: '{cleaned[:100]}...'")
+        return cleaned
     
     def _apply_postgresql_type_casting(self, expression, layer=None):
         """
@@ -1257,6 +1430,27 @@ class FilterEngineTask(QgsTask):
             combine_operator = 'AND'
             logger.info(f"FilterMate: Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant")
         
+        # CRITICAL FIX v2.5.12: Handle OGR fallback for PostgreSQL layers
+        # When using OGR fallback, the old subset might contain PostgreSQL-specific syntax
+        # (SELECT ... FROM ... WHERE ...) that OGR can't parse. In this case, only use
+        # the WHERE clause portion, or skip combination if the old subset is too complex.
+        if hasattr(self, 'param_source_provider_type') and self.param_source_provider_type == PROVIDER_OGR:
+            # For OGR, check if old subset contains PostgreSQL-specific syntax
+            old_subset_upper = self.param_source_old_subset.upper()
+            if 'SELECT' in old_subset_upper or 'FROM' in old_subset_upper:
+                logger.warning(f"FilterMate: Old subset contains PostgreSQL syntax but using OGR fallback")
+                # Try to extract just the WHERE clause
+                index_where = self.param_source_old_subset.upper().find('WHERE')
+                if index_where != -1:
+                    where_clause = self.param_source_old_subset[index_where + 5:].strip()  # Skip 'WHERE'
+                    # Remove trailing SELECT part if this was a subquery
+                    if where_clause:
+                        logger.info(f"FilterMate: Extracted WHERE clause for OGR: {where_clause[:80]}...")
+                        return f'( {where_clause} ) {combine_operator} ( {expression} )'
+                # Can't extract WHERE clause - skip combination, use new expression only
+                logger.warning(f"FilterMate: Cannot combine with PostgreSQL subset in OGR mode - using new expression only")
+                return expression
+        
         # Extract WHERE clause from old subset
         index_where = self.param_source_old_subset.find('WHERE')
         if index_where == -1:
@@ -1336,8 +1530,31 @@ class FilterEngineTask(QgsTask):
                 combine_operator = 'AND'
                 logger.info(f"FilterMate: Aucun opérateur de combinaison défini, utilisation de AND par défaut pour préserver le filtre existant (feature ID list)")
             
+            # CRITICAL FIX v2.5.12: Handle OGR fallback for PostgreSQL layers
+            # When using OGR fallback, the old subset might contain PostgreSQL-specific syntax
+            old_subset_to_combine = self.param_source_old_subset
+            if self.param_source_provider_type == PROVIDER_OGR:
+                old_subset_upper = self.param_source_old_subset.upper()
+                if 'SELECT' in old_subset_upper or 'FROM' in old_subset_upper:
+                    logger.warning(f"FilterMate: Old subset contains PostgreSQL syntax but using OGR fallback (feature ID list)")
+                    # Try to extract just the WHERE clause
+                    index_where = self.param_source_old_subset.upper().find('WHERE')
+                    if index_where != -1:
+                        where_clause = self.param_source_old_subset[index_where + 5:].strip()
+                        if where_clause:
+                            old_subset_to_combine = where_clause
+                            logger.info(f"FilterMate: Extracted WHERE clause for OGR: {where_clause[:80]}...")
+                        else:
+                            # Can't extract WHERE clause - skip combination
+                            logger.warning(f"FilterMate: Cannot combine with PostgreSQL subset in OGR mode - using new expression only")
+                            return expression
+                    else:
+                        # No WHERE clause found - skip combination
+                        logger.warning(f"FilterMate: Cannot combine with PostgreSQL subset in OGR mode - using new expression only")
+                        return expression
+            
             expression = (
-                f'( {self.param_source_old_subset} ) '
+                f'( {old_subset_to_combine} ) '
                 f'{combine_operator} ( {expression} )'
             )
         
@@ -1351,18 +1568,32 @@ class FilterEngineTask(QgsTask):
             bool: True if successful, False otherwise
         """
         # Apply type casting for PostgreSQL to fix varchar/numeric comparison issues
-        provider_type = self.source_layer.providerType()
-        if provider_type == 'postgres':
+        # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
+        # providerType() returns 'postgres' even when using OGR fallback (psycopg2 unavailable)
+        # param_source_provider_type correctly accounts for OGR fallback
+        if self.param_source_provider_type == PROVIDER_POSTGRES:
             expression = self._apply_postgresql_type_casting(expression, self.source_layer)
         
         # CRITICAL: setSubsetString must be called from main thread
         result = safe_set_subset_string(self.source_layer, expression)
         
         if result:
+            # CRITICAL FIX v2.5.11: Queue source layer for repaint in finished()
+            # The source layer must be repainted after filtering to update the canvas.
+            # We add it to _pending_subset_requests so that finished() calls triggerRepaint()
+            # Note: We use a special marker (None, layer) to indicate "just repaint, don't re-apply filter"
+            # OR we can add the layer with its expression for consistency
+            if hasattr(self, '_pending_subset_requests'):
+                # Add source layer to pending requests for repaint in finished()
+                # The expression is already applied, but we need the repaint
+                self._pending_subset_requests.append((self.source_layer, expression))
+                logger.debug(f"Queued source layer {self.source_layer.name()} for repaint in finished()")
+            
             # Only build PostgreSQL SELECT for PostgreSQL providers
             # OGR and Spatialite use subset strings directly
-            provider_type = self.source_layer.providerType()
-            if provider_type == 'postgres':
+            # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
+            # providerType() returns 'postgres' even when using OGR fallback
+            if self.param_source_provider_type == PROVIDER_POSTGRES:
                 # Build full SELECT expression for subset management (PostgreSQL only)
                 full_expression = (
                     f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
@@ -2450,11 +2681,11 @@ class FilterEngineTask(QgsTask):
                     if hasattr(f, 'hasGeometry') and hasattr(f, 'geometry'):
                         if f.hasGeometry() and not f.geometry().isEmpty():
                             valid_features.append(f)
-                            # Log first few features for diagnostic
-                            if i < 3:
+                            # Log first few features for diagnostic (DEBUG level)
+                            if i < 3 and logger.isEnabledFor(logging.DEBUG):
                                 geom = f.geometry()
                                 bbox = geom.boundingBox()
-                                logger.info(f"  Feature[{i}]: type={geom.wkbType()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
+                                logger.debug(f"  Feature[{i}]: type={geom.wkbType()}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})")
                         else:
                             logger.debug(f"  Skipping feature[{i}] without valid geometry")
                     elif f:
@@ -2742,6 +2973,40 @@ class FilterEngineTask(QgsTask):
         geom_type = wkt.split('(')[0].strip() if '(' in wkt else 'Unknown'
         logger.info(f"  Final collected geometry type: {geom_type}")
         logger.info(f"  Number of geometries collected: {len(geometries)}")
+        
+        # v2.5.11: Simplify very large geometries to prevent SQL expression issues
+        # Large WKT can cause performance problems and display issues in PostgreSQL
+        MAX_WKT_LENGTH = 100000  # 100KB max for WKT
+        SIMPLIFY_TOLERANCE = 1.0  # 1 meter simplification tolerance (for projected CRS)
+        
+        if len(wkt) > MAX_WKT_LENGTH:
+            logger.warning(f"  ⚠️ WKT too long ({len(wkt)} chars > {MAX_WKT_LENGTH} max)")
+            logger.info(f"  Attempting to simplify geometry...")
+            
+            # Try progressive simplification until WKT is small enough
+            tolerance = SIMPLIFY_TOLERANCE
+            max_attempts = 5
+            
+            for attempt in range(max_attempts):
+                simplified = collected_geometry.simplify(tolerance)
+                if simplified and not simplified.isEmpty():
+                    simplified_wkt = simplified.asWkt()
+                    if len(simplified_wkt) <= MAX_WKT_LENGTH:
+                        logger.info(f"  ✓ Simplified geometry (tolerance={tolerance}m): {len(wkt)} → {len(simplified_wkt)} chars")
+                        wkt = simplified_wkt
+                        collected_geometry = simplified
+                        break
+                    else:
+                        # Increase tolerance and try again
+                        tolerance *= 2
+                        logger.debug(f"  Still too large ({len(simplified_wkt)} chars), trying tolerance={tolerance}m")
+                else:
+                    logger.warning(f"  Simplification with tolerance={tolerance}m returned empty geometry")
+                    break
+            
+            if len(wkt) > MAX_WKT_LENGTH:
+                logger.warning(f"  ⚠️ Could not simplify enough - using original ({len(wkt)} chars)")
+                logger.warning(f"  This may cause performance issues with PostgreSQL queries")
         
         # Escape single quotes for SQL
         wkt_escaped = wkt.replace("'", "''")
@@ -3930,25 +4195,21 @@ class FilterEngineTask(QgsTask):
             )
             
             # DIAGNOSTIC v2.4.17: Log geometry details of task features before creating memory layer
-            QgsMessageLog.logMessage(
-                f"OGR TASK PARAMS: {len(valid_task_features_early)} features to use",
-                "FilterMate", Qgis.Info
-            )
-            for idx, feat in enumerate(valid_task_features_early):
-                if hasattr(feat, 'geometry') and feat.hasGeometry():
-                    geom = feat.geometry()
-                    geom_type = geom.type()
-                    geom_wkt_preview = geom.asWkt()[:200] if geom.asWkt() else "EMPTY"
-                    bbox = geom.boundingBox()
-                    QgsMessageLog.logMessage(
-                        f"  Feature[{idx}]: type={geom_type}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f}), wkt={geom_wkt_preview}...",
-                        "FilterMate", Qgis.Info
-                    )
-                else:
-                    QgsMessageLog.logMessage(
-                        f"  Feature[{idx}]: NO GEOMETRY or type={type(feat).__name__}",
-                        "FilterMate", Qgis.Warning
-                    )
+            logger.debug(f"OGR TASK PARAMS: {len(valid_task_features_early)} features to use")
+            # Only log first 3 features at DEBUG level to reduce verbosity
+            if logger.isEnabledFor(logging.DEBUG):
+                for idx, feat in enumerate(valid_task_features_early[:3]):
+                    if hasattr(feat, 'geometry') and feat.hasGeometry():
+                        geom = feat.geometry()
+                        geom_type = geom.type()
+                        bbox = geom.boundingBox()
+                        logger.debug(
+                            f"  Feature[{idx}]: type={geom_type}, bbox=({bbox.xMinimum():.1f},{bbox.yMinimum():.1f})-({bbox.xMaximum():.1f},{bbox.yMaximum():.1f})"
+                        )
+                    else:
+                        logger.debug(f"  Feature[{idx}]: NO GEOMETRY or type={type(feat).__name__}")
+                if len(valid_task_features_early) > 3:
+                    logger.debug(f"  ... and {len(valid_task_features_early) - 3} more features")
             
             # Create memory layer from task features
             layer = self._create_memory_layer_from_features(valid_task_features_early, layer.crs(), "source_from_task")
@@ -4836,23 +5097,36 @@ class FilterEngineTask(QgsTask):
             str: Filter expression or None on error
         """
         # Get source layer filter for EXISTS subqueries
-        # CRITICAL FIX v2.3.15: Do NOT include source_filter in geometric filtering
-        # 
-        # The source_filter was being used to add attribute conditions inside EXISTS,
-        # but this causes several problems:
-        # 1. Style-based rules from QGIS layer symbology get included incorrectly
-        # 2. Filters with unqualified field names (e.g., "nature" without table prefix)
-        #    cause "column does not exist" errors on target layers
-        # 3. Complex CASE expressions with table references break SQL syntax
+        # CRITICAL FIX v2.5.11: For PostgreSQL EXISTS mode, we MUST include the source
+        # layer's filter to ensure the EXISTS query only considers the filtered
+        # source features. Without this, EXISTS queries the ENTIRE source table!
         #
-        # For geometric filtering, we only need the spatial predicate (ST_Intersects, etc.)
-        # applied to the source geometries. The source layer's own filter is already
-        # applied via its subsetString/featureCount, so we get the correct filtered
-        # source geometries without needing to duplicate the filter in EXISTS.
+        # The previous fix (v2.3.15) set source_filter=None thinking "featureCount reflects
+        # the subset" - but that's WRONG for EXISTS because PostgreSQL doesn't know about
+        # QGIS's subsetString. The EXISTS query goes directly to PostgreSQL.
         #
-        # Set source_filter to None - geometric predicates are sufficient
+        # v2.5.12 FIX: Pass the ENTIRE source subsetString to EXISTS, not just spatial
+        # clauses. The subsetString contains ALL legitimate filter conditions:
+        # - Spatial filters (ST_Intersects with emprise)
+        # - Attribute filters from exploring (SELECT CASE for custom expressions)
+        # - Any other user-defined filters
+        #
+        # Note: Style rules from renderers are NOT in subsetString - they're handled
+        # separately by QGIS rendering engine. So we can safely use the full filter.
         source_filter = None
-        logger.debug(f"Geometric filtering: source_filter set to None (style rules excluded)")
+        
+        # For PostgreSQL EXISTS mode, use entire source layer subsetString
+        if backend.get_backend_name() == 'PostgreSQL':
+            source_subset = self.source_layer.subsetString() if self.source_layer else None
+            if source_subset:
+                # Use the entire source filter - includes spatial AND attribute conditions
+                source_filter = source_subset
+                logger.info(f"🎯 PostgreSQL EXISTS: Using full source filter ({len(source_filter)} chars)")
+                logger.debug(f"   Source filter preview: '{source_filter[:100]}...'")
+            else:
+                logger.debug(f"Geometric filtering: Source layer has no subsetString")
+        else:
+            logger.debug(f"Geometric filtering: Non-PostgreSQL backend, source_filter=None")
         
         # REMOVED: Old logic that picked up source layer filter including style rules
         # if hasattr(self, 'param_source_new_subset') and self.param_source_new_subset:
@@ -4990,8 +5264,19 @@ class FilterEngineTask(QgsTask):
         ]
         has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
         
+        # Pattern 4: FilterMate materialized view reference (fid IN SELECT from mv_...)
+        # CRITICAL FIX v2.5.11: Detect previous FilterMate geometric filters using materialized views
+        # Format: "fid" IN (SELECT ... FROM "filter_mate_temp"."mv_...")
+        # These should be REPLACED, not combined, when re-filtering geometrically
+        import re
+        has_mv_filter = bool(re.search(
+            r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?mv_',
+            old_subset,
+            re.IGNORECASE | re.DOTALL
+        ))
+        
         # If old_subset contains geometric filter patterns, replace instead of combine
-        if has_source_alias or has_exists or has_spatial_predicate:
+        if has_source_alias or has_exists or has_spatial_predicate or has_mv_filter:
             reason = []
             if has_source_alias:
                 reason.append("__source alias")
@@ -4999,6 +5284,8 @@ class FilterEngineTask(QgsTask):
                 reason.append("EXISTS subquery")
             if has_spatial_predicate:
                 reason.append("spatial predicate")
+            if has_mv_filter:
+                reason.append("FilterMate materialized view (mv_)")
             
             logger.info(f"FilterMate: Old subset contains {', '.join(reason)} - replacing instead of combining")
             return expression
@@ -5181,8 +5468,7 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"🧹 CLEANING corrupted subset on {layer.name()} BEFORE filtering")
                 logger.warning(f"  → Corrupted subset found: '{current_subset[:100]}'...")
                 logger.warning(f"  → Clearing it to prevent SQL errors")
-                # Use thread-safe method to clear the subset
-                from .signal_utils import safe_set_subset_string
+                # Use thread-safe method to clear the subset (already imported from appUtils)
                 safe_set_subset_string(layer, "")
                 logger.info(f"  ✓ Layer {layer.name()} subset cleared - ready for fresh filter")
             
@@ -5233,15 +5519,25 @@ class FilterEngineTask(QgsTask):
                             if ogr_expression:
                                 logger.info(f"  → OGR expression built: {ogr_expression[:100]}...")
                                 
-                                # CRITICAL FIX v2.4.15: Do NOT combine with existing subset in OGR fallback
-                                # Geometric filtering REPLACES existing filters to avoid:
-                                # 1. Style-based conditions causing type mismatch errors
-                                # 2. Complex WHERE clauses that are slow and error-prone
-                                # 3. Previous geometric filters being nested incorrectly
-                                old_subset = None  # Clear - geometric filter replaces everything
-                                combine_operator = None  # No combination needed
+                                # CRITICAL FIX v2.5.10: Handle old_subset intelligently for OGR fallback
+                                # Get the current layer's old_subset for OGR fallback
+                                fallback_old_subset = layer.subsetString() if layer.subsetString() else None
+                                fallback_combine_op = self._get_combine_operator()
                                 
-                                result = ogr_backend.apply_filter(layer, ogr_expression, old_subset, combine_operator)
+                                # Apply same logic as main path - preserve attribute filters, replace geometric
+                                if fallback_old_subset:
+                                    upper = fallback_old_subset.upper()
+                                    is_geo = ('__source' in fallback_old_subset.lower() or 
+                                              'EXISTS' in upper or 
+                                              any(p in upper for p in ['ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN']))
+                                    if is_geo:
+                                        logger.info(f"  → OGR fallback: Replacing geometric filter")
+                                        fallback_old_subset = None
+                                        fallback_combine_op = None
+                                    else:
+                                        logger.info(f"  → OGR fallback: Preserving attribute filter")
+                                
+                                result = ogr_backend.apply_filter(layer, ogr_expression, fallback_old_subset, fallback_combine_op)
                                 
                                 if result:
                                     logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")
@@ -5268,24 +5564,54 @@ class FilterEngineTask(QgsTask):
             old_subset = layer.subsetString() if layer.subsetString() != '' else None
             combine_operator = self._get_combine_operator()
             
-            # CRITICAL FIX v2.4.1: Do NOT combine with existing subset during geometric filtering
-            # Geometric filtering REPLACES any existing filter with the spatial predicate
+            # CRITICAL FIX v2.5.10: Intelligently handle existing subset during geometric filtering
+            # - REPLACE if it contains geometric patterns (EXISTS, ST_*, __source)
+            # - COMBINE if it's a simple attribute filter
             # 
-            # Reasons to NOT combine:
-            # 1. User filters (style/project based) may have incompatible SQL syntax
-            # 2. Type mismatches (e.g., "importance" < 4 where importance is varchar)
-            # 3. Combining creates very complex WHERE clauses that are slow and error-prone
-            # 4. Previous geometric filters should be replaced, not combined
-            #
-            # The user's existing filter will be replaced by the geometric filter.
-            # If they want to preserve their filter, they should use the expression-based
-            # filtering mode instead of geometric filtering.
+            # This preserves user's attribute filters (like "importance > 5") while avoiding
+            # nested geometric filters which cause SQL errors.
             if old_subset:
-                logger.info(f"🔄 Existing subset detected on {layer.name()}")
-                logger.info(f"  → Existing: '{old_subset[:100]}...'")
-                logger.info(f"  → Geometric filtering REPLACES existing subset (not combining)")
-                logger.info(f"  → Reason: Combining may cause SQL type errors or complex clauses")
-                old_subset = None  # Clear - geometric filtering replaces, doesn't combine
+                old_subset_upper = old_subset.upper()
+                
+                # Check if old_subset contains geometric filter patterns that cannot be nested
+                is_geometric_filter = (
+                    '__source' in old_subset.lower() or
+                    'EXISTS (' in old_subset_upper or
+                    'EXISTS(' in old_subset_upper or
+                    any(pred in old_subset_upper for pred in [
+                        'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                        'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                        'ST_DWITHIN', 'ST_COVERS', 'ST_COVEREDBY', 'ST_BUFFER'
+                    ])
+                )
+                
+                # Check for style/display expression patterns
+                # CRITICAL FIX v2.5.10: Enhanced detection for SELECT CASE expressions
+                import re
+                is_style_expression = any(re.search(pattern, old_subset, re.IGNORECASE | re.DOTALL) for pattern in [
+                    r'AND\s+TRUE\s*\)',              # Rule-based style
+                    r'THEN\s+true\b',                # CASE THEN true
+                    r'THEN\s+false\b',               # CASE THEN false
+                    r'coalesce\s*\([^)]+,\s*\'',     # Display expression
+                    r'SELECT\s+CASE\s+',             # SELECT CASE expression from rule-based styles
+                    r'\(\s*CASE\s+WHEN\s+.+THEN\s+true',  # CASE WHEN ... THEN true
+                ])
+                
+                if is_geometric_filter:
+                    logger.info(f"🔄 Existing subset on {layer.name()} contains GEOMETRIC filter - will be REPLACED")
+                    logger.info(f"  → Existing: '{old_subset[:100]}...'")
+                    logger.info(f"  → Reason: Cannot nest geometric filters (EXISTS, ST_*, __source)")
+                    old_subset = None
+                elif is_style_expression:
+                    logger.info(f"🔄 Existing subset on {layer.name()} contains STYLE expression - will be REPLACED")
+                    logger.info(f"  → Existing: '{old_subset[:100]}...'")
+                    logger.info(f"  → Reason: Style expressions cause type mismatch errors")
+                    old_subset = None
+                else:
+                    # Simple attribute filter - will be COMBINED by backend
+                    logger.info(f"✅ Existing subset on {layer.name()} is ATTRIBUTE filter - will be COMBINED")
+                    logger.info(f"  → Existing: '{old_subset[:100]}...'")
+                    logger.info(f"  → Reason: Preserving user's attribute filter with geometric filter")
             
             logger.info(f"📋 Préparation du filtre pour {layer.name()}")
             logger.info(f"  → Nouvelle expression: '{expression[:100]}...' ({len(expression)} chars)")
@@ -5302,18 +5628,30 @@ class FilterEngineTask(QgsTask):
             # try OGR backend as fallback. This handles cases where user forces a backend
             # on layers that don't support that backend (e.g., Shapefiles with Spatialite).
             # Also trigger fallback when Spatialite functions are not available (e.g., GDAL without Spatialite)
+            # 
+            # CRITICAL FIX v2.5.18: Also trigger OGR fallback for PostgreSQL failures
+            # This handles:
+            # - statement_timeout on complex EXISTS queries with large source datasets
+            # - Connection failures
+            # - SQL syntax errors on edge cases
             if not result and backend_name in ('spatialite', 'postgresql'):
                 forced_backends = self.task_parameters.get('forced_backends', {})
                 was_forced = layer.id() in forced_backends
                 
-                # Always try OGR fallback for Spatialite failures, not just forced layers
-                # This handles GeoPackages where Spatialite functions are unavailable
-                should_fallback = was_forced or (backend_name == 'spatialite')
+                # CRITICAL FIX v2.5.18: Always try OGR fallback for PostgreSQL failures too
+                # PostgreSQL backend may fail due to timeout (complex spatial queries),
+                # connection issues, or SQL errors. OGR uses QGIS processing which is
+                # slower but more reliable.
+                should_fallback = was_forced or (backend_name in ('spatialite', 'postgresql'))
                 
                 if should_fallback:
                     if was_forced:
                         logger.warning(f"⚠️ {backend_name.upper()} backend FAILED for forced layer {layer.name()}")
                         logger.warning(f"  → Layer may not support {backend_name.upper()} SQL functions")
+                    elif backend_name == 'postgresql':
+                        logger.warning(f"⚠️ PostgreSQL backend FAILED for {layer.name()}")
+                        logger.warning(f"  → Query may have timed out or connection failed")
+                        logger.warning(f"  → Consider reducing source feature count or using simpler predicates")
                     else:
                         logger.warning(f"⚠️ {backend_name.upper()} backend FAILED for {layer.name()}")
                         logger.warning(f"  → Spatialite functions may not be available (GDAL without Spatialite)")
@@ -5487,8 +5825,64 @@ class FilterEngineTask(QgsTask):
         if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
             return None
         
-        # Return source layer operator directly (no conversion needed)
-        return getattr(self, 'param_source_layer_combine_operator', None)
+        # Return source layer operator, normalized to English SQL keyword
+        source_op = getattr(self, 'param_source_layer_combine_operator', None)
+        return self._normalize_sql_operator(source_op)
+    
+    def _normalize_sql_operator(self, operator):
+        """
+        Normalize translated SQL operators to English SQL keywords.
+        
+        FIX v2.5.12: Handle cases where translated operator values (ET, OU, NON)
+        are stored in layer properties or project files from older versions.
+        
+        Args:
+            operator: The operator string (possibly translated)
+            
+        Returns:
+            str: Normalized SQL operator ('AND', 'OR', 'AND NOT', 'NOT') or None
+        """
+        if not operator:
+            return None
+        
+        op_upper = operator.upper().strip()
+        
+        # Mapping of translated operators to SQL keywords
+        translations = {
+            # French
+            'ET': 'AND',
+            'OU': 'OR',
+            'ET NON': 'AND NOT',
+            'NON': 'NOT',
+            # German
+            'UND': 'AND',
+            'ODER': 'OR',
+            'UND NICHT': 'AND NOT',
+            'NICHT': 'NOT',
+            # Spanish
+            'Y': 'AND',
+            'O': 'OR',
+            'Y NO': 'AND NOT',
+            'NO': 'NOT',
+            # Italian
+            'E': 'AND',
+            'E NON': 'AND NOT',
+            # Portuguese
+            'E NÃO': 'AND NOT',
+            'NÃO': 'NOT',
+            # Already English - just return as-is
+            'AND': 'AND',
+            'OR': 'OR',
+            'AND NOT': 'AND NOT',
+            'NOT': 'NOT',
+        }
+        
+        normalized = translations.get(op_upper, operator)
+        
+        if normalized != operator:
+            logger.debug(f"Normalized operator '{operator}' to '{normalized}'")
+        
+        return normalized
     
     def _get_combine_operator(self):
         """
@@ -5509,9 +5903,9 @@ class FilterEngineTask(QgsTask):
         if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
             return None
         
-        # Return operator directly - no conversion needed for WHERE clause combinations
+        # Get operator and normalize to English SQL keyword
         other_op = getattr(self, 'param_other_layers_combine_operator', None)
-        return other_op
+        return self._normalize_sql_operator(other_op)
     
     def _prepare_source_geometry(self, layer_provider_type):
         """
@@ -7785,10 +8179,28 @@ class FilterEngineTask(QgsTask):
                     ]
                     has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
                     
+                    # Pattern 4: FilterMate materialized view reference (fid IN SELECT from mv_...)
+                    # CRITICAL FIX v2.5.11: Detect previous FilterMate geometric filters using materialized views
+                    import re
+                    has_mv_filter = bool(re.search(
+                        r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?mv_',
+                        old_subset,
+                        re.IGNORECASE | re.DOTALL
+                    ))
+                    
                     # If old_subset contains geometric filter patterns, replace instead of combine
-                    if has_source_alias or has_exists or has_spatial_predicate:
+                    if has_source_alias or has_exists or has_spatial_predicate or has_mv_filter:
                         final_expression = where_clause
-                        logger.info(f"Old subset contains geometric filter patterns - replacing instead of combining")
+                        reason = []
+                        if has_source_alias:
+                            reason.append("__source alias")
+                        if has_exists:
+                            reason.append("EXISTS subquery")
+                        if has_spatial_predicate:
+                            reason.append("spatial predicate")
+                        if has_mv_filter:
+                            reason.append("FilterMate materialized view (mv_)")
+                        logger.info(f"Old subset contains {', '.join(reason)} - replacing instead of combining")
                     else:
                         # CRITICAL FIX v2.4.15: Detect QGIS style/symbology expressions
                         # These patterns indicate rule-based symbology filters that should NOT
@@ -8278,7 +8690,171 @@ class FilterEngineTask(QgsTask):
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
 
+    def _delayed_canvas_refresh(self):
+        """
+        Perform a delayed canvas refresh for all filtered layers.
+        
+        FIX v2.5.15: This is called via QTimer.singleShot after the initial
+        refresh to allow providers to complete their data fetch.
+        Using a timer avoids blocking the main thread while still ensuring
+        the canvas is properly updated.
+        
+        FIX v2.5.11: Also force updateExtents for all visible layers to fix
+        display issues with complex spatial queries (e.g., buffered EXISTS).
+        
+        FIX v2.5.19: Force aggressive reload for layers with complex filters
+        (EXISTS, ST_Buffer, IN clauses, etc.) to ensure data provider cache is cleared.
+        This fixes display issues after multi-step filtering with spatial predicates.
+        
+        FIX v2.5.20: Extended support for Spatialite and OGR layers with complex filters.
+        - Spatialite: ST_*, Intersects, Contains, Within functions
+        - OGR: IN clause with many IDs (typical for selectbylocation results)
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            layers_refreshed = {
+                'postgres': 0,
+                'spatialite': 0,
+                'ogr': 0,
+                'other': 0
+            }
+            
+            for layer_id, layer in QgsProject.instance().mapLayers().items():
+                try:
+                    if layer.type() == 0:  # Vector layer
+                        provider_type = layer.providerType()
+                        subset = layer.subsetString() or ''
+                        subset_upper = subset.upper()
+                        
+                        # Detect complex filters by provider type
+                        has_complex_filter = False
+                        
+                        if provider_type == 'postgres':
+                            # PostgreSQL: EXISTS, ST_*, __source
+                            has_complex_filter = (
+                                'EXISTS' in subset_upper or
+                                'ST_BUFFER' in subset_upper or
+                                'ST_INTERSECTS' in subset_upper or
+                                'ST_CONTAINS' in subset_upper or
+                                'ST_WITHIN' in subset_upper or
+                                '__source' in subset.lower() or
+                                # Large IN clause (> 100 IDs)
+                                (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
+                            )
+                            
+                        elif provider_type == 'spatialite':
+                            # Spatialite: ST_*, Intersects, Contains, Within
+                            has_complex_filter = (
+                                'ST_BUFFER' in subset_upper or
+                                'ST_INTERSECTS' in subset_upper or
+                                'ST_CONTAINS' in subset_upper or
+                                'ST_WITHIN' in subset_upper or
+                                'INTERSECTS(' in subset_upper or
+                                'CONTAINS(' in subset_upper or
+                                'WITHIN(' in subset_upper or
+                                'GEOSFROMTEXT' in subset_upper or
+                                'GEOMFROMTEXT' in subset_upper or
+                                # Large IN clause
+                                (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
+                            )
+                            
+                        elif provider_type == 'ogr':
+                            # OGR/GeoPackage: Large IN clauses from selectbylocation
+                            has_complex_filter = (
+                                # IN clause with many IDs (typical for spatial filter results)
+                                (subset_upper.count(',') > 50 and ' IN (' in subset_upper) or
+                                # Any filter longer than 1000 chars is likely complex
+                                len(subset) > 1000
+                            )
+                        
+                        # Apply appropriate reload strategy
+                        if has_complex_filter:
+                            try:
+                                # Force provider to clear cache and reload data
+                                layer.dataProvider().reloadData()
+                                logger.debug(f"  → Forced reloadData() for {layer.name()} ({provider_type}, complex filter)")
+                            except Exception as reload_err:
+                                logger.debug(f"  → reloadData() failed for {layer.name()}: {reload_err}")
+                                # Fallback to layer.reload()
+                                try:
+                                    layer.reload()
+                                except Exception:
+                                    pass
+                            layers_refreshed[provider_type if provider_type in layers_refreshed else 'other'] += 1
+                        else:
+                            # Simple filter - just reload layer
+                            try:
+                                layer.reload()
+                            except Exception:
+                                pass
+                        
+                        # Update extents and trigger repaint for all vector layers
+                        layer.updateExtents()
+                        layer.triggerRepaint()
+                        
+                except Exception as layer_err:
+                    logger.debug(f"  → Layer refresh failed: {layer_err}")
+            
+            # Final canvas refresh
+            iface.mapCanvas().refresh()
+            
+            # Log summary
+            total_refreshed = sum(layers_refreshed.values())
+            if total_refreshed > 0:
+                refresh_summary = ", ".join(
+                    f"{count} {ptype}" for ptype, count in layers_refreshed.items() if count > 0
+                )
+                logger.debug(f"Delayed canvas refresh: reloaded {refresh_summary} layer(s)")
+            else:
+                logger.debug("Delayed canvas refresh completed")
+                
+        except Exception as e:
+            logger.debug(f"Delayed canvas refresh skipped: {e}")
 
+    def _final_canvas_refresh(self):
+        """
+        Perform a final canvas refresh after all filter queries have completed.
+        
+        FIX v2.5.19: This is the last refresh pass, scheduled 2 seconds after filtering
+        to ensure even slow queries with complex EXISTS, ST_Buffer, and large IN clauses
+        have completed.
+        
+        FIX v2.5.20: Extended to all provider types (PostgreSQL, Spatialite, OGR).
+        This method:
+        1. Triggers repaint for all filtered vector layers
+        2. Forces canvas full refresh
+        
+        This fixes display issues where complex multi-step filters don't show
+        all filtered features immediately after the filter task completes.
+        """
+        try:
+            from qgis.core import QgsProject
+            
+            # Final refresh for all vector layers with filters
+            layers_repainted = 0
+            for layer_id, layer in QgsProject.instance().mapLayers().items():
+                try:
+                    if layer.type() == 0:  # Vector layer
+                        # Check if layer has any filter applied
+                        subset = layer.subsetString()
+                        if subset:
+                            layer.triggerRepaint()
+                            layers_repainted += 1
+                except Exception:
+                    pass
+            
+            # Final canvas refresh
+            iface.mapCanvas().refresh()
+            
+            if layers_repainted > 0:
+                logger.debug(f"Final canvas refresh: repainted {layers_repainted} filtered layer(s)")
+            else:
+                logger.debug("Final canvas refresh completed (2s delay)")
+            logger.debug("Final canvas refresh completed (2s delay)")
+            
+        except Exception as e:
+            logger.debug(f"Final canvas refresh skipped: {e}")
 
     def _cleanup_postgresql_materialized_views(self):
         """
@@ -8373,38 +8949,79 @@ class FilterEngineTask(QgsTask):
             for layer, expression in self._pending_subset_requests:
                 try:
                     if layer and is_valid_layer(layer):
-                        # FIX v2.4.13: Use safe_set_subset_string to apply PostgreSQL type casting
-                        # This fixes "operator does not exist: character varying < integer" errors
-                        success = safe_set_subset_string(layer, expression)
-                        if success:
+                        # FIX v2.5.11: Check if filter is already applied to avoid redundant application
+                        # This happens for source layer which is filtered during run()
+                        current_subset = layer.subsetString() or ''
+                        expression_str = expression or ''
+                        
+                        if current_subset.strip() == expression_str.strip():
+                            # Filter already applied - force reload for PostgreSQL layers
+                            # FIX v2.5.16: Use layer.reload() for PostgreSQL to force data refresh
+                            # This is less aggressive than dataProvider().reloadData() but more
+                            # effective than just triggerRepaint()
+                            if layer.providerType() == 'postgres':
+                                layer.reload()
+                            layer.updateExtents()
                             layer.triggerRepaint()
-                            logger.debug(f"  ✓ Applied filter to {layer.name()}: {len(expression)} chars")
                             
-                            # v2.4.13: Handle -1 feature count (unknown count for OGR/GeoPackage)
+                            logger.debug(f"  ✓ Filter already applied to {layer.name()}, triggered reload+repaint")
+                            
                             feature_count = layer.featureCount()
-                            if feature_count >= 0:
-                                count_str = f"{feature_count} features"
-                            else:
-                                count_str = "(count pending)"
+                            count_str = f"{feature_count} features" if feature_count >= 0 else "(count pending)"
                             
                             QgsMessageLog.logMessage(
-                                f"finished() ✓ Applied: {layer.name()} → {count_str}",
+                                f"finished() ✓ Repaint: {layer.name()} → {count_str} (filter already applied)",
                                 "FilterMate", Qgis.Info
                             )
                         else:
-                            # ENHANCED DIAGNOSTIC v2.4.12: Log detailed error information
-                            error_msg = 'Unknown error'
-                            if layer.error():
-                                error_msg = layer.error().message()
-                            logger.warning(f"  ✗ Failed to apply filter to {layer.name()}")
-                            logger.warning(f"    → Error: {error_msg}")
-                            logger.warning(f"    → Expression ({len(expression)} chars): {expression[:200]}...")
-                            logger.warning(f"    → Provider: {layer.providerType()}")
-                            
-                            QgsMessageLog.logMessage(
-                                f"finished() ✗ FAILED: {layer.name()} - {error_msg}",
-                                "FilterMate", Qgis.Critical
-                            )
+                            # FIX v2.4.13: Use safe_set_subset_string to apply PostgreSQL type casting
+                            # This fixes "operator does not exist: character varying < integer" errors
+                            success = safe_set_subset_string(layer, expression)
+                            if success:
+                                # FIX v2.5.16: Force layer reload for PostgreSQL after setSubsetString
+                                # For PostgreSQL layers with MV-based filters (IN SELECT queries),
+                                # the provider cache may not refresh automatically
+                                if layer.providerType() == 'postgres':
+                                    layer.reload()
+                                layer.updateExtents()
+                                layer.triggerRepaint()
+                                
+                                logger.debug(f"  ✓ Applied filter to {layer.name()}: {len(expression) if expression else 0} chars")
+                                
+                                # v2.4.13: Handle -1 feature count (unknown count for OGR/GeoPackage)
+                                feature_count = layer.featureCount()
+                                if feature_count >= 0:
+                                    count_str = f"{feature_count} features"
+                                    # v2.5.11: Additional diagnostic for layers with 0 features
+                                    if feature_count == 0:
+                                        logger.warning(f"  ⚠️ Layer {layer.name()} has 0 features after filtering!")
+                                        logger.warning(f"    → Expression length: {len(expression)} chars")
+                                        logger.warning(f"    → Check if expression is too complex or returns no results")
+                                        QgsMessageLog.logMessage(
+                                            f"⚠️ {layer.name()} → 0 features (filter may be too restrictive or expression error)",
+                                            "FilterMate", Qgis.Warning
+                                        )
+                                else:
+                                    count_str = "(count pending)"
+                                
+                                QgsMessageLog.logMessage(
+                                    f"finished() ✓ Applied: {layer.name()} → {count_str}",
+                                    "FilterMate", Qgis.Info
+                                )
+                            else:
+                                # ENHANCED DIAGNOSTIC v2.4.12: Log detailed error information
+                                error_msg = 'Unknown error'
+                                if layer.error():
+                                    error_msg = layer.error().message()
+                                logger.warning(f"  ✗ Failed to apply filter to {layer.name()}")
+                                logger.warning(f"    → Error: {error_msg}")
+                                logger.warning(f"    → Expression ({len(expression) if expression else 0} chars): {expression[:200] if expression else '(empty)'}...")
+                                logger.warning(f"    → Provider: {layer.providerType()}")
+                                
+                                QgsMessageLog.logMessage(
+                                    f"finished() ✗ FAILED: {layer.name()} - {error_msg}",
+                                    "FilterMate", Qgis.Critical
+                                )
                     else:
                         logger.warning(f"  ✗ Layer became invalid before filter could be applied")
                         QgsMessageLog.logMessage(
@@ -8422,6 +9039,27 @@ class FilterEngineTask(QgsTask):
                     )
             # Clear the pending requests
             self._pending_subset_requests = []
+            
+            # FIX v2.5.15: Simplified canvas refresh with delayed second pass
+            # Avoid processEvents() which can cause reentrancy issues and freezes
+            # Use a QTimer for delayed refresh to allow PostgreSQL provider to update
+            # FIX v2.5.19: Increased delay and added second refresh for complex filters
+            try:
+                # First immediate refresh
+                iface.mapCanvas().refreshAllLayers()
+                logger.debug("Canvas refresh triggered after applying all subset requests")
+                
+                # Schedule a delayed second refresh for PostgreSQL layers
+                # This allows the provider to complete its data refresh
+                # FIX v2.5.19: Increased delay to 800ms for complex filters with EXISTS
+                from qgis.PyQt.QtCore import QTimer
+                QTimer.singleShot(800, lambda: self._delayed_canvas_refresh())
+                
+                # FIX v2.5.19: Schedule a third refresh at 2s for very complex filters
+                # This catches cases where PostgreSQL is slow to return data
+                QTimer.singleShot(2000, lambda: self._final_canvas_refresh())
+            except Exception as canvas_err:
+                logger.warning(f"Failed to refresh canvas: {canvas_err}")
         
         # CRITICAL FIX v2.3.13: Only cleanup MVs on reset/unfilter actions, NOT on filter
         # When filtering, materialized views are referenced by the layer's subsetString.
@@ -8460,6 +9098,13 @@ class FilterEngineTask(QgsTask):
                         message_category,
                         f'Filter task : {result_action}',
                         Qgis.Success)
+                    
+                    # FIX v2.5.12: Ensure canvas is refreshed after successful filter operation
+                    # This guarantees filtered features are visible on the map
+                    try:
+                        iface.mapCanvas().refresh()
+                    except Exception:
+                        pass  # Ignore refresh errors, filter was still applied
 
                 elif message_category == 'ExportLayers':
 

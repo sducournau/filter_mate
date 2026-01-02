@@ -258,6 +258,13 @@ class PopulateListEngineTask(QgsTask):
             elif self.action == 'updateFeatures':
                 self.updateFeatures()
 
+            # FIX v2.5.19: Return True even when canceled to prevent QGIS "Task failed" messages
+            # Cancellation is a normal, expected operation (e.g., user switches layers, new filter starts)
+            # and should not be treated as an error. When tasks with ParentDependsOnSubTask
+            # are canceled, returning True ensures the parent task also completes gracefully.
+            if self.isCanceled():
+                logger.debug(f'Task "{self.action}" was canceled for layer "{self.layer.name() if self.layer else "Unknown"}" - completing gracefully')
+            
             return True
         
         except Exception as e:
@@ -280,6 +287,22 @@ class PopulateListEngineTask(QgsTask):
                 'null pointer',
             ])
             
+            # Check for PostgreSQL connection errors (v2.5.11)
+            # These occur when connection is lost during task execution
+            is_postgres_error = any(x in error_str for x in [
+                'connection is closed',
+                'connection already closed',
+                'server closed the connection',
+                'connection terminated',
+                'connection reset',
+                'could not connect',
+                'no connection',
+                'connection refused',
+                'operationalerror',  # psycopg2.OperationalError
+                'interfaceerror',    # psycopg2.InterfaceError
+                'databaseerror',     # psycopg2.DatabaseError
+            ])
+            
             # ENHANCED LOGGING: Differentiate between transient and permanent errors
             import traceback
             if is_sqlite_error:
@@ -299,6 +322,15 @@ class PopulateListEngineTask(QgsTask):
                     f'This is expected when switching projects or removing layers.'
                 )
                 return True
+            elif is_postgres_error:
+                # PostgreSQL connection error - log at DEBUG level (transient during cleanup)
+                logger.debug(
+                    f'PopulateListEngineTask: PostgreSQL connection error during "{self.action}" for '
+                    f'layer "{self.layer.name() if self.layer else "None"}". '
+                    f'This is typically transient when connection is lost. Error: {e}'
+                )
+                # Return True for transient errors to avoid "Task failed" message in QGIS
+                return True
             else:
                 # Other unexpected errors - log fully
                 logger.error(f'PopulateListEngineTask failed for action "{self.action}": {e}')
@@ -310,8 +342,32 @@ class PopulateListEngineTask(QgsTask):
     def get_task_action_and_layer(self):
         return self.action, self.layer
     
+    def _update_progress_batched(self, index: int, total_count: int, batch_size: int = 100):
+        """
+        Update progress in batches to reduce UI overhead.
+        
+        For large datasets, updating progress on every feature causes significant
+        slowdown. This method only updates every batch_size features.
+        
+        Args:
+            index: Current feature index
+            total_count: Total number of features
+            batch_size: Update progress every N features (default: 100)
+        """
+        if total_count == 0:
+            return
+        if index % batch_size == 0 or index == total_count - 1:
+            self.setProgress((index / total_count) * 100)
+    
     def buildFeaturesList(self, has_limit=True, filter_txt_splitted=None):
-
+        """
+        Build the features list for the widget.
+        
+        PERFORMANCE OPTIMIZATIONS:
+        - Uses batched progress updates to reduce UI overhead
+        - Pre-compiles expressions for complex display expressions
+        - Respects cancellation for quick abort
+        """
         features_list = []
 
         limit = 0
@@ -399,15 +455,18 @@ class PopulateListEngineTask(QgsTask):
                     if limit > 0:
                         filter_expression_request.setLimit(limit)
 
-                    total_count = sum(1 for _ in layer_features_source.getFeatures(filter_expression_request))
-
-                    # Prevent division by zero when no features match
-                    if total_count == 0:
-                        logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self.layer.name()}'")
-                        self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
-                        return
-
+                    # PERFORMANCE FIX (v2.5.9): Avoid double iteration for PostgreSQL layers
+                    # Previously: sum(1 for _ in getFeatures()) then getFeatures() again = 2x SQL queries
+                    # Now: Single-pass collection with incremental progress updates
+                    # For complex expressions on pre-filtered PostgreSQL layers, this prevents freezes
+                    
+                    # Use estimated count for progress (avoid costly pre-count query)
+                    estimated_count = total_features_list_count if total_features_list_count > 0 else 1000
+                    if limit > 0:
+                        estimated_count = min(estimated_count, limit)
+                    
                     if self.is_field_flag is True:
+                        # Single-pass: collect features and update progress incrementally
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                             # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                             # when main thread modifies layer variables during setLayerVariable()
@@ -416,7 +475,14 @@ class PopulateListEngineTask(QgsTask):
                                 return
                             arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                             features_list.append(arr)
-                            self.setProgress((index/total_count)*100)
+                            # PERFORMANCE: Use batched progress updates with estimated count
+                            self._update_progress_batched(index, estimated_count)
+                        
+                        # Check if we got any features, handle empty result
+                        if len(features_list) == 0:
+                            logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self.layer.name()}'")
+                            self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                            return
                     else:
                         display_expression = QgsExpression(self.display_expression)
 
@@ -430,6 +496,7 @@ class PopulateListEngineTask(QgsTask):
                                 context = QgsExpressionContext()
                                 logger.debug(f"Using minimal expression context for layer '{self.layer.name()}'")
 
+                            # Single-pass iteration with incremental progress
                             for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                                 # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                                 if self.isCanceled():
@@ -442,10 +509,21 @@ class PopulateListEngineTask(QgsTask):
                                     # Fallback: try to get identifier field value instead
                                     logger.debug(f"Expression eval error: {display_expression.evalErrorString()}")
                                     result = get_feature_attribute(feature, self.identifier_field_name)
-                                if result:
-                                    arr = [result, get_feature_attribute(feature, self.identifier_field_name)]
+                                # FIX v2.5.11: Use 'is not None' instead of 'if result:' to allow
+                                # falsy values like 0, empty string, False from CASE expressions
+                                if result is not None:
+                                    # Convert to string for display, preserving the value
+                                    display_value = str(result) if result != '' else '(empty)'
+                                    arr = [display_value, get_feature_attribute(feature, self.identifier_field_name)]
                                     features_list.append(arr)
-                                    self.setProgress((index/total_count)*100)
+                                    # PERFORMANCE: Use batched progress updates with estimated count
+                                    self._update_progress_batched(index, estimated_count)
+                            
+                            # Check if we got any features, handle empty result
+                            if len(features_list) == 0:
+                                logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self.layer.name()}'")
+                                self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                                return
                         else:
                             # Invalid expression - log and fallback to identifier field
                             expr_display = repr(self.display_expression) if self.display_expression else '<empty>'
@@ -458,7 +536,8 @@ class PopulateListEngineTask(QgsTask):
                                 id_value = get_feature_attribute(feature, self.identifier_field_name)
                                 arr = [id_value, id_value]
                                 features_list.append(arr)
-                                self.setProgress((index/total_count)*100)
+                                # PERFORMANCE: Use batched progress updates with estimated count
+                                self._update_progress_batched(index, estimated_count)
 
 
             
@@ -476,14 +555,11 @@ class PopulateListEngineTask(QgsTask):
                 if limit > 0:
                     filter_expression_request.setLimit(limit)
 
-                    
-                total_count = sum(1 for _ in layer_features_source.getFeatures(filter_expression_request))
-
-                # Prevent division by zero when no features available
-                if total_count == 0:
-                    logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
-                    self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
-                    return
+                # PERFORMANCE FIX (v2.5.9): Avoid double iteration - use estimated count
+                # Previously: sum(1 for _ in getFeatures()) caused full query execution twice
+                estimated_count_else = total_features_list_count if total_features_list_count > 0 else 1000
+                if limit > 0:
+                    estimated_count_else = min(estimated_count_else, limit)
 
                 if self.is_field_flag is True:
                     for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
@@ -493,7 +569,14 @@ class PopulateListEngineTask(QgsTask):
                             return
                         arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                         features_list.append(arr)
-                        self.setProgress((index/total_count)*100)
+                        # PERFORMANCE: Use batched progress updates with estimated count
+                        self._update_progress_batched(index, estimated_count_else)
+                    
+                    # Handle empty result
+                    if len(features_list) == 0:
+                        logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                        self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                        return
                 else:
                     display_expression = QgsExpression(self.display_expression)
 
@@ -519,10 +602,21 @@ class PopulateListEngineTask(QgsTask):
                                 # Fallback: try to get identifier field value instead
                                 logger.debug(f"Expression eval error: {display_expression.evalErrorString()}")
                                 result = get_feature_attribute(feature, self.identifier_field_name)
-                            if result:
-                                arr = [result, get_feature_attribute(feature, self.identifier_field_name)]
+                            # FIX v2.5.11: Use 'is not None' instead of 'if result:' to allow
+                            # falsy values like 0, empty string, False from CASE expressions
+                            if result is not None:
+                                # Convert to string for display, preserving the value
+                                display_value = str(result) if result != '' else '(empty)'
+                                arr = [display_value, get_feature_attribute(feature, self.identifier_field_name)]
                                 features_list.append(arr)
-                                self.setProgress((index/total_count)*100)
+                                # PERFORMANCE: Use batched progress updates with estimated count
+                                self._update_progress_batched(index, estimated_count_else)
+                        
+                        # Handle empty result
+                        if len(features_list) == 0:
+                            logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                            self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                            return
                     else:
                         # Invalid expression - log and fallback to identifier field
                         expr_display = repr(self.display_expression) if self.display_expression else '<empty>'
@@ -535,7 +629,14 @@ class PopulateListEngineTask(QgsTask):
                             id_value = get_feature_attribute(feature, self.identifier_field_name)
                             arr = [id_value, id_value]
                             features_list.append(arr)
-                            self.setProgress((index/total_count)*100)
+                            # PERFORMANCE: Use batched progress updates with estimated count
+                            self._update_progress_batched(index, estimated_count_else)
+                        
+                        # Handle empty result
+                        if len(features_list) == 0:
+                            logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                            self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
+                            return
 
             # CRASH FIX (v2.3.20): Final cancellation check before widget updates
             if self.isCanceled():
@@ -560,7 +661,11 @@ class PopulateListEngineTask(QgsTask):
                 return
                 
             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
-            self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list)
+            
+            # FIX v2.5.8: Apply sort order from parent widget settings
+            sort_order, sort_field = self.parent.getSortOrder()
+            reverse = (sort_order == 'DESC')
+            self.parent.list_widgets[self.layer.id()].sortFeaturesListByDisplayExpression(nonSubset_features_list, reverse=reverse)
 
 
     def loadFeaturesList(self, new_list=True):
@@ -634,7 +739,8 @@ class PopulateListEngineTask(QgsTask):
                     lwi.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
                     lwi.setData(4,"False")
             self.parent.list_widgets[self.layer.id()].addItem(lwi)
-            self.setProgress((index/total_count)*100)
+            # PERFORMANCE: Use batched progress updates
+            self._update_progress_batched(index, total_count)
 
 
         self.updateFeatures()
@@ -659,7 +765,8 @@ class PopulateListEngineTask(QgsTask):
                 string_value = item.text().lower().replace('é','e').replace('è','e').replace('â','a').replace('ô','o')
                 filter = all(x not in string_value for x in filter_txt_splitted)
                 list_widget.setRowHidden(index, filter)
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
 
         visible_features_list = []
         list_widget = self.parent.list_widgets[self.layer.id()]
@@ -693,7 +800,8 @@ class PopulateListEngineTask(QgsTask):
                     item.setData(6,self.parent.font_by_state['checked'][0])
                     item.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
                     item.setData(4,"True")
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
 
         
         elif self.sub_action == 'Select All (non subset)':
@@ -714,7 +822,8 @@ class PopulateListEngineTask(QgsTask):
                         item.setData(6,self.parent.font_by_state['checkedFiltered'][0])
                         item.setData(9,QBrush(self.parent.font_by_state['checkedFiltered'][1]))
                         item.setData(4,"False")
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
         
 
         elif self.sub_action == 'Select All (subset)':
@@ -735,7 +844,8 @@ class PopulateListEngineTask(QgsTask):
                         item.setData(6,self.parent.font_by_state['checked'][0])
                         item.setData(9,QBrush(self.parent.font_by_state['checked'][1]))
                         item.setData(4,"True")
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
 
         self.updateFeatures()
 
@@ -761,7 +871,8 @@ class PopulateListEngineTask(QgsTask):
                     item.setData(6,self.parent.font_by_state['unChecked'][0])
                     item.setData(9,QBrush(self.parent.font_by_state['unChecked'][1]))
                     item.setData(4,"True")
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
 
         elif self.sub_action == 'De-select All (non subset)':
 
@@ -781,7 +892,8 @@ class PopulateListEngineTask(QgsTask):
                         item.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
                         item.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
                         item.setData(4,"False")
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
 
 
         elif self.sub_action == 'De-select All (subset)':
@@ -802,7 +914,8 @@ class PopulateListEngineTask(QgsTask):
                         item.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
                         item.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
                         item.setData(4,"False")
-                self.setProgress((index/total_count)*100)
+                # PERFORMANCE: Use batched progress updates
+                self._update_progress_batched(index, total_count)
 
         self.updateFeatures()
 
@@ -818,7 +931,8 @@ class PopulateListEngineTask(QgsTask):
             if item.checkState() == Qt.Checked:
                 selection_data.append([item.data(0), item.data(3), bool(item.data(4))])
             visible_data.append([item.data(0), item.data(3), bool(item.data(4))])
-            self.setProgress((index/total_count)*100)
+            # PERFORMANCE: Use batched progress updates
+            self._update_progress_batched(index, total_count)
         selection_data.sort(key=lambda k: k[0])
         self.parent.items_le.setText(', '.join([data[0] for data in selection_data]))
         self.parent.list_widgets[self.layer.id()].setSelectedFeaturesList(selection_data)
@@ -959,12 +1073,44 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.layer = None
         self.is_field_flag = None
         
+        # Sort order settings (ASC/DESC)
+        self._sort_order = 'ASC'
+        self._sort_field = None
+        
         # Debounce timer for filter text input to prevent launching many tasks
         # when user types quickly - waits 300ms after last keystroke before filtering
         self._filter_debounce_timer = QTimer(self)
         self._filter_debounce_timer.setSingleShot(True)
         self._filter_debounce_timer.setInterval(300)  # 300ms debounce delay
         self._filter_debounce_timer.timeout.connect(self._execute_filter)
+
+    def setSortOrder(self, order='ASC', field=None):
+        """
+        Set the sort order for the features list.
+        
+        Args:
+            order: 'ASC' or 'DESC' for ascending/descending order
+            field: Optional field name for sorting (if None, uses display expression)
+        """
+        self._sort_order = order
+        self._sort_field = field
+        logger.debug(f"QgsCheckableComboBoxFeaturesListPickerWidget.setSortOrder: order={order}, field={field}")
+        
+        # If we have a layer and list widget, re-sort and refresh
+        if self.layer is not None and self.layer.id() in self.list_widgets:
+            # Trigger a refresh to apply the new sort order
+            expression = self.list_widgets[self.layer.id()].getDisplayExpression()
+            if expression:
+                self.setDisplayExpression(expression)
+    
+    def getSortOrder(self):
+        """
+        Get the current sort order settings.
+        
+        Returns:
+            tuple: (order, field) where order is 'ASC' or 'DESC'
+        """
+        return (self._sort_order, self._sort_field)
 
     def checkedItems(self):
         selection = []
@@ -1530,12 +1676,18 @@ class ListWidgetWrapper(QListWidget):
     def getLimit(self):
         return self.limit
     
-    def sortFeaturesListByDisplayExpression(self, nonSubset_features_list=[]):
+    def sortFeaturesListByDisplayExpression(self, nonSubset_features_list=[], reverse=False):
         """
         Sort features list by display expression.
         
         FIX v2.5.7: Handle None values in sort key to prevent TypeError
         when comparing str with NoneType.
+        
+        FIX v2.5.8: Added reverse parameter to support DESC order.
+        
+        Args:
+            nonSubset_features_list: List of feature IDs that are not in the current subset
+            reverse: If True, sort in descending order (DESC)
         """
         def safe_sort_key(k):
             # k[0] is the display expression value, k[1] is the feature id
@@ -1544,7 +1696,7 @@ class ListWidgetWrapper(QListWidget):
             is_in_subset = k[1] not in nonSubset_features_list
             return (is_in_subset, display_value)
         
-        self.features_list.sort(key=safe_sort_key)
+        self.features_list.sort(key=safe_sort_key, reverse=reverse)
 
 
 class QgsCheckableComboBoxLayer(QComboBox):
