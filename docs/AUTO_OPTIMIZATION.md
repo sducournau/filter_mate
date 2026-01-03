@@ -196,6 +196,8 @@ When filtering with auto-optimization enabled, a confirmation dialog appears sho
 - **Checkboxes** to accept/reject each optimization individually
 - **Remember my choices**: Skip confirmation for similar layers in this session
 
+**v2.7.1 Improvement**: When user accepts optimizations in the dialog, the corresponding UI checkboxes (e.g., "Use centroids for source layer", "Use centroids for distant layers") are automatically updated to reflect the user's choice. This ensures visual consistency between the dialog selections and the main FilterMate interface.
+
 ### Settings Dialog
 
 The advanced settings dialog provides:

@@ -2,6 +2,37 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.6.8] - 2026-01-03 - Fix: PostgreSQL Geometric Filtering with Non-PostgreSQL Source
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: PostgreSQL geometric filtering fails when source layer is not PostgreSQL**
+
+  - **Problème**: Les filtres géométriques ne fonctionnaient plus avec le backend PostgreSQL quand la couche source (d'exploration) n'était pas PostgreSQL (ex: GeoPackage, Shapefile).
+  - **Symptômes**: Les couches PostgreSQL distantes n'affichaient aucune entité filtrée, ou l'expression de filtre était invalide.
+  - **Cause Racine**:
+    1. Quand la source n'est pas PostgreSQL, `postgresql_source_geom` n'est pas défini
+    2. Le fallback dans `_prepare_source_geometry()` retourne le WKT brut
+    3. Dans `build_expression()`, si le nombre de features source > 50, le mode EXISTS est tenté
+    4. Le parser `_parse_source_table_reference()` retourne None car le WKT n'est pas une référence de table
+    5. Le code génère alors `ST_Intersects("geom", POLYGON(...))` - expression invalide car le WKT brut n'est pas encapsulé dans `ST_GeomFromText()`
+  - **Solution**: Détection du WKT brut dans la branche "simple expression" et encapsulation automatique dans `ST_GeomFromText('WKT', SRID)`
+  - **Expression corrigée**: `ST_Intersects("geometrie", ST_GeomFromText('POLYGON(...))', 4326))` au lieu de `ST_Intersects("geometrie", POLYGON(...))`
+
+### 🔧 Changements Techniques
+
+- `build_expression()` dans `postgresql_backend.py`:
+  - Ajout de détection des préfixes WKT (POINT, POLYGON, MULTIPOLYGON, etc.)
+  - Encapsulation automatique du WKT dans `ST_GeomFromText()` avec SRID approprié
+  - Application du buffer si nécessaire après l'encapsulation
+- Logs améliorés pour diagnostiquer ce cas de figure
+
+### 📁 Fichiers Modifiés
+
+- `modules/backends/postgresql_backend.py`: Gestion du fallback WKT dans le mode non-EXISTS
+
+---
+
 ## [2.6.7] - 2026-01-03 - Fix: PostgreSQL Distant Layer Geometric Filtering
 
 ### 🐛 Correction de Bug Critique

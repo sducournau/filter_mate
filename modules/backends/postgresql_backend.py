@@ -1177,7 +1177,46 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     self.log_debug(f"Using EXISTS subquery to avoid missing FROM-clause error")
                 else:
                     # Simple expression (WKT, geometry literal, etc.) - can use directly
-                    expr = f"{predicate_func}({geom_expr}, {source_geom})"
+                    # CRITICAL FIX v2.6.8: Detect if source_geom is raw WKT and wrap in ST_GeomFromText
+                    # When source layer is not PostgreSQL (e.g., GeoPackage), postgresql_source_geom
+                    # may not be set, causing fallback to WKT. Raw WKT must be wrapped in
+                    # ST_GeomFromText('WKT', SRID) for PostgreSQL to parse it as geometry.
+                    source_geom_sql = source_geom
+                    
+                    # Check if source_geom looks like raw WKT (starts with geometry type keyword)
+                    wkt_prefixes = (
+                        'POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT', 'MULTILINESTRING',
+                        'MULTIPOLYGON', 'GEOMETRYCOLLECTION', 'CIRCULARSTRING', 'COMPOUNDCURVE',
+                        'CURVEPOLYGON', 'MULTICURVE', 'MULTISURFACE'
+                    )
+                    source_geom_upper = source_geom.upper().strip() if source_geom else ''
+                    is_raw_wkt = any(source_geom_upper.startswith(prefix) for prefix in wkt_prefixes)
+                    
+                    if is_raw_wkt:
+                        self.log_warning(f"⚠️ source_geom is raw WKT - wrapping in ST_GeomFromText()")
+                        
+                        # Get SRID from source layer or fallback to default
+                        fallback_srid = 4326  # Default WGS84
+                        if source_srid is not None:
+                            fallback_srid = source_srid
+                        elif hasattr(self, 'task_params') and self.task_params:
+                            source_crs_authid = self.task_params.get('infos', {}).get('source_layer_crs_authid', '')
+                            if source_crs_authid.startswith('EPSG:'):
+                                try:
+                                    fallback_srid = int(source_crs_authid.split(':')[1])
+                                except (ValueError, IndexError):
+                                    pass
+                        
+                        # Wrap WKT in ST_GeomFromText
+                        source_geom_sql = f"ST_GeomFromText('{source_geom}', {fallback_srid})"
+                        self.log_info(f"  ✓ Wrapped WKT in ST_GeomFromText with SRID={fallback_srid}")
+                        
+                        # Apply buffer if needed
+                        if buffer_value is not None and buffer_value != 0:
+                            self.log_info(f"  ✓ Applying buffer {buffer_value}m to WKT geometry")
+                            source_geom_sql = self._build_st_buffer_with_style(source_geom_sql, buffer_value)
+                    
+                    expr = f"{predicate_func}({geom_expr}, {source_geom_sql})"
                 
                 predicate_expressions.append(expr)
         

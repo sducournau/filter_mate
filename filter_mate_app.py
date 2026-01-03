@@ -2363,6 +2363,10 @@ class FilterMateApp:
                 for layer_info in layers_needing_optimization:
                     approved_optimizations[layer_info['layer_id']] = selected
                 
+                # v2.7.1: Update UI widgets when user accepts optimizations
+                # This ensures checkboxes reflect the user's optimization choices
+                self._apply_optimization_to_ui_widgets(selected)
+                
                 # Check if user wants to remember
                 if dialog.should_remember():
                     # Store in dockwidget for session persistence
@@ -2382,6 +2386,63 @@ class FilterMateApp:
             logger.warning(f"Error in optimization check: {e}")
         
         return approved_optimizations, auto_apply
+    
+    def _apply_optimization_to_ui_widgets(self, selected_optimizations: dict):
+        """
+        Apply accepted optimization choices to UI widgets.
+        
+        When user accepts optimizations in the confirmation dialog, this method
+        updates the corresponding checkboxes and other UI controls to reflect
+        their choices. This ensures visual consistency between the dialog
+        selections and the main UI state.
+        
+        Args:
+            selected_optimizations: Dict of {optimization_type: bool} choices
+                e.g., {'use_centroid': True, 'simplify_geometry': False}
+        
+        v2.7.1: New method for UI synchronization after optimization acceptance
+        """
+        if not self.dockwidget or not selected_optimizations:
+            return
+        
+        try:
+            # Handle centroid optimization - update both source and distant layer checkboxes
+            if selected_optimizations.get('use_centroid', False):
+                # Update distant layers centroid checkbox (primary target for remote layers)
+                if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
+                    if not self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked():
+                        self.dockwidget.checkBox_filtering_use_centroids_distant_layers.setChecked(True)
+                        logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_distant_layers' checkbox")
+                
+                # Update source layer centroid checkbox if applicable
+                if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
+                    if not self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked():
+                        self.dockwidget.checkBox_filtering_use_centroids_source_layer.setChecked(True)
+                        logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_source_layer' checkbox")
+                
+                # Also update the current layer's stored parameters
+                if hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
+                    layer_id = self.dockwidget.current_layer.id()
+                    if layer_id in self.PROJECT_LAYERS:
+                        if "filtering" not in self.PROJECT_LAYERS[layer_id]:
+                            self.PROJECT_LAYERS[layer_id]["filtering"] = {}
+                        self.PROJECT_LAYERS[layer_id]["filtering"]["use_centroids_source_layer"] = True
+                        self.PROJECT_LAYERS[layer_id]["filtering"]["use_centroids_distant_layers"] = True
+                        logger.debug(f"AUTO-OPTIMIZATION: Updated PROJECT_LAYERS for {layer_id}")
+            
+            # Handle other optimization types (future expansion)
+            # if selected_optimizations.get('simplify_geometry', False):
+            #     # Update simplification UI if it exists
+            #     pass
+            
+            # if selected_optimizations.get('bbox_prefilter', False):
+            #     # Update bbox prefilter UI if it exists
+            #     pass
+            
+            logger.debug(f"Applied optimization choices to UI: {selected_optimizations}")
+            
+        except Exception as e:
+            logger.warning(f"Error applying optimizations to UI widgets: {e}")
     
     def _build_layers_to_filter(self, current_layer):
         """Build list of layers to filter with validation.
