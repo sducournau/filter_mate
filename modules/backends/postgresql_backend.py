@@ -135,11 +135,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     MATERIALIZED_VIEW_THRESHOLD = 10000  # Features count threshold for MV strategy
     LARGE_DATASET_THRESHOLD = 100000     # Features count for additional logging
     
-    # WKT size limits (v2.5.11) - prevent very long SQL expressions
+    # WKT size limits (v2.5.11, v2.7.3) - prevent very long SQL expressions
     # PostgreSQL can handle very long expressions but performance degrades
     # and some layer display issues can occur with very complex geometries
-    MAX_WKT_LENGTH = 50000               # Max WKT chars before forcing EXISTS subquery
-    WKT_SIMPLIFY_THRESHOLD = 100000      # WKT chars threshold for geometry simplification warning
+    # v2.7.3: Increased from 50000 to 100000 to handle detailed French communes
+    # (e.g., Toulouse commune boundary is ~60000 chars)
+    MAX_WKT_LENGTH = 100000              # Max WKT chars before forcing EXISTS subquery
+    WKT_SIMPLIFY_THRESHOLD = 200000      # WKT chars threshold for geometry simplification warning
     
     # Progressive filter thresholds (v2.5.9)
     TWO_PHASE_COMPLEXITY_THRESHOLD = 100  # Min complexity score for two-phase
@@ -366,8 +368,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         3. ST_Buffer("schema"."table"."geom", value) - with buffer
         4. "table"."geom" - table reference without schema (uses default "public")
         5. ST_Buffer("table"."geom", value) - buffer without schema
+        6. CASE WHEN ST_IsEmpty(...ST_Buffer("schema"."table"."geom"...) - negative buffer wrapper
         
-        For formats 1, 3, 4, 5 we need to use EXISTS subquery in setSubsetString.
+        For formats 1, 3, 4, 5, 6 we need to use EXISTS subquery in setSubsetString.
         For format 2 (materialized view), it's OK to use direct reference.
         
         Args:
@@ -408,6 +411,48 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 pass
             
             return buffer_expr
+        
+        # CRITICAL FIX v2.7.5: Handle CASE WHEN wrapper for negative buffers
+        # When postgresql_source_geom contains a negative buffer, it's wrapped as:
+        # CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer("schema"."table"."geom", -100))) THEN NULL ELSE ... END
+        # This must be parsed to extract the table reference, then rebuilt with __source alias
+        # Pattern: CASE WHEN ... ST_Buffer("schema"."table"."geom", value) ...
+        if source_geom.upper().startswith('CASE WHEN'):
+            self.log_debug(f"Detected CASE WHEN wrapper for negative buffer expression")
+            
+            # Try to find 3-part table reference inside ST_Buffer
+            inner_3part_pattern = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^,)]+)'
+            inner_match = re.search(inner_3part_pattern, source_geom, re.IGNORECASE)
+            if inner_match:
+                schema, table, geom_field, buffer_value = inner_match.groups()
+                # Skip materialized views
+                if table.startswith('mv_') and table.endswith('_dump'):
+                    self.log_debug(f"Source is materialized view '{table}' with CASE wrapper - using direct reference")
+                    return None
+                self.log_info(f"  ✓ Extracted from CASE WHEN: schema='{schema}', table='{table}', geom='{geom_field}', buffer={buffer_value}")
+                return {
+                    'schema': schema,
+                    'table': table,
+                    'geom_field': geom_field,
+                    'buffer_expr': build_buffer_expr(f'__source."{geom_field}"', buffer_value)
+                }
+            
+            # Try to find 2-part table reference inside ST_Buffer (no schema)
+            inner_2part_pattern = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^,)]+)'
+            inner_match = re.search(inner_2part_pattern, source_geom, re.IGNORECASE)
+            if inner_match:
+                table, geom_field, buffer_value = inner_match.groups()
+                # Skip materialized views
+                if table.startswith('mv_') and table.endswith('_dump'):
+                    self.log_debug(f"Source is materialized view '{table}' with CASE wrapper - using direct reference")
+                    return None
+                self.log_info(f"  ✓ Extracted from CASE WHEN (2-part): table='{table}', geom='{geom_field}', buffer={buffer_value}")
+                return {
+                    'schema': 'public',
+                    'table': table,
+                    'geom_field': geom_field,
+                    'buffer_expr': build_buffer_expr(f'__source."{geom_field}"', buffer_value)
+                }
         
         # Pattern 1: ST_Buffer("schema"."table"."geom", value) - 3-part with buffer
         buffer_pattern_3part = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^)]+)\)'
@@ -912,9 +957,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         )
         
         if use_simple_wkt:
-            self.log_debug(f"📝 Using SIMPLE WKT mode for {layer_props.get('layer_name', 'unknown')}")
-            self.log_debug(f"  - Source features: {source_feature_count} (≤ {self.SIMPLE_WKT_THRESHOLD} threshold)")
-            self.log_debug(f"  - WKT length: {wkt_length} chars (≤ {self.MAX_WKT_LENGTH} max)")
+            # v2.7.2: Log WKT mode usage - especially important for OGR source + PostgreSQL distant
+            self.log_info(f"📝 Using SIMPLE WKT mode for {layer_props.get('layer_name', 'unknown')}")
+            self.log_info(f"  - Source features: {source_feature_count} (≤ {self.SIMPLE_WKT_THRESHOLD} threshold)")
+            self.log_info(f"  - WKT length: {wkt_length} chars")
+            self.log_info(f"  - SRID: {source_srid}")
         elif wkt_too_long and source_feature_count <= self.SIMPLE_WKT_THRESHOLD:
             # WKT exceeds size limit even with few features (complex buffer geometry)
             self.log_info(f"⚠️ WKT too long ({wkt_length} chars > {self.MAX_WKT_LENGTH} max)")
@@ -932,8 +979,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Extract and sort predicates by optimal order
         predicate_items = []
         for key, func in predicates.items():
-            # Extract predicate name from function name (e.g., 'ST_Intersects' -> 'intersects')
-            predicate_lower = key.lower().replace('st_', '')
+            # FIX v2.7.1: Extract predicate name from the VALUE (func), not the key
+            # Previously, when key was a string index like '0', this failed to match PREDICATE_ORDER
+            # Now handles both old index-based format and new function-based format
+            # e.g., 'ST_Intersects' -> 'intersects', or '0' key with 'ST_Intersects' value
+            predicate_lower = func.lower().replace('st_', '')
             order = self.PREDICATE_ORDER.get(predicate_lower, 99)
             predicate_items.append((key, func, order))
         
@@ -1219,6 +1269,35 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     expr = f"{predicate_func}({geom_expr}, {source_geom_sql})"
                 
                 predicate_expressions.append(expr)
+            
+            # STRATEGY 3: WKT fallback for OGR source layers (v2.7.4)
+            # When WKT is too long but source_geom is None (OGR/GeoPackage source layer),
+            # we MUST still use WKT because there's no alternative. Without this fallback,
+            # the filter expression is empty and returns ALL features unfiltered!
+            # This happens when selecting complex geometries from GeoPackage layers.
+            elif source_wkt is not None and source_srid is not None:
+                self.log_warning(f"⚠️ STRATEGY 3: WKT fallback for OGR source layer")
+                self.log_warning(f"  → source_geom is None (non-PostgreSQL source)")
+                self.log_warning(f"  → WKT is large ({wkt_length} chars) but no alternative available")
+                self.log_warning(f"  → Using WKT anyway - may cause slow queries for very complex geometries")
+                
+                # Use the same logic as STRATEGY 1 (simple WKT) but with a warning
+                expr = self._build_simple_wkt_expression(
+                    geom_expr=geom_expr,
+                    predicate_func=predicate_func,
+                    source_wkt=source_wkt,
+                    source_srid=source_srid,
+                    buffer_value=buffer_value
+                )
+                self.log_info(f"  ✓ WKT fallback expression built: {expr[:100]}...")
+                predicate_expressions.append(expr)
+            else:
+                # No valid geometry source available - log error
+                self.log_error(f"❌ No geometry source available for {layer_props.get('layer_name', 'unknown')}")
+                self.log_error(f"  → source_geom: {source_geom is not None}")
+                self.log_error(f"  → source_wkt: {source_wkt is not None}")
+                self.log_error(f"  → source_srid: {source_srid}")
+                self.log_error(f"  → This will result in an empty filter returning ALL features!")
         
         # Combine predicates with OR
         if predicate_expressions:

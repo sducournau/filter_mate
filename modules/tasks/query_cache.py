@@ -134,7 +134,9 @@ class QueryExpressionCache:
         buffer_value: Optional[float],
         source_geometry_hash: str,
         provider_type: str,
-        source_filter_hash: Optional[str] = None
+        source_filter_hash: Optional[str] = None,
+        use_centroids: bool = False,
+        use_centroids_source: bool = False
     ) -> Tuple:
         """
         Generate a unique cache key for a query expression.
@@ -147,6 +149,10 @@ class QueryExpressionCache:
             provider_type: Backend type ('postgresql', 'spatialite', 'ogr')
             source_filter_hash: Optional hash of source layer filter (for PostgreSQL EXISTS)
                                This ensures cache invalidation when source filter changes
+            use_centroids: Whether centroid optimization is enabled for distant layers
+                          v2.5.14: Added to ensure cache invalidation when centroid option changes
+            use_centroids_source: Whether centroid optimization is enabled for source layer
+                          v2.5.15: Added for complete centroid cache invalidation
         
         Returns:
             Tuple: Unique cache key
@@ -160,7 +166,9 @@ class QueryExpressionCache:
             buffer_value,
             source_geometry_hash,
             provider_type,
-            source_filter_hash  # v2.5.19: Include source filter for cache invalidation on refilter
+            source_filter_hash,  # v2.5.19: Include source filter for cache invalidation on refilter
+            use_centroids,  # v2.5.14: Include centroid flag for cache invalidation (distant layers)
+            use_centroids_source  # v2.5.15: Include centroid flag for source layer
         )
     
     def compute_source_hash(self, source_geometry: Any) -> str:

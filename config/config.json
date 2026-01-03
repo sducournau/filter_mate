@@ -237,7 +237,7 @@
       "SMALL_DATASET_OPTIMIZATION": {
         "description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)",
         "enabled": {
-          "value": true,
+          "value": false,
           "choices": [true, false],
           "description": "Enable/disable optimization"
         },

@@ -346,3 +346,48 @@ def reset_config_to_default():
             Qgis.Critical
         )
         return False
+
+
+def reload_config():
+    """
+    Reload configuration from config.json file.
+    
+    Use this to apply configuration changes without restarting QGIS.
+    Updates ENV_VARS['CONFIG_DATA'] with latest values from disk.
+    
+    Returns:
+        bool: True if reload successful, False otherwise
+    """
+    global ENV_VARS
+    
+    try:
+        config_json_path = ENV_VARS.get("CONFIG_JSON_PATH")
+        
+        if not config_json_path or not os.path.exists(config_json_path):
+            QgsMessageLog.logMessage(
+                f"Config file not found: {config_json_path}",
+                "FilterMate",
+                Qgis.Warning
+            )
+            return False
+        
+        with open(config_json_path, 'r', encoding='utf-8') as f:
+            new_config = json.load(f)
+        
+        ENV_VARS["CONFIG_DATA"] = new_config
+        
+        QgsMessageLog.logMessage(
+            f"Configuration reloaded from: {config_json_path}",
+            "FilterMate",
+            Qgis.Info
+        )
+        
+        return True
+        
+    except Exception as e:
+        QgsMessageLog.logMessage(
+            f"Failed to reload configuration: {e}",
+            "FilterMate",
+            Qgis.Critical
+        )
+        return False

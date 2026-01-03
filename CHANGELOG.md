@@ -2,6 +2,78 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.7.5] - 2026-01-03 - Fix: Negative Buffer "missing FROM-clause entry" Error
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: PostgreSQL geometric filtering with negative buffer causes "missing FROM-clause entry" SQL error**
+
+  - **Problème**: Lorsqu'un filtre géométrique avec buffer négatif (érosion) était appliqué sur la couche source PostgreSQL, les couches distantes recevaient l'erreur SQL: `ERROR: missing FROM-clause entry for table "commune"`
+  - **Symptômes**:
+    - Filtre géométrique avec buffer négatif sur couche source PostgreSQL
+    - Toutes les couches distantes PostgreSQL affichent "missing FROM-clause entry"
+    - L'erreur mentionne le nom de la table source (ex: "commune")
+  - **Cause Racine**:
+    1. `prepare_postgresql_source_geom()` génère une expression CASE WHEN pour les buffers négatifs:
+       `CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer("public"."commune"."geom", -100))) THEN NULL ELSE ... END`
+    2. `_parse_source_table_reference()` utilise `re.match()` qui ne matche qu'au DÉBUT de la chaîne
+    3. L'expression commence par "CASE WHEN", pas par "ST_Buffer", donc aucun pattern ne matche
+    4. La fonction retourne `None`, et le code utilise l'expression directement sans la wrapper dans EXISTS
+    5. Résultat: la référence `"public"."commune"."geom"` est utilisée dans `setSubsetString` sans EXISTS, causant l'erreur SQL
+  - **Solution**:
+    1. Ajout d'un nouveau pattern dans `_parse_source_table_reference()` pour détecter `CASE WHEN ... ST_Buffer(...)`
+    2. Utilisation de `re.search()` au lieu de `re.match()` pour trouver la référence de table n'importe où dans l'expression
+    3. Extraction correcte du schéma, table, champ géométrie et valeur de buffer même depuis l'expression CASE WHEN
+  - **Impact**: Les filtres géométriques avec buffer négatif fonctionnent maintenant correctement pour les couches PostgreSQL
+
+### 🔧 Changements Techniques
+
+- `postgresql_backend.py` (`_parse_source_table_reference`):
+  - **Avant**: Patterns utilisaient `re.match()` (début de chaîne seulement)
+  - **Après**: Ajout d'un bloc spécial pour `CASE WHEN` utilisant `re.search()` pour trouver ST_Buffer n'importe où
+
+### 📁 Fichiers Modifiés
+
+- `modules/backends/postgresql_backend.py`: Ajout du support pour les expressions CASE WHEN avec buffer négatif
+
+---
+
+## [2.7.1] - 2026-01-XX - Fix: Geometric Predicates Mapping Bug
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: Geometric filtering broken for PostgreSQL and Spatialite backends**
+
+  - **Problème**: Le filtre géométrique ne fonctionnait plus pour les backends PostgreSQL et Spatialite. Les prédicats spatiaux (Intersect, Contain, etc.) n'étaient pas correctement transmis aux backends.
+  - **Symptômes**:
+    - Sélection de "Contain" appliquait "Disjoint" (Spatialite)
+    - L'ordre de performance des prédicats était incorrect (PostgreSQL)
+  - **Cause Racine**:
+    1. `filter_task.py` utilisait `list(self.predicates).index(key)` pour obtenir l'indice du prédicat
+    2. Le dict `self.predicates` contient 16 entrées (8 capitalisées + 8 minuscules), produisant des indices pairs (0, 2, 4, 6...)
+    3. Le backend Spatialite attendait des indices 0-7 dans son mapping `index_to_name`
+    4. Le backend PostgreSQL extrayait le nom du prédicat depuis la **clé** au lieu de la **valeur**
+  - **Solution**:
+    1. `filter_task.py`: Utiliser directement le nom de fonction SQL comme clé (`{"ST_Intersects": "ST_Intersects"}`)
+    2. `postgresql_backend.py`: Extraire le nom du prédicat depuis la valeur (func) au lieu de la clé
+  - **Compatibilité**: Les deux backends gèrent maintenant correctement le nouveau format tout en restant compatibles avec les anciens formats
+
+### 🔧 Changements Techniques
+
+- `filter_task.py` (ligne 6739):
+  - **Avant**: `self.current_predicates[str(index)] = self.predicates[key]`
+  - **Après**: `self.current_predicates[func_name] = func_name`
+- `postgresql_backend.py` (ligne 937):
+  - **Avant**: `predicate_lower = key.lower().replace('st_', '')`
+  - **Après**: `predicate_lower = func.lower().replace('st_', '')`
+
+### 📁 Fichiers Modifiés
+
+- `modules/tasks/filter_task.py`: Correction du mapping des prédicats
+- `modules/backends/postgresql_backend.py`: Extraction du nom de prédicat depuis la valeur
+
+---
+
 ## [2.6.8] - 2026-01-03 - Fix: PostgreSQL Geometric Filtering with Non-PostgreSQL Source
 
 ### 🐛 Correction de Bug Critique

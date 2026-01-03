@@ -395,3 +395,35 @@ This prevents C++ level crashes that Python cannot catch.
 - Custom backend plugins support
 
 **Note:** Parallel execution for OGR is NOT planned due to thread safety constraints.
+
+---
+
+## v2.8.0 Enhanced Optimization System
+
+### New Modules
+
+**optimizer_metrics.py:**
+- `OptimizationMetricsCollector`: Central metrics hub (singleton)
+- `LRUCache`: Thread-safe LRU cache with TTL
+- `QueryPatternDetector`: Detect recurring query patterns
+- `AdaptiveThresholdManager`: Dynamic threshold tuning
+- `SelectivityHistogram`: Selectivity estimation via sampling
+
+**parallel_processor.py:**
+- `ParallelChunkProcessor`: Thread-safe parallel spatial filtering
+- `GeometryBatch`: Batch geometry operations for worker threads
+- Uses WKB for thread-safe geometry operations
+
+### EnhancedAutoOptimizer
+Extends AutoOptimizer with:
+- Session-based metrics tracking
+- Query pattern detection for recurring optimizations  
+- Adaptive threshold tuning based on observed performance
+- Parallel processing for large datasets (>10k features)
+- LRU caching with TTL and pattern-based invalidation
+
+### Critical Fixes in v2.7.x
+
+1. **v2.7.2**: PostgreSQL target + OGR source now uses WKT mode correctly
+2. **v2.7.3**: WKT decision uses SELECTED feature count (not total)
+3. **v2.7.5**: CASE WHEN wrapper parsing for negative buffers in PostgreSQL

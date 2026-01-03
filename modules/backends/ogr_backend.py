@@ -693,15 +693,32 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 source_layer = getattr(self, 'source_geom', None)
                 
                 # DIAGNOSTIC: Log source layer state
+                # FIX v2.6.13: Also log to QGIS MessagePanel for visibility
+                from qgis.core import QgsMessageLog, Qgis
+                
                 self.log_info(f"📍 OGR source_geom state for {layer.name()}:")
                 if source_layer is None:
                     self.log_error("  → source_geom is None!")
+                    QgsMessageLog.logMessage(
+                        f"OGR apply_filter: source_geom is None for '{layer.name()}'",
+                        "FilterMate", Qgis.Critical
+                    )
                 elif not isinstance(source_layer, QgsVectorLayer):
                     self.log_error(f"  → source_geom is not a QgsVectorLayer: {type(source_layer).__name__}")
+                    QgsMessageLog.logMessage(
+                        f"OGR apply_filter: source_geom is not a QgsVectorLayer for '{layer.name()}': {type(source_layer).__name__}",
+                        "FilterMate", Qgis.Critical
+                    )
                 else:
                     self.log_info(f"  → Name: {source_layer.name()}")
                     self.log_info(f"  → Valid: {source_layer.isValid()}")
                     self.log_info(f"  → Feature count: {source_layer.featureCount()}")
+                    # Log summary to MessagePanel
+                    QgsMessageLog.logMessage(
+                        f"OGR apply_filter: source_geom for '{layer.name()}' = '{source_layer.name()}' "
+                        f"(valid={source_layer.isValid()}, features={source_layer.featureCount()})",
+                        "FilterMate", Qgis.Info
+                    )
                     if source_layer.featureCount() > 0:
                         # Check first geometry
                         for feat in source_layer.getFeatures():
@@ -783,16 +800,31 @@ class OGRGeometricFilter(GeometricFilterBackend):
         - Very large negative buffers may collapse the polygon entirely
         """
         # STABILITY FIX v2.3.9: Validate source layer before any operations
+        # FIX v2.6.13: Add QGIS MessagePanel logging for visibility
+        from qgis.core import QgsMessageLog, Qgis
+        
         if source_layer is None:
             self.log_error("Source layer is None - cannot apply buffer")
+            QgsMessageLog.logMessage(
+                "OGR _apply_buffer: source layer is None",
+                "FilterMate", Qgis.Critical
+            )
             return None
         
         if not isinstance(source_layer, QgsVectorLayer):
             self.log_error(f"Source layer is not a QgsVectorLayer: {type(source_layer).__name__}")
+            QgsMessageLog.logMessage(
+                f"OGR _apply_buffer: source layer is not a QgsVectorLayer: {type(source_layer).__name__}",
+                "FilterMate", Qgis.Critical
+            )
             return None
         
         if not source_layer.isValid():
             self.log_error(f"Source layer is not valid: {source_layer.name()}")
+            QgsMessageLog.logMessage(
+                f"OGR _apply_buffer: source layer '{source_layer.name()}' is not valid",
+                "FilterMate", Qgis.Critical
+            )
             return None
         
         # CRITICAL FIX v2.5.4: For memory layers, featureCount() can return 0 immediately after creation
@@ -825,6 +857,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
             self.log_error(f"     1. No features selected in source layer")
             self.log_error(f"     2. Source layer subset string filters out all features")
             self.log_error(f"     3. Field-based filtering returned no matches")
+            # FIX v2.6.13: Add QGIS MessagePanel logging for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"OGR _apply_buffer: source layer '{source_layer.name()}' has 0 features - "
+                f"cannot perform spatial filtering. Check source layer selection/filter.",
+                "FilterMate", Qgis.Critical
+            )
             return None
         
         # Support both positive and negative buffer values
@@ -1665,21 +1704,40 @@ class OGRGeometricFilter(GeometricFilterBackend):
         existing_subset = None
         
         # STABILITY FIX v2.3.9: Validate layers before any operations
+        # FIX v2.6.13: Add QGIS MessagePanel logging for visibility
+        from qgis.core import QgsMessageLog, Qgis
+        
         if layer is None or not layer.isValid():
             self.log_error("Target layer is None or invalid - cannot proceed with standard filtering")
             if layer is None:
                 self.log_error("  → layer is None")
+                QgsMessageLog.logMessage(
+                    "OGR _apply_filter_standard: target layer is None",
+                    "FilterMate", Qgis.Critical
+                )
             else:
                 self.log_error(f"  → layer.isValid() = {layer.isValid()}")
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_filter_standard: target layer '{layer.name()}' is invalid",
+                    "FilterMate", Qgis.Critical
+                )
             return False
         
         if source_layer is None or not source_layer.isValid():
             self.log_error("Source layer is None or invalid - cannot proceed with standard filtering")
             if source_layer is None:
                 self.log_error("  → source_layer is None")
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_filter_standard: source layer is None for target '{layer.name()}'",
+                    "FilterMate", Qgis.Critical
+                )
             else:
                 self.log_error(f"  → source_layer.isValid() = {source_layer.isValid()}")
                 self.log_error(f"  → source_layer.featureCount() = {source_layer.featureCount()}")
+                QgsMessageLog.logMessage(
+                    f"OGR _apply_filter_standard: source layer '{source_layer.name()}' is invalid (valid={source_layer.isValid()}, features={source_layer.featureCount()})",
+                    "FilterMate", Qgis.Critical
+                )
             return False
         
         # FIX v2.4.18: Save and temporarily clear existing subset string
@@ -1715,6 +1773,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
         intersect_layer = self._apply_buffer(source_layer, buffer_value)
         if intersect_layer is None:
             # FIX v2.4.18: Restore original subset if buffer failed
+            # FIX v2.6.13: Add QGIS MessagePanel logging for visibility
+            QgsMessageLog.logMessage(
+                f"OGR _apply_filter_standard: _apply_buffer returned None for '{layer.name()}' - "
+                f"source layer '{source_layer.name()}' may have no features or invalid geometries",
+                "FilterMate", Qgis.Critical
+            )
             if existing_subset:
                 self.log_warning(f"Restoring original subset after buffer failure")
                 safe_set_subset_string(layer, existing_subset)

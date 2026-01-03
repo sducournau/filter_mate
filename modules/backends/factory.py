@@ -35,15 +35,31 @@ logger = get_tasks_logger()
 
 def get_small_dataset_config() -> Tuple[bool, int]:
     """
-    Get small dataset optimization configuration from ENV_VARS.
+    Get small dataset optimization configuration.
+    
+    Reads directly from config.json file to allow dynamic configuration changes
+    without requiring plugin reload.
     
     Returns:
         Tuple of (enabled: bool, threshold: int)
     """
+    import json
+    import os
+    
     try:
+        # Read config.json directly to get latest values (not cached ENV_VARS)
         from ...config.config import ENV_VARS
+        config_json_path = ENV_VARS.get('CONFIG_JSON_PATH')
         
-        config_data = ENV_VARS.get('CONFIG_DATA', {})
+        if config_json_path and os.path.exists(config_json_path):
+            with open(config_json_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            logger.debug(f"Read config from file: {config_json_path}")
+        else:
+            # Fallback to cached config
+            config_data = ENV_VARS.get('CONFIG_DATA', {})
+            logger.debug("Using cached CONFIG_DATA")
+        
         config = config_data.get('APP', {}).get('OPTIONS', {}).get('SMALL_DATASET_OPTIMIZATION', {})
         
         # Handle nested config objects with 'value' key (v2.0 config format)
@@ -61,9 +77,11 @@ def get_small_dataset_config() -> Tuple[bool, int]:
         else:
             threshold = threshold_config
         
+        logger.info(f"SMALL_DATASET_OPTIMIZATION: enabled={enabled}, threshold={threshold}")
         return (bool(enabled), int(threshold))
-    except Exception:
+    except Exception as e:
         # Fallback to defaults
+        logger.warning(f"Failed to read config, using defaults: {e}")
         return (DEFAULT_SMALL_DATASET_OPTIMIZATION, SMALL_DATASET_THRESHOLD)
 
 
@@ -81,6 +99,10 @@ def should_use_memory_optimization(layer: QgsVectorLayer, layer_provider_type: s
     Returns:
         True if memory optimization should be used
     """
+    # DISABLED: Small dataset optimization is disabled
+    # To re-enable, remove this line and set enabled=true in config.json
+    return False
+    
     # Only applies to PostgreSQL layers
     if layer_provider_type != PROVIDER_POSTGRES:
         return False

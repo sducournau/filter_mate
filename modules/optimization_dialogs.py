@@ -212,12 +212,13 @@ class OptimizationRecommendationDialog(QDialog):
     
     def _get_optimization_display_text(self, opt_type: str, speedup: float) -> str:
         """Get human-readable text for optimization type."""
+        # v2.7.3: Removed progressive_chunks - now applied by default
         opt_names = {
             'use_centroid': f"🎯 Use Centroids (~{speedup:.1f}x faster)",
             'simplify_geometry': f"📐 Simplify Geometries (~{speedup:.1f}x faster) ⚠️",
             'bbox_prefilter': f"📦 BBox Pre-filtering (~{speedup:.1f}x faster)",
             'attribute_first': f"🔤 Attribute-First Strategy (~{speedup:.1f}x faster)",
-            'progressive_chunks': f"📊 Progressive Chunking (~{speedup:.1f}x faster)",
+            # 'progressive_chunks' removed - v2.7.3: now default behavior
         }
         return opt_names.get(opt_type, f"⚙️ {opt_type} (~{speedup:.1f}x faster)")
     
@@ -483,10 +484,11 @@ def show_optimization_hint(layer_name: str, optimization_type: str, speedup: flo
     """
     from qgis.utils import iface
     
+    # v2.7.3: Removed progressive_chunks hint - now default behavior
     opt_descriptions = {
         'use_centroid': f"Using centroids for '{layer_name}' could be ~{speedup:.1f}x faster",
-        'progressive_chunks': f"Large dataset '{layer_name}' - using progressive chunking",
         'bbox_prefilter': f"BBox pre-filtering enabled for '{layer_name}'",
+        # 'progressive_chunks' removed - v2.7.3: now default behavior
     }
     
     message = opt_descriptions.get(

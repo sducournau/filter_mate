@@ -36,7 +36,7 @@ from .resources import *  # Qt resources must be imported with wildcard
 import os
 import os.path
 from .filter_mate_app import FilterMateApp
-from .config.config import ENV_VARS, init_env_vars
+from .config.config import ENV_VARS, init_env_vars, reload_config
 from .modules.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -216,6 +216,9 @@ class FilterMate:
         
         # Install message log filter to suppress known QGIS warnings about missing form dependencies
         self._install_message_filter()
+        
+        # Force reload configuration from disk to get latest user changes
+        reload_config()
         
         # Auto-migrate configuration if needed
         self._auto_migrate_config()

@@ -36,13 +36,14 @@ v2.7.0: Initial implementation
 """
 
 import time
-from typing import Dict, List, Optional, Tuple, Set, Any
+from typing import Dict, List, Optional, Tuple, Set, Any, Callable
 from enum import Enum
 from dataclasses import dataclass, field
 from qgis.core import (
     QgsVectorLayer,
     QgsRectangle,
     QgsWkbTypes,
+    QgsGeometry,
 )
 
 from ..logging_config import get_tasks_logger
@@ -54,11 +55,41 @@ from ..constants import (
     GEOMETRY_TYPE_POINT, GEOMETRY_TYPE_LINE, GEOMETRY_TYPE_POLYGON,
 )
 
+# Import metrics and parallel processing (optional - graceful fallback)
+try:
+    from .optimizer_metrics import (
+        get_metrics_collector,
+        OptimizationMetricsCollector,
+        LRUCache,
+        QueryPatternDetector,
+        AdaptiveThresholdManager,
+        SelectivityHistogram,
+    )
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+    get_metrics_collector = None
+
+try:
+    from .parallel_processor import (
+        ParallelChunkProcessor,
+        get_parallel_processor,
+        should_use_parallel_processing,
+        PARALLEL_AVAILABLE,
+    )
+except ImportError:
+    PARALLEL_AVAILABLE = False
+    get_parallel_processor = None
+    should_use_parallel_processing = lambda *args, **kwargs: False
+
 logger = get_tasks_logger()
 
 # Flag to indicate this module is available and functional
 # This can be imported by other modules to check availability
 AUTO_OPTIMIZER_AVAILABLE = True
+
+# Additional feature flags
+ENHANCED_OPTIMIZER_AVAILABLE = METRICS_AVAILABLE and PARALLEL_AVAILABLE
 
 
 # =============================================================================
@@ -749,16 +780,11 @@ class AutoOptimizer:
         
         feature_count = target.feature_count
         
-        # Very large dataset: progressive chunks
-        if feature_count > PERFORMANCE_THRESHOLD_LARGE:
-            return OptimizationRecommendation(
-                optimization_type=OptimizationType.PROGRESSIVE_CHUNKS,
-                priority=4,
-                estimated_speedup=1.3,
-                reason=f"Large dataset ({feature_count:,} features) - using progressive chunking",
-                auto_applicable=True,
-                parameters={"chunk_size": 10000}
-            )
+        # v2.7.3: Progressive chunks is now DEFAULT behavior for all datasets
+        # No longer proposed as an optimization since it's always applied
+        # Very large dataset: was progressive chunks, now just skip this optimization
+        # The chunking is handled automatically in apply_filter()
+        pass  # Progressive chunking now default
         
         # Has selective attribute filter: attribute-first
         if attribute_filter and feature_count > PERFORMANCE_THRESHOLD_SMALL:
@@ -875,3 +901,486 @@ def recommend_optimizations(
         attribute_filter=attribute_filter,
         user_requested_centroids=user_requested_centroids
     )
+
+
+# =============================================================================
+# Enhanced Optimizer (v2.8.0)
+# =============================================================================
+
+class EnhancedAutoOptimizer(AutoOptimizer):
+    """
+    Enhanced auto-optimizer with metrics collection, pattern detection,
+    adaptive thresholds, and parallel processing support.
+    
+    v2.8.0 Features:
+    - Performance metrics collection and reporting
+    - Query pattern detection for recurring optimizations
+    - Adaptive threshold tuning based on observed performance
+    - Parallel processing for large spatial operations
+    - LRU caching with automatic invalidation
+    - Selectivity histograms for better estimation
+    
+    Usage:
+        optimizer = get_enhanced_optimizer()
+        
+        # Start optimization session
+        session_id = optimizer.start_optimization_session(layer)
+        
+        # Get optimized plan
+        plan = optimizer.create_optimization_plan(layer, ...)
+        
+        # Execute with parallel processing if beneficial
+        if optimizer.should_use_parallel(layer):
+            results = optimizer.execute_parallel_spatial_filter(...)
+        
+        # End session and get metrics
+        summary = optimizer.end_optimization_session(session_id, execution_time_ms)
+        
+        # Get optimization statistics
+        stats = optimizer.get_statistics()
+    """
+    
+    def __init__(
+        self,
+        enable_auto_centroid: Optional[bool] = None,
+        enable_auto_simplify: Optional[bool] = None,
+        enable_auto_strategy: Optional[bool] = None,
+        enable_metrics: bool = True,
+        enable_parallel: bool = True,
+        enable_adaptive_thresholds: bool = True
+    ):
+        """
+        Initialize enhanced optimizer.
+        
+        Args:
+            enable_auto_centroid: Enable centroid optimization (None = use config)
+            enable_auto_simplify: Enable geometry simplification (None = use config)
+            enable_auto_strategy: Enable strategy selection (None = use config)
+            enable_metrics: Enable metrics collection
+            enable_parallel: Enable parallel processing
+            enable_adaptive_thresholds: Enable adaptive threshold adjustment
+        """
+        super().__init__(
+            enable_auto_centroid=enable_auto_centroid,
+            enable_auto_simplify=enable_auto_simplify,
+            enable_auto_strategy=enable_auto_strategy
+        )
+        
+        self.enable_metrics = enable_metrics and METRICS_AVAILABLE
+        self.enable_parallel = enable_parallel and PARALLEL_AVAILABLE
+        self.enable_adaptive_thresholds = enable_adaptive_thresholds
+        
+        # Initialize components
+        self._metrics = None
+        self._parallel_processor = None
+        self._pattern_detector = None
+        
+        if self.enable_metrics and get_metrics_collector:
+            self._metrics = get_metrics_collector()
+            if self.enable_adaptive_thresholds:
+                # Get adaptive thresholds
+                self._update_thresholds_from_metrics()
+        
+        if self.enable_parallel and get_parallel_processor:
+            self._parallel_processor = get_parallel_processor()
+    
+    def _update_thresholds_from_metrics(self) -> None:
+        """Update thresholds from adaptive threshold manager."""
+        if not self._metrics:
+            return
+        
+        thresholds = self._metrics.threshold_manager.get_all_thresholds()
+        
+        # Apply adaptive thresholds
+        if 'centroid_threshold_distant' in thresholds:
+            self.centroid_threshold_distant = int(thresholds['centroid_threshold_distant'])
+        if 'centroid_threshold_local' in thresholds:
+            self.centroid_threshold_local = int(thresholds['centroid_threshold_local'])
+    
+    def start_optimization_session(
+        self,
+        layer: QgsVectorLayer
+    ) -> Optional[str]:
+        """
+        Start an optimization session for metrics collection.
+        
+        Args:
+            layer: Layer being optimized
+            
+        Returns:
+            Session ID or None if metrics disabled
+        """
+        if not self._metrics:
+            return None
+        
+        return self._metrics.start_session(
+            layer_id=layer.id(),
+            layer_name=layer.name(),
+            feature_count=layer.featureCount()
+        )
+    
+    def end_optimization_session(
+        self,
+        session_id: str,
+        execution_time_ms: float,
+        baseline_estimate_ms: Optional[float] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        End optimization session and get summary.
+        
+        Args:
+            session_id: Session identifier
+            execution_time_ms: Actual execution time
+            baseline_estimate_ms: Estimated time without optimization
+            
+        Returns:
+            Session summary dictionary
+        """
+        if not self._metrics or not session_id:
+            return None
+        
+        return self._metrics.end_session(
+            session_id=session_id,
+            execution_time_ms=execution_time_ms,
+            baseline_estimate_ms=baseline_estimate_ms
+        )
+    
+    def create_optimization_plan(
+        self,
+        target_layer: QgsVectorLayer,
+        source_layer: Optional[QgsVectorLayer] = None,
+        source_wkt_length: int = 0,
+        predicates: Optional[Dict] = None,
+        attribute_filter: Optional[str] = None,
+        user_requested_centroids: Optional[bool] = None,
+        session_id: Optional[str] = None
+    ) -> OptimizationPlan:
+        """
+        Create optimization plan with enhanced features.
+        
+        Extends base functionality with:
+        - Pattern detection for recurring queries
+        - Cached analysis results
+        - Metrics recording
+        - Parallel processing recommendations
+        """
+        analysis_start = time.time()
+        
+        # Check for cached/pattern-based recommendation
+        if self._metrics:
+            predicate_list = list(predicates.keys()) if predicates else []
+            
+            # Check pattern detector for known good strategy
+            recommended = self._metrics.pattern_detector.get_recommended_strategy(
+                layer_id=target_layer.id(),
+                attribute_filter=attribute_filter,
+                spatial_predicates=predicate_list
+            )
+            
+            if recommended:
+                strategy, confidence = recommended
+                if confidence > 0.7:
+                    logger.debug(
+                        f"Using pattern-based strategy '{strategy}' "
+                        f"with {confidence:.0%} confidence"
+                    )
+        
+        # Get base plan
+        plan = super().create_optimization_plan(
+            target_layer=target_layer,
+            source_layer=source_layer,
+            source_wkt_length=source_wkt_length,
+            predicates=predicates,
+            attribute_filter=attribute_filter,
+            user_requested_centroids=user_requested_centroids
+        )
+        
+        # Add parallel processing recommendation if beneficial
+        if self.enable_parallel and plan.layer_analysis.feature_count > 0:
+            should_parallel = should_use_parallel_processing(
+                feature_count=plan.layer_analysis.feature_count,
+                has_spatial_filter=bool(predicates),
+                geometry_complexity=plan.layer_analysis.estimated_complexity
+            )
+            
+            if should_parallel:
+                plan.recommendations.append(
+                    OptimizationRecommendation(
+                        optimization_type=OptimizationType.MEMORY_OPTIMIZATION,
+                        priority=10,  # Low priority - applied in addition to others
+                        estimated_speedup=min(2.0, PARALLEL_AVAILABLE and 1.5 or 1.0),
+                        reason=f"Large dataset ({plan.layer_analysis.feature_count:,} features) - parallel processing available",
+                        auto_applicable=True,
+                        parameters={"parallel": True, "workers": 4}
+                    )
+                )
+        
+        # Record metrics
+        if self._metrics and session_id:
+            analysis_time = (time.time() - analysis_start) * 1000
+            self._metrics.record_analysis_time(session_id, analysis_time)
+            self._metrics.record_strategy(
+                session_id, 
+                plan.final_strategy,
+                plan.estimated_total_speedup
+            )
+        
+        return plan
+    
+    def should_use_parallel(
+        self,
+        layer: QgsVectorLayer,
+        has_spatial_filter: bool = True
+    ) -> bool:
+        """
+        Check if parallel processing should be used for this layer.
+        
+        Args:
+            layer: Target layer
+            has_spatial_filter: Whether spatial filtering is needed
+            
+        Returns:
+            True if parallel processing is recommended
+        """
+        if not self.enable_parallel:
+            return False
+        
+        analysis = LayerAnalyzer.analyze_layer(layer)
+        
+        return should_use_parallel_processing(
+            feature_count=analysis.feature_count,
+            has_spatial_filter=has_spatial_filter,
+            geometry_complexity=analysis.estimated_complexity
+        )
+    
+    def execute_parallel_spatial_filter(
+        self,
+        layer: QgsVectorLayer,
+        test_geometry: 'QgsGeometry',
+        predicate: str = 'intersects',
+        pre_filter_fids: Optional[Set[int]] = None,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
+    ) -> Tuple[Set[int], Dict[str, Any]]:
+        """
+        Execute spatial filter using parallel processing.
+        
+        Args:
+            layer: Target layer
+            test_geometry: Geometry to test against
+            predicate: Spatial predicate name
+            pre_filter_fids: Optional pre-filtered FIDs
+            progress_callback: Progress callback
+            
+        Returns:
+            Tuple of (matching_fids, stats_dict)
+        """
+        if not self._parallel_processor:
+            raise RuntimeError("Parallel processing not available")
+        
+        matching, stats = self._parallel_processor.process_spatial_filter_parallel(
+            layer=layer,
+            test_geometry=test_geometry,
+            predicate=predicate,
+            pre_filter_fids=pre_filter_fids,
+            progress_callback=progress_callback
+        )
+        
+        return matching, stats.to_dict()
+    
+    def record_query_pattern(
+        self,
+        layer_id: str,
+        attribute_filter: Optional[str],
+        spatial_predicates: Optional[List[str]],
+        execution_time_ms: float,
+        strategy_used: str
+    ) -> None:
+        """
+        Record query pattern for future optimization.
+        
+        Args:
+            layer_id: Layer identifier
+            attribute_filter: Attribute filter used
+            spatial_predicates: Spatial predicates used
+            execution_time_ms: Execution time
+            strategy_used: Strategy that was used
+        """
+        if not self._metrics:
+            return
+        
+        self._metrics.pattern_detector.record_query(
+            layer_id=layer_id,
+            attribute_filter=attribute_filter,
+            spatial_predicates=spatial_predicates,
+            execution_time_ms=execution_time_ms,
+            strategy_used=strategy_used
+        )
+    
+    def build_selectivity_histogram(
+        self,
+        layer: QgsVectorLayer,
+        field_name: str,
+        sample_size: int = 500
+    ) -> None:
+        """
+        Build selectivity histogram for a field.
+        
+        Args:
+            layer: Layer to sample
+            field_name: Field to analyze
+            sample_size: Number of features to sample
+        """
+        if not self._metrics:
+            return
+        
+        from qgis.core import QgsFeatureRequest
+        
+        field_idx = layer.fields().indexOf(field_name)
+        if field_idx < 0:
+            return
+        
+        # Sample values
+        request = QgsFeatureRequest()
+        request.setLimit(sample_size)
+        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setSubsetOfAttributes([field_idx])
+        
+        values = []
+        for feat in layer.getFeatures(request):
+            val = feat.attribute(field_idx)
+            if val is not None:
+                values.append(val)
+        
+        if values:
+            self._metrics.histograms.build_histogram(
+                layer_id=layer.id(),
+                field_name=field_name,
+                values=values
+            )
+    
+    def estimate_selectivity(
+        self,
+        layer: QgsVectorLayer,
+        field_name: str,
+        operator: str,
+        value: Any
+    ) -> float:
+        """
+        Estimate selectivity for a condition using histograms.
+        
+        Args:
+            layer: Layer to query
+            field_name: Field name
+            operator: Comparison operator
+            value: Comparison value
+            
+        Returns:
+            Estimated selectivity (0.0 to 1.0)
+        """
+        if not self._metrics:
+            return 0.5
+        
+        return self._metrics.histograms.estimate_selectivity(
+            layer_id=layer.id(),
+            field_name=field_name,
+            operator=operator,
+            value=value
+        )
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        Get optimization statistics.
+        
+        Returns:
+            Dictionary with optimization statistics
+        """
+        if not self._metrics:
+            return {
+                'metrics_available': False,
+                'parallel_available': self.enable_parallel,
+            }
+        
+        stats = self._metrics.get_statistics()
+        stats['metrics_available'] = True
+        stats['parallel_available'] = self.enable_parallel
+        stats['adaptive_thresholds_enabled'] = self.enable_adaptive_thresholds
+        
+        return stats
+    
+    def get_recent_sessions(self, count: int = 10) -> List[Dict[str, Any]]:
+        """Get recent optimization session summaries."""
+        if not self._metrics:
+            return []
+        return self._metrics.get_recent_sessions(count)
+    
+    def invalidate_layer_cache(self, layer_id: str) -> None:
+        """
+        Invalidate cached data for a layer.
+        
+        Call this when a layer's data changes.
+        
+        Args:
+            layer_id: Layer identifier
+        """
+        # Clear layer analyzer cache
+        LayerAnalyzer.clear_cache(layer_id)
+        
+        # Clear metrics cache
+        if self._metrics:
+            self._metrics.cache.invalidate_pattern(
+                lambda k: k.startswith(layer_id)
+            )
+    
+    def reset_adaptive_thresholds(self) -> None:
+        """Reset adaptive thresholds to defaults."""
+        if self._metrics:
+            self._metrics.threshold_manager.reset_to_defaults()
+
+
+def get_enhanced_optimizer(
+    enable_metrics: bool = True,
+    enable_parallel: bool = True,
+    enable_adaptive_thresholds: bool = True
+) -> EnhancedAutoOptimizer:
+    """
+    Factory function to get an enhanced auto-optimizer instance.
+    
+    Args:
+        enable_metrics: Enable metrics collection
+        enable_parallel: Enable parallel processing
+        enable_adaptive_thresholds: Enable adaptive threshold adjustment
+        
+    Returns:
+        Configured EnhancedAutoOptimizer instance
+    """
+    return EnhancedAutoOptimizer(
+        enable_metrics=enable_metrics,
+        enable_parallel=enable_parallel,
+        enable_adaptive_thresholds=enable_adaptive_thresholds
+    )
+
+
+# =============================================================================
+# Convenience Functions
+# =============================================================================
+
+def get_optimization_statistics() -> Dict[str, Any]:
+    """
+    Get global optimization statistics.
+    
+    Returns:
+        Dictionary with optimization statistics
+    """
+    if METRICS_AVAILABLE and get_metrics_collector:
+        return get_metrics_collector().get_statistics()
+    return {'metrics_available': False}
+
+
+def clear_optimization_cache() -> None:
+    """Clear all optimization caches."""
+    LayerAnalyzer.clear_cache()
+    
+    if METRICS_AVAILABLE and get_metrics_collector:
+        collector = get_metrics_collector()
+        collector.cache.clear()
+        collector.pattern_detector.clear_old_patterns(0)  # Clear all

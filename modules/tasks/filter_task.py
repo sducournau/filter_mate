@@ -2207,14 +2207,39 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all required geometries prepared successfully
         """
-        # Check if we need WKT for PostgreSQL simplified mode (few source features)
-        source_feature_count = self.source_layer.featureCount()
+        # CRITICAL FIX v2.7.3: Use SELECTED/FILTERED feature count, not total table count!
+        # When user selects 1 commune out of 930, we should use WKT mode (1 feature ≤ 50)
+        # NOT EXISTS subquery (which would require filtering 930 communes).
+        #
+        # Priority for source feature count:
+        # 1. task_features from task_parameters (selected features passed from main thread)
+        # 2. source_layer.featureCount() (respects subsetString but NOT manual selection)
+        task_features = self.task_parameters.get("task", {}).get("features", [])
+        if task_features and len(task_features) > 0:
+            source_feature_count = len(task_features)
+            logger.info(f"Using task_features count for WKT decision: {source_feature_count} selected features")
+            # DIAGNOSTIC: Also log to QGIS Message Panel
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"v2.7.3 FIX: Using {source_feature_count} SELECTED features for WKT decision (not {self.source_layer.featureCount()} total)",
+                "FilterMate", Qgis.Info
+            )
+        else:
+            source_feature_count = self.source_layer.featureCount()
+            logger.info(f"Using source_layer featureCount for WKT decision: {source_feature_count} total features")
+        
         postgresql_needs_wkt = (
             'postgresql' in provider_list and 
             POSTGRESQL_AVAILABLE and
             source_feature_count <= 50  # SIMPLE_WKT_THRESHOLD from PostgreSQL backend
         )
         
+        # DIAGNOSTIC: Log WKT decision
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"v2.7.3: postgresql_needs_wkt={postgresql_needs_wkt} (count={source_feature_count}, postgresql in list={'postgresql' in provider_list})",
+            "FilterMate", Qgis.Info
+        )
         if postgresql_needs_wkt:
             logger.info(f"PostgreSQL simplified mode: {source_feature_count} features ≤ 50")
             logger.info("  → Will prepare WKT geometry for direct ST_GeomFromText()")
@@ -2230,9 +2255,16 @@ class FilterEngineTask(QgsTask):
                     break
         
         # Prepare PostgreSQL source geometry
-        # CRITICAL FIX: Check BOTH source layer AND distant layers for PostgreSQL
-        # If source layer is PostgreSQL with connection, we MUST prepare postgresql_source_geom
-        # for EXISTS subqueries to work correctly
+        # CRITICAL FIX v2.7.2: Only prepare postgresql_source_geom if SOURCE layer is PostgreSQL
+        # Previously, this was also called when source layer is OGR but distant layers are PostgreSQL.
+        # This created invalid table references like "public"."commune"."geometrie" where
+        # "commune" is an OGR layer (GeoPackage/Shapefile) that doesn't exist in PostgreSQL!
+        # The result was that EXISTS subqueries referenced non-existent tables, causing
+        # filters to silently fail and return all features instead of filtered results.
+        #
+        # NEW BEHAVIOR:
+        # - Source is PostgreSQL + distant is PostgreSQL: Use postgresql_source_geom (EXISTS subquery)
+        # - Source is OGR + distant is PostgreSQL: Use WKT (spatialite_source_geom) with ST_GeomFromText
         has_postgresql_fallback_layers = False  # Track if any PostgreSQL layer uses OGR fallback
         
         if 'postgresql' in provider_list and POSTGRESQL_AVAILABLE:
@@ -2255,13 +2287,19 @@ class FilterEngineTask(QgsTask):
                         has_postgresql_fallback_layers = True
                         logger.info(f"  → Layer '{layer.name()}' is PostgreSQL with OGR fallback")
             
-            if source_is_postgresql_with_connection or has_distant_postgresql_with_connection:
+            # CRITICAL FIX v2.7.2: ONLY prepare postgresql_source_geom if SOURCE is PostgreSQL
+            # For OGR source + PostgreSQL distant, we will use WKT mode (spatialite_source_geom)
+            if source_is_postgresql_with_connection:
                 logger.info("Preparing PostgreSQL source geometry...")
-                if source_is_postgresql_with_connection:
-                    logger.info("  → Source layer is PostgreSQL with connection")
-                if has_distant_postgresql_with_connection:
-                    logger.info("  → Distant PostgreSQL layers with connection found")
+                logger.info("  → Source layer is PostgreSQL with connection")
                 self.prepare_postgresql_source_geom()
+            elif has_distant_postgresql_with_connection:
+                # Source is NOT PostgreSQL but distant layers ARE PostgreSQL
+                # Use WKT mode (ST_GeomFromText) instead of EXISTS subquery
+                logger.info("PostgreSQL distant layers detected but source is NOT PostgreSQL")
+                logger.info("  → Source layer provider: %s", self.param_source_provider_type)
+                logger.info("  → Will use WKT mode (ST_GeomFromText) for PostgreSQL filtering")
+                logger.info("  → Skipping prepare_postgresql_source_geom() to avoid invalid table references")
             else:
                 logger.warning("PostgreSQL in provider list but no layers have connection - will use OGR fallback")
                 # Ensure OGR geometry is prepared for PostgreSQL fallback
@@ -2279,6 +2317,12 @@ class FilterEngineTask(QgsTask):
         # Also needed for PostgreSQL simplified mode (few source features)
         # CRITICAL FIX: Also prepare for OGR layers that will use Spatialite backend (GeoPackage/SQLite)
         if 'spatialite' in provider_list or postgresql_needs_wkt or ogr_needs_spatialite_geom:
+            # DIAGNOSTIC v2.7.3: Log to QGIS Message Panel
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"v2.7.3: Preparing Spatialite/WKT geometry (postgresql_wkt={postgresql_needs_wkt})",
+                "FilterMate", Qgis.Info
+            )
             logger.info("Preparing Spatialite source geometry...")
             logger.info(f"  → Reason: spatialite={'spatialite' in provider_list}, "
                        f"postgresql_wkt={postgresql_needs_wkt}, ogr_spatialite={ogr_needs_spatialite_geom}")
@@ -2291,11 +2335,24 @@ class FilterEngineTask(QgsTask):
                     spatialite_success = True
                     wkt_preview = self.spatialite_source_geom[:150] if len(self.spatialite_source_geom) > 150 else self.spatialite_source_geom
                     logger.info(f"✓ Spatialite source geometry prepared: {len(self.spatialite_source_geom)} chars")
+                    # DIAGNOSTIC v2.7.3
+                    QgsMessageLog.logMessage(
+                        f"v2.7.3: WKT prepared OK ({len(self.spatialite_source_geom)} chars)",
+                        "FilterMate", Qgis.Info
+                    )
                     logger.info(f"  → WKT preview: {wkt_preview}...")
                 else:
                     logger.warning("Spatialite geometry preparation returned None")
+                    QgsMessageLog.logMessage(
+                        "v2.7.3: WARNING - Spatialite geometry preparation returned None!",
+                        "FilterMate", Qgis.Warning
+                    )
             except Exception as e:
                 logger.warning(f"Spatialite geometry preparation failed: {e}")
+                QgsMessageLog.logMessage(
+                    f"v2.7.3: ERROR - Spatialite geometry preparation failed: {e}",
+                    "FilterMate", Qgis.Critical
+                )
                 import traceback
                 logger.debug(f"Traceback: {traceback.format_exc()}")
             
@@ -3039,7 +3096,10 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  Using {len(task_features)} features from task_parameters (thread-safe)")
             
             # Validate features (filter out invalid/empty ones)
+            # v2.7.4: Improved thread-safety - copy geometry to local QgsGeometry object
+            # to prevent access violations when original feature becomes invalid
             valid_features = []
+            validation_errors = 0
             for i, f in enumerate(task_features):
                 try:
                     if f is None or f == "":
@@ -3057,11 +3117,31 @@ class FilterEngineTask(QgsTask):
                     elif f:
                         valid_features.append(f)
                 except Exception as e:
+                    validation_errors += 1
                     logger.warning(f"  Feature[{i}] validation error (thread-safety): {e}")
                     continue
             
             features = valid_features
             logger.info(f"  Valid features after filtering: {len(features)}")
+            
+            # v2.7.4: CRITICAL FIX - If ALL task_features failed validation but we had features,
+            # this is likely a thread-safety issue. DO NOT fall back to all features!
+            # Instead, log an error and use the source selection if available.
+            if len(features) == 0 and len(task_features) > 0 and validation_errors > 0:
+                logger.error(f"  ❌ ALL {len(task_features)} task_features failed validation ({validation_errors} errors)")
+                logger.error(f"  This is likely a thread-safety issue - features became invalid")
+                logger.error(f"  Will attempt to use source layer selection as fallback")
+                
+                # Try to get selected features directly from source layer
+                if self.source_layer and self.source_layer.selectedFeatureCount() > 0:
+                    try:
+                        features = list(self.source_layer.selectedFeatures())
+                        logger.info(f"  ✓ Recovered {len(features)} features from source layer selection")
+                    except Exception as e:
+                        logger.error(f"  ❌ Could not recover selection: {e}")
+                        # Don't fall back to all features - this would be wrong behavior
+                        # Instead, set features to empty and let the filter fail gracefully
+                        features = []
         elif has_subset and not has_task_features:
             # Fallback: use getFeatures() which respects subsetString
             logger.info(f"=== prepare_spatialite_source_geom (FILTERED MODE) ===")
@@ -5650,12 +5730,18 @@ class FilterEngineTask(QgsTask):
         
         # For PostgreSQL, provide WKT for small datasets (simpler expression)
         if backend.get_backend_name() == 'PostgreSQL':
-            # CRITICAL FIX v2.7.0: Use ogr_source_geom feature count when available
-            # The ogr_source_geom contains the ACTUAL filtered/selected features
-            # (e.g., 1 commune selected), not the original source layer count (e.g., 930 communes).
-            # This ensures use_simple_wkt is True when appropriate, enabling efficient
-            # WKT-based filtering instead of EXISTS subquery which requires PostgreSQL table reference.
-            if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
+            # CRITICAL FIX v2.7.3: Use SELECTED/FILTERED feature count, not total table count!
+            # Priority order:
+            # 1. task_features from task_parameters (selected features from main thread)
+            # 2. ogr_source_geom feature count (if available, contains filtered features)
+            # 3. source_layer.featureCount() (fallback - respects subset but NOT manual selection)
+            #
+            # This ensures use_simple_wkt is True for small selections (e.g., 1 commune out of 930)
+            task_features = self.task_parameters.get("task", {}).get("features", [])
+            if task_features and len(task_features) > 0:
+                source_feature_count = len(task_features)
+                logger.info(f"PostgreSQL: Using task_features count: {source_feature_count} selected features")
+            elif hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
                 if isinstance(self.ogr_source_geom, QgsVectorLayer):
                     source_feature_count = self.ogr_source_geom.featureCount()
                     logger.debug(f"PostgreSQL: Using ogr_source_geom feature count: {source_feature_count}")
@@ -5681,6 +5767,21 @@ class FilterEngineTask(QgsTask):
                     source_srid = 4326
                 
                 logger.debug(f"PostgreSQL simple mode: {source_feature_count} features, SRID={source_srid}")
+                # DIAGNOSTIC v2.7.3
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"v2.7.3: PostgreSQL will use WKT mode (count={source_feature_count}, wkt_len={len(source_wkt)}, srid={source_srid})",
+                    "FilterMate", Qgis.Info
+                )
+            else:
+                # DIAGNOSTIC v2.7.3: WKT not available
+                from qgis.core import QgsMessageLog, Qgis
+                has_attr = hasattr(self, 'spatialite_source_geom')
+                attr_val = getattr(self, 'spatialite_source_geom', None)
+                QgsMessageLog.logMessage(
+                    f"v2.7.3: WARNING - spatialite_source_geom NOT available! (has_attr={has_attr}, val={'None' if attr_val is None else 'empty' if not attr_val else len(attr_val)})",
+                    "FilterMate", Qgis.Warning
+                )
         
         # Phase 4: Check expression cache before building
         layer = layer_props.get('layer')
@@ -5701,13 +5802,18 @@ class FilterEngineTask(QgsTask):
                 source_filter_hash = hashlib.md5(source_filter.encode()).hexdigest()[:16]
                 logger.debug(f"  Cache: source_filter_hash={source_filter_hash} (filter length: {len(source_filter)})")
             
+            # v2.5.14: Include use_centroids in cache key to invalidate when centroid option changes
+            use_centroids_distant = self.param_use_centroids_distant_layers if hasattr(self, 'param_use_centroids_distant_layers') else False
+            use_centroids_source = self.param_use_centroids_source_layer if hasattr(self, 'param_use_centroids_source_layer') else False
             cache_key = self.expr_cache.get_cache_key(
                 layer_id=layer_id,
                 predicates=self.current_predicates,
                 buffer_value=buffer_value,
                 source_geometry_hash=source_hash,
                 provider_type=provider_type,
-                source_filter_hash=source_filter_hash  # v2.5.19: Include for refilter cache invalidation
+                source_filter_hash=source_filter_hash,  # v2.5.19: Include for refilter cache invalidation
+                use_centroids=use_centroids_distant,  # v2.5.14: Include centroid flag for distant layers
+                use_centroids_source=use_centroids_source  # v2.5.15: Include centroid flag for source layer
             )
             
             # Try to get cached expression
@@ -6564,22 +6670,47 @@ class FilterEngineTask(QgsTask):
         the requested geometry type is not available. This commonly happens
         when a backend is forced but the corresponding geometry wasn't prepared.
         
+        CRITICAL FIX v2.7.2: For PostgreSQL target layers, only use postgresql_source_geom
+        if the SOURCE layer is also PostgreSQL. When source is OGR (GeoPackage/Shapefile),
+        always use WKT (spatialite_source_geom) which works via ST_GeomFromText().
+        
         Args:
             layer_provider_type: Target layer provider type
         
         Returns:
             Source geometry (type depends on provider):
-            - PostgreSQL: SQL expression string
+            - PostgreSQL: SQL expression string (table ref if source is PG, WKT otherwise)
             - Spatialite: WKT string  
             - OGR: QgsVectorLayer
         """
         # PostgreSQL backend needs SQL expression
         if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
-            if hasattr(self, 'postgresql_source_geom') and self.postgresql_source_geom:
-                return self.postgresql_source_geom
+            # CRITICAL FIX v2.7.2: Only use postgresql_source_geom if source is also PostgreSQL
+            # When source is OGR and postgresql_source_geom was NOT prepared (per fix in
+            # _prepare_geometries_by_provider), we should use WKT mode.
+            # However, if postgresql_source_geom was somehow prepared with invalid data,
+            # we need to validate it first.
+            source_is_postgresql = (
+                hasattr(self, 'param_source_provider_type') and 
+                self.param_source_provider_type == PROVIDER_POSTGRES
+            )
+            
+            if source_is_postgresql:
+                # Source is PostgreSQL - use postgresql_source_geom (table reference for EXISTS)
+                if hasattr(self, 'postgresql_source_geom') and self.postgresql_source_geom:
+                    return self.postgresql_source_geom
+            else:
+                # Source is NOT PostgreSQL (OGR, Spatialite, etc.)
+                # Must use WKT mode - DO NOT use postgresql_source_geom even if set
+                # because it would contain invalid table references
+                logger.info(f"PostgreSQL target but source is {self.param_source_provider_type} - using WKT mode")
+            
             # Fallback: try WKT for PostgreSQL (works with ST_GeomFromText)
             if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom:
-                logger.warning(f"PostgreSQL source geom not available, using WKT fallback")
+                if not source_is_postgresql:
+                    logger.info(f"Using WKT (spatialite_source_geom) for PostgreSQL filtering")
+                else:
+                    logger.warning(f"PostgreSQL source geom not available, using WKT fallback")
                 return self.spatialite_source_geom
         
         # Spatialite backend needs WKT string
@@ -6732,12 +6863,15 @@ class FilterEngineTask(QgsTask):
                 # source_predicates is a list, not a dict
                 logger.info(f"  → Geometric predicates: {source_predicates}")
                 
+                # FIX v2.7.1: Use function name as key instead of indices
+                # Previously, using list(self.predicates).index(key) produced incorrect indices
+                # (0, 2, 4, 6...) because the predicates dict has both capitalized and lowercase
+                # entries (16 total). This caused Spatialite backend's index_to_name mapping to fail.
+                # Now we use the SQL function name directly as the key, which both backends handle correctly.
                 for key in source_predicates:
-                    index = None
                     if key in self.predicates:
-                        index = list(self.predicates).index(key)
-                        if index >= 0:
-                            self.current_predicates[str(index)] = self.predicates[key]
+                        func_name = self.predicates[key]
+                        self.current_predicates[func_name] = func_name
 
                 logger.info(f"  → Current predicates configured: {self.current_predicates}")
                 logger.info(f"\n🚀 Calling manage_distant_layers_geometric_filtering()...")
@@ -6780,13 +6914,40 @@ class FilterEngineTask(QgsTask):
                 logger.info("  → Only source layer filtered")
         else:
             # Log detailed reason why geometric filtering is skipped
+            logger.warning("=" * 60)
+            logger.warning("⚠️ DISTANT LAYERS FILTERING SKIPPED - DIAGNOSTIC")
+            logger.warning("=" * 60)
             if not has_geom_predicates:
-                logger.info("  → Geometric predicates not enabled (has_geometric_predicates=False)")
+                logger.warning("  ❌ has_geometric_predicates = FALSE")
+                logger.warning("     → Enable 'Geometric predicates' button in UI")
+            else:
+                logger.info("  ✓ has_geometric_predicates = True")
+            
             if not has_layers_to_filter and not has_layers_in_params:
-                logger.info("  → No layers to filter (has_layers_to_filter=False AND no layers in params)")
+                logger.warning("  ❌ No layers to filter:")
+                logger.warning(f"     - has_layers_to_filter = {has_layers_to_filter}")
+                logger.warning(f"     - has_layers_in_params = {has_layers_in_params}")
+                logger.warning("     → Select layers to filter in UI")
+            else:
+                logger.info(f"  ✓ has_layers_to_filter = {has_layers_to_filter}")
+                logger.info(f"  ✓ has_layers_in_params = {has_layers_in_params}")
+            
             if self.layers_count == 0:
-                logger.info("  → No layers organized for filtering (layers_count=0)")
-            logger.info("  → Only source layer filtered")
+                logger.warning("  ❌ layers_count = 0 (no layers organized)")
+                logger.warning("     → Check if selected layers exist in project")
+            else:
+                logger.info(f"  ✓ layers_count = {self.layers_count}")
+            
+            # Log filtering parameters for debugging
+            filtering_params = self.task_parameters.get("filtering", {})
+            logger.warning("  📋 Filtering parameters:")
+            logger.warning(f"     - has_geometric_predicates: {filtering_params.get('has_geometric_predicates', 'NOT SET')}")
+            logger.warning(f"     - geometric_predicates: {filtering_params.get('geometric_predicates', 'NOT SET')}")
+            logger.warning(f"     - has_layers_to_filter: {filtering_params.get('has_layers_to_filter', 'NOT SET')}")
+            logger.warning(f"     - layers_to_filter: {filtering_params.get('layers_to_filter', 'NOT SET')}")
+            
+            logger.warning("=" * 60)
+            logger.warning("  → Only source layer filtered")
 
         return result 
      

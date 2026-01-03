@@ -4764,7 +4764,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                                 "combine_operator":(("filtering", "has_combine_operator"), ("filtering", "source_layer_combine_operator"),("filtering", "other_layers_combine_operator")),
                                                 "buffer_type":(("filtering","has_buffer_type"),("filtering","buffer_type"),("filtering","buffer_segments")),
                                                 "buffer_value":(("filtering", "has_buffer_value"),("filtering","has_buffer_type"),("filtering", "buffer_value"),("filtering", "buffer_value_expression"),("filtering", "buffer_value_property")),
-                                                "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer_value"),("filtering","has_buffer_type"),("filtering","geometric_predicates"))
+                                                "geometric_predicates":(("filtering","has_geometric_predicates"),("filtering","has_buffer_value"),("filtering","has_buffer_type"),("filtering","geometric_predicates")),
+                                                "use_centroids_distant_layers":(("filtering","use_centroids_distant_layers"),),
+                                                "use_centroids_source_layer":(("filtering","use_centroids_source_layer"),)
                                                 }
         
         self.export_properties_tuples_dict =   {
@@ -8578,6 +8580,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             total_items = widget.count()
             
             logger.info(f"=== get_layers_to_filter DIAGNOSTIC ===")
+            logger.info(f"  Current layer (source): {self.current_layer.name()}")
             logger.info(f"  Total items in combobox: {total_items}")
             
             for i in range(total_items):
@@ -8585,16 +8588,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 check_state = widget.itemCheckState(i)
                 data = widget.itemData(i, Qt.UserRole)
                 
-                logger.debug(f"  Item {i}: '{item_text}' | checked={check_state == Qt.Checked} | data={data}")
+                # v2.7.4: Log ALL items (not just checked ones) to diagnose missing layers
+                is_checked = check_state == Qt.Checked
+                layer_id_preview = data.get('layer_id', 'N/A')[:8] if isinstance(data, dict) else str(data)[:8]
+                status = "✓ CHECKED" if is_checked else "✗ unchecked"
+                logger.info(f"  Item {i}: '{item_text}' | {status} | id={layer_id_preview}...")
                 
-                if check_state == Qt.Checked:
+                if is_checked:
                     if isinstance(data, dict) and "layer_id" in data:
                         checked_list_data.append(data["layer_id"])
-                        logger.info(f"  ✓ CHECKED: {item_text} -> layer_id={data['layer_id'][:8]}...")
                     elif isinstance(data, str):
                         # Backward compatibility with old format
                         checked_list_data.append(data)
-                        logger.info(f"  ✓ CHECKED (legacy): {item_text} -> {data[:8]}...")
             
             logger.info(f"  Total checked layers: {len(checked_list_data)}")
             logger.info(f"=== END get_layers_to_filter ===")
@@ -11018,17 +11023,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             feature_count = current_layer.featureCount() if current_layer else -1
             
             # Import optimization logic
-            from .modules.backends.factory import should_use_memory_optimization
+            from .modules.backends.factory import should_use_memory_optimization, get_small_dataset_config
             from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
             
-            # PostgreSQL layers
-            if provider_type == 'postgresql' and postgresql_usable:
-                # Check if small dataset optimization would be used
-                if current_layer and should_use_memory_optimization(current_layer, 'postgresql'):
-                    backend_type = 'ogr'  # Small PostgreSQL → OGR memory optimization
-                else:
-                    backend_type = 'postgresql'
-            elif provider_type == 'postgresql' and not postgresql_usable:
+            # Normalize provider type (QGIS uses 'postgres', we use 'postgresql')
+            normalized_provider = provider_type
+            if provider_type == 'postgres':
+                normalized_provider = 'postgresql'
+            
+            # PostgreSQL layers - check for both 'postgresql' and 'postgres'
+            is_postgresql = normalized_provider == 'postgresql'
+            
+            if is_postgresql and postgresql_usable:
+                # Small dataset optimization is DISABLED - always use PostgreSQL
+                backend_type = 'postgresql'
+            elif is_postgresql and not postgresql_usable:
                 backend_type = 'ogr_fallback'
             # Spatialite layers (native spatialite provider)
             elif provider_type == 'spatialite':

@@ -87,7 +87,13 @@ try:
         OptimizationRecommendation,
         LayerAnalysis,
         recommend_optimizations,
-        get_auto_optimizer
+        get_auto_optimizer,
+        # v2.8.0: Enhanced optimizer
+        EnhancedAutoOptimizer,
+        get_enhanced_optimizer,
+        get_optimization_statistics,
+        clear_optimization_cache,
+        ENHANCED_OPTIMIZER_AVAILABLE,
     )
     from .factory import (
         get_optimization_plan,
@@ -109,6 +115,49 @@ except ImportError:
     should_use_centroids = None
     analyze_layer_for_optimization = None
     AUTO_OPTIMIZER_AVAILABLE = False
+    # v2.8.0
+    EnhancedAutoOptimizer = None
+    get_enhanced_optimizer = None
+    get_optimization_statistics = None
+    clear_optimization_cache = None
+    ENHANCED_OPTIMIZER_AVAILABLE = False
+
+# v2.8.0: Optimizer metrics and parallel processing
+try:
+    from .optimizer_metrics import (
+        OptimizationMetricsCollector,
+        get_metrics_collector,
+        LRUCache,
+        QueryPatternDetector,
+        AdaptiveThresholdManager,
+        SelectivityHistogram,
+        OptimizationSession,
+    )
+    METRICS_AVAILABLE = True
+except ImportError:
+    OptimizationMetricsCollector = None
+    get_metrics_collector = None
+    LRUCache = None
+    QueryPatternDetector = None
+    AdaptiveThresholdManager = None
+    SelectivityHistogram = None
+    OptimizationSession = None
+    METRICS_AVAILABLE = False
+
+try:
+    from .parallel_processor import (
+        ParallelChunkProcessor,
+        get_parallel_processor,
+        should_use_parallel_processing,
+        PARALLEL_AVAILABLE,
+        ParallelProcessingStats,
+    )
+except ImportError:
+    ParallelChunkProcessor = None
+    get_parallel_processor = None
+    should_use_parallel_processing = None
+    PARALLEL_AVAILABLE = False
+    ParallelProcessingStats = None
 
 __all__ = [
     # Core backends
@@ -149,4 +198,25 @@ __all__ = [
     'should_use_centroids',
     'analyze_layer_for_optimization',
     'AUTO_OPTIMIZER_AVAILABLE',
+    # v2.8.0 Enhanced Optimizer
+    'EnhancedAutoOptimizer',
+    'get_enhanced_optimizer',
+    'get_optimization_statistics',
+    'clear_optimization_cache',
+    'ENHANCED_OPTIMIZER_AVAILABLE',
+    # v2.8.0 Metrics
+    'OptimizationMetricsCollector',
+    'get_metrics_collector',
+    'LRUCache',
+    'QueryPatternDetector',
+    'AdaptiveThresholdManager',
+    'SelectivityHistogram',
+    'OptimizationSession',
+    'METRICS_AVAILABLE',
+    # v2.8.0 Parallel Processing
+    'ParallelChunkProcessor',
+    'get_parallel_processor',
+    'should_use_parallel_processing',
+    'PARALLEL_AVAILABLE',
+    'ParallelProcessingStats',
 ]

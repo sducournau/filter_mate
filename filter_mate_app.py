@@ -2476,6 +2476,20 @@ class FilterMateApp:
         logger.info(f"  Raw layers_to_filter list (user-selected): {raw_layers_list}")
         logger.info(f"  Number of user-selected layers: {len(raw_layers_list)}")
         
+        # DIAGNOSTIC v2.7.4: List ALL available layers vs selected ones to identify missing layers
+        all_available_layers = []
+        for key in list(self.PROJECT_LAYERS.keys()):
+            if key != current_layer.id():  # Exclude source layer
+                layer_obj = self.PROJECT.mapLayer(key)
+                if layer_obj:
+                    all_available_layers.append((layer_obj.name(), key[:8]))
+        
+        logger.info(f"  All available layers for filtering ({len(all_available_layers)}):")
+        for name, key_prefix in all_available_layers:
+            is_selected = any(k.startswith(key_prefix[:8]) for k in raw_layers_list)
+            status = "✓ SELECTED" if is_selected else "✗ NOT SELECTED"
+            logger.info(f"    - {name} ({key_prefix}...) → {status}")
+        
         # FIX v2.5.15: Disabled auto-inclusion of GeoPackage layers
         # User selection is now strictly respected - only explicitly checked layers are filtered
         # Previously, all layers from the same GeoPackage were auto-included, ignoring user selection
@@ -2933,17 +2947,77 @@ class FilterMateApp:
             else:
                 self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = False
 
+            # CRITICAL FIX v2.5.x: Synchronize has_geometric_predicates button state
+            # The button clicked signal may not have updated PROJECT_LAYERS yet
+            if self.dockwidget and hasattr(self.dockwidget, 'pushButton_checkable_filtering_geometric_predicates'):
+                current_has_geom_predicates = self.dockwidget.pushButton_checkable_filtering_geometric_predicates.isChecked()
+                stored_has_geom_predicates = task_parameters.get("filtering", {}).get("has_geometric_predicates", False)
+                if current_has_geom_predicates != stored_has_geom_predicates:
+                    logger.info(f"SYNC has_geometric_predicates: button={current_has_geom_predicates}, stored={stored_has_geom_predicates} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["has_geometric_predicates"] = current_has_geom_predicates
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["has_geometric_predicates"] = current_has_geom_predicates
+
+            # CRITICAL FIX v2.5.x: Synchronize geometric_predicates list from UI
+            # The listWidget selection may not have updated PROJECT_LAYERS yet
+            if self.dockwidget and hasattr(self.dockwidget, 'listWidget_filtering_geometric_predicate'):
+                # Get selected predicates from list widget
+                selected_items = self.dockwidget.listWidget_filtering_geometric_predicate.selectedItems()
+                current_predicates = [item.text() for item in selected_items]
+                stored_predicates = task_parameters.get("filtering", {}).get("geometric_predicates", [])
+                if set(current_predicates) != set(stored_predicates):
+                    logger.info(f"SYNC geometric_predicates: listWidget={current_predicates}, stored={stored_predicates} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["geometric_predicates"] = current_predicates
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["geometric_predicates"] = current_predicates
+
+            # CRITICAL FIX v2.5.x: Synchronize has_layers_to_filter button state
+            if self.dockwidget and hasattr(self.dockwidget, 'pushButton_checkable_filtering_layers_to_filter'):
+                current_has_layers = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
+                stored_has_layers = task_parameters.get("filtering", {}).get("has_layers_to_filter", False)
+                if current_has_layers != stored_has_layers:
+                    logger.info(f"SYNC has_layers_to_filter: button={current_has_layers}, stored={stored_has_layers} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["has_layers_to_filter"] = current_has_layers
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["has_layers_to_filter"] = current_has_layers
+
+            # CRITICAL FIX v2.5.x: Synchronize layers_to_filter list from UI
+            # The combobox checked items may not have updated PROJECT_LAYERS yet
+            if self.dockwidget and hasattr(self.dockwidget, 'get_layers_to_filter'):
+                current_layers_to_filter = self.dockwidget.get_layers_to_filter()
+                stored_layers_to_filter = task_parameters.get("filtering", {}).get("layers_to_filter", [])
+                if set(current_layers_to_filter) != set(stored_layers_to_filter):
+                    logger.info(f"SYNC layers_to_filter: combobox={len(current_layers_to_filter)} layers, stored={len(stored_layers_to_filter)} layers → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["layers_to_filter"] = current_layers_to_filter
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
+
             features, expression = self.dockwidget.get_current_features()
 
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
                 
-                # Log filtering state
+                # Log filtering state - ENHANCED DIAGNOSTIC
                 filtering_props = self.PROJECT_LAYERS[current_layer.id()]["filtering"]
-                logger.debug(f"get_task_parameters - Filtering state for {current_layer.name()}: "
-                           f"has_layers_to_filter={filtering_props.get('has_layers_to_filter')}, "
-                           f"layers_count={len(layers_to_filter)}")
+                logger.info(f"=" * 60)
+                logger.info(f"🔍 GEOMETRIC FILTERING DIAGNOSTIC - get_task_parameters")
+                logger.info(f"=" * 60)
+                logger.info(f"  Source layer: {current_layer.name()}")
+                logger.info(f"  has_geometric_predicates: {filtering_props.get('has_geometric_predicates', 'NOT SET')}")
+                logger.info(f"  geometric_predicates: {filtering_props.get('geometric_predicates', [])}")
+                logger.info(f"  has_layers_to_filter: {filtering_props.get('has_layers_to_filter', 'NOT SET')}")
+                logger.info(f"  layers_to_filter (from filtering): {filtering_props.get('layers_to_filter', [])}")
+                logger.info(f"  layers_to_filter (validated): {len(layers_to_filter)} layers")
+                for i, l in enumerate(layers_to_filter[:5]):  # Show first 5
+                    logger.info(f"    {i+1}. {l.get('layer_name', 'unknown')}")
+                if len(layers_to_filter) > 5:
+                    logger.info(f"    ... and {len(layers_to_filter) - 5} more")
+                logger.info(f"=" * 60)
                 
                 # Build common task parameters
                 # Note: unfilter no longer needs history_manager (just clears filters)
