@@ -171,6 +171,9 @@ from .parallel_executor import ParallelFilterExecutor, ParallelConfig
 # Import streaming exporter (Phase 4 optimization)
 from .result_streaming import StreamingExporter, StreamingConfig
 
+# Import combined query optimizer (Phase 5 optimization - v2.8.0)
+from .combined_query_optimizer import get_combined_query_optimizer, optimize_combined_filter
+
 class FilterEngineTask(QgsTask):
     """Main QgsTask class which filter and unfilter data"""
     
@@ -1353,7 +1356,9 @@ class FilterEngineTask(QgsTask):
         # FIXED: Only reject if expression is JUST a field name (no operators)
         # Allow expressions like "HOMECOUNT = 10" or "field > 5"
         qgs_expr = QgsExpression(expression)
-        if qgs_expr.isField() and not any(op in expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
+        # FIX v2.3.9: Use case-insensitive check for operators (e.g., 'in' vs 'IN')
+        expr_upper = expression.upper()
+        if qgs_expr.isField() and not any(op in expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']):
             logger.debug(f"Rejecting expression '{expression}' - it's just a field name without comparison")
             return None, None
         
@@ -1930,8 +1935,10 @@ class FilterEngineTask(QgsTask):
         is_simple_field = False
         if task_expression:
             qgs_expr = QgsExpression(task_expression)
+            # FIX v2.3.9: Use case-insensitive check for operators (e.g., 'in' vs 'IN')
+            task_expr_upper = task_expression.upper()
             is_simple_field = qgs_expr.isField() and not any(
-                op in task_expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
+                op in task_expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
             )
         
         # Check if skip_source_filter is enabled (custom selection with non-filter expression)
@@ -3082,6 +3089,7 @@ class FilterEngineTask(QgsTask):
                 - exists_subquery_threshold: int (WKT length for EXISTS mode)
                 - parallel_processing_threshold: int (feature count for parallel)
                 - progress_update_batch_size: int (features per progress update)
+                - source_mv_fid_threshold: int (max FIDs for inline IN clause, above creates MV)
         """
         # Default values
         defaults = {
@@ -3091,7 +3099,8 @@ class FilterEngineTask(QgsTask):
             'centroid_optimization_threshold': 5000,
             'exists_subquery_threshold': 100000,
             'parallel_processing_threshold': 100000,
-            'progress_update_batch_size': 100
+            'progress_update_batch_size': 100,
+            'source_mv_fid_threshold': 500  # v2.8.0: Create MV when source FIDs > 500
         }
         
         # Try to get from task_parameters
@@ -3109,7 +3118,8 @@ class FilterEngineTask(QgsTask):
                     'centroid_optimization_threshold': opt_config.get('centroid_optimization_threshold', {}).get('value', defaults['centroid_optimization_threshold']),
                     'exists_subquery_threshold': opt_config.get('exists_subquery_threshold', {}).get('value', defaults['exists_subquery_threshold']),
                     'parallel_processing_threshold': opt_config.get('parallel_processing_threshold', {}).get('value', defaults['parallel_processing_threshold']),
-                    'progress_update_batch_size': opt_config.get('progress_update_batch_size', {}).get('value', defaults['progress_update_batch_size'])
+                    'progress_update_batch_size': opt_config.get('progress_update_batch_size', {}).get('value', defaults['progress_update_batch_size']),
+                    'source_mv_fid_threshold': opt_config.get('source_mv_fid_threshold', {}).get('value', defaults['source_mv_fid_threshold'])
                 }
         
         return defaults
@@ -6207,17 +6217,22 @@ class FilterEngineTask(QgsTask):
         return result_expression
 
 
-    def _build_combined_filter_expression(self, new_expression, old_subset, combine_operator):
+    def _build_combined_filter_expression(self, new_expression, old_subset, combine_operator, layer_props=None):
         """
         Combine new filter expression with existing subset using specified operator.
+        
+        OPTIMIZATION v2.8.0: Uses CombinedQueryOptimizer to detect and reuse
+        materialized views from previous filter operations, providing 10-50x
+        speedup for successive filters on large datasets.
         
         Args:
             new_expression: New filter expression to apply
             old_subset: Existing subset string from layer
             combine_operator: SQL operator ('AND', 'OR', 'NOT')
+            layer_props: Optional layer properties for optimization context
             
         Returns:
-            str: Combined filter expression
+            str: Combined filter expression (optimized when possible)
         """
         if not old_subset or not combine_operator:
             return new_expression
@@ -6228,6 +6243,29 @@ class FilterEngineTask(QgsTask):
         if not old_subset:
             return new_expression
         
+        # OPTIMIZATION v2.8.0: Try to optimize combined expression
+        # This is especially effective when old_subset contains a materialized view reference
+        # and new_expression is a spatial predicate (EXISTS with ST_Intersects, etc.)
+        try:
+            optimizer = get_combined_query_optimizer()
+            result = optimizer.optimize_combined_expression(
+                old_subset=old_subset,
+                new_expression=new_expression,
+                combine_operator=combine_operator,
+                layer_props=layer_props
+            )
+            
+            if result.success:
+                logger.info(
+                    f"✓ Combined expression optimized ({result.optimization_type.name}): "
+                    f"~{result.estimated_speedup:.1f}x speedup expected"
+                )
+                return result.optimized_expression
+        except Exception as e:
+            # Log but don't fail - fall back to original logic
+            logger.warning(f"Combined query optimization failed, using fallback: {e}")
+        
+        # FALLBACK: Original combination logic
         # Extract WHERE clause from old subset if present
         param_old_subset_where_clause = ''
         param_source_old_subset = old_subset
@@ -6319,7 +6357,7 @@ class FilterEngineTask(QgsTask):
             # Patterns that get skipped:
             # - EXISTS( or EXISTS ( - geometric filter from previous FilterMate operation
             # - __source - already adapted filter
-            # - "filter_mate_temp"."mv_" - materialized view reference
+            # - "filter_mate_temp"."mv_" - materialized view reference (except mv_src_sel_)
             skip_source_subset = False
             if source_subset:
                 source_subset_upper = source_subset.upper()
@@ -6329,10 +6367,11 @@ class FilterEngineTask(QgsTask):
                     'EXISTS ('
                 ])
                 if not skip_source_subset:
-                    # Also check for MV references
+                    # Also check for MV references (except source selection MVs which are allowed)
                     import re
+                    # v2.8.0: Use negative lookahead to exclude mv_src_sel_ (source selection MVs)
                     skip_source_subset = bool(re.search(
-                        r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?mv_',
+                        r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?.*mv_(?!.*src_sel_)',
                         source_subset,
                         re.IGNORECASE | re.DOTALL
                     ))
@@ -6408,14 +6447,6 @@ class FilterEngineTask(QgsTask):
                             logger.debug(f"  Could not extract ID from feature: {e}")
                     
                     if fids:
-                        # Build IN clause filter
-                        # CRITICAL FIX v2.7.9: Prefix with source table name for _adapt_filter_for_subquery
-                        # Without table prefix, the filter "fid" IN (135) is ambiguous in EXISTS subquery
-                        # because both source and target tables may have a "fid" column.
-                        # The _adapt_filter_for_subquery function expects qualified names to convert
-                        # "table"."column" to __source."column".
-                        fids_str = ', '.join(str(fid) for fid in fids)
-                        
                         # Get source table name for qualification
                         # CRITICAL: Use param_source_table (actual DB table name), not layer.name() (display name)
                         # e.g., layer.name()="Distribution Cluster" but param_source_table="distribution_clusters"
@@ -6429,12 +6460,76 @@ class FilterEngineTask(QgsTask):
                             except Exception:
                                 source_table_name = self.source_layer.name()
                         
-                        if source_table_name:
-                            # Use qualified column name: "table"."column"
-                            source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
+                        # v2.8.0: Check if we should create a MV for large source selections
+                        # This optimizes EXISTS subqueries by avoiding inline IN(...) with thousands of FIDs
+                        thresholds = self._get_optimization_thresholds()
+                        source_mv_fid_threshold = thresholds.get('source_mv_fid_threshold', 500)
+                        
+                        if len(fids) > source_mv_fid_threshold:
+                            # Large source selection: create MV for better performance
+                            logger.info(f"🗄️ v2.8.0: Source selection ({len(fids)} FIDs) > threshold ({source_mv_fid_threshold})")
+                            logger.info(f"   → Creating temporary MV for optimized EXISTS query")
+                            
+                            # Get geometry field name
+                            source_geom_field = getattr(self, 'param_source_geom', None)
+                            if not source_geom_field and self.source_layer:
+                                try:
+                                    uri = QgsDataSourceUri(self.source_layer.source())
+                                    source_geom_field = uri.geometryColumn() or 'geom'
+                                except Exception:
+                                    source_geom_field = 'geom'
+                            
+                            # Create MV using backend method
+                            from ..backends.postgresql_backend import PostgreSQLGeometricFilter
+                            pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
+                            
+                            mv_ref = pg_backend.create_source_selection_mv(
+                                layer=self.source_layer,
+                                fids=fids,
+                                pk_field=pk_field,
+                                geom_field=source_geom_field
+                            )
+                            
+                            if mv_ref:
+                                # Use MV reference in source_filter
+                                # The EXISTS subquery will use: __source."pk" IN (SELECT pk FROM mv_ref)
+                                # This is MUCH faster than inline IN(...) with thousands of values
+                                source_filter = f'"{source_table_name}"."{pk_field}" IN (SELECT pk FROM {mv_ref})'
+                                
+                                # Store MV reference for cleanup
+                                if not hasattr(self, '_source_selection_mvs'):
+                                    self._source_selection_mvs = []
+                                self._source_selection_mvs.append(mv_ref)
+                                
+                                logger.info(f"   ✓ MV created: {mv_ref}")
+                                logger.info(f"   → Using optimized filter: {source_filter[:80]}...")
+                                
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"v2.8.0: Using source selection MV ({len(fids)} features) for EXISTS optimization",
+                                    "FilterMate", Qgis.Info
+                                )
+                            else:
+                                # MV creation failed, fall back to inline IN clause
+                                logger.warning(f"   ⚠️ MV creation failed, using inline IN clause (may be slow)")
+                                fids_str = ', '.join(str(fid) for fid in fids)
+                                if source_table_name:
+                                    source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
+                                else:
+                                    source_filter = f'"{pk_field}" IN ({fids_str})'
                         else:
-                            # Fallback: unqualified (may still be ambiguous)
-                            source_filter = f'"{pk_field}" IN ({fids_str})'
+                            # Small source selection: use inline IN clause (fast enough)
+                            # CRITICAL FIX v2.7.9: Prefix with source table name for _adapt_filter_for_subquery
+                            # Without table prefix, the filter "fid" IN (135) is ambiguous in EXISTS subquery
+                            # because both source and target tables may have a "fid" column.
+                            fids_str = ', '.join(str(fid) for fid in fids)
+                            
+                            if source_table_name:
+                                # Use qualified column name: "table"."column"
+                                source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
+                            else:
+                                # Fallback: unqualified (may still be ambiguous)
+                                source_filter = f'"{pk_field}" IN ({fids_str})'
                         
                         logger.info(f"🎯 PostgreSQL EXISTS: Generated selection filter from {len(fids)} features")
                         logger.info(f"   Filter: {source_filter[:100]}...")

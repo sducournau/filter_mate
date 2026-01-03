@@ -1247,10 +1247,15 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         # Format: "fid" IN (SELECT ... FROM "filter_mate_temp"."mv_...")
                         # These are from previous multi-step geometric filters and cannot be adapted
                         # because they reference temporary materialized views, not the source table
+                        #
+                        # v2.8.0 EXCEPTION: Do NOT skip source selection MVs (mv_src_sel_)
+                        # These are created by create_source_selection_mv() specifically for this filter
+                        # and ARE designed to be used in EXISTS subqueries
                         if not skip_filter:
                             import re
+                            # Check for MV reference that is NOT a source selection MV
                             has_mv_filter = bool(re.search(
-                                r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?mv_',
+                                r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?mv_(?!src_sel_)',
                                 source_filter,
                                 re.IGNORECASE | re.DOTALL
                             ))
@@ -1259,11 +1264,22 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 self.log_warning(f"  ⚠️ Source filter contains FilterMate MV reference (mv_) - SKIPPING")
                                 self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
                                 self.log_warning(f"  → Reason: MV references cannot be adapted for subquery")
+                            else:
+                                # v2.8.0: Check if it's a source selection MV (keep this)
+                                has_src_sel_mv = bool(re.search(
+                                    r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?.*mv_.*src_sel_',
+                                    source_filter,
+                                    re.IGNORECASE | re.DOTALL
+                                ))
+                                if has_src_sel_mv:
+                                    self.log_info(f"  ✓ v2.8.0: Source filter uses source selection MV - KEEPING")
                         
                         # CRITICAL FIX v2.5.20: Also detect external table references
                         # If source filter contains references to tables OTHER than the source table,
                         # these cannot be adapted and would cause "missing FROM-clause entry" errors.
                         # Example: filter with "commune"."fid" when source table is "troncon_de_route"
+                        #
+                        # v2.8.0 EXCEPTION: filter_mate_temp schema is allowed (for source selection MVs)
                         if not skip_filter:
                             # Pattern to find ANY table references in the filter: "table"."column" or "schema"."table"."column"
                             external_table_pattern = re.compile(r'"([^"]+)"\s*\.\s*"([^"]+)"')
@@ -1272,6 +1288,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                             for match in matches:
                                 # match is (schema_or_table, table_or_column) or (table, column)
                                 potential_table = match[0]
+                                
+                                # v2.8.0: Skip filter_mate_temp (allowed for source selection MVs)
+                                if potential_table.lower() == 'filter_mate_temp':
+                                    continue
                                 
                                 # Check if this reference is NOT to the source table
                                 # It could be: "schema"."table" or "table"."column"
@@ -2622,6 +2642,143 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             self.log_info("Falling back to direct filter method")
             return self._apply_direct(layer, expression)
+    
+    def create_source_selection_mv(
+        self, 
+        layer: QgsVectorLayer, 
+        fids: list, 
+        pk_field: str,
+        geom_field: str
+    ) -> Optional[str]:
+        """
+        Create a temporary materialized view for selected source features.
+        
+        This optimization is used when the number of selected source features exceeds
+        the source_mv_fid_threshold. Instead of including thousands of FIDs in an 
+        inline IN(...) clause (which is slow for EXISTS subqueries), we create a 
+        small indexed MV and use it in the EXISTS subquery.
+        
+        Performance benefits:
+        - EXISTS subquery uses spatial index on MV instead of scanning IN(...) list
+        - PostgreSQL can use hash/merge joins between target and source MV
+        - Dramatically faster for large source selections (>500 features)
+        
+        Args:
+            layer: Source QgsVectorLayer (PostgreSQL)
+            fids: List of feature IDs to include in MV
+            pk_field: Primary key field name
+            geom_field: Geometry field name
+            
+        Returns:
+            Full MV reference string (e.g., '"filter_mate_temp"."mv_src_sel_abc123"')
+            or None if creation failed
+            
+        Note:
+            The MV is cleaned up automatically by cleanup_materialized_views()
+        """
+        import uuid
+        import time
+        
+        try:
+            conn, source_uri = get_datasource_connexion_from_layer(layer)
+            if not conn:
+                self.log_warning("Cannot get PostgreSQL connection for source selection MV")
+                return None
+            
+            cursor = conn.cursor()
+            source_schema = source_uri.schema() or "public"
+            source_table = source_uri.table()
+            
+            # Generate unique MV name with prefix for identification
+            mv_suffix = uuid.uuid4().hex[:8]
+            mv_name = f"{self.mv_prefix}src_sel_{mv_suffix}"
+            
+            # Use filter_mate_temp schema (same as other FilterMate MVs)
+            mv_schema = "filter_mate_temp"
+            full_mv_name = f'"{mv_schema}"."{mv_name}"'
+            
+            self.log_info(f"🗄️ v2.8.0: Creating source selection MV for {len(fids)} features")
+            self.log_info(f"   MV: {full_mv_name}")
+            
+            # Ensure schema exists
+            try:
+                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{mv_schema}";')
+                conn.commit()
+            except Exception as schema_err:
+                self.log_debug(f"Schema creation skipped (may already exist): {schema_err}")
+                conn.rollback()
+            
+            # Build FIDs string for IN clause
+            fids_str = ', '.join(str(fid) for fid in fids)
+            
+            # Drop existing MV if any (unlikely but safe)
+            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS {full_mv_name} CASCADE;'
+            
+            # Create lightweight MV with only pk + geometry
+            # UNLOGGED for better performance (data is transient anyway)
+            sql_create = f'''
+                CREATE MATERIALIZED VIEW {full_mv_name} AS
+                SELECT 
+                    "{pk_field}" as pk,
+                    "{geom_field}" as geom
+                FROM "{source_schema}"."{source_table}"
+                WHERE "{pk_field}" IN ({fids_str})
+                WITH DATA;
+            '''
+            
+            # Create spatial index for fast spatial joins
+            index_name = f"{mv_name}_gist_idx"
+            sql_index = f'''
+                CREATE INDEX "{index_name}" ON {full_mv_name} 
+                USING GIST ("geom");
+            '''
+            
+            # Execute commands
+            start_time = time.time()
+            
+            cursor.execute(sql_drop)
+            conn.commit()
+            
+            cursor.execute(sql_create)
+            conn.commit()
+            
+            cursor.execute(sql_index)
+            conn.commit()
+            
+            # ANALYZE for query optimizer
+            cursor.execute(f'ANALYZE {full_mv_name};')
+            conn.commit()
+            
+            elapsed = time.time() - start_time
+            
+            cursor.close()
+            conn.close()
+            
+            self.log_info(f"   ✓ MV created and indexed in {elapsed:.2f}s")
+            
+            # Log to QGIS Message Panel for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"v2.8.0: Created source selection MV ({len(fids)} features) in {elapsed:.2f}s",
+                "FilterMate", Qgis.Info
+            )
+            
+            return full_mv_name
+            
+        except Exception as e:
+            self.log_error(f"Error creating source selection MV: {str(e)}")
+            import traceback
+            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            
+            # Cleanup on error
+            try:
+                if 'conn' in locals() and conn:
+                    conn.rollback()
+                    conn.close()
+            except Exception:
+                pass
+            
+            return None
     
     def cleanup_materialized_views(self, layer: QgsVectorLayer) -> bool:
         """

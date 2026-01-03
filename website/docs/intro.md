@@ -7,27 +7,57 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.6.6 - Fix: Spatialite Filtering Freeze
+## 🎉 What's New in v2.8.0 - Enhanced Auto-Optimization System
 
-This release fixes a critical bug that caused QGIS to freeze when filtering with Spatialite/GeoPackage backends.
+This major release introduces an **Enhanced Auto-Optimization System** that significantly improves filtering performance through intelligent optimization strategies.
 
-### 🐛 Critical Fixes
+### 🚀 New Features
 
-| Issue                            | Solution                                                 |
-| -------------------------------- | -------------------------------------------------------- |
-| **Spatialite/GeoPackage Freeze** | Removed `reloadData()` calls for OGR/Spatialite layers   |
-| **UI Thread Blocking**           | Only PostgreSQL uses `reloadData()` for MV-based filters |
-| **Improved Responsiveness**      | Better UI reactivity for local data sources              |
+| Feature                            | Description                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| **Performance Metrics Collection** | Track and analyze optimization effectiveness across sessions             |
+| **Query Pattern Detection**        | Identify recurring queries and automatically pre-optimize                |
+| **Adaptive Thresholds**            | Automatically tune optimization thresholds based on observed performance |
+| **Parallel Processing**            | Multi-threaded spatial operations for large datasets                     |
+| **LRU Caching**                    | Intelligent caching with automatic eviction and TTL support              |
+| **Selectivity Histograms**         | Better selectivity estimation using sampled data                         |
 
-### 🔧 Technical Changes
+### 📊 Performance Improvements
 
-| Change                    | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| **reloadData() Scope**    | Reserved exclusively for PostgreSQL MV operations      |
-| **OGR/Spatialite Layers** | No longer call `reloadData()` after filtering          |
-| **Thread Safety**         | Prevents main thread blocking on local file operations |
+| Dataset Size | Sequential | Parallel (4 workers) | Speedup |
+| ------------ | ---------- | -------------------- | ------- |
+| 500,000      | 28s        | 14s                  | 2.0x    |
+| 1,000,000    | 62s        | 28s                  | 2.2x    |
+
+| Scenario           | Without Cache | With Cache (80% hit) | Improvement |
+| ------------------ | ------------- | -------------------- | ----------- |
+| Layer analysis     | 50ms          | 10ms                 | 5x          |
+| Strategy selection | 30ms          | 5ms                  | 6x          |
+
+### 🔧 New Configuration
+
+New `v2.8.0_enhanced` section in config.json:
+
+- `enable_metrics`: Track optimization effectiveness
+- `enable_parallel_processing`: Multi-threaded spatial ops
+- `enable_adaptive_thresholds`: Auto-tune thresholds
+- `parallel_workers`: Number of parallel workers (default: 4)
+- `cache_max_size`: LRU cache size (default: 200)
+- `cache_ttl_seconds`: Cache TTL in seconds (default: 600)
 
 ### Previous Releases
+
+## 🎯 v2.7.14 - WKT Coordinate Precision Optimization
+
+- **PostgreSQL refiltering with negative buffer** - Fixed (returns ALL features → correct subset)
+- **WKT coordinate precision** optimized by CRS (60-70% smaller for metric CRS)
+- **Aggressive WKT simplification** with Convex Hull/Bounding Box fallbacks
+
+## 🎯 v2.6.6 - Fix: Spatialite Filtering Freeze
+
+- **Spatialite/GeoPackage Freeze** - Removed `reloadData()` calls for OGR/Spatialite layers
+- **UI Thread Blocking** - Only PostgreSQL uses `reloadData()` for MV-based filters
+- **Improved Responsiveness** - Better UI reactivity for local data sources
 
 ## 🎯 v2.6.5 - UI Freeze Prevention for Large Layers
 

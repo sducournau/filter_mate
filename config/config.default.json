@@ -442,6 +442,12 @@
           "max": 1000000,
           "description": "WKT length (chars) above which EXISTS subquery mode is used instead of inline WKT"
         },
+        "source_mv_fid_threshold": {
+          "value": 500,
+          "min": 50,
+          "max": 5000,
+          "description": "Maximum number of source FIDs to include inline in EXISTS query. Above this threshold, a temporary materialized view is created for better performance (v2.8.0 optimization for large source selections)"
+        },
         "parallel_processing_threshold": {
           "value": 100000,
           "min": 10000,

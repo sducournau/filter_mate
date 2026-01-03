@@ -51,6 +51,7 @@ from .modules.appUtils import (
     safe_set_subset_string,
     detect_layer_provider_type,
     cleanup_corrupted_layer_filters,
+    validate_and_cleanup_postgres_layers,  # v2.8.1: Orphaned MV cleanup on project load
 )
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
@@ -259,6 +260,17 @@ class FilterMateApp:
         if not filtered and not postgres_pending:
             logger.info("FilterMate: Ignoring layersAdded (no usable layers)")
             return
+        
+        # v2.8.1: Validate PostgreSQL layers for orphaned MV references BEFORE adding them
+        # This fixes "relation does not exist" errors when layers with stale filters are added
+        postgres_to_validate = [l for l in filtered if l.providerType() == 'postgres']
+        if postgres_to_validate:
+            try:
+                cleaned = validate_and_cleanup_postgres_layers(postgres_to_validate)
+                if cleaned:
+                    logger.info(f"Cleared orphaned MV references from {len(cleaned)} layer(s) during add")
+            except Exception as e:
+                logger.debug(f"Error validating PostgreSQL layers during add: {e}")
         
         if filtered:
             self.manage_task('add_layers', filtered)
@@ -4820,6 +4832,7 @@ class FilterMateApp:
         
         Called when a new project is loaded while the plugin was already active.
         Ensures all widgets, comboboxes, and signals are properly updated with new project layers.
+        Also validates PostgreSQL layers for orphaned materialized view references.
         """
         if self.dockwidget is None or not self.dockwidget.widgets_initialized:
             logger.debug("Cannot refresh UI: dockwidget not initialized")
@@ -4831,6 +4844,11 @@ class FilterMateApp:
             return
             
         logger.info(f"Forcing complete UI refresh after project load with {len(self.PROJECT_LAYERS)} layers")
+        
+        # v2.8.1: Validate PostgreSQL layers for orphaned MV references
+        # This fixes "relation does not exist" errors when QGIS is restarted
+        # and materialized views created by FilterMate no longer exist
+        self._validate_postgres_layers_on_project_load()
         
         # CRITICAL: Reconnect dockwidget signals that depend on PROJECT
         # The PROJECT reference has changed and signals need to be refreshed
@@ -4859,6 +4877,55 @@ class FilterMateApp:
                 logger.info(f"UI refreshed with active layer: {active_layer.name()}")
         else:
             logger.info("No active layer after project load, UI refreshed without layer selection")
+    
+    def _validate_postgres_layers_on_project_load(self):
+        """
+        Validate PostgreSQL layers for orphaned materialized view references.
+        
+        v2.8.1: When QGIS/FilterMate is closed and reopened, materialized views
+        created for filtering are no longer present in the database. However, 
+        the layer's subset string may still reference them, causing 
+        "relation does not exist" errors.
+        
+        This method detects such orphaned references and clears them,
+        restoring the layer to its unfiltered state.
+        """
+        try:
+            # Get all PostgreSQL layers from the project
+            postgres_layers = []
+            for layer in self.PROJECT.mapLayers().values():
+                if isinstance(layer, QgsVectorLayer) and layer.providerType() == 'postgres':
+                    postgres_layers.append(layer)
+            
+            if not postgres_layers:
+                logger.debug("No PostgreSQL layers to validate for orphaned MVs")
+                return
+            
+            logger.debug(f"Validating {len(postgres_layers)} PostgreSQL layer(s) for orphaned MV references")
+            
+            # Validate and cleanup orphaned MV references
+            cleaned_layers = validate_and_cleanup_postgres_layers(postgres_layers)
+            
+            if cleaned_layers:
+                # Show warning to user about cleared filters
+                layer_list = ", ".join(cleaned_layers[:3])
+                if len(cleaned_layers) > 3:
+                    layer_list += f" (+{len(cleaned_layers) - 3} other(s))"
+                
+                iface.messageBar().pushWarning(
+                    "FilterMate",
+                    f"Cleared orphaned filter(s) from {len(cleaned_layers)} layer(s): {layer_list}. "
+                    f"Previous filters referenced temporary views that no longer exist."
+                )
+                logger.warning(
+                    f"Cleared orphaned MV references from {len(cleaned_layers)} PostgreSQL layer(s) on project load"
+                )
+            else:
+                logger.debug("No orphaned MV references found in PostgreSQL layers")
+                
+        except Exception as e:
+            # Non-critical - don't fail project load
+            logger.debug(f"Error validating PostgreSQL layers for orphaned MVs: {e}")
             
     def update_datasource(self):
         # POSTGRESQL_AVAILABLE est maintenant importé au niveau du module

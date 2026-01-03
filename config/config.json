@@ -15,11 +15,7 @@
     "DOCKWIDGET": {
       "FEEDBACK_LEVEL": {
         "value": "normal",
-        "choices": [
-          "minimal",
-          "normal",
-          "verbose"
-        ],
+        "choices": ["minimal", "normal", "verbose"],
         "description": "User feedback verbosity: 'minimal' (errors only), 'normal' (balanced), 'verbose' (all messages including debug)",
         "categories_affected": [
           "filter_count",
@@ -85,12 +81,7 @@
       },
       "UI_PROFILE": {
         "value": "auto",
-        "choices": [
-          "auto",
-          "compact",
-          "normal",
-          "hidpi"
-        ],
+        "choices": ["auto", "compact", "normal", "hidpi"],
         "description": "UI display profile: 'auto' (detect from screen/DPI), 'compact' for small screens, 'normal' for standard displays, 'hidpi' for high resolution displays (4K, Retina)",
         "auto_detection_thresholds": {
           "compact_if_width_less_than": 1920,
@@ -101,30 +92,17 @@
       },
       "DOCK_POSITION": {
         "value": "right",
-        "choices": [
-          "left",
-          "right",
-          "top",
-          "bottom"
-        ],
+        "choices": ["left", "right", "top", "bottom"],
         "description": "Position of the FilterMate dockwidget in QGIS: 'left' (left side), 'right' (right side), 'top' (top area), 'bottom' (bottom area)"
       },
       "ACTION_BAR_POSITION": {
         "value": "bottom",
-        "choices": [
-          "top",
-          "bottom",
-          "left",
-          "right"
-        ],
+        "choices": ["top", "bottom", "left", "right"],
         "description": "Position of the action bar: 'top' (horizontal at top), 'bottom' (horizontal at bottom), 'left' (vertical on left side), 'right' (vertical on right side)"
       },
       "ACTION_BAR_VERTICAL_ALIGNMENT": {
         "value": "top",
-        "choices": [
-          "top",
-          "bottom"
-        ],
+        "choices": ["top", "bottom"],
         "description": "Vertical alignment of action buttons when action bar is in vertical mode (left/right): 'top' (buttons at top), 'bottom' (buttons at bottom). Use the splitter handle to adjust position."
       },
       "PushButton": {
@@ -196,36 +174,18 @@
       "COLORS": {
         "ACTIVE_THEME": {
           "value": "default",
-          "choices": [
-            "auto",
-            "default",
-            "dark",
-            "light"
-          ],
+          "choices": ["auto", "default", "dark", "light"],
           "description": "Color theme for UI: 'auto' (detect from QGIS theme), 'default', 'dark', or 'light'"
         },
         "THEME_SOURCE": {
           "value": "config",
-          "choices": [
-            "config",
-            "qgis",
-            "system"
-          ],
+          "choices": ["config", "qgis", "system"],
           "description": "Theme source: 'config' (use configured theme), 'qgis' (inherit from QGIS), 'system' (use OS theme)"
         },
         "THEMES": {
           "default": {
-            "BACKGROUND": [
-              "#F5F5F5",
-              "#FFFFFF",
-              "#E0E0E0",
-              "#2196F3"
-            ],
-            "FONT": [
-              "#212121",
-              "#616161",
-              "#BDBDBD"
-            ],
+            "BACKGROUND": ["#F5F5F5", "#FFFFFF", "#E0E0E0", "#2196F3"],
+            "FONT": ["#212121", "#616161", "#BDBDBD"],
             "ACCENT": {
               "PRIMARY": "#1976D2",
               "HOVER": "#2196F3",
@@ -235,17 +195,8 @@
             }
           },
           "dark": {
-            "BACKGROUND": [
-              "#1E1E1E",
-              "#2D2D30",
-              "#3E3E42",
-              "#4A4A4F"
-            ],
-            "FONT": [
-              "#F5F5F5",
-              "#E0E0E0",
-              "#A0A0A0"
-            ],
+            "BACKGROUND": ["#1E1E1E", "#2D2D30", "#3E3E42", "#4A4A4F"],
+            "FONT": ["#F5F5F5", "#E0E0E0", "#A0A0A0"],
             "ACCENT": {
               "PRIMARY": "#007ACC",
               "HOVER": "#1E90FF",
@@ -255,17 +206,8 @@
             }
           },
           "light": {
-            "BACKGROUND": [
-              "#FFFFFF",
-              "#F5F5F5",
-              "#E0E0E0",
-              "#2196F3"
-            ],
-            "FONT": [
-              "#000000",
-              "#424242",
-              "#9E9E9E"
-            ],
+            "BACKGROUND": ["#FFFFFF", "#F5F5F5", "#E0E0E0", "#2196F3"],
+            "FONT": ["#000000", "#424242", "#9E9E9E"],
             "ACCENT": {
               "PRIMARY": "#2196F3",
               "HOVER": "#64B5F6",
@@ -275,17 +217,8 @@
             }
           }
         },
-        "BACKGROUND": [
-          "#FAFAFA",
-          "#E0E0E0",
-          "#BDBDBD",
-          "#2196F3"
-        ],
-        "FONT": [
-          "#212121",
-          "#424242",
-          "#9E9E9E"
-        ],
+        "BACKGROUND": ["#FAFAFA", "#E0E0E0", "#BDBDBD", "#2196F3"],
+        "FONT": ["#212121", "#424242", "#9E9E9E"],
         "ACCENT": {
           "PRIMARY": "#2196F3",
           "HOVER": "#64B5F6",
@@ -305,10 +238,7 @@
         "description": "For PostgreSQL layers with fewer features than threshold, use OGR memory backend for faster filtering (avoids network overhead)",
         "enabled": {
           "value": false,
-          "choices": [
-            true,
-            false
-          ],
+          "choices": [true, false],
           "description": "Enable/disable optimization"
         },
         "threshold": {
@@ -317,10 +247,7 @@
         },
         "method": {
           "value": "ogr_memory",
-          "choices": [
-            "ogr_memory",
-            "qgis_processing"
-          ],
+          "choices": ["ogr_memory", "qgis_processing"],
           "description": "Backend to use: 'ogr_memory' (fastest) or 'qgis_processing' (compatible)"
         }
       },
@@ -328,10 +255,7 @@
         "description": "Use parallel execution for filtering multiple layers simultaneously (Phase 4 optimization)",
         "enabled": {
           "value": true,
-          "choices": [
-            true,
-            false
-          ],
+          "choices": [true, false],
           "description": "Enable/disable parallel layer filtering"
         },
         "min_layers": {
@@ -347,10 +271,7 @@
         "description": "Use batch streaming for exporting large datasets to avoid memory issues (Phase 4 optimization)",
         "enabled": {
           "value": true,
-          "choices": [
-            true,
-            false
-          ],
+          "choices": [true, false],
           "description": "Enable/disable streaming export"
         },
         "feature_threshold": {
@@ -368,10 +289,7 @@
         "description": "Geometry simplification settings for large WKT expressions",
         "enabled": {
           "value": true,
-          "choices": [
-            true,
-            false
-          ],
+          "choices": [true, false],
           "description": "Enable automatic geometry simplification for large WKT expressions"
         },
         "max_wkt_length": {
@@ -382,10 +300,7 @@
         },
         "preserve_topology": {
           "value": true,
-          "choices": [
-            true,
-            false
-          ],
+          "choices": [true, false],
           "description": "Preserve geometry topology during simplification (prevents self-intersections)"
         },
         "min_tolerance_meters": {
@@ -402,10 +317,7 @@
         },
         "show_simplification_warnings": {
           "value": true,
-          "choices": [
-            true,
-            false
-          ],
+          "choices": [true, false],
           "description": "Show warning messages when geometry is simplified"
         }
       },
@@ -440,6 +352,12 @@
           "min": 10000,
           "max": 1000000,
           "description": "WKT length (chars) above which EXISTS subquery mode is used instead of inline WKT"
+        },
+        "source_mv_fid_threshold": {
+          "value": 500,
+          "min": 50,
+          "max": 5000,
+          "description": "Maximum number of source FIDs to include inline in EXISTS query. Above this threshold, a temporary materialized view is created for better performance (v2.8.0 optimization for large source selections)"
         },
         "parallel_processing_threshold": {
           "value": 100000,

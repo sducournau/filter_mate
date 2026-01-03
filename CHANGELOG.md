@@ -2,6 +2,108 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.8.1] - 2026-01-03 - Orphaned Materialized View Recovery
+
+### 🐛 Bug Fix: "Relation does not exist" Error
+
+This patch fixes a critical issue where PostgreSQL layers would display errors after QGIS was restarted.
+
+### 🔧 Problem
+
+When FilterMate applies a filter on a PostgreSQL layer, it creates a **materialized view** (MV) for optimized querying. The layer's subset string references this MV:
+
+```sql
+"fid" IN (SELECT "pk" FROM "public"."filtermate_mv_abc123")
+```
+
+**Issue**: When QGIS is closed (or the database connection is lost), the MV is dropped, but the layer's subset string is saved in the project file. Upon reopening, QGIS tries to query the non-existent MV, causing:
+
+```
+ERROR: relation "public.filtermate_mv_ddccad55" does not exist
+```
+
+### ✅ Solution
+
+Added automatic detection and cleanup of orphaned MV references:
+
+1. **On Project Load**: Validates all PostgreSQL layers for stale MV references
+2. **On Layer Add**: Checks new layers before they cause errors
+3. **Auto-Recovery**: Clears orphaned subset strings to restore layer functionality
+4. **User Notification**: Shows warning when filters are cleared
+
+### 📁 Files Changed
+
+- `modules/appUtils.py`: Added MV detection and validation functions
+- `filter_mate_app.py`: Integrated validation on project load and layer add
+
+### 🔧 New Utility Functions
+
+- `detect_filtermate_mv_reference(subset_string)`: Detect MV references in subset strings
+- `validate_mv_exists(layer, mv_name, schema)`: Check if MV exists in database
+- `clear_orphaned_mv_subset(layer)`: Clear invalid subset strings
+- `validate_and_cleanup_postgres_layers(layers)`: Batch validation for multiple layers
+
+---
+
+## [2.8.0] - 2026-01-03 - Enhanced Auto-Optimization System
+
+### 🚀 Major Release: Performance & Intelligence
+
+This release introduces an **Enhanced Auto-Optimization System** that builds upon the v2.7.0 auto-optimizer with advanced features for significantly improved filtering performance.
+
+### ✨ New Features
+
+- **Performance Metrics Collection**: Track and analyze optimization effectiveness across sessions
+- **Query Pattern Detection**: Identify recurring queries and automatically pre-optimize
+- **Adaptive Thresholds**: Automatically tune optimization thresholds based on observed performance
+- **Parallel Processing**: Multi-threaded spatial operations for large datasets
+- **LRU Caching**: Intelligent caching with automatic eviction and TTL support
+- **Selectivity Histograms**: Better selectivity estimation using sampled data
+- **Source Selection MV Optimization**: Creates temporary materialized view when source selection exceeds threshold (default: 500 FIDs). Dramatically improves EXISTS subquery performance for large source selections (e.g., filtering 1M buildings with 4700+ selected roads now completes in seconds instead of timeout)
+
+### 📊 Performance Improvements
+
+| Feature                                 | Improvement  |
+| --------------------------------------- | ------------ |
+| **Parallel Processing (1M features)**   | 2.2x speedup |
+| **Parallel Processing (500K features)** | 2.0x speedup |
+| **Layer Analysis (cache hit)**          | 5x faster    |
+| **Strategy Selection (cache hit)**      | 6x faster    |
+| **Cache Hit Rate**                      | Up to 80%    |
+
+### 🔧 New Configuration Options
+
+New `v2.8.0_enhanced` section in config.json:
+
+- `enable_metrics`: Track optimization effectiveness (default: true)
+- `enable_parallel_processing`: Multi-threaded spatial ops (default: true)
+- `enable_adaptive_thresholds`: Auto-tune thresholds (default: true)
+- `parallel_workers`: Number of parallel workers (default: 4)
+- `parallel_chunk_size`: Features per chunk (default: 5000)
+- `cache_max_size`: LRU cache size (default: 200)
+- `cache_ttl_seconds`: Cache TTL in seconds (default: 600)
+- `pattern_detection_threshold`: Queries before pattern detection (default: 3)
+
+New in `OPTIMIZATION_THRESHOLDS` section:
+
+- `source_mv_fid_threshold`: Max FIDs for inline IN clause (default: 500). Above this, a temporary MV is created for the source selection, enabling faster EXISTS subqueries with spatial index joins
+
+### 🧵 Thread Safety
+
+- `LRUCache`, `QueryPatternDetector`, `AdaptiveThresholdManager`, `SelectivityHistogram` are fully thread-safe
+- Parallel processor extracts geometry WKB in main thread, processes in workers
+- All QGIS API calls remain on main thread
+
+### 🔄 Migration from v2.7.x
+
+Fully backwards compatible:
+
+- Basic optimizer: `get_auto_optimizer()` works exactly as before
+- Enhanced optimizer: `get_enhanced_optimizer()` enables all new features
+- Selective features: Pass `enable_*` flags to enable/disable specific features
+
+---
+
 ## [2.7.14] - 2025-01-03 - WKT Coordinate Precision Optimization
 
 ### 🚀 Performance: Réduction Drastique de la Taille des WKT (60-70%)

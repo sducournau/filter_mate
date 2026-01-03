@@ -7940,8 +7940,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             is_simple_field = False
             if expression:
                 qgs_expr = QgsExpression(expression)
+                # FIX v2.3.9: Use case-insensitive check for operators (e.g., 'in' vs 'IN')
+                expr_upper = expression.upper()
                 is_simple_field = qgs_expr.isField() and not any(
-                    op in expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
+                    op in expr_upper for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
                 )
             
             if is_simple_field:

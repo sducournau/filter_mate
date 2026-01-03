@@ -1655,3 +1655,194 @@ def get_best_display_field(layer, sample_size=10, use_value_relations=True):
     
     # Fall back to first field
     return fields[0].name()
+
+
+# ============================================================================
+# Orphaned Materialized View Detection and Cleanup (v2.8.1)
+# ============================================================================
+
+def detect_filtermate_mv_reference(subset_string: str) -> str:
+    """
+    Detect if a subset string references a FilterMate materialized view.
+    
+    FilterMate creates materialized views with the prefix 'filtermate_mv_' for
+    optimized PostgreSQL filtering. When QGIS closes or the MV is cleaned up,
+    the layer's subset string may still reference the now-deleted MV.
+    
+    Args:
+        subset_string: The layer's current subset string
+    
+    Returns:
+        The MV name if found, empty string otherwise
+    
+    Example subset strings that reference MVs:
+        - "fid" IN (SELECT "pk" FROM "public"."filtermate_mv_abc123")
+        - "id" IN (SELECT "id" FROM "schema"."filtermate_mv_xyz789")
+    """
+    import re
+    
+    if not subset_string:
+        return ""
+    
+    # Pattern to match FilterMate MV references in subset strings
+    # Matches: SELECT ... FROM "schema"."filtermate_mv_xxxxx"
+    # or: SELECT ... FROM schema.filtermate_mv_xxxxx
+    patterns = [
+        # Quoted schema and table: "schema"."filtermate_mv_xxx"
+        r'FROM\s+["\']?(\w+)["\']?\s*\.\s*["\']?(filtermate_mv_[a-f0-9]+)["\']?',
+        # Just table name: filtermate_mv_xxx
+        r'FROM\s+["\']?(filtermate_mv_[a-f0-9]+)["\']?',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, subset_string, re.IGNORECASE)
+        if match:
+            # Return the full MV name (last capturing group)
+            return match.group(match.lastindex)
+    
+    return ""
+
+
+def validate_mv_exists(layer, mv_name: str, schema: str = None) -> bool:
+    """
+    Validate if a FilterMate materialized view exists in the database.
+    
+    Args:
+        layer: PostgreSQL QgsVectorLayer to get connection from
+        mv_name: Name of the materialized view to check
+        schema: Schema name (defaults to layer's schema or 'public')
+    
+    Returns:
+        True if the MV exists, False otherwise
+    """
+    if not PSYCOPG2_AVAILABLE:
+        # Cannot verify MV existence without psycopg2
+        # Assume it doesn't exist to be safe
+        logger.debug(f"Cannot verify MV '{mv_name}' - psycopg2 not available")
+        return False
+    
+    if not layer or layer.providerType() != 'postgres':
+        return False
+    
+    try:
+        conn, source_uri = get_datasource_connexion_from_layer(layer)
+        if not conn:
+            logger.debug(f"Cannot verify MV '{mv_name}' - no database connection")
+            return False
+        
+        # Get schema from source URI if not provided
+        if schema is None:
+            schema = source_uri.schema() or "public"
+        
+        cursor = conn.cursor()
+        
+        # Query pg_matviews to check if MV exists
+        cursor.execute("""
+            SELECT 1 FROM pg_matviews 
+            WHERE schemaname = %s AND matviewname = %s
+            LIMIT 1
+        """, (schema, mv_name))
+        
+        exists = cursor.fetchone() is not None
+        
+        cursor.close()
+        conn.close()
+        
+        logger.debug(f"MV '{schema}.{mv_name}' exists: {exists}")
+        return exists
+        
+    except Exception as e:
+        logger.debug(f"Error checking MV existence for '{mv_name}': {e}")
+        return False
+
+
+def clear_orphaned_mv_subset(layer) -> bool:
+    """
+    Clear a layer's subset string if it references a missing FilterMate MV.
+    
+    This fixes the "relation does not exist" error that occurs when:
+    1. FilterMate creates a materialized view for filtering
+    2. QGIS closes or the MV is cleaned up
+    3. Project is reopened - subset string still references the deleted MV
+    
+    Args:
+        layer: PostgreSQL QgsVectorLayer to check and fix
+    
+    Returns:
+        True if the subset was cleared (MV was orphaned), False otherwise
+    """
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return False
+    
+    if layer.providerType() != 'postgres':
+        return False
+    
+    subset_string = layer.subsetString()
+    if not subset_string:
+        return False
+    
+    # Check if subset references a FilterMate MV
+    mv_name = detect_filtermate_mv_reference(subset_string)
+    if not mv_name:
+        return False  # Not a FilterMate MV reference
+    
+    # Get schema from layer's source URI
+    source_uri, _ = get_data_source_uri(layer)
+    schema = source_uri.schema() if source_uri else "public"
+    
+    # Validate if the MV exists
+    if validate_mv_exists(layer, mv_name, schema):
+        logger.debug(f"Layer '{layer.name()}' has valid MV reference: {mv_name}")
+        return False  # MV exists, no cleanup needed
+    
+    # MV doesn't exist - clear the orphaned subset string
+    logger.warning(
+        f"Layer '{layer.name()}' references missing MV '{schema}.{mv_name}'. "
+        f"Clearing orphaned filter to restore layer functionality."
+    )
+    
+    try:
+        # Clear the subset string to restore layer to unfiltered state
+        layer.setSubsetString("")
+        logger.info(f"Cleared orphaned MV reference from layer '{layer.name()}'")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to clear subset string for layer '{layer.name()}': {e}")
+        return False
+
+
+def validate_and_cleanup_postgres_layers(layers: list) -> list:
+    """
+    Validate PostgreSQL layers and clean up orphaned MV references.
+    
+    Should be called on project load to detect and fix layers that reference
+    FilterMate materialized views that no longer exist.
+    
+    Args:
+        layers: List of QgsVectorLayer instances to check
+    
+    Returns:
+        List of layer names that had orphaned MVs cleared
+    """
+    cleaned_layers = []
+    
+    for layer in layers:
+        if not isinstance(layer, QgsVectorLayer):
+            continue
+        
+        if layer.providerType() != 'postgres':
+            continue
+        
+        try:
+            if clear_orphaned_mv_subset(layer):
+                cleaned_layers.append(layer.name())
+        except Exception as e:
+            logger.debug(f"Error validating layer '{layer.name()}': {e}")
+    
+    if cleaned_layers:
+        logger.warning(
+            f"Cleaned up {len(cleaned_layers)} layer(s) with orphaned MV references: "
+            f"{', '.join(cleaned_layers)}"
+        )
+    
+    return cleaned_layers

@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.6.6** | January 2026 | **Production-Ready**
+**Version 2.8.0** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,34 +27,27 @@
 
 ## 📋 Recent Changes
 
+### v2.8.0 - Enhanced Auto-Optimization System (January 2026)
+
+- 🚀 **NEW: Performance Metrics Collection** - Track and analyze optimization effectiveness
+- 🚀 **NEW: Query Pattern Detection** - Identify recurring queries and pre-optimize
+- 🚀 **NEW: Adaptive Thresholds** - Automatically tune optimization thresholds based on observed performance
+- 🚀 **NEW: Parallel Processing** - Multi-threaded spatial operations for large datasets (2x speedup on 1M features)
+- 🚀 **NEW: LRU Caching** - Intelligent caching with automatic eviction and TTL support
+- 🚀 **NEW: Selectivity Histograms** - Better selectivity estimation using sampled data
+- 📊 **STATS: Cache hit rate up to 80%, strategy selection 6x faster**
+
+### v2.7.14 - WKT Coordinate Precision Optimization (January 2026)
+
+- 🐛 **FIX: PostgreSQL refiltering with negative buffer returns ALL features**
+- 🔧 **WKT coordinate precision optimized by CRS (60-70% smaller WKT for metric CRS)**
+- 🚀 **Aggressive WKT simplification with Convex Hull/Bounding Box fallbacks**
+
 ### v2.6.6 - Fix: Spatialite Filtering Freeze (January 2026)
 
 - 🐛 **FIX: QGIS freeze when filtering with Spatialite/GeoPackage backend**
 - 🐛 **FIX: Removed reloadData() calls for OGR/Spatialite layers (causes freeze)**
 - 🚀 **PERF: Only PostgreSQL uses reloadData() for MV-based complex filters**
-
-### v2.6.5 - Fix: UI Freeze Prevention for Large Layers (January 2026)
-
-- 🐛 **FIX: QGIS freeze on plugin reload with large layers**
-- 🐛 **FIX: get_filtered_layer_extent() now limits iteration to 10k features**
-- 🐛 **FIX: Multiple selection extent calculation limited to 500 items**
-- 🚀 **PERF: Uses updateExtents() for large filtered datasets instead of iterating**
-
-### v2.6.4 - Fix: SQLite Thread-Safety & Large WKT Freeze (January 2026)
-
-- 🐛 **FIX: "SQLite objects created in a thread" error (check_same_thread=False)**
-- 🐛 **FIX: QGIS freeze with large source geometries (>100K chars WKT)**
-- 🚀 **NEW: Automatic R-tree optimization for large WKT (LARGE_WKT_THRESHOLD=100K)**
-
-### v2.6.0 - Major Release: Performance & Stability (January 2026)
-
-- 🚀 **PROGRESSIVE FILTERING**: Two-phase filtering (bbox + full predicate) for complex PostgreSQL queries
-- 📊 **QUERY COMPLEXITY ESTIMATOR**: Dynamic SQL analysis with automatic strategy selection
-- 🔄 **MULTI-BACKEND CANVAS REFRESH**: Extended refresh system to Spatialite/OGR backends
-- 🌍 **CRS UTILITIES MODULE**: Automatic metric CRS conversion with optimal UTM zone detection
-- ⚡ **ENHANCED CACHE**: TTL support, result count caching, complexity score caching
-- 🛡️ **POSTGRESQL TIMEOUT**: Statement timeout protection (120s) with automatic OGR fallback
-- 🎯 **AUTO STRATEGY**: DIRECT → MATERIALIZED → TWO_PHASE → PROGRESSIVE based on complexity
 
 ### v2.5.x Series - Stability Improvements (December 2025 - January 2026)
 

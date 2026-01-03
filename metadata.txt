@@ -6,36 +6,30 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.7.14
+version=2.8.1
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.7.14 - WKT Precision Optimization
+about=FilterMate v2.8.1 - Orphaned MV Recovery Fix
 
- NEW in v2.7.14:
+ NEW in v2.8.1:
+ - 🐛 FIX: "Relation does not exist" error when reopening projects with PostgreSQL filters
+ - 🐛 FIX: Automatic detection and cleanup of orphaned materialized view references
+ - 🔧 NEW: Validates PostgreSQL layers on project load for stale MV references
+ - 🔧 NEW: User notification when orphaned filters are cleared
+
+ Previous version (v2.8.0):
+ - 🚀 NEW: Performance Metrics Collection - Track and analyze optimization effectiveness
+ - 🚀 NEW: Query Pattern Detection - Identify recurring queries and pre-optimize
+ - 🚀 NEW: Adaptive Thresholds - Automatically tune optimization thresholds based on observed performance
+ - 🚀 NEW: Parallel Processing - Multi-threaded spatial operations for large datasets (2x speedup on 1M features)
+ - 🚀 NEW: LRU Caching - Intelligent caching with automatic eviction and TTL support
+ - 🚀 NEW: Selectivity Histograms - Better selectivity estimation using sampled data
+ - 📊 STATS: Cache hit rate up to 80%, strategy selection 6x faster
+
+ Previous version (v2.7.14):
  - 🐛 FIX: PostgreSQL refiltering with negative buffer returns ALL features instead of filtered subset
- - 🐛 FIX: When source layer has EXISTS filter from previous operation, properly detects and falls through to task_features
- - 🐛 FIX: Prevents source_filter from being skipped when it contains EXISTS/MV patterns that would be ignored anyway
- - ✓ Correct behavior: Refiltering with -500m buffer now correctly applies to selected features only
-
- Previous version (v2.7.6):
- - 🐛 FIX: PostgreSQL EXISTS subquery ignores selected features when WKT is too long
- - 🐛 FIX: When selecting complex geometries (>100KB WKT), generates PK-based filter for EXISTS
- - 🚀 NEW: Adaptive geometry simplification algorithm (25M chars → 100K with topology preservation)
- - ✓ Correct behavior: Selected 1 commune → distant layers filtered to intersecting features only
-
- Previous version (v2.7.5):
- - 🐛 FIX: PostgreSQL geometric filtering with negative buffer causes "missing FROM-clause entry" SQL error
-
- Previous version (v2.6.7):
- - 🐛 FIX: QGIS freeze on plugin reload with large layers (batiment, etc.)
- - 🐛 FIX: get_filtered_layer_extent() now limits iteration to 10k features
- - 🐛 FIX: Multiple selection extent calculation limited to 500 items
- - 🚀 PERF: Uses updateExtents() for large filtered datasets instead of iterating
-
- Previous version (v2.6.4):
- - 🐛 FIX: "SQLite objects created in a thread" error (check_same_thread=False)
- - 🐛 FIX: QGIS freeze with large source geometries (>100K chars WKT)
+ - 🐛 FIX: "SQLite objects created in a thread" error
  - 🚀 NEW: Automatic R-tree optimization for large WKT (LARGE_WKT_THRESHOLD=100K)
  
  Core features:
@@ -62,23 +56,24 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
-    Version 2.5.5 (December 2025) - Critical PostgreSQL Negative Buffer Fix
-    🐛 CRITICAL: PostgreSQL backend now correctly detects ALL empty geometry types
-    🔧 Uses ST_IsEmpty() instead of NULLIF for POLYGON EMPTY, MULTIPOLYGON EMPTY, etc.
-    🎨 NEW: HiDPI UI profile for 4K/Retina displays with auto-detection
-    🖼️ UI improvements: Compact sidebar, harmonized button spacing across all tabs
-    ✅ Thread safety: Warning messages stored for main thread display
+    Version 2.8.0 (January 2026) - Enhanced Auto-Optimization System
+    🚀 NEW: Performance Metrics Collection - Track and analyze optimization effectiveness
+    🚀 NEW: Query Pattern Detection - Identify recurring queries and pre-optimize
+    🚀 NEW: Adaptive Thresholds - Automatically tune thresholds based on performance
+    🚀 NEW: Parallel Processing - Multi-threaded spatial ops (2x speedup on 1M features)
+    🚀 NEW: LRU Caching - Intelligent caching with TTL support
+    🚀 NEW: Selectivity Histograms - Better selectivity estimation using sampled data
+    📊 STATS: Cache hit rate 80%%, strategy selection 6x faster
     
-    Version 2.5.4 (December 2025) - OGR Backend Memory Layer Fix
-    🐛 CRITICAL: OGR backend now correctly counts features in memory layers
-    🔧 Intelligent feature counting with retry mechanism
+    Version 2.7.14 (January 2026) - WKT Precision Optimization
+    🐛 FIX: PostgreSQL refiltering with negative buffer returns ALL features
+    🔧 WKT coordinate precision optimized by CRS (60-70%% smaller)
+    🚀 Aggressive WKT simplification with Convex Hull/Bounding Box fallbacks
     
-    Version 2.4.4 (December 2025) - Critical Thread Safety Fix
-    🔥 CRITICAL: Fixed parallel filtering crash (Windows fatal exception: access violation)
-    🛡️ Thread Safety: OGR layers now always filter sequentially
-    🔒 QGIS layer objects (selectedFeatures, startEditing, etc.) are NOT thread-safe
-    📝 ParallelFilterExecutor auto-detects OGR/geometric ops and uses sequential mode
-    ⚠️ Added thread detection warnings to OGR backend
+    Version 2.6.x (January 2026) - Stability Improvements
+    🐛 FIX: QGIS freeze on plugin reload with large layers
+    🐛 FIX: SQLite thread-safety issues
+    🚀 NEW: Automatic R-tree optimization for large WKT
     
     Version 2.3.9 (December 2025) - Critical Stability Fix
     🔥 CRITICAL: Fixed GEOS crash during OGR backend filtering
