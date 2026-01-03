@@ -5650,7 +5650,23 @@ class FilterEngineTask(QgsTask):
         
         # For PostgreSQL, provide WKT for small datasets (simpler expression)
         if backend.get_backend_name() == 'PostgreSQL':
-            source_feature_count = self.source_layer.featureCount()
+            # CRITICAL FIX v2.7.0: Use ogr_source_geom feature count when available
+            # The ogr_source_geom contains the ACTUAL filtered/selected features
+            # (e.g., 1 commune selected), not the original source layer count (e.g., 930 communes).
+            # This ensures use_simple_wkt is True when appropriate, enabling efficient
+            # WKT-based filtering instead of EXISTS subquery which requires PostgreSQL table reference.
+            if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
+                if isinstance(self.ogr_source_geom, QgsVectorLayer):
+                    source_feature_count = self.ogr_source_geom.featureCount()
+                    logger.debug(f"PostgreSQL: Using ogr_source_geom feature count: {source_feature_count}")
+                else:
+                    # ogr_source_geom exists but is not a layer (might be a geometry)
+                    source_feature_count = 1  # Assume single geometry
+                    logger.debug(f"PostgreSQL: ogr_source_geom is {type(self.ogr_source_geom).__name__}, assuming 1 feature")
+            else:
+                # Fallback to original source layer count
+                source_feature_count = self.source_layer.featureCount()
+                logger.debug(f"PostgreSQL: Using source_layer feature count (fallback): {source_feature_count}")
             
             # If Spatialite WKT is available, use it for PostgreSQL too (same format)
             if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom:

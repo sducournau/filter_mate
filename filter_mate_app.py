@@ -2406,7 +2406,10 @@ class FilterMateApp:
             return
         
         try:
-            # Handle centroid optimization - update both source and distant layer checkboxes
+            # Handle centroid optimization - update ONLY distant layer checkbox
+            # IMPORTANT v2.7.2: Do NOT enable centroids for source layer when it's a polygon
+            # used for spatial intersection - this would give geometrically incorrect results.
+            # Centroid optimization should only apply to distant layers being filtered.
             if selected_optimizations.get('use_centroid', False):
                 # Update distant layers centroid checkbox (primary target for remote layers)
                 if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
@@ -2414,21 +2417,23 @@ class FilterMateApp:
                         self.dockwidget.checkBox_filtering_use_centroids_distant_layers.setChecked(True)
                         logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_distant_layers' checkbox")
                 
-                # Update source layer centroid checkbox if applicable
-                if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
-                    if not self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked():
-                        self.dockwidget.checkBox_filtering_use_centroids_source_layer.setChecked(True)
-                        logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_source_layer' checkbox")
+                # v2.7.2: Do NOT automatically enable centroids for source layer
+                # The source layer geometry must be preserved for accurate spatial intersection.
+                # Users can still manually enable this if they understand the implications.
+                # if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
+                #     if not self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked():
+                #         self.dockwidget.checkBox_filtering_use_centroids_source_layer.setChecked(True)
+                #         logger.info("AUTO-OPTIMIZATION: Enabled 'use_centroids_source_layer' checkbox")
                 
-                # Also update the current layer's stored parameters
+                # Also update the current layer's stored parameters (distant layers only)
                 if hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
                     layer_id = self.dockwidget.current_layer.id()
                     if layer_id in self.PROJECT_LAYERS:
                         if "filtering" not in self.PROJECT_LAYERS[layer_id]:
                             self.PROJECT_LAYERS[layer_id]["filtering"] = {}
-                        self.PROJECT_LAYERS[layer_id]["filtering"]["use_centroids_source_layer"] = True
+                        # v2.7.2: Only set distant layers centroids, NOT source layer
                         self.PROJECT_LAYERS[layer_id]["filtering"]["use_centroids_distant_layers"] = True
-                        logger.debug(f"AUTO-OPTIMIZATION: Updated PROJECT_LAYERS for {layer_id}")
+                        logger.debug(f"AUTO-OPTIMIZATION: Updated PROJECT_LAYERS for {layer_id} (distant layers only)")
             
             # Handle other optimization types (future expansion)
             # if selected_optimizations.get('simplify_geometry', False):

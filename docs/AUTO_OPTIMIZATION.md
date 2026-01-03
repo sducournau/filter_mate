@@ -196,7 +196,9 @@ When filtering with auto-optimization enabled, a confirmation dialog appears sho
 - **Checkboxes** to accept/reject each optimization individually
 - **Remember my choices**: Skip confirmation for similar layers in this session
 
-**v2.7.1 Improvement**: When user accepts optimizations in the dialog, the corresponding UI checkboxes (e.g., "Use centroids for source layer", "Use centroids for distant layers") are automatically updated to reflect the user's choice. This ensures visual consistency between the dialog selections and the main FilterMate interface.
+**v2.7.2 Improvement**: When user accepts centroid optimizations in the dialog, only the "Use centroids for distant layers" checkbox is automatically enabled. The "Use centroids for source layer" checkbox is **NOT** automatically enabled because the source layer geometry must be preserved for accurate spatial intersection operations. This is particularly important when the source layer is a polygon used for intersection with distant layers - using centroids would give geometrically incorrect results.
+
+**v2.7.1 Improvement**: UI checkboxes are automatically updated to reflect the user's optimization choices, ensuring visual consistency between the dialog selections and the main FilterMate interface.
 
 ### Settings Dialog
 
