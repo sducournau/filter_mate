@@ -316,7 +316,16 @@ class FilterEngineTask(QgsTask):
         """
         if layer and expression is not None:
             self._pending_subset_requests.append((layer, expression))
-            logger.debug(f"Queued subset request for {layer.name()}: {len(expression)} chars")
+            logger.info(f"📥 Queued subset request for {layer.name()}: {len(expression)} chars")
+            # v2.7.9: Log to QGIS panel for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            expr_preview = (expression[:60] + '...') if len(expression) > 60 else expression
+            QgsMessageLog.logMessage(
+                f"queue_subset_request: {layer.name()} → {expr_preview}",
+                "FilterMate", Qgis.Info
+            )
+        else:
+            logger.warning(f"⚠️ queue_subset_request called with invalid params: layer={layer}, expression={expression is not None}")
         return True  # Return True to indicate success (actual application is deferred)
     
     def _ensure_db_directory_exists(self):
@@ -563,7 +572,18 @@ class FilterEngineTask(QgsTask):
         forced_backends = self.task_parameters.get('forced_backends', {})
         
         # Process all layers in the list
-        for layer_props in self.task_parameters["task"]["layers"]:
+        for layer_props_original in self.task_parameters["task"]["layers"]:
+            # CRITICAL FIX v2.7.8: Create a COPY of layer_props to avoid modifying
+            # the original dict in self.PROJECT_LAYERS. Without this, modifications
+            # like _effective_provider_type and _postgresql_fallback persist between
+            # filter executions, causing PostgreSQL layers to incorrectly use OGR backend.
+            layer_props = layer_props_original.copy()
+            
+            # Remove stale runtime keys from previous executions that may have been
+            # copied from PROJECT_LAYERS (in case copy() was added after some runs)
+            for stale_key in ['_effective_provider_type', '_postgresql_fallback', '_forced_backend']:
+                layer_props.pop(stale_key, None)
+            
             provider_type = layer_props["layer_provider_type"]
             layer_name = layer_props.get("layer_name", "unknown")
             layer_id = layer_props.get("layer_id", "unknown")
@@ -707,11 +727,14 @@ class FilterEngineTask(QgsTask):
         
         # Performance warning for large datasets without PostgreSQL
         feature_count = self.source_layer.featureCount()
-        if feature_count > 50000 and not (
+        thresholds = self._get_optimization_thresholds()
+        large_dataset_threshold = thresholds['large_dataset_warning']
+        
+        if large_dataset_threshold > 0 and feature_count > large_dataset_threshold and not (
             POSTGRESQL_AVAILABLE and self.param_source_provider_type == PROVIDER_POSTGRES
         ):
             logger.warning(
-                f"Large dataset detected ({feature_count:,} features) without PostgreSQL backend. "
+                f"Large dataset detected ({feature_count:,} features > {large_dataset_threshold:,} threshold) without PostgreSQL backend. "
                 "Performance may be reduced. Consider using PostgreSQL/PostGIS for optimal performance."
             )
 
@@ -3034,6 +3057,251 @@ class FilterEngineTask(QgsTask):
 
 
 
+    def _get_optimization_thresholds(self):
+        """
+        Get optimization thresholds configuration from task parameters or defaults.
+        
+        Returns:
+            dict: Optimization thresholds with keys:
+                - large_dataset_warning: int (feature count for performance warnings)
+                - async_expression_threshold: int (feature count for async expressions)
+                - update_extents_threshold: int (feature count for auto extent update)
+                - centroid_optimization_threshold: int (feature count for centroid opt)
+                - exists_subquery_threshold: int (WKT length for EXISTS mode)
+                - parallel_processing_threshold: int (feature count for parallel)
+                - progress_update_batch_size: int (features per progress update)
+        """
+        # Default values
+        defaults = {
+            'large_dataset_warning': 50000,
+            'async_expression_threshold': 10000,
+            'update_extents_threshold': 50000,
+            'centroid_optimization_threshold': 5000,
+            'exists_subquery_threshold': 100000,
+            'parallel_processing_threshold': 100000,
+            'progress_update_batch_size': 100
+        }
+        
+        # Try to get from task_parameters
+        if hasattr(self, 'task_parameters') and self.task_parameters:
+            config = self.task_parameters.get('config', {})
+            app_config = config.get('APP', {})
+            settings = app_config.get('SETTINGS', {})
+            opt_config = settings.get('OPTIMIZATION_THRESHOLDS', {})
+            
+            if opt_config:
+                return {
+                    'large_dataset_warning': opt_config.get('large_dataset_warning', {}).get('value', defaults['large_dataset_warning']),
+                    'async_expression_threshold': opt_config.get('async_expression_threshold', {}).get('value', defaults['async_expression_threshold']),
+                    'update_extents_threshold': opt_config.get('update_extents_threshold', {}).get('value', defaults['update_extents_threshold']),
+                    'centroid_optimization_threshold': opt_config.get('centroid_optimization_threshold', {}).get('value', defaults['centroid_optimization_threshold']),
+                    'exists_subquery_threshold': opt_config.get('exists_subquery_threshold', {}).get('value', defaults['exists_subquery_threshold']),
+                    'parallel_processing_threshold': opt_config.get('parallel_processing_threshold', {}).get('value', defaults['parallel_processing_threshold']),
+                    'progress_update_batch_size': opt_config.get('progress_update_batch_size', {}).get('value', defaults['progress_update_batch_size'])
+                }
+        
+        return defaults
+
+    def _get_simplification_config(self):
+        """
+        Get geometry simplification configuration from task parameters or defaults.
+        
+        Returns:
+            dict: Simplification configuration with keys:
+                - enabled: bool
+                - max_wkt_length: int
+                - preserve_topology: bool
+                - min_tolerance_meters: float
+                - max_tolerance_meters: float
+                - show_warnings: bool
+        """
+        # Default values
+        defaults = {
+            'enabled': True,
+            'max_wkt_length': 100000,
+            'preserve_topology': True,
+            'min_tolerance_meters': 1.0,
+            'max_tolerance_meters': 100.0,
+            'show_warnings': True
+        }
+        
+        # Try to get from task_parameters
+        if hasattr(self, 'task_parameters') and self.task_parameters:
+            config = self.task_parameters.get('config', {})
+            app_config = config.get('APP', {})
+            settings = app_config.get('SETTINGS', {})
+            simp_config = settings.get('GEOMETRY_SIMPLIFICATION', {})
+            
+            if simp_config:
+                return {
+                    'enabled': simp_config.get('enabled', {}).get('value', defaults['enabled']),
+                    'max_wkt_length': simp_config.get('max_wkt_length', {}).get('value', defaults['max_wkt_length']),
+                    'preserve_topology': simp_config.get('preserve_topology', {}).get('value', defaults['preserve_topology']),
+                    'min_tolerance_meters': simp_config.get('min_tolerance_meters', {}).get('value', defaults['min_tolerance_meters']),
+                    'max_tolerance_meters': simp_config.get('max_tolerance_meters', {}).get('value', defaults['max_tolerance_meters']),
+                    'show_warnings': simp_config.get('show_simplification_warnings', {}).get('value', defaults['show_warnings'])
+                }
+        
+        return defaults
+
+    def _simplify_geometry_adaptive(self, geometry, max_wkt_length=None, crs_authid=None):
+        """
+        Simplify geometry adaptively to fit within WKT size limit while preserving topology.
+        
+        v2.7.6: New adaptive simplification algorithm that:
+        1. Estimates optimal tolerance based on geometry extent and target size
+        2. Uses topology-preserving simplification
+        3. Progressively increases tolerance until target size is reached
+        4. Never produces empty or invalid geometries
+        5. Respects configuration parameters for tolerance limits
+        
+        Args:
+            geometry: QgsGeometry to simplify
+            max_wkt_length: Maximum WKT string length (default from config, fallback 100KB)
+            crs_authid: CRS authority ID for unit-aware simplification (e.g., 'EPSG:2154')
+            
+        Returns:
+            QgsGeometry: Simplified geometry, or original if simplification fails/disabled
+        """
+        from qgis.core import QgsGeometry, QgsWkbTypes
+        
+        if not geometry or geometry.isEmpty():
+            return geometry
+        
+        # Get configuration
+        config = self._get_simplification_config()
+        
+        # Check if simplification is enabled
+        if not config['enabled']:
+            logger.debug(f"  Geometry simplification disabled in config")
+            return geometry
+        
+        # Use configured max_wkt_length if not specified
+        if max_wkt_length is None:
+            max_wkt_length = config['max_wkt_length']
+        
+        original_wkt = geometry.asWkt()
+        original_length = len(original_wkt)
+        
+        if original_length <= max_wkt_length:
+            logger.debug(f"  Geometry already within limit ({original_length} chars)")
+            return geometry
+        
+        if config['show_warnings']:
+            logger.info(f"  🔧 Simplifying geometry: {original_length} chars → target {max_wkt_length} chars")
+        
+        # Calculate reduction ratio needed
+        reduction_ratio = max_wkt_length / original_length
+        logger.debug(f"  Reduction ratio needed: {reduction_ratio:.4f} ({(1-reduction_ratio)*100:.1f}% reduction)")
+        
+        # Get geometry extent to estimate appropriate tolerance
+        extent = geometry.boundingBox()
+        extent_size = max(extent.width(), extent.height())
+        
+        # Determine if CRS is geographic (degrees) or metric
+        is_geographic = False
+        if crs_authid:
+            try:
+                srid = int(crs_authid.split(':')[1]) if ':' in crs_authid else int(crs_authid)
+                # EPSG:4326 and similar geographic CRS have small SRID numbers
+                is_geographic = srid == 4326 or (srid < 5000 and srid > 4000)
+            except (ValueError, IndexError):
+                pass
+        
+        # Get tolerance limits from config
+        min_tolerance = config['min_tolerance_meters']
+        max_tolerance = config['max_tolerance_meters']
+        
+        # Calculate initial tolerance based on extent and reduction needed
+        # For very large reductions, start with a larger tolerance
+        if is_geographic:
+            # Geographic CRS: convert meters to degrees (approximate)
+            # 1 degree ≈ 111km at equator
+            min_tolerance = min_tolerance / 111000.0
+            max_tolerance = max_tolerance / 111000.0
+            base_tolerance = extent_size * 0.0001  # Start with 0.01% of extent
+        else:
+            # Projected CRS: tolerance in map units (usually meters)
+            base_tolerance = extent_size * 0.001  # Start with 0.1% of extent
+        
+        # Scale initial tolerance based on how much reduction is needed
+        if reduction_ratio < 0.01:  # Need >99% reduction
+            initial_tolerance = base_tolerance * 50
+        elif reduction_ratio < 0.05:  # Need >95% reduction
+            initial_tolerance = base_tolerance * 20
+        elif reduction_ratio < 0.1:  # Need >90% reduction
+            initial_tolerance = base_tolerance * 10
+        elif reduction_ratio < 0.5:  # Need >50% reduction
+            initial_tolerance = base_tolerance * 5
+        else:
+            initial_tolerance = base_tolerance
+        
+        # Clamp to configured limits
+        initial_tolerance = max(min_tolerance, min(initial_tolerance, max_tolerance))
+        
+        logger.info(f"  Initial tolerance: {initial_tolerance:.6f} ({'degrees' if is_geographic else 'map units'})")
+        logger.info(f"  Tolerance limits: [{min_tolerance:.6f}, {max_tolerance:.6f}]")
+        logger.info(f"  Extent size: {extent_size:.2f}")
+        
+        # Progressive simplification with topology preservation
+        tolerance = initial_tolerance
+        best_simplified = geometry
+        best_wkt_length = original_length
+        max_attempts = 15
+        tolerance_multiplier = 2.0
+        
+        for attempt in range(max_attempts):
+            # Check if we've exceeded max tolerance
+            if tolerance > max_tolerance:
+                logger.warning(f"  Reached max tolerance ({max_tolerance:.6f}) - stopping")
+                break
+            
+            # Use QGIS simplify which is topology-aware for polygons
+            simplified = geometry.simplify(tolerance)
+            
+            if simplified is None or simplified.isEmpty():
+                logger.warning(f"  Attempt {attempt+1}: Simplification produced empty geometry at tolerance {tolerance:.6f}")
+                # Try a smaller tolerance step
+                tolerance *= 1.5
+                continue
+            
+            # Validate geometry type is preserved
+            if QgsWkbTypes.geometryType(simplified.wkbType()) != QgsWkbTypes.geometryType(geometry.wkbType()):
+                logger.warning(f"  Attempt {attempt+1}: Geometry type changed, skipping")
+                tolerance *= tolerance_multiplier
+                continue
+            
+            simplified_wkt = simplified.asWkt()
+            wkt_length = len(simplified_wkt)
+            reduction_pct = (1 - wkt_length / original_length) * 100
+            
+            logger.debug(f"  Attempt {attempt+1}: tolerance={tolerance:.6f}, {wkt_length} chars ({reduction_pct:.1f}% reduction)")
+            
+            # Track best result
+            if wkt_length < best_wkt_length:
+                best_simplified = simplified
+                best_wkt_length = wkt_length
+            
+            if wkt_length <= max_wkt_length:
+                if config['show_warnings']:
+                    logger.info(f"  ✓ Simplified: {original_length} → {wkt_length} chars ({reduction_pct:.1f}% reduction)")
+                    logger.info(f"  ✓ Final tolerance: {tolerance:.6f}")
+                return simplified
+            
+            # Increase tolerance for next attempt
+            tolerance *= tolerance_multiplier
+        
+        # Use best result even if not under limit
+        final_reduction = (1 - best_wkt_length / original_length) * 100
+        if best_wkt_length < original_length:
+            if config['show_warnings']:
+                logger.warning(f"  ⚠️ Could not reach target, using best result: {original_length} → {best_wkt_length} chars ({final_reduction:.1f}% reduction)")
+            return best_simplified
+        else:
+            if config['show_warnings']:
+                logger.warning(f"  ⚠️ Simplification failed, using original geometry")
+            return geometry
+
     def prepare_spatialite_source_geom(self):
         """
         Prepare source geometry for Spatialite filtering.
@@ -3451,64 +3719,40 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  Final collected geometry type: {geom_type}")
         logger.info(f"  Number of geometries collected: {len(geometries)}")
         
-        # v2.5.11: Simplify very large geometries to prevent SQL expression issues
-        # Large WKT can cause performance problems and display issues in PostgreSQL
-        # v2.6.3: Reduced limit for Spatialite compatibility - very large WKT causes SQLite parsing issues
-        MAX_WKT_LENGTH = 100000  # 100KB max for WKT
-        SPATIALITE_WKT_CRITICAL = 500000  # 500KB - SQLite may have issues beyond this
-        SPATIALITE_WKT_EXTREME = 750000  # 750KB - extreme size requiring aggressive simplification
-        SIMPLIFY_TOLERANCE = 1.0  # 1 meter simplification tolerance (for projected CRS)
+        # v2.7.6: Use adaptive simplification for very large geometries
+        # This preserves topology while achieving the target WKT size
+        # Get threshold from configuration
+        thresholds = self._get_optimization_thresholds()
+        MAX_WKT_LENGTH = thresholds['exists_subquery_threshold']
         
         if len(wkt) > MAX_WKT_LENGTH:
             logger.warning(f"  ⚠️ WKT too long ({len(wkt)} chars > {MAX_WKT_LENGTH} max)")
-            logger.info(f"  Attempting to simplify geometry...")
+            logger.info(f"  Using adaptive simplification algorithm...")
             
-            # v2.6.3: Use more aggressive simplification for very large WKT
-            # SQLite has practical limits on expression complexity
-            # v2.6.10: Scale starting tolerance based on WKT size for faster convergence
-            if len(wkt) > SPATIALITE_WKT_EXTREME:
-                logger.warning(f"  ⚠️⚠️ WKT EXTREME size ({len(wkt)} chars > {SPATIALITE_WKT_EXTREME} extreme threshold)")
-                logger.warning(f"  Using VERY aggressive simplification (starting at 10m tolerance)")
-                max_attempts = 15  # More attempts for extreme geometries
-                tolerance = 10.0  # Start at 10m for extreme cases
-            elif len(wkt) > SPATIALITE_WKT_CRITICAL:
-                logger.warning(f"  ⚠️⚠️ WKT VERY large ({len(wkt)} chars > {SPATIALITE_WKT_CRITICAL} critical threshold)")
-                logger.warning(f"  Using aggressive simplification (starting at 5m tolerance)")
-                max_attempts = 12  # More attempts for very large geometries
-                tolerance = 5.0  # Start at 5m for critical cases
-            else:
-                max_attempts = 8
-                tolerance = SIMPLIFY_TOLERANCE
+            # Use new adaptive simplification that estimates optimal tolerance
+            simplified = self._simplify_geometry_adaptive(
+                collected_geometry,
+                max_wkt_length=MAX_WKT_LENGTH,
+                crs_authid=self.source_layer_crs_authid if hasattr(self, 'source_layer_crs_authid') else None
+            )
             
-            # v2.6.10: Use larger multiplier for faster convergence on very large geometries
-            tolerance_multiplier = 2.5 if len(wkt) > SPATIALITE_WKT_CRITICAL else 2.0
-            original_wkt = wkt  # Keep original for logging
-            
-            for attempt in range(max_attempts):
-                simplified = collected_geometry.simplify(tolerance)
-                if simplified and not simplified.isEmpty():
-                    simplified_wkt = simplified.asWkt()
-                    reduction_pct = (1 - len(simplified_wkt) / len(original_wkt)) * 100
-                    
-                    if len(simplified_wkt) <= MAX_WKT_LENGTH:
-                        logger.info(f"  ✓ Simplified geometry (tolerance={tolerance:.1f}m, attempt {attempt+1}): {len(original_wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
-                        wkt = simplified_wkt
-                        collected_geometry = simplified
-                        break
-                    else:
-                        # Increase tolerance and try again
-                        tolerance *= tolerance_multiplier
-                        logger.debug(f"  Attempt {attempt+1}: Still too large ({len(simplified_wkt)} chars, {reduction_pct:.1f}% reduction), trying tolerance={tolerance:.1f}m")
+            if simplified and not simplified.isEmpty():
+                simplified_wkt = simplified.asWkt()
+                reduction_pct = (1 - len(simplified_wkt) / len(wkt)) * 100
+                
+                if len(simplified_wkt) <= MAX_WKT_LENGTH:
+                    logger.info(f"  ✓ Adaptive simplification succeeded: {len(wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
+                    wkt = simplified_wkt
+                    collected_geometry = simplified
                 else:
-                    logger.warning(f"  Simplification with tolerance={tolerance:.1f}m returned empty geometry - stopping")
-                    break
-            
-            if len(wkt) > MAX_WKT_LENGTH:
-                logger.warning(f"  ⚠️ Could not simplify enough - using original ({len(wkt)} chars)")
-                logger.warning(f"  This may cause performance issues with PostgreSQL/Spatialite queries")
-                if len(wkt) > SPATIALITE_WKT_CRITICAL:
-                    logger.warning(f"  ⚠️ WKT exceeds Spatialite critical threshold - filtering may FAIL")
-                    logger.warning(f"  Consider using smaller source selection or PostgreSQL backend")
+                    logger.warning(f"  ⚠️ Adaptive simplification reduced but not enough: {len(wkt)} → {len(simplified_wkt)} chars")
+                    logger.warning(f"  This may cause performance issues with PostgreSQL/Spatialite queries")
+                    # Use the partially simplified geometry anyway - it's better than nothing
+                    wkt = simplified_wkt
+                    collected_geometry = simplified
+            else:
+                logger.warning(f"  ⚠️ Simplification failed, using original ({len(wkt)} chars)")
+                logger.warning(f"  Consider using PostgreSQL backend for better handling of complex geometries")
         
         # Escape single quotes for SQL
         wkt_escaped = wkt.replace("'", "''")
@@ -5713,7 +5957,106 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"🎯 PostgreSQL EXISTS: Using full source filter ({len(source_filter)} chars)")
                 logger.debug(f"   Source filter preview: '{source_filter[:100]}...'")
             else:
-                logger.debug(f"Geometric filtering: Source layer has no subsetString")
+                # CRITICAL FIX v2.7.4: When no subsetString but features are SELECTED,
+                # we MUST generate a filter based on the selected feature IDs.
+                # Without this, EXISTS queries the ENTIRE source table instead of
+                # just the selected features!
+                #
+                # This happens when:
+                # 1. User selects features in QGIS (not via attribute filter)
+                # 2. WKT is too long for simple mode (> MAX_WKT_LENGTH)
+                # 3. Backend falls back to EXISTS subquery
+                #
+                # Solution: Generate "fid" IN (id1, id2, ...) filter from task_features
+                task_features = self.task_parameters.get("task", {}).get("features", [])
+                if task_features and len(task_features) > 0:
+                    # Get the primary key field name (usually 'fid', 'id', or 'gid')
+                    pk_field = None
+                    if self.source_layer:
+                        try:
+                            # Try to get primary key from provider
+                            pk_attrs = self.source_layer.primaryKeyAttributes()
+                            if pk_attrs:
+                                fields = self.source_layer.fields()
+                                pk_field = fields[pk_attrs[0]].name()
+                        except Exception:
+                            pass
+                    
+                    # Fallback: try common PK names
+                    if not pk_field:
+                        for common_pk in ['fid', 'id', 'gid', 'ogc_fid']:
+                            if self.source_layer and self.source_layer.fields().indexOf(common_pk) >= 0:
+                                pk_field = common_pk
+                                break
+                    
+                    if pk_field:
+                        # Extract feature IDs from task_features
+                        fids = []
+                        for f in task_features:
+                            try:
+                                # task_features are QgsFeature objects
+                                # CRITICAL: Use attribute(pk_field) NOT id()!
+                                # f.id() returns QGIS internal FID which may differ from DB primary key
+                                if hasattr(f, 'attribute'):
+                                    fid_val = f.attribute(pk_field)
+                                    if fid_val is not None:
+                                        fids.append(fid_val)
+                                    else:
+                                        # Fallback to QGIS FID if attribute is null
+                                        # This shouldn't happen but provides safety
+                                        if hasattr(f, 'id'):
+                                            fids.append(f.id())
+                                elif hasattr(f, 'id'):
+                                    # Legacy fallback for non-QgsFeature objects
+                                    fids.append(f.id())
+                                elif isinstance(f, dict) and pk_field in f:
+                                    fids.append(f[pk_field])
+                            except Exception as e:
+                                logger.debug(f"  Could not extract ID from feature: {e}")
+                        
+                        if fids:
+                            # Build IN clause filter
+                            # CRITICAL FIX v2.7.9: Prefix with source table name for _adapt_filter_for_subquery
+                            # Without table prefix, the filter "fid" IN (135) is ambiguous in EXISTS subquery
+                            # because both source and target tables may have a "fid" column.
+                            # The _adapt_filter_for_subquery function expects qualified names to convert
+                            # "table"."column" to __source."column".
+                            fids_str = ', '.join(str(fid) for fid in fids)
+                            
+                            # Get source table name for qualification
+                            # CRITICAL: Use param_source_table (actual DB table name), not layer.name() (display name)
+                            # e.g., layer.name()="Distribution Cluster" but param_source_table="distribution_clusters"
+                            source_table_name = getattr(self, 'param_source_table', None)
+                            if not source_table_name and self.source_layer:
+                                # Fallback: try to get from layer URI
+                                try:
+                                    from qgis.core import QgsDataSourceUri
+                                    uri = QgsDataSourceUri(self.source_layer.source())
+                                    source_table_name = uri.table()
+                                except Exception:
+                                    source_table_name = self.source_layer.name()
+                            
+                            if source_table_name:
+                                # Use qualified column name: "table"."column"
+                                source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
+                            else:
+                                # Fallback: unqualified (may still be ambiguous)
+                                source_filter = f'"{pk_field}" IN ({fids_str})'
+                            
+                            logger.info(f"🎯 PostgreSQL EXISTS: Generated selection filter from {len(fids)} features")
+                            logger.info(f"   Filter: {source_filter[:100]}...")
+                            
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"v2.7.9: Generated qualified source filter: {source_filter[:60]}...",
+                                "FilterMate", Qgis.Info
+                            )
+                        else:
+                            logger.warning(f"⚠️ PostgreSQL EXISTS: Could not extract feature IDs from task_features")
+                    else:
+                        logger.warning(f"⚠️ PostgreSQL EXISTS: Could not determine primary key field for source layer")
+                else:
+                    logger.debug(f"Geometric filtering: Source layer has no subsetString and no selection")
         else:
             logger.debug(f"Geometric filtering: Non-PostgreSQL backend, source_filter=None")
         
@@ -6180,9 +6523,16 @@ class FilterEngineTask(QgsTask):
                 
                 # FALLBACK v2.4.10: Try OGR backend when Spatialite expression building fails
                 # This happens when Spatialite source geometry is not available (e.g., GDAL without Spatialite)
-                if backend_name == 'spatialite':
-                    logger.warning(f"⚠️ Spatialite expression building failed for {layer.name()}")
-                    logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
+                # CRITICAL FIX v2.7.6: Also try OGR fallback for PostgreSQL when WKT is too large
+                # This handles cases where complex geometries exceed PostgreSQL's WKT embedding limits
+                if backend_name in ('spatialite', 'postgresql'):
+                    if backend_name == 'postgresql':
+                        logger.warning(f"⚠️ PostgreSQL expression building failed for {layer.name()}")
+                        logger.warning(f"  → This typically means WKT geometry is too large for PostgreSQL embedding")
+                        logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
+                    else:
+                        logger.warning(f"⚠️ Spatialite expression building failed for {layer.name()}")
+                        logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
                     
                     try:
                         ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters)
@@ -9909,6 +10259,15 @@ class FilterEngineTask(QgsTask):
                 f"finished(): Applying {len(self._pending_subset_requests)} pending subset requests",
                 "FilterMate", Qgis.Info
             )
+            
+            # v2.7.9: ENHANCED DIAGNOSTIC - Log all pending requests details
+            for idx, (lyr, expr) in enumerate(self._pending_subset_requests):
+                lyr_name = lyr.name() if lyr and is_valid_layer(lyr) else "INVALID"
+                expr_preview = (expr[:80] + '...') if expr and len(expr) > 80 else (expr or 'EMPTY')
+                QgsMessageLog.logMessage(
+                    f"  [{idx+1}] {lyr_name}: {expr_preview}",
+                    "FilterMate", Qgis.Info
+                )
             
             # v2.6.5: PERFORMANCE - Skip updateExtents for large layers to prevent freeze
             MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000

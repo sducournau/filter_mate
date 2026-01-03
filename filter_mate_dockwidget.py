@@ -141,7 +141,7 @@ from .modules.customExceptions import SignalStateChangeError
 from .modules.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
 from .modules.ui_styles import StyleLoader, QGISThemeWatcher
 from .modules.feedback_utils import show_info, show_warning, show_error, show_success
-from .modules.config_helpers import set_config_value
+from .modules.config_helpers import set_config_value, get_optimization_thresholds
 from .modules.exploring_cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
 
@@ -255,7 +255,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # PERFORMANCE (v2.5.10): Async expression evaluation for large layers
         # Threshold above which expression evaluation runs in background task
-        self._async_expression_threshold = 10000  # Features count threshold for async
+        # v2.7.6: Get threshold from configuration
+        thresholds = get_optimization_thresholds(ENV_VARS)
+        self._async_expression_threshold = thresholds['async_expression_threshold']
         self._expression_manager = get_expression_manager() if ASYNC_EXPRESSION_AVAILABLE else None
         self._pending_async_evaluation = None  # Track pending async evaluation
         
@@ -3581,10 +3583,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._centroid_auto_enabled = settings.get('auto_centroid_for_distant', True)
                 self._optimization_ask_before = settings.get('ask_before_apply', True)
                 
-                # Store thresholds
+                # Store thresholds - v2.7.6: Use configurable defaults
                 if not hasattr(self, '_optimization_thresholds'):
                     self._optimization_thresholds = {}
-                self._optimization_thresholds['centroid_distant'] = settings.get('centroid_threshold_distant', 5000)
+                thresholds = get_optimization_thresholds(ENV_VARS)
+                self._optimization_thresholds['centroid_distant'] = settings.get(
+                    'centroid_threshold_distant', 
+                    thresholds['centroid_optimization_threshold']
+                )
                 
                 logger.info(f"Applied optimization settings: {settings}")
                 show_success("FilterMate", "Optimization settings saved")
@@ -3641,9 +3647,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 return False
             
             # Check if it's a distant layer
-            threshold = 5000
+            # v2.7.6: Use configurable threshold
+            thresholds = get_optimization_thresholds(ENV_VARS)
+            threshold = thresholds['centroid_optimization_threshold']
             if hasattr(self, '_optimization_thresholds'):
-                threshold = self._optimization_thresholds.get('centroid_distant', 5000)
+                threshold = self._optimization_thresholds.get('centroid_distant', threshold)
             
             if analysis.location_type in (LayerLocationType.REMOTE_SERVICE, 
                                           LayerLocationType.REMOTE_DATABASE):
@@ -5567,6 +5575,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     return
                 
                 layer_props = self.PROJECT_LAYERS[layer.id()]
+                
+                # FIX v2.7.5: Diagnostic to identify layers missing from combobox
+                qgis_vector_layers = [l for l in self.PROJECT.mapLayers().values() 
+                                      if isinstance(l, QgsVectorLayer) and l.id() != layer.id()]
+                logger.info(f"=== filtering_populate_layers_chekableCombobox DIAGNOSTIC ===")
+                logger.info(f"  Source layer: {layer.name()}")
+                logger.info(f"  PROJECT_LAYERS count: {len(self.PROJECT_LAYERS)}")
+                logger.info(f"  QGIS vector layers (excl. source): {len(qgis_vector_layers)}")
+                
+                # List layers in QGIS but NOT in PROJECT_LAYERS
+                missing_from_project_layers = []
+                for qgis_layer in qgis_vector_layers:
+                    if qgis_layer.id() not in self.PROJECT_LAYERS:
+                        missing_from_project_layers.append(qgis_layer.name())
+                
+                if missing_from_project_layers:
+                    logger.warning(f"  ⚠️ Layers in QGIS but NOT in PROJECT_LAYERS: {missing_from_project_layers}")
+                    logger.warning(f"     These layers won't appear in distant layers combobox!")
+                    logger.warning(f"     Solution: Remove and re-add these layers to the QGIS project")
 
                 if layer_props["filtering"]["has_layers_to_filter"]:
                     i = 0

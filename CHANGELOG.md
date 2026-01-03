@@ -2,6 +2,138 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.7.6] - 2026-01-03 - Fix: PostgreSQL EXISTS Filter for Selected Features
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: PostgreSQL EXISTS subquery ignores selected features when WKT is too long**
+
+  - **Problème**: Lorsqu'un utilisateur sélectionne une feature (ex: 1 commune parmi 930) avec une géométrie complexe, le filtre PostgreSQL ne fonctionnait pas sur les couches distantes.
+  - **Symptômes**:
+    - Sélection d'1 commune → couche source correctement filtrée à 1 feature
+    - Couches distantes (batiment, routes, etc.) affichent TOUTES les features au lieu des features intersectant la commune
+    - Expression générée: `EXISTS (SELECT 1 FROM "public"."commune" AS __source WHERE ST_Intersects(...))` sans filtre sur la commune sélectionnée
+  - **Cause Racine**:
+    1. La géométrie WKT de la commune complexe dépasse `MAX_WKT_LENGTH` (100000 chars) → mode WKT simple désactivé
+    2. Le backend bascule sur EXISTS subquery
+    3. EXISTS utilise `source_layer.subsetString()` pour filtrer la source
+    4. MAIS: La sélection QGIS n'est PAS reflétée dans subsetString (c'est vide)
+    5. Résultat: EXISTS scanne TOUTE la table commune, pas juste la feature sélectionnée
+  - **Solution**:
+    1. Quand `subsetString` est vide mais `task_features` contient des features sélectionnées
+    2. Générer un filtre `"pk_field" IN (id1, id2, ...)` basé sur les IDs des features
+    3. Utiliser `f.attribute(pk_field)` au lieu de `f.id()` (le FID QGIS peut différer du PK PostgreSQL)
+    4. Ce filtre est inclus dans la clause WHERE du EXISTS
+  - **Impact**: Les filtres géométriques avec sélection manuelle fonctionnent maintenant correctement même pour les géométries complexes
+
+### � Optimisation: Simplification Adaptative des Géométries
+
+- **NEW: Algorithme de simplification adaptative pour les grandes géométries WKT**
+
+  - **Problème précédent**: Les géométries très complexes (>100KB WKT) causaient des problèmes de performance
+  - **Nouvelle approche**:
+    1. Estimation automatique de la tolérance optimale basée sur l'étendue de la géométrie
+    2. Prise en compte du ratio de réduction nécessaire (ex: 25M → 100K = 99.6% réduction)
+    3. Adaptation à l'unité du CRS (degrés vs mètres)
+    4. Préservation de la topologie (pas de géométrie vide ou invalide)
+    5. Convergence plus rapide avec tolérance initiale calculée
+  - **Résultat**: Commune de 25M chars → ~100K chars en ~5 tentatives au lieu de 15+
+
+### 🔧 Changements Techniques
+
+- `filter_task.py` (`_build_backend_expression`):
+  - Génère un filtre `"pk_field" IN (...)` depuis `task_features` quand disponible
+  - Détection automatique du champ clé primaire via `primaryKeyAttributes()`
+- `filter_task.py` (`_get_simplification_config`):
+  - **Nouvelle fonction** pour lire les paramètres de simplification depuis la configuration
+- `filter_task.py` (`_simplify_geometry_adaptive`):
+  - **Nouvelle fonction** de simplification adaptative
+  - Calcul de tolérance basé sur `extent_size * ratio`
+  - Respect des limites min/max configurées
+  - Multiplicateur de tolérance adaptatif selon la taille
+- `filter_task.py` (`prepare_spatialite_source_geom`):
+  - Utilise maintenant `_simplify_geometry_adaptive()` au lieu de boucles manuelles
+- `config_editor_widget.py`:
+  - **Ajout du support QDoubleSpinBox** pour les paramètres float dans la TreeView
+- `config_schema.json`:
+  - **Nouvelle section** `geometry_simplification` avec 6 paramètres configurables
+- `config.default.json`:
+  - **Nouvelle section** `GEOMETRY_SIMPLIFICATION` avec les valeurs par défaut
+
+### ⚙️ Paramètres Configurables pour la Simplification
+
+- **NEW: Paramètres de simplification des géométries accessibles dans les Options**
+
+  | Paramètre                      | Type  | Défaut | Description                                      |
+  | ------------------------------ | ----- | ------ | ------------------------------------------------ |
+  | `enabled`                      | bool  | true   | Activer/désactiver la simplification automatique |
+  | `max_wkt_length`               | int   | 100000 | Longueur maximale du WKT avant simplification    |
+  | `preserve_topology`            | bool  | true   | Préserver la topologie lors de la simplification |
+  | `min_tolerance_meters`         | float | 1.0    | Tolérance minimale en mètres                     |
+  | `max_tolerance_meters`         | float | 100.0  | Tolérance maximale en mètres                     |
+  | `show_simplification_warnings` | bool  | true   | Afficher les avertissements dans les logs        |
+
+  Ces paramètres sont accessibles via **Options → SETTINGS → GEOMETRY_SIMPLIFICATION** dans le TreeView.
+
+### ⚙️ Seuils d'Optimisation Configurables
+
+- **NEW: Seuils de performance configurables dans les Options**
+
+  | Paramètre                         | Type | Défaut | Description                                               |
+  | --------------------------------- | ---- | ------ | --------------------------------------------------------- |
+  | `large_dataset_warning`           | int  | 50000  | Seuil d'avertissement pour les grands jeux de données     |
+  | `async_expression_threshold`      | int  | 10000  | Seuil pour l'évaluation asynchrone des expressions        |
+  | `update_extents_threshold`        | int  | 50000  | Seuil en dessous duquel les extents sont mis à jour auto  |
+  | `centroid_optimization_threshold` | int  | 5000   | Seuil pour l'optimisation centroïde des couches distantes |
+  | `exists_subquery_threshold`       | int  | 100000 | Longueur WKT au-delà de laquelle EXISTS est utilisé       |
+  | `parallel_processing_threshold`   | int  | 100000 | Seuil pour activer le traitement parallèle                |
+  | `progress_update_batch_size`      | int  | 100    | Nombre de features entre les mises à jour de progression  |
+
+  Ces paramètres sont accessibles via **Options → SETTINGS → OPTIMIZATION_THRESHOLDS** dans le TreeView.
+
+### 🔧 Changements Techniques Additionnels
+
+- `filter_task.py` (`_get_optimization_thresholds`):
+  - **Nouvelle fonction** pour lire les seuils d'optimisation depuis la configuration
+- `config_helpers.py`:
+  - **Nouvelles fonctions** `get_optimization_thresholds()` et `get_simplification_config()`
+  - Centralisation de la lecture des seuils pour tous les modules
+- `filter_mate_app.py`:
+  - Utilise maintenant les seuils configurables pour `update_extents_threshold`
+- `filter_mate_dockwidget.py`:
+  - Utilise maintenant les seuils configurables pour `async_expression_threshold` et `centroid_optimization_threshold`
+
+### � Migration Automatique de la Configuration
+
+- **NEW: Mise à jour automatique de la configuration utilisateur**
+
+  - Lors du démarrage, si la configuration existante ne contient pas les nouvelles sections, elles sont automatiquement ajoutées
+  - Un message informatif s'affiche pour informer l'utilisateur des nouveaux paramètres disponibles
+  - Les sections ajoutées automatiquement :
+    - `GEOMETRY_SIMPLIFICATION` : Paramètres de simplification des géométries
+    - `OPTIMIZATION_THRESHOLDS` : Seuils d'optimisation de performance
+  - Messages traduits en : français, anglais, allemand, espagnol, italien, portugais
+  - Pas de perte des paramètres existants de l'utilisateur
+
+- `config_migration.py` (`update_settings_sections`):
+  - **Nouvelle fonction** pour ajouter les sections manquantes à la configuration
+  - Appelée automatiquement au démarrage via `auto_migrate_if_needed()`
+
+### 📁 Fichiers Modifiés
+
+- `modules/tasks/filter_task.py`: Génération du filtre source + simplification adaptative + lecture config
+- `modules/config_editor_widget.py`: Support QDoubleSpinBox pour paramètres flottants
+- `modules/config_helpers.py`: Fonctions helpers pour lecture des seuils
+- `modules/config_migration.py`: Migration automatique des nouvelles sections
+- `config/config_schema.json`: Schéma des paramètres de simplification + seuils d'optimisation
+- `config/config.default.json`: Valeurs par défaut de simplification + seuils d'optimisation
+- `filter_mate.py`: Affichage du message de mise à jour de configuration
+- `filter_mate_app.py`: Utilisation des seuils configurables
+- `filter_mate_dockwidget.py`: Utilisation des seuils configurables
+- `i18n/FilterMate_*.ts`: Traductions des messages de mise à jour (fr, en, de, es, it, pt)
+
+---
+
 ## [2.7.5] - 2026-01-03 - Fix: Negative Buffer "missing FROM-clause entry" Error
 
 ### 🐛 Correction de Bug Critique

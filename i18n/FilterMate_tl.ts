@@ -144,6 +144,18 @@ Do you want to continue?</translation>
         <translation>Na-update ang pagsasaayos sa pinakabagong bersyon</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Na-update ang pagsasaayos: may bagong mga setting ({sections}). I-access sa pamamagitan ng Options menu.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Pagpapasimple ng Geometry</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Mga Threshold ng Optimization</translation>
+    </message>
+    <message>
         <source>Error during configuration migration: {}</source>
         <translation>Error during configuration migration: {}</translation>
     </message>

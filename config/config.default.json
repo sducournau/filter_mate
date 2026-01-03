@@ -387,6 +387,51 @@
           "description": "Show tips about optimal backend selection"
         }
       },
+      "OPTIMIZATION_THRESHOLDS": {
+        "description": "Thresholds for automatic optimizations (feature counts and sizes)",
+        "large_dataset_warning": {
+          "value": 50000,
+          "min": 0,
+          "max": 1000000,
+          "description": "Feature count above which performance warnings are displayed (0 to disable)"
+        },
+        "async_expression_threshold": {
+          "value": 10000,
+          "min": 1000,
+          "max": 500000,
+          "description": "Feature count above which expression evaluation runs in background thread"
+        },
+        "update_extents_threshold": {
+          "value": 50000,
+          "min": 1000,
+          "max": 500000,
+          "description": "Feature count below which layer extents are automatically updated after filtering"
+        },
+        "centroid_optimization_threshold": {
+          "value": 5000,
+          "min": 1000,
+          "max": 100000,
+          "description": "Feature count above which centroid optimization is applied for distant layers"
+        },
+        "exists_subquery_threshold": {
+          "value": 100000,
+          "min": 10000,
+          "max": 1000000,
+          "description": "WKT length (chars) above which EXISTS subquery mode is used instead of inline WKT"
+        },
+        "parallel_processing_threshold": {
+          "value": 100000,
+          "min": 10000,
+          "max": 1000000,
+          "description": "Feature count above which parallel processing is enabled"
+        },
+        "progress_update_batch_size": {
+          "value": 100,
+          "min": 10,
+          "max": 1000,
+          "description": "Number of features between progress bar updates (higher = faster but less responsive)"
+        }
+      },
       "HISTORY": {
         "description": "Filter history (undo/redo) settings",
         "max_history_size": {
@@ -397,6 +442,42 @@
           "value": true,
           "choices": [true, false],
           "description": "Save filter history to project file"
+        }
+      },
+      "GEOMETRY_SIMPLIFICATION": {
+        "description": "Geometry simplification settings for large WKT expressions",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable automatic geometry simplification for large WKT expressions"
+        },
+        "max_wkt_length": {
+          "value": 100000,
+          "min": 10000,
+          "max": 1000000,
+          "description": "Maximum WKT string length (chars) before simplification is applied"
+        },
+        "preserve_topology": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Preserve geometry topology during simplification (prevents self-intersections)"
+        },
+        "min_tolerance_meters": {
+          "value": 1.0,
+          "min": 0.1,
+          "max": 100.0,
+          "description": "Minimum simplification tolerance in meters"
+        },
+        "max_tolerance_meters": {
+          "value": 100.0,
+          "min": 10.0,
+          "max": 1000.0,
+          "description": "Maximum simplification tolerance in meters (prevents excessive distortion)"
+        },
+        "show_simplification_warnings": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Show warning messages when geometry is simplified"
         }
       }
     }

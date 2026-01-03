@@ -371,6 +371,24 @@ class FilterMate:
                 elif any("obsolete" in str(w).lower() for w in warnings):
                     msg = self.tr("Obsolete configuration reset. Default settings have been restored.")
                     msg_type = "warning"
+                elif any(w.startswith("config_updated:") for w in warnings):
+                    # v2.7.6: New settings sections were added
+                    added_sections = []
+                    for w in warnings:
+                        if w.startswith("config_updated:"):
+                            added_sections = w.replace("config_updated:", "").split(",")
+                            break
+                    
+                    # Build user-friendly message
+                    section_names = {
+                        "GEOMETRY_SIMPLIFICATION": self.tr("Geometry Simplification"),
+                        "OPTIMIZATION_THRESHOLDS": self.tr("Optimization Thresholds")
+                    }
+                    friendly_names = [section_names.get(s, s) for s in added_sections]
+                    sections_str = ", ".join(friendly_names)
+                    
+                    msg = self.tr("Configuration updated: new settings available ({sections}). Access via Options menu.").format(sections=sections_str)
+                    msg_type = "info"
                 else:
                     msg = self.tr("Configuration updated to latest version")
                     msg_type = "success"

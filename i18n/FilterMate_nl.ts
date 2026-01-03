@@ -104,6 +104,18 @@ Start QGIS opnieuw om alle wijzigingen toe te passen.</translation>
         <translation>Configuratie bijgewerkt naar nieuwste versie</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Configuratie bijgewerkt: nieuwe instellingen beschikbaar ({sections}). Toegang via Opties menu.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometrie vereenvoudiging</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Optimalisatie drempels</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Geometrie validatie instelling</translation>
     </message>

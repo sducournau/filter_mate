@@ -60,6 +60,7 @@ from .modules.feedback_utils import (
 from .modules.filter_history import HistoryManager
 from .modules.filter_favorites import FavoritesManager
 from .modules.ui_config import UIConfig, DisplayProfile
+from .modules.config_helpers import get_optimization_thresholds
 from .modules.object_safety import (
     is_sip_deleted, is_valid_layer, is_valid_qobject, is_qgis_alive,
     safe_disconnect, safe_emit, make_safe_callback,
@@ -2482,13 +2483,23 @@ class FilterMateApp:
             if key != current_layer.id():  # Exclude source layer
                 layer_obj = self.PROJECT.mapLayer(key)
                 if layer_obj:
-                    all_available_layers.append((layer_obj.name(), key[:8]))
+                    all_available_layers.append((layer_obj.name(), key[:8], key))
         
-        logger.info(f"  All available layers for filtering ({len(all_available_layers)}):")
-        for name, key_prefix in all_available_layers:
-            is_selected = any(k.startswith(key_prefix[:8]) for k in raw_layers_list)
+        logger.info(f"  All available layers in PROJECT_LAYERS for filtering ({len(all_available_layers)}):")
+        for name, key_prefix, full_key in all_available_layers:
+            is_selected = full_key in raw_layers_list
             status = "✓ SELECTED" if is_selected else "✗ NOT SELECTED"
             logger.info(f"    - {name} ({key_prefix}...) → {status}")
+        
+        # FIX v2.7.5: Detect layers in QGIS project but NOT in PROJECT_LAYERS (registration issue)
+        qgis_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
+        missing_from_project_layers = []
+        for qgis_layer in qgis_layers:
+            if qgis_layer.id() not in self.PROJECT_LAYERS and qgis_layer.id() != current_layer.id():
+                missing_from_project_layers.append(qgis_layer.name())
+        
+        if missing_from_project_layers:
+            logger.warning(f"  ⚠️ QGIS layers NOT in PROJECT_LAYERS (may need re-add): {missing_from_project_layers}")
         
         # FIX v2.5.15: Disabled auto-inclusion of GeoPackage layers
         # User selection is now strictly respected - only explicitly checked layers are filtered
@@ -2496,145 +2507,164 @@ class FilterMateApp:
         logger.info(f"  Final layers to process: {len(raw_layers_list)} (user selection only)")
         
         for key in raw_layers_list:
-            if key in self.PROJECT_LAYERS:
-                layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+            # FIX v2.7.5: Log when layer is not in PROJECT_LAYERS (was silently ignored)
+            if key not in self.PROJECT_LAYERS:
+                # Try to find layer name for better error message
+                layer_obj = self.PROJECT.mapLayer(key)
+                layer_name = layer_obj.name() if layer_obj else "unknown"
+                logger.warning(
+                    f"  ⚠️ Layer '{layer_name}' (id={key[:16]}...) in user selection but NOT in PROJECT_LAYERS - SKIPPED!"
+                )
+                logger.warning(f"     Available PROJECT_LAYERS keys count: {len(self.PROJECT_LAYERS)}")
+                continue
+            
+            layer_info = self.PROJECT_LAYERS[key]["infos"].copy()
+            
+            # CRITICAL FIX v2.7.8: Remove stale runtime keys from previous filter executions
+            # These keys should NOT be part of the persistent layer configuration
+            for stale_key in ['_effective_provider_type', '_postgresql_fallback', '_forced_backend']:
+                layer_info.pop(stale_key, None)
 
-                # Resolve actual QgsVectorLayer by id
-                layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
-                if not layer_obj:
+            # Resolve actual QgsVectorLayer by id
+            layer_obj = [l for l in self.PROJECT.mapLayers().values() if l.id() == key]
+            if not layer_obj:
+                logger.error(f"Cannot filter layer {key}: layer not found in project")
+                continue
+            layer = layer_obj[0]
+
+            # Skip invalid or unavailable layers (broken source)
+            if not is_layer_source_available(layer):
+                logger.warning(
+                    f"Skipping layer '{layer.name()}' (id={key}) - invalid or source missing"
+                )
+                continue
+            
+            # Validate required keys exist for geometric filtering
+            required_keys = [
+                'layer_name', 'layer_id', 'layer_provider_type',
+                'primary_key_name', 'layer_geometry_field', 'layer_schema'
+            ]
+            
+            missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+            if missing_keys:
+                logger.warning(f"Layer {key} missing required keys: {missing_keys}")
+                # Try to fill in missing keys from QGIS layer object
+                if layer_obj:
+                    layer = layer_obj[0]
+                    # Fill basic info
+                    if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
+                        layer_info['layer_name'] = layer.name()
+                    if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
+                        layer_info['layer_id'] = layer.id()
+                    
+                    # Fill layer_geometry_field from data provider
+                    if 'layer_geometry_field' not in layer_info or layer_info['layer_geometry_field'] is None:
+                        try:
+                            geom_col = layer.dataProvider().geometryColumn()
+                            if geom_col:
+                                layer_info['layer_geometry_field'] = geom_col
+                                logger.info(f"Auto-filled layer_geometry_field='{geom_col}' for layer {layer.name()}")
+                            else:
+                                # Default geometry field names by provider
+                                provider = layer.providerType()
+                                if provider == 'postgres':
+                                    layer_info['layer_geometry_field'] = 'geom'
+                                elif provider == 'spatialite':
+                                    layer_info['layer_geometry_field'] = 'geometry'
+                                else:
+                                    layer_info['layer_geometry_field'] = 'geom'
+                                logger.info(f"Using default layer_geometry_field='{layer_info['layer_geometry_field']}' for layer {layer.name()}")
+                        except Exception as e:
+                            layer_info['layer_geometry_field'] = 'geom'
+                            logger.warning(f"Could not detect geometry column for {layer.name()}, using 'geom': {e}")
+                    
+                    # Fill layer_provider_type
+                    # Use detect_layer_provider_type to get correct provider for backend selection
+                    if 'layer_provider_type' not in layer_info or layer_info['layer_provider_type'] is None:
+                        detected_type = detect_layer_provider_type(layer)
+                        layer_info['layer_provider_type'] = detected_type
+                        logger.info(f"Auto-filled layer_provider_type='{detected_type}' for layer {layer.name()}")
+                    
+                    # Fill/validate layer_schema (NULL for non-PostgreSQL layers)
+                    # CRITICAL FIX v2.3.15: Always re-validate schema from layer source for PostgreSQL
+                    # The stored layer_schema can be corrupted or incorrect (e.g., literal "schema" string)
+                    if layer_info.get('layer_provider_type') == 'postgresql':
+                        try:
+                            from qgis.core import QgsDataSourceUri
+                            source_uri = QgsDataSourceUri(layer.source())
+                            detected_schema = source_uri.schema()
+                            stored_schema = layer_info.get('layer_schema')
+                            
+                            if detected_schema:
+                                if stored_schema and stored_schema != detected_schema and stored_schema != 'NULL':
+                                    logger.warning(f"Schema mismatch for {layer.name()}: stored='{stored_schema}', actual='{detected_schema}'")
+                                layer_info['layer_schema'] = detected_schema
+                                logger.debug(f"Validated layer_schema='{detected_schema}' for layer {layer.name()}")
+                            elif not stored_schema or stored_schema == 'NULL':
+                                layer_info['layer_schema'] = 'public'
+                                logger.info(f"Auto-filled layer_schema='public' (default) for layer {layer.name()}")
+                        except Exception as e:
+                            logger.warning(f"Could not detect schema for {layer.name()}: {e}")
+                            if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
+                                # Fallback to regex if QgsDataSourceUri fails
+                                import re
+                                source = layer.source()
+                                match = re.search(r'table="([^"]+)"\.', source)
+                                if match:
+                                    layer_info['layer_schema'] = match.group(1)
+                                else:
+                                    layer_info['layer_schema'] = 'public'
+                                logger.info(f"Auto-filled layer_schema='{layer_info['layer_schema']}' (regex fallback) for layer {layer.name()}")
+                    elif 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
+                        layer_info['layer_schema'] = 'NULL'
+                    
+                    # Fill primary_key_name by searching for a unique field
+                    if 'primary_key_name' not in layer_info or layer_info['primary_key_name'] is None:
+                        pk_found = False
+                        # Check declared primary key
+                        pk_attrs = layer.primaryKeyAttributes()
+                        if pk_attrs:
+                            field = layer.fields()[pk_attrs[0]]
+                            layer_info['primary_key_name'] = field.name()
+                            pk_found = True
+                            logger.info(f"Auto-filled primary_key_name='{field.name()}' from primary key for layer {layer.name()}")
+                        
+                        # Fallback: look for 'id' field
+                        if not pk_found:
+                            for field in layer.fields():
+                                if 'id' in field.name().lower():
+                                    layer_info['primary_key_name'] = field.name()
+                                    pk_found = True
+                                    logger.info(f"Auto-filled primary_key_name='{field.name()}' (contains 'id') for layer {layer.name()}")
+                                    break
+                        
+                        # Last resort: use first numeric field
+                        if not pk_found:
+                            for field in layer.fields():
+                                if field.isNumeric():
+                                    layer_info['primary_key_name'] = field.name()
+                                    logger.info(f"Auto-filled primary_key_name='{field.name()}' (first numeric) for layer {layer.name()}")
+                                    break
+                    
+                    # Log what still couldn't be filled
+                    still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
+                    if still_missing:
+                        logger.error(f"Cannot filter layer {layer.name()} (id={key}): still missing {still_missing}")
+                        continue
+                    else:
+                        logger.info(f"Successfully auto-filled missing properties for layer {layer.name()}")
+                        # Update PROJECT_LAYERS with auto-filled values
+                        # CRITICAL FIX v2.7.8: Remove runtime keys before updating persistent storage
+                        # These keys should only exist during filter execution, not in saved config
+                        update_info = {k: v for k, v in layer_info.items() 
+                                       if k not in ['_effective_provider_type', '_postgresql_fallback', '_forced_backend']}
+                        self.PROJECT_LAYERS[key]["infos"].update(update_info)
+                else:
                     logger.error(f"Cannot filter layer {key}: layer not found in project")
                     continue
-                layer = layer_obj[0]
-
-                # Skip invalid or unavailable layers (broken source)
-                if not is_layer_source_available(layer):
-                    logger.warning(
-                        f"Skipping layer '{layer.name()}' (id={key}) - invalid or source missing"
-                    )
-                    continue
-                
-                # Validate required keys exist for geometric filtering
-                required_keys = [
-                    'layer_name', 'layer_id', 'layer_provider_type',
-                    'primary_key_name', 'layer_geometry_field', 'layer_schema'
-                ]
-                
-                missing_keys = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                if missing_keys:
-                    logger.warning(f"Layer {key} missing required keys: {missing_keys}")
-                    # Try to fill in missing keys from QGIS layer object
-                    if layer_obj:
-                        layer = layer_obj[0]
-                        # Fill basic info
-                        if 'layer_name' not in layer_info or layer_info['layer_name'] is None:
-                            layer_info['layer_name'] = layer.name()
-                        if 'layer_id' not in layer_info or layer_info['layer_id'] is None:
-                            layer_info['layer_id'] = layer.id()
-                        
-                        # Fill layer_geometry_field from data provider
-                        if 'layer_geometry_field' not in layer_info or layer_info['layer_geometry_field'] is None:
-                            try:
-                                geom_col = layer.dataProvider().geometryColumn()
-                                if geom_col:
-                                    layer_info['layer_geometry_field'] = geom_col
-                                    logger.info(f"Auto-filled layer_geometry_field='{geom_col}' for layer {layer.name()}")
-                                else:
-                                    # Default geometry field names by provider
-                                    provider = layer.providerType()
-                                    if provider == 'postgres':
-                                        layer_info['layer_geometry_field'] = 'geom'
-                                    elif provider == 'spatialite':
-                                        layer_info['layer_geometry_field'] = 'geometry'
-                                    else:
-                                        layer_info['layer_geometry_field'] = 'geom'
-                                    logger.info(f"Using default layer_geometry_field='{layer_info['layer_geometry_field']}' for layer {layer.name()}")
-                            except Exception as e:
-                                layer_info['layer_geometry_field'] = 'geom'
-                                logger.warning(f"Could not detect geometry column for {layer.name()}, using 'geom': {e}")
-                        
-                        # Fill layer_provider_type
-                        # Use detect_layer_provider_type to get correct provider for backend selection
-                        if 'layer_provider_type' not in layer_info or layer_info['layer_provider_type'] is None:
-                            detected_type = detect_layer_provider_type(layer)
-                            layer_info['layer_provider_type'] = detected_type
-                            logger.info(f"Auto-filled layer_provider_type='{detected_type}' for layer {layer.name()}")
-                        
-                        # Fill/validate layer_schema (NULL for non-PostgreSQL layers)
-                        # CRITICAL FIX v2.3.15: Always re-validate schema from layer source for PostgreSQL
-                        # The stored layer_schema can be corrupted or incorrect (e.g., literal "schema" string)
-                        if layer_info.get('layer_provider_type') == 'postgresql':
-                            try:
-                                from qgis.core import QgsDataSourceUri
-                                source_uri = QgsDataSourceUri(layer.source())
-                                detected_schema = source_uri.schema()
-                                stored_schema = layer_info.get('layer_schema')
-                                
-                                if detected_schema:
-                                    if stored_schema and stored_schema != detected_schema and stored_schema != 'NULL':
-                                        logger.warning(f"Schema mismatch for {layer.name()}: stored='{stored_schema}', actual='{detected_schema}'")
-                                    layer_info['layer_schema'] = detected_schema
-                                    logger.debug(f"Validated layer_schema='{detected_schema}' for layer {layer.name()}")
-                                elif not stored_schema or stored_schema == 'NULL':
-                                    layer_info['layer_schema'] = 'public'
-                                    logger.info(f"Auto-filled layer_schema='public' (default) for layer {layer.name()}")
-                            except Exception as e:
-                                logger.warning(f"Could not detect schema for {layer.name()}: {e}")
-                                if 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
-                                    # Fallback to regex if QgsDataSourceUri fails
-                                    import re
-                                    source = layer.source()
-                                    match = re.search(r'table="([^"]+)"\.', source)
-                                    if match:
-                                        layer_info['layer_schema'] = match.group(1)
-                                    else:
-                                        layer_info['layer_schema'] = 'public'
-                                    logger.info(f"Auto-filled layer_schema='{layer_info['layer_schema']}' (regex fallback) for layer {layer.name()}")
-                        elif 'layer_schema' not in layer_info or layer_info['layer_schema'] is None:
-                            layer_info['layer_schema'] = 'NULL'
-                        
-                        # Fill primary_key_name by searching for a unique field
-                        if 'primary_key_name' not in layer_info or layer_info['primary_key_name'] is None:
-                            pk_found = False
-                            # Check declared primary key
-                            pk_attrs = layer.primaryKeyAttributes()
-                            if pk_attrs:
-                                field = layer.fields()[pk_attrs[0]]
-                                layer_info['primary_key_name'] = field.name()
-                                pk_found = True
-                                logger.info(f"Auto-filled primary_key_name='{field.name()}' from primary key for layer {layer.name()}")
-                            
-                            # Fallback: look for 'id' field
-                            if not pk_found:
-                                for field in layer.fields():
-                                    if 'id' in field.name().lower():
-                                        layer_info['primary_key_name'] = field.name()
-                                        pk_found = True
-                                        logger.info(f"Auto-filled primary_key_name='{field.name()}' (contains 'id') for layer {layer.name()}")
-                                        break
-                            
-                            # Last resort: use first numeric field
-                            if not pk_found:
-                                for field in layer.fields():
-                                    if field.isNumeric():
-                                        layer_info['primary_key_name'] = field.name()
-                                        logger.info(f"Auto-filled primary_key_name='{field.name()}' (first numeric) for layer {layer.name()}")
-                                        break
-                        
-                        # Log what still couldn't be filled
-                        still_missing = [k for k in required_keys if k not in layer_info or layer_info[k] is None]
-                        if still_missing:
-                            logger.error(f"Cannot filter layer {layer.name()} (id={key}): still missing {still_missing}")
-                            continue
-                        else:
-                            logger.info(f"Successfully auto-filled missing properties for layer {layer.name()}")
-                            # Update PROJECT_LAYERS with auto-filled values
-                            self.PROJECT_LAYERS[key]["infos"].update(layer_info)
-                    else:
-                        logger.error(f"Cannot filter layer {key}: layer not found in project")
-                        continue
-                
-                layers_to_filter.append(layer_info)
-                logger.info(f"  ✓ Added layer to filter list: {layer_info.get('layer_name', key)}")
+            
+            layers_to_filter.append(layer_info)
+            logger.info(f"  ✓ Added layer to filter list: {layer_info.get('layer_name', key)}")
         
         logger.info(f"=== Built layers_to_filter list with {len(layers_to_filter)} layers ===")
         return layers_to_filter
@@ -3128,7 +3158,9 @@ class FilterMateApp:
                 # Use GDAL error handler to suppress transient SQLite warnings during refresh
                 with GdalErrorHandler():
                     # v2.6.5: Skip updateExtents for large layers to prevent freeze
-                    MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000
+                    # v2.7.6: Use configurable threshold
+                    thresholds = get_optimization_thresholds(ENV_VARS)
+                    MAX_FEATURES_FOR_UPDATE_EXTENTS = thresholds['update_extents_threshold']
                     feature_count = source_layer.featureCount() if source_layer else 0
                     if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                         source_layer.updateExtents()

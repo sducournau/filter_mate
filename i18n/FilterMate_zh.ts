@@ -104,6 +104,18 @@ Please restart QGIS to apply all changes.</source>
         <translation>配置已更新至最新版本</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>配置已更新：新设置可用 ({sections})。通过选项菜单访问。</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>几何简化</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>优化阈值</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>几何验证设置</translation>
     </message>

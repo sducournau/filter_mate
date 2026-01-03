@@ -144,6 +144,18 @@ Do you want to continue?</translation>
         <translation>Configuration updated to latest version</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Configuration updated: new settings available ({sections}). Access via Options menu.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometry Simplification</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Optimization Thresholds</translation>
+    </message>
+    <message>
         <source>Error during configuration migration: {}</source>
         <translation>Error during configuration migration: {}</translation>
     </message>

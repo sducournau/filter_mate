@@ -144,6 +144,18 @@ Davom etmoqchimisiz?</translation>
         <translation>Sozlamalar eng so&apos;nggi versiyaga yangilandi</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Sozlamalar yangilandi: yangi sozlamalar mavjud ({sections}). Tanlovlar menyusi orqali kirish.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometriyani soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Optimallashtirish chegaralari</translation>
+    </message>
+    <message>
         <source>Error during configuration migration: {}</source>
         <translation>Sozlamalarni ko&apos;chirish vaqtida xatolik: {}</translation>
     </message>

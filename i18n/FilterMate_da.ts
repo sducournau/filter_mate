@@ -104,6 +104,18 @@ Genstart QGIS for at anvende alle ændringer.</translation>
         <translation>Konfiguration opdateret til seneste version</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Konfiguration opdateret: nye indstillinger tilgængelige ({sections}). Tilgå via Indstillinger menu.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometri forenkling</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Optimeringstærskler</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Geometri valideringsindstilling</translation>
     </message>

@@ -649,7 +649,139 @@ class ConfigMigration:
                 return False, f"Failed to save config: {e}"
         
         return False, "No updates needed"
-    
+
+    def update_settings_sections(self) -> Tuple[bool, str, List[str]]:
+        """
+        Update SETTINGS sections in config.json to add new configurable parameters
+        like GEOMETRY_SIMPLIFICATION and OPTIMIZATION_THRESHOLDS if missing.
+        
+        This ensures user configs are automatically updated when new settings
+        sections are added without requiring a full migration.
+        
+        Returns:
+            Tuple of (updated, message, list_of_added_sections)
+        """
+        if not os.path.exists(self.config_path):
+            return False, "Config file not found", []
+        
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        except Exception as e:
+            return False, f"Failed to load config: {e}", []
+        
+        updated = False
+        added_sections = []
+        
+        # Ensure APP.SETTINGS exists
+        if "APP" not in config_data:
+            config_data["APP"] = {}
+        if "SETTINGS" not in config_data["APP"]:
+            config_data["APP"]["SETTINGS"] = {}
+        
+        settings = config_data["APP"]["SETTINGS"]
+        
+        # Add GEOMETRY_SIMPLIFICATION if missing
+        if "GEOMETRY_SIMPLIFICATION" not in settings:
+            settings["GEOMETRY_SIMPLIFICATION"] = {
+                "description": "Geometry simplification settings for large WKT expressions",
+                "enabled": {
+                    "value": True,
+                    "choices": [True, False],
+                    "description": "Enable automatic geometry simplification for large WKT expressions"
+                },
+                "max_wkt_length": {
+                    "value": 100000,
+                    "min": 10000,
+                    "max": 1000000,
+                    "description": "Maximum WKT string length (chars) before simplification is applied"
+                },
+                "preserve_topology": {
+                    "value": True,
+                    "choices": [True, False],
+                    "description": "Preserve geometry topology during simplification (prevents self-intersections)"
+                },
+                "min_tolerance_meters": {
+                    "value": 1.0,
+                    "min": 0.1,
+                    "max": 100.0,
+                    "description": "Minimum simplification tolerance in meters"
+                },
+                "max_tolerance_meters": {
+                    "value": 100.0,
+                    "min": 10.0,
+                    "max": 1000.0,
+                    "description": "Maximum simplification tolerance in meters (prevents excessive distortion)"
+                },
+                "show_simplification_warnings": {
+                    "value": True,
+                    "choices": [True, False],
+                    "description": "Show warning messages when geometry is simplified"
+                }
+            }
+            updated = True
+            added_sections.append("GEOMETRY_SIMPLIFICATION")
+        
+        # Add OPTIMIZATION_THRESHOLDS if missing
+        if "OPTIMIZATION_THRESHOLDS" not in settings:
+            settings["OPTIMIZATION_THRESHOLDS"] = {
+                "description": "Thresholds for automatic optimizations (feature counts and sizes)",
+                "large_dataset_warning": {
+                    "value": 50000,
+                    "min": 0,
+                    "max": 1000000,
+                    "description": "Feature count above which performance warnings are displayed (0 to disable)"
+                },
+                "async_expression_threshold": {
+                    "value": 10000,
+                    "min": 1000,
+                    "max": 500000,
+                    "description": "Feature count above which expression evaluation runs in background thread"
+                },
+                "update_extents_threshold": {
+                    "value": 50000,
+                    "min": 1000,
+                    "max": 500000,
+                    "description": "Feature count below which layer extents are automatically updated after filtering"
+                },
+                "centroid_optimization_threshold": {
+                    "value": 5000,
+                    "min": 1000,
+                    "max": 100000,
+                    "description": "Feature count above which centroid optimization is applied for distant layers"
+                },
+                "exists_subquery_threshold": {
+                    "value": 100000,
+                    "min": 10000,
+                    "max": 1000000,
+                    "description": "WKT length (chars) above which EXISTS subquery mode is used instead of inline WKT"
+                },
+                "parallel_processing_threshold": {
+                    "value": 100000,
+                    "min": 10000,
+                    "max": 1000000,
+                    "description": "Feature count above which parallel processing is enabled"
+                },
+                "progress_update_batch_size": {
+                    "value": 100,
+                    "min": 10,
+                    "max": 1000,
+                    "description": "Number of features between progress bar updates (higher = faster but less responsive)"
+                }
+            }
+            updated = True
+            added_sections.append("OPTIMIZATION_THRESHOLDS")
+        
+        if updated:
+            try:
+                with open(self.config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=2, ensure_ascii=False)
+                return True, "Settings sections updated successfully", added_sections
+            except Exception as e:
+                return False, f"Failed to save config: {e}", []
+        
+        return False, "No updates needed", []
+
     def auto_migrate_if_needed(self, confirm_reset_callback: Optional[callable] = None) -> Tuple[bool, List[str]]:
         """
         Automatically detect and migrate configuration if needed.
@@ -718,11 +850,22 @@ class ConfigMigration:
         # Check if migration is needed
         if not self.needs_migration(config_data):
             print(f"✓ Configuration is up to date (v{self.CURRENT_VERSION})")
+            any_updated = False
+            
             # Still check for UI_PROFILE updates (new options like hidpi)
             updated, update_msg = self.update_ui_profile_options()
             if updated:
                 print(f"✓ {update_msg}")
-            return updated, warnings
+                any_updated = True
+            
+            # Check for new SETTINGS sections (v2.7.6+)
+            settings_updated, settings_msg, added_sections = self.update_settings_sections()
+            if settings_updated:
+                print(f"✓ {settings_msg}: {', '.join(added_sections)}")
+                warnings.append(f"config_updated:{','.join(added_sections)}")
+                any_updated = True
+            
+            return any_updated, warnings
         
         current_version = self.detect_version(config_data)
         print(f"⚠ Configuration needs migration from v{current_version} to v{self.CURRENT_VERSION}")

@@ -6,23 +6,22 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.6.8
+version=2.7.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.6.7 - PostgreSQL Distant Layer Geometric Filtering Fix
+about=FilterMate v2.7.6 - PostgreSQL EXISTS Filter for Selected Features Fix
 
- NEW in v2.6.7:
- - 🐛 FIX: PostgreSQL distant layers not filtered with EXISTS spatial expressions
- - 🐛 FIX: Expression now uses unqualified column name for setSubsetString context
- - ✓ Correct expression: EXISTS (SELECT 1 FROM "schema"."source" AS __source WHERE ST_Intersects("geom", __source."geom"))
+ NEW in v2.7.6:
+ - 🐛 FIX: PostgreSQL EXISTS subquery ignores selected features when WKT is too long
+ - 🐛 FIX: When selecting complex geometries (>100KB WKT), generates PK-based filter for EXISTS
+ - 🚀 NEW: Adaptive geometry simplification algorithm (25M chars → 100K with topology preservation)
+ - ✓ Correct behavior: Selected 1 commune → distant layers filtered to intersecting features only
 
- Previous version (v2.6.6):
- - 🐛 FIX: QGIS freeze when filtering with Spatialite/GeoPackage backend
- - 🐛 FIX: Removed reloadData() calls for OGR/Spatialite layers (causes freeze)
- - 🚀 PERF: Only PostgreSQL uses reloadData() for MV-based complex filters
+ Previous version (v2.7.5):
+ - 🐛 FIX: PostgreSQL geometric filtering with negative buffer causes "missing FROM-clause entry" SQL error
 
- Previous version (v2.6.5):
+ Previous version (v2.6.7):
  - 🐛 FIX: QGIS freeze on plugin reload with large layers (batiment, etc.)
  - 🐛 FIX: get_filtered_layer_extent() now limits iteration to 10k features
  - 🐛 FIX: Multiple selection extent calculation limited to 500 items

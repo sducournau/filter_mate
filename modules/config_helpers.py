@@ -879,3 +879,101 @@ def get_feature_count_limit(config_data: dict) -> int:
         ("CURRENT_PROJECT", "OPTIONS", "LAYERS", "FEATURE_COUNT_LIMIT"),
         default=10000
     )
+
+
+def get_optimization_thresholds(config_data: dict) -> Dict[str, int]:
+    """
+    Get optimization thresholds from configuration.
+    
+    Args:
+        config_data: Root configuration dictionary
+        
+    Returns:
+        dict: Optimization thresholds with keys:
+            - large_dataset_warning: int (feature count for performance warnings)
+            - async_expression_threshold: int (feature count for async expressions)
+            - update_extents_threshold: int (feature count for auto extent update)
+            - centroid_optimization_threshold: int (feature count for centroid opt)
+            - exists_subquery_threshold: int (WKT length for EXISTS mode)
+            - parallel_processing_threshold: int (feature count for parallel)
+            - progress_update_batch_size: int (features per progress update)
+    """
+    # Default values
+    defaults = {
+        'large_dataset_warning': 50000,
+        'async_expression_threshold': 10000,
+        'update_extents_threshold': 50000,
+        'centroid_optimization_threshold': 5000,
+        'exists_subquery_threshold': 100000,
+        'parallel_processing_threshold': 100000,
+        'progress_update_batch_size': 100
+    }
+    
+    # Try to get from config
+    try:
+        app_config = config_data.get('APP', {})
+        settings = app_config.get('SETTINGS', {})
+        opt_config = settings.get('OPTIMIZATION_THRESHOLDS', {})
+        
+        if opt_config:
+            result = {}
+            for key, default_val in defaults.items():
+                config_entry = opt_config.get(key, {})
+                if isinstance(config_entry, dict):
+                    result[key] = config_entry.get('value', default_val)
+                else:
+                    result[key] = config_entry if config_entry is not None else default_val
+            return result
+    except Exception:
+        pass
+    
+    return defaults
+
+
+def get_simplification_config(config_data: dict) -> Dict[str, Any]:
+    """
+    Get geometry simplification configuration.
+    
+    Args:
+        config_data: Root configuration dictionary
+        
+    Returns:
+        dict: Simplification configuration with keys:
+            - enabled: bool
+            - max_wkt_length: int
+            - preserve_topology: bool
+            - min_tolerance_meters: float
+            - max_tolerance_meters: float
+            - show_warnings: bool
+    """
+    # Default values
+    defaults = {
+        'enabled': True,
+        'max_wkt_length': 100000,
+        'preserve_topology': True,
+        'min_tolerance_meters': 1.0,
+        'max_tolerance_meters': 100.0,
+        'show_warnings': True
+    }
+    
+    # Try to get from config
+    try:
+        app_config = config_data.get('APP', {})
+        settings = app_config.get('SETTINGS', {})
+        simp_config = settings.get('GEOMETRY_SIMPLIFICATION', {})
+        
+        if simp_config:
+            result = {}
+            for key, default_val in defaults.items():
+                # Handle mapping for show_warnings -> show_simplification_warnings
+                config_key = 'show_simplification_warnings' if key == 'show_warnings' else key
+                config_entry = simp_config.get(config_key, {})
+                if isinstance(config_entry, dict):
+                    result[key] = config_entry.get('value', default_val)
+                else:
+                    result[key] = config_entry if config_entry is not None else default_val
+            return result
+    except Exception:
+        pass
+    
+    return defaults

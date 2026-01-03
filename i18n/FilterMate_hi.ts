@@ -104,6 +104,18 @@ Please restart QGIS to apply all changes.</source>
         <translation>कॉन्फ़िगरेशन नवीनतम संस्करण में अपडेट हो गई</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>कॉन्फ़िगरेशन अपडेट: नई सेटिंग्स उपलब्ध ({sections})। विकल्प मेनू से एक्सेस करें।</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>ज्यामिति सरलीकरण</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>अनुकूलन सीमा</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>ज्यामिति सत्यापन सेटिंग</translation>
     </message>

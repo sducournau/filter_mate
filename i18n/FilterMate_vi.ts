@@ -104,6 +104,18 @@ Vui lòng khởi động lại QGIS để áp dụng tất cả các thay đổi
         <translation>Cấu hình đã được cập nhật lên phiên bản mới nhất</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Cấu hình đã cập nhật: cài đặt mới có sẵn ({sections}). Truy cập qua menu Tùy chọn.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Đơn giản hóa hình học</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Ngưỡng tối ưu hóa</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Cài đặt xác thực hình học</translation>
     </message>

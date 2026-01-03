@@ -104,6 +104,18 @@ Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</t
         <translation>Yapılandırma en son sürüme güncellendi</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Yapılandırma güncellendi: yeni ayarlar mevcut ({sections}). Seçenekler menüsünden erişin.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometri Basitleştirme</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Optimizasyon Eşikleri</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Geometri doğrulama ayarı</translation>
     </message>

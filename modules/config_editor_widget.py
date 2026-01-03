@@ -20,7 +20,7 @@ Date: December 2025
 
 from qgis.PyQt.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
-    QComboBox, QLineEdit, QSpinBox, QPushButton, QGroupBox,
+    QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
     QScrollArea, QColorDialog, QFormLayout, QFrame
 )
 from qgis.PyQt.QtCore import Qt, pyqtSignal
@@ -164,6 +164,12 @@ class ConfigEditorWidget(QWidget):
             max_val = validation.get('max', 999999)
             return self.create_spinbox(config_path, current_value, min_val, max_val)
         
+        elif widget_type == 'doublespinbox':
+            validation = meta.get('validation', {})
+            min_val = validation.get('min', 0.0)
+            max_val = validation.get('max', 999999.0)
+            return self.create_doublespinbox(config_path, current_value, min_val, max_val)
+        
         elif widget_type == 'colorpicker':
             return self.create_colorpicker(config_path, current_value)
         
@@ -229,6 +235,22 @@ class ConfigEditorWidget(QWidget):
         spinbox.setMinimum(min_val)
         spinbox.setMaximum(max_val)
         spinbox.setValue(int(current_value or 0))
+        
+        spinbox.valueChanged.connect(
+            lambda value: self.on_value_changed(config_path, value)
+        )
+        
+        return spinbox
+    
+    def create_doublespinbox(self, config_path: str, current_value: float,
+                             min_val: float, max_val: float) -> QDoubleSpinBox:
+        """Create double spinbox widget for float values."""
+        spinbox = QDoubleSpinBox()
+        spinbox.setMinimum(float(min_val))
+        spinbox.setMaximum(float(max_val))
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(0.1)
+        spinbox.setValue(float(current_value or 0.0))
         
         spinbox.valueChanged.connect(
             lambda value: self.on_value_changed(config_path, value)

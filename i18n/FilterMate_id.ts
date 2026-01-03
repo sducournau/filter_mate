@@ -104,6 +104,18 @@ Silakan restart QGIS untuk menerapkan semua perubahan.</translation>
         <translation>Konfigurasi diperbarui ke versi terbaru</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Konfigurasi diperbarui: pengaturan baru tersedia ({sections}). Akses melalui menu Opsi.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Penyederhanaan Geometri</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Ambang Batas Optimasi</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Pengaturan validasi geometri</translation>
     </message>

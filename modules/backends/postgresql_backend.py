@@ -581,6 +581,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Step 1: Strip outer parentheses BEFORE regex substitution
         filter_expr = strip_balanced_outer_parens(filter_expr)
         
+        # v2.7.9: DIAGNOSTIC - Log the adaptation parameters
+        self.log_info(f"  🔄 _adapt_filter_for_subquery:")
+        self.log_info(f"     → schema='{schema}', table='{table}'")
+        self.log_info(f"     → input: '{filter_expr[:80]}'...")
+        
         # Step 2: Apply regex substitutions for table references
         # Pattern 1: "schema"."table"."column" -> __source."column"
         three_part_pattern = rf'"{re.escape(schema)}"\s*\.\s*"{re.escape(table)}"\s*\.\s*"([^"]+)"'
@@ -589,6 +594,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # Pattern 2: "table"."column" -> __source."column"
         two_part_pattern = rf'"{re.escape(table)}"\s*\.\s*"([^"]+)"'
         adapted = re.sub(two_part_pattern, r'__source."\1"', adapted)
+        
+        # v2.7.9: Log the result of adaptation
+        self.log_info(f"     → output: '{adapted[:80]}'...")
         
         # Step 3: CRITICAL FIX - Strip outer parentheses AFTER regex substitution
         # The regex may have changed the structure, leaving orphan parentheses
@@ -1243,6 +1251,20 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     is_raw_wkt = any(source_geom_upper.startswith(prefix) for prefix in wkt_prefixes)
                     
                     if is_raw_wkt:
+                        # CRITICAL FIX v2.7.6: Check if WKT is too large for direct embedding
+                        # Large WKT (> MAX_WKT_LENGTH) can cause PostgreSQL to fail silently
+                        # or return incorrect results when used in setSubsetString.
+                        # In this case, return empty to trigger OGR fallback.
+                        source_geom_len = len(source_geom) if source_geom else 0
+                        if source_geom_len > self.MAX_WKT_LENGTH:
+                            self.log_error(f"❌ STRATEGY 2 ABORT: WKT too large ({source_geom_len:,} chars > {self.MAX_WKT_LENGTH:,} max)")
+                            self.log_error(f"  → Cannot embed {source_geom_len:,} char WKT into SQL expression")
+                            self.log_error(f"  → Layer: {layer_props.get('layer_name', 'unknown')}")
+                            self.log_error(f"  → Source geometry is too complex for PostgreSQL ST_GeomFromText")
+                            self.log_error(f"  → Returning empty expression to trigger OGR fallback")
+                            # Return empty string to signal failure and trigger OGR fallback
+                            return ""
+                        
                         self.log_warning(f"⚠️ source_geom is raw WKT - wrapping in ST_GeomFromText()")
                         
                         # Get SRID from source layer or fallback to default
@@ -1275,7 +1297,17 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             # we MUST still use WKT because there's no alternative. Without this fallback,
             # the filter expression is empty and returns ALL features unfiltered!
             # This happens when selecting complex geometries from GeoPackage layers.
+            # CRITICAL FIX v2.7.6: Check WKT size - if too large, return empty to trigger OGR fallback
             elif source_wkt is not None and source_srid is not None:
+                # v2.7.6: Check if WKT is too large for PostgreSQL embedding
+                if wkt_length > self.MAX_WKT_LENGTH:
+                    self.log_error(f"❌ STRATEGY 3 ABORT: WKT too large ({wkt_length:,} chars > {self.MAX_WKT_LENGTH:,} max)")
+                    self.log_error(f"  → Cannot embed {wkt_length:,} char WKT into SQL expression")
+                    self.log_error(f"  → Layer: {layer_props.get('layer_name', 'unknown')}")
+                    self.log_error(f"  → Source geometry is too complex for PostgreSQL ST_GeomFromText")
+                    self.log_error(f"  → Returning empty expression to trigger OGR fallback")
+                    return ""
+                
                 self.log_warning(f"⚠️ STRATEGY 3: WKT fallback for OGR source layer")
                 self.log_warning(f"  → source_geom is None (non-PostgreSQL source)")
                 self.log_warning(f"  → WKT is large ({wkt_length} chars) but no alternative available")

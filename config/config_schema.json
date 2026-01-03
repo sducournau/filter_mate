@@ -319,6 +319,160 @@
         "default": 100,
         "user_friendly_label": "Max Cache Size (MB)"
       }
+    },
+    "optimization_thresholds": {
+      "large_dataset_warning": {
+        "description": "Feature count above which performance warnings are displayed (0 to disable)",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 0,
+          "max": 1000000
+        },
+        "default": 50000,
+        "user_friendly_label": "Large Dataset Warning Threshold"
+      },
+      "async_expression_threshold": {
+        "description": "Feature count above which expression evaluation runs in background thread",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 1000,
+          "max": 500000
+        },
+        "default": 10000,
+        "user_friendly_label": "Async Expression Threshold"
+      },
+      "update_extents_threshold": {
+        "description": "Feature count below which layer extents are automatically updated after filtering",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 1000,
+          "max": 500000
+        },
+        "default": 50000,
+        "user_friendly_label": "Update Extents Threshold"
+      },
+      "centroid_optimization_threshold": {
+        "description": "Feature count above which centroid optimization is applied for distant layers",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 1000,
+          "max": 100000
+        },
+        "default": 5000,
+        "user_friendly_label": "Centroid Optimization Threshold"
+      },
+      "exists_subquery_threshold": {
+        "description": "WKT length (chars) above which EXISTS subquery mode is used instead of inline WKT",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 10000,
+          "max": 1000000
+        },
+        "default": 100000,
+        "user_friendly_label": "EXISTS Subquery Threshold"
+      },
+      "parallel_processing_threshold": {
+        "description": "Feature count above which parallel processing is enabled",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 10000,
+          "max": 1000000
+        },
+        "default": 100000,
+        "user_friendly_label": "Parallel Processing Threshold"
+      },
+      "progress_update_batch_size": {
+        "description": "Number of features between progress bar updates (higher = faster but less responsive)",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 10,
+          "max": 1000
+        },
+        "default": 100,
+        "user_friendly_label": "Progress Update Batch Size"
+      }
+    },
+    "geometry_simplification": {
+      "enabled": {
+        "description": "Enable automatic geometry simplification for large WKT expressions (reduces SQL size for better performance)",
+        "widget_type": "checkbox",
+        "data_type": "boolean",
+        "validation": {
+          "required": true
+        },
+        "default": true,
+        "user_friendly_label": "Enable Geometry Simplification"
+      },
+      "max_wkt_length": {
+        "description": "Maximum WKT string length in characters before simplification is applied (100000 = 100KB)",
+        "widget_type": "spinbox",
+        "data_type": "integer",
+        "validation": {
+          "required": true,
+          "min": 10000,
+          "max": 1000000
+        },
+        "default": 100000,
+        "user_friendly_label": "Max WKT Length (chars)"
+      },
+      "preserve_topology": {
+        "description": "Preserve geometry topology during simplification (prevents self-intersections but may result in less reduction)",
+        "widget_type": "checkbox",
+        "data_type": "boolean",
+        "validation": {
+          "required": true
+        },
+        "default": true,
+        "user_friendly_label": "Preserve Topology"
+      },
+      "min_tolerance_meters": {
+        "description": "Minimum simplification tolerance in meters (higher values = more simplification but less precision)",
+        "widget_type": "doublespinbox",
+        "data_type": "float",
+        "validation": {
+          "required": true,
+          "min": 0.1,
+          "max": 100.0
+        },
+        "default": 1.0,
+        "user_friendly_label": "Min Tolerance (meters)"
+      },
+      "max_tolerance_meters": {
+        "description": "Maximum simplification tolerance in meters (limit to prevent excessive geometry distortion)",
+        "widget_type": "doublespinbox",
+        "data_type": "float",
+        "validation": {
+          "required": true,
+          "min": 10.0,
+          "max": 1000.0
+        },
+        "default": 100.0,
+        "user_friendly_label": "Max Tolerance (meters)"
+      },
+      "show_simplification_warnings": {
+        "description": "Show warning messages when geometry is simplified or when simplification fails",
+        "widget_type": "checkbox",
+        "data_type": "boolean",
+        "validation": {
+          "required": true
+        },
+        "default": true,
+        "user_friendly_label": "Show Simplification Warnings"
+      }
     }
   }
 }

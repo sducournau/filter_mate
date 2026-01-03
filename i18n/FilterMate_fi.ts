@@ -104,6 +104,18 @@ Käynnistä QGIS uudelleen ottaaksesi kaikki muutokset käyttöön.</translation
         <translation>Asetukset päivitetty uusimpaan versioon</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Asetukset päivitetty: uudet asetukset saatavilla ({sections}). Pääsy Asetukset-valikon kautta.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometrian yksinkertaistaminen</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Optimointirajat</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Geometrian tarkistusasetus</translation>
     </message>

@@ -104,6 +104,18 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
         <translation>Configuration mise à jour vers la dernière version</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Configuration mise à jour : nouveaux paramètres disponibles ({sections}). Accès via le menu Options.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Simplification des géométries</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Seuils d&apos;optimisation</translation>
+    </message>
+    <message>
         <source>Geometry validation setting</source>
         <translation>Paramètre de validation des géométries</translation>
     </message>

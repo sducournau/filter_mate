@@ -144,6 +144,18 @@ Do you want to continue?</translation>
         <translation>ውቅረት ወደ አዲሱ ስሪት ተዘምኗል</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>ውቅረት ተዘምኗል: አዲስ ቅንብሮች አሉ ({sections})። በአማራጭምነው ይድረሱ።</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>የጂኦሜትሪ ማሳለጥ</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>የማሳጣኘት ደረጃዎች</translation>
+    </message>
+    <message>
         <source>Error during configuration migration: {}</source>
         <translation>Error during configuration migration: {}</translation>
     </message>

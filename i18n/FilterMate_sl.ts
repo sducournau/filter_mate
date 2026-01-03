@@ -144,6 +144,18 @@ Do you want to continue?</translation>
         <translation>Konfiguracija posodobljena na najnovejšo različico</translation>
     </message>
     <message>
+        <source>Configuration updated: new settings available ({sections}). Access via Options menu.</source>
+        <translation>Konfiguracija posodobljena: nove nastavitve na voljo ({sections}). Dostop prek menija Možnosti.</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Poenostavitev geometrije</translation>
+    </message>
+    <message>
+        <source>Optimization Thresholds</source>
+        <translation>Pragovi optimizacije</translation>
+    </message>
+    <message>
         <source>Error during configuration migration: {}</source>
         <translation>Error during configuration migration: {}</translation>
     </message>
