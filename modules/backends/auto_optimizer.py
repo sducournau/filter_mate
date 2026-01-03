@@ -182,6 +182,11 @@ CENTROID_AUTO_THRESHOLD_LOCAL = 50000       # Auto-enable for local layers > 50k
 SIMPLIFY_AUTO_THRESHOLD = 100000            # Auto-simplify for layers > 100k features
 SIMPLIFY_TOLERANCE_FACTOR = 0.001           # Tolerance as fraction of extent diagonal
 
+# Buffer simplification thresholds
+BUFFER_SIMPLIFY_VERTEX_THRESHOLD = 50       # Simplify before buffer if avg vertices > this
+BUFFER_SIMPLIFY_FEATURE_THRESHOLD = 1000    # Simplify before buffer if feature count > this
+BUFFER_SIMPLIFY_DEFAULT_TOLERANCE = 1.0     # Default tolerance in meters for buffer simplification
+
 # Large WKT thresholds (chars)
 LARGE_WKT_THRESHOLD = 100000                # Use R-tree optimization above this
 VERY_LARGE_WKT_THRESHOLD = 500000           # Force aggressive optimization
@@ -196,6 +201,7 @@ class OptimizationType(Enum):
     NONE = "none"
     USE_CENTROID = "use_centroid"
     SIMPLIFY_GEOMETRY = "simplify_geometry"
+    SIMPLIFY_BEFORE_BUFFER = "simplify_before_buffer"  # Simplify geometry before buffer
     BBOX_PREFILTER = "bbox_prefilter"
     ATTRIBUTE_FIRST = "attribute_first"
     PROGRESSIVE_CHUNKS = "progressive_chunks"
@@ -463,7 +469,8 @@ class AutoOptimizer:
         self,
         enable_auto_centroid: Optional[bool] = None,
         enable_auto_simplify: Optional[bool] = None,
-        enable_auto_strategy: Optional[bool] = None
+        enable_auto_strategy: Optional[bool] = None,
+        enable_auto_simplify_buffer: Optional[bool] = None
     ):
         """
         Initialize the auto-optimizer.
@@ -472,6 +479,7 @@ class AutoOptimizer:
             enable_auto_centroid: Auto-enable centroid for distant layers (None = use config)
             enable_auto_simplify: Auto-enable geometry simplification (None = use config)
             enable_auto_strategy: Auto-select optimal filtering strategy (None = use config)
+            enable_auto_simplify_buffer: Auto-simplify geometry before buffer (None = use config)
         """
         # Load configuration
         config = get_auto_optimization_config()
@@ -483,10 +491,14 @@ class AutoOptimizer:
         self.enable_auto_centroid = enable_auto_centroid if enable_auto_centroid is not None else config.get('auto_centroid_for_distant', True)
         self.enable_auto_simplify = enable_auto_simplify if enable_auto_simplify is not None else config.get('auto_simplify_geometry', False)
         self.enable_auto_strategy = enable_auto_strategy if enable_auto_strategy is not None else config.get('auto_strategy_selection', True)
+        self.enable_auto_simplify_buffer = enable_auto_simplify_buffer if enable_auto_simplify_buffer is not None else config.get('auto_simplify_before_buffer', True)
         
         # Load thresholds from config
         self.centroid_threshold_distant = config.get('centroid_threshold_distant', CENTROID_AUTO_THRESHOLD_DISTANT)
         self.centroid_threshold_local = config.get('centroid_threshold_local', CENTROID_AUTO_THRESHOLD_LOCAL)
+        self.buffer_simplify_vertex_threshold = config.get('buffer_simplify_vertex_threshold', BUFFER_SIMPLIFY_VERTEX_THRESHOLD)
+        self.buffer_simplify_feature_threshold = config.get('buffer_simplify_feature_threshold', BUFFER_SIMPLIFY_FEATURE_THRESHOLD)
+        self.buffer_simplify_default_tolerance = config.get('buffer_simplify_default_tolerance', BUFFER_SIMPLIFY_DEFAULT_TOLERANCE)
         self.show_hints = config.get('show_optimization_hints', True)
     
     def create_optimization_plan(
@@ -496,7 +508,9 @@ class AutoOptimizer:
         source_wkt_length: int = 0,
         predicates: Optional[Dict] = None,
         attribute_filter: Optional[str] = None,
-        user_requested_centroids: Optional[bool] = None
+        user_requested_centroids: Optional[bool] = None,
+        has_buffer: bool = False,
+        buffer_value: float = 0.0
     ) -> OptimizationPlan:
         """
         Create an optimization plan for a filtering operation.
@@ -508,6 +522,8 @@ class AutoOptimizer:
             predicates: Spatial predicates being used
             attribute_filter: Attribute filter expression
             user_requested_centroids: Explicit user choice (None = auto)
+            has_buffer: Whether buffer is being applied
+            buffer_value: Buffer distance value (positive or negative)
             
         Returns:
             OptimizationPlan with recommendations
@@ -543,6 +559,13 @@ class AutoOptimizer:
                     f"(reduces precision but improves performance)"
                 )
         
+        # 2b. BUFFER SIMPLIFICATION OPTIMIZATION (auto-applicable)
+        buffer_simplify_rec = self._evaluate_buffer_simplify_optimization(
+            target_analysis, source_analysis, has_buffer, buffer_value
+        )
+        if buffer_simplify_rec:
+            recommendations.append(buffer_simplify_rec)
+        
         # 3. STRATEGY OPTIMIZATION
         strategy_rec = self._evaluate_strategy_optimization(
             target_analysis, attribute_filter, predicates
@@ -559,11 +582,17 @@ class AutoOptimizer:
                 for r in recommendations)
         )
         
+        # Get simplify tolerance - prioritize buffer simplification if applicable
         final_simplify = None
         for rec in recommendations:
-            if rec.optimization_type == OptimizationType.SIMPLIFY_GEOMETRY and rec.auto_applicable:
+            if rec.optimization_type == OptimizationType.SIMPLIFY_BEFORE_BUFFER and rec.auto_applicable:
                 final_simplify = rec.parameters.get('tolerance')
                 break
+        if final_simplify is None:
+            for rec in recommendations:
+                if rec.optimization_type == OptimizationType.SIMPLIFY_GEOMETRY and rec.auto_applicable:
+                    final_simplify = rec.parameters.get('tolerance')
+                    break
         
         final_strategy = "default"
         for rec in recommendations:
@@ -598,7 +627,8 @@ class AutoOptimizer:
     
     def get_recommendations(
         self,
-        layer_analysis: 'LayerAnalysis'
+        layer_analysis: 'LayerAnalysis',
+        user_centroid_enabled: Optional[bool] = None
     ) -> List[OptimizationRecommendation]:
         """
         Get optimization recommendations for a single layer.
@@ -608,6 +638,9 @@ class AutoOptimizer:
         
         Args:
             layer_analysis: Analysis of the layer to optimize
+            user_centroid_enabled: True if user has already enabled centroid optimization
+                                   (via checkbox or previous choice). If True, centroid
+                                   recommendation will be skipped.
             
         Returns:
             List of OptimizationRecommendation objects
@@ -618,13 +651,18 @@ class AutoOptimizer:
         recommendations = []
         
         # 1. CENTROID OPTIMIZATION - check if layer would benefit from centroid usage
-        centroid_rec = self._evaluate_centroid_optimization(
-            target=layer_analysis,
-            source=None,
-            user_requested=None
-        )
-        if centroid_rec:
-            recommendations.append(centroid_rec)
+        # Skip if user has already enabled centroids (avoid redundant recommendation)
+        if user_centroid_enabled is True:
+            # User already has centroid enabled - no need to recommend
+            logger.debug(f"Skipping centroid recommendation for {layer_analysis.layer_name}: already enabled by user")
+        else:
+            centroid_rec = self._evaluate_centroid_optimization(
+                target=layer_analysis,
+                source=None,
+                user_requested=None  # None = auto-detect based on layer characteristics
+            )
+            if centroid_rec:
+                recommendations.append(centroid_rec)
         
         # 2. SIMPLIFICATION OPTIMIZATION - check if complex geometries need simplification
         simplify_rec = self._evaluate_simplify_optimization(
@@ -767,6 +805,92 @@ class AutoOptimizer:
         
         return None
     
+    def _evaluate_buffer_simplify_optimization(
+        self,
+        target: LayerAnalysis,
+        source: Optional[LayerAnalysis],
+        has_buffer: bool,
+        buffer_value: float
+    ) -> Optional[OptimizationRecommendation]:
+        """
+        Evaluate if geometry simplification before buffer should be recommended.
+        
+        This optimization simplifies geometries BEFORE applying buffer to improve
+        performance. Works for both positive and negative buffers.
+        
+        Args:
+            target: Target layer analysis
+            source: Source layer analysis (if any)
+            has_buffer: Whether buffer is being applied
+            buffer_value: Buffer distance (positive or negative)
+            
+        Returns:
+            OptimizationRecommendation if simplification is recommended
+        """
+        if not self.enable_auto_simplify_buffer:
+            return None
+        
+        if not has_buffer:
+            return None
+        
+        # Determine if simplification is beneficial based on geometry complexity
+        # For buffers, we check both source and target layers
+        layer_to_simplify = None
+        avg_vertices = 0
+        feature_count = 0
+        
+        # Source layer is typically the one being buffered
+        if source:
+            avg_vertices = source.avg_vertices_per_feature
+            feature_count = source.feature_count
+            layer_to_simplify = "source"
+        else:
+            avg_vertices = target.avg_vertices_per_feature
+            feature_count = target.feature_count
+            layer_to_simplify = "target"
+        
+        # Check thresholds for buffer simplification
+        should_simplify = (
+            avg_vertices > self.buffer_simplify_vertex_threshold or
+            feature_count > self.buffer_simplify_feature_threshold
+        )
+        
+        if not should_simplify:
+            return None
+        
+        # Calculate adaptive tolerance based on buffer size
+        # For small buffers, use smaller tolerance to preserve detail
+        # For large buffers, we can use larger tolerance
+        abs_buffer = abs(buffer_value)
+        if abs_buffer > 0:
+            # Tolerance = 10% of buffer size, clamped to reasonable range
+            adaptive_tolerance = max(
+                0.1,  # minimum 0.1 meters
+                min(abs_buffer * 0.1, self.buffer_simplify_default_tolerance)
+            )
+        else:
+            adaptive_tolerance = self.buffer_simplify_default_tolerance
+        
+        # Higher speedup for negative buffers (more complex operation)
+        is_negative_buffer = buffer_value < 0
+        estimated_speedup = 2.5 if is_negative_buffer else 2.0
+        
+        buffer_type = "negative" if is_negative_buffer else "positive"
+        
+        return OptimizationRecommendation(
+            optimization_type=OptimizationType.SIMPLIFY_BEFORE_BUFFER,
+            priority=1,  # High priority - buffer operations are expensive
+            estimated_speedup=estimated_speedup,
+            reason=f"Simplify geometry before {buffer_type} buffer ({avg_vertices:.0f} avg vertices, {feature_count:,} features)",
+            auto_applicable=True,  # Auto-apply without consent (safe optimization)
+            requires_user_consent=False,
+            parameters={
+                "tolerance": adaptive_tolerance,
+                "target": layer_to_simplify,
+                "buffer_value": buffer_value
+            }
+        )
+    
     def _evaluate_strategy_optimization(
         self,
         target: LayerAnalysis,
@@ -876,7 +1000,9 @@ def recommend_optimizations(
     source_wkt_length: int = 0,
     predicates: Optional[Dict] = None,
     attribute_filter: Optional[str] = None,
-    user_requested_centroids: Optional[bool] = None
+    user_requested_centroids: Optional[bool] = None,
+    has_buffer: bool = False,
+    buffer_value: float = 0.0
 ) -> OptimizationPlan:
     """
     Convenience function to get optimization recommendations.
@@ -888,6 +1014,8 @@ def recommend_optimizations(
         predicates: Spatial predicates being used
         attribute_filter: Attribute filter expression
         user_requested_centroids: Explicit user choice (None = auto)
+        has_buffer: Whether buffer is being applied
+        buffer_value: Buffer distance (positive or negative)
         
     Returns:
         OptimizationPlan with recommendations
@@ -899,7 +1027,9 @@ def recommend_optimizations(
         source_wkt_length=source_wkt_length,
         predicates=predicates,
         attribute_filter=attribute_filter,
-        user_requested_centroids=user_requested_centroids
+        user_requested_centroids=user_requested_centroids,
+        has_buffer=has_buffer,
+        buffer_value=buffer_value
     )
 
 

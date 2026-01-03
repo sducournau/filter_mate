@@ -3516,9 +3516,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 show_info("FilterMate", f"Could not analyze layer '{current_layer.name()}'")
                 return
             
-            # Get recommendations
+            # Check if centroid is already enabled by user (via checkbox or layer override)
+            user_centroid_enabled = self._is_centroid_already_enabled(current_layer)
+            
+            # Get recommendations - skip centroid if already enabled
             optimizer = AutoOptimizer()
-            recommendations = optimizer.get_recommendations(layer_analysis)
+            recommendations = optimizer.get_recommendations(
+                layer_analysis, 
+                user_centroid_enabled=user_centroid_enabled
+            )
             
             if not recommendations:
                 show_success("FilterMate", 
@@ -3601,6 +3607,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             show_warning("FilterMate", f"Error showing settings: {str(e)[:50]}")
             logger.error(f"Error in optimization settings dialog: {e}")
+    
+    def _is_centroid_already_enabled(self, layer) -> bool:
+        """
+        Check if centroid optimization is already enabled by the user.
+        
+        This is used to avoid proposing centroid optimization when the user
+        has already explicitly enabled it via:
+        1. The 'Use centroids for distant layers' checkbox in UI
+        2. The 'Use centroids for source layer' checkbox in UI
+        3. A layer-specific override stored in _layer_centroid_overrides
+        
+        Args:
+            layer: QgsVectorLayer to check
+            
+        Returns:
+            bool: True if centroid is already enabled (don't recommend again)
+        """
+        # Check layer-specific override first
+        if hasattr(self, '_layer_centroid_overrides'):
+            layer_id = layer.id() if layer else None
+            if layer_id and self._layer_centroid_overrides.get(layer_id, False):
+                return True
+        
+        # Check if distant layers checkbox is checked
+        if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
+            if self.checkBox_filtering_use_centroids_distant_layers.isChecked():
+                return True
+        
+        # Check if source layer checkbox is checked
+        if hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
+            if self.checkBox_filtering_use_centroids_source_layer.isChecked():
+                return True
+        
+        return False
     
     def should_use_centroid_for_layer(self, layer) -> bool:
         """
@@ -7035,7 +7075,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             elif self.current_exploring_groupbox == "custom_selection":
                 expression = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                logger.debug(f"   CUSTOM_SELECTION expression: '{expression}'")
+                logger.info(f"   CUSTOM_SELECTION expression from widget: '{expression}'")
+                
+                # v2.7.17: Additional diagnostics for custom selection
+                if not expression or not expression.strip():
+                    logger.warning(f"   ⚠️ CUSTOM_SELECTION: Empty expression!")
+                else:
+                    # Check expression validity
+                    qgs_expr = QgsExpression(expression)
+                    if qgs_expr.hasParserError():
+                        logger.warning(f"   ⚠️ CUSTOM_SELECTION: Expression parse error: {qgs_expr.parserErrorString()}")
+                    else:
+                        logger.info(f"   CUSTOM_SELECTION: Expression is valid")
+                    # Log layer subset state
+                    if self.current_layer.subsetString():
+                        logger.info(f"   CUSTOM_SELECTION: Layer has active subset - features will be from filtered set")
                 
                 # Save expression to layer_props before calling exploring_custom_selection
                 if self.current_layer.id() in self.PROJECT_LAYERS:
@@ -7043,7 +7097,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Process expression (whether field or complex expression)
                 features, expression = self.exploring_custom_selection()
-                logger.debug(f"   RESULT: features count = {len(features)}, expression = '{expression}'")
+                logger.info(f"   CUSTOM_SELECTION RESULT: {len(features)} features, expression='{expression}'")
+                
+                # v2.7.17: Warn if no features found with valid expression
+                if len(features) == 0 and expression:
+                    logger.warning(f"   ⚠️ CUSTOM_SELECTION: 0 features matched expression '{expression}'")
+                    if self.current_layer.subsetString():
+                        logger.warning(f"      Note: Layer is already filtered - expression evaluated on {self.current_layer.featureCount()} filtered features")
+                        logger.warning(f"      Consider: Reset layer filters before applying new custom expression")
 
             else:
                 logger.warning(f"   ⚠️ current_exploring_groupbox '{self.current_exploring_groupbox}' does not match any known groupbox!")
@@ -11220,16 +11281,43 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"Exploring cache: invalidated {layer_id[:8]}.../{groupbox_type}")
 
     def launchTaskEvent(self, state, task_name):
-
+        # v2.7.17: Enhanced logging for task launch diagnostics
+        logger.info(f"=" * 60)
+        logger.info(f"launchTaskEvent: task_name='{task_name}', state={state}")
+        logger.info(f"  widgets_initialized: {self.widgets_initialized}")
+        
         if self.widgets_initialized is True:
 
             # CRITICAL: Verify current_layer and its presence in PROJECT_LAYERS
-            if self.current_layer is None or self.current_layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"launchTaskEvent: Cannot launch task {task_name} - no valid current_layer")
+            if self.current_layer is None:
+                logger.warning(f"launchTaskEvent: Cannot launch task {task_name} - current_layer is None")
+                logger.info(f"=" * 60)
+                return
+            
+            if self.current_layer.id() not in self.PROJECT_LAYERS:
+                logger.warning(f"launchTaskEvent: Cannot launch task {task_name} - layer '{self.current_layer.name()}' not in PROJECT_LAYERS")
+                logger.info(f"  Layer ID: {self.current_layer.id()}")
+                logger.info(f"  PROJECT_LAYERS keys: {list(self.PROJECT_LAYERS.keys())[:5]}...")
+                logger.info(f"=" * 60)
                 return
 
+            # v2.7.17: Log custom selection expression state before launching
+            layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
+            exploring_groupbox = layer_props.get("exploring", {}).get("current_exploring_groupbox", "unknown")
+            custom_expr = layer_props.get("exploring", {}).get("custom_selection_expression", "")
+            logger.info(f"  current_layer: {self.current_layer.name()}")
+            logger.info(f"  current_exploring_groupbox: {exploring_groupbox}")
+            logger.info(f"  custom_selection_expression: '{custom_expr}'")
+            logger.info(f"  layer subset string: '{self.current_layer.subsetString()[:80] if self.current_layer.subsetString() else '(none)'}'...")
+            
             self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
+            logger.info(f"  layers_to_filter count: {len(self.get_layers_to_filter())}")
+            logger.info(f"  → Emitting launchingTask signal for '{task_name}'")
+            logger.info(f"=" * 60)
             self.launchingTask.emit(task_name)
+        else:
+            logger.warning(f"launchTaskEvent: widgets_initialized is False, cannot launch task")
+            logger.info(f"=" * 60)
     
     def _setup_truncation_tooltips(self):
         """

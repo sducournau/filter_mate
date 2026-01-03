@@ -6,13 +6,19 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.7.6
+version=2.7.14
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.7.6 - PostgreSQL EXISTS Filter for Selected Features Fix
+about=FilterMate v2.7.14 - WKT Precision Optimization
 
- NEW in v2.7.6:
+ NEW in v2.7.14:
+ - 🐛 FIX: PostgreSQL refiltering with negative buffer returns ALL features instead of filtered subset
+ - 🐛 FIX: When source layer has EXISTS filter from previous operation, properly detects and falls through to task_features
+ - 🐛 FIX: Prevents source_filter from being skipped when it contains EXISTS/MV patterns that would be ignored anyway
+ - ✓ Correct behavior: Refiltering with -500m buffer now correctly applies to selected features only
+
+ Previous version (v2.7.6):
  - 🐛 FIX: PostgreSQL EXISTS subquery ignores selected features when WKT is too long
  - 🐛 FIX: When selecting complex geometries (>100KB WKT), generates PK-based filter for EXISTS
  - 🚀 NEW: Adaptive geometry simplification algorithm (25M chars → 100K with topology preservation)

@@ -776,6 +776,96 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Traceback: {traceback.format_exc()}")
                 return False
     
+    def _get_simplify_tolerance(self) -> float:
+        """
+        Get the geometry simplification tolerance from task_params.
+        
+        When simplify_tolerance > 0, geometries are simplified using
+        native:simplifygeometries before applying buffer. This reduces
+        vertex count and improves performance for complex geometries.
+        
+        QGIS native:simplifygeometries algorithm:
+        - Uses Douglas-Peucker algorithm by default
+        - Tolerance in same units as geometry (meters for projected CRS)
+        - Value of 0 means no simplification
+        
+        Returns:
+            Simplification tolerance (0 = disabled)
+        """
+        if not self.task_params:
+            return 0.0
+        
+        filtering_params = self.task_params.get("filtering", {})
+        
+        # Check if simplification is enabled
+        if not filtering_params.get("has_simplify_tolerance", False):
+            return 0.0
+        
+        tolerance = filtering_params.get("simplify_tolerance", 0.0)
+        if tolerance and tolerance > 0:
+            self.log_debug(f"Using geometry simplification tolerance: {tolerance}")
+        return float(tolerance) if tolerance else 0.0
+    
+    def _apply_simplify(self, source_layer, simplify_tolerance):
+        """Apply geometry simplification to source layer.
+        
+        Uses QGIS native:simplifygeometries algorithm with Douglas-Peucker method.
+        This reduces vertex count for complex geometries before buffer application.
+        
+        Args:
+            source_layer: QgsVectorLayer to simplify
+            simplify_tolerance: Tolerance value in layer units (meters for projected CRS)
+            
+        Returns:
+            QgsVectorLayer: Simplified layer or original layer if simplification fails/skipped
+        """
+        if not source_layer or simplify_tolerance <= 0:
+            return source_layer
+        
+        from qgis.core import QgsProcessingContext, QgsFeatureRequest
+        
+        try:
+            context = QgsProcessingContext()
+            context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
+            feedback = self._create_cancellable_feedback()
+            
+            # Check cancellation before simplification
+            if self._is_task_canceled():
+                self.log_info("Filter cancelled before simplification")
+                return source_layer
+            
+            self.log_info(f"📐 Applying geometry simplification (tolerance={simplify_tolerance}m)")
+            
+            # Use Douglas-Peucker algorithm (METHOD=0)
+            simplify_result = processing.run("native:simplifygeometries", {
+                'INPUT': source_layer,
+                'METHOD': 0,  # Douglas-Peucker
+                'TOLERANCE': float(simplify_tolerance),
+                'OUTPUT': 'memory:'
+            }, context=context, feedback=feedback)
+            
+            simplified_layer = simplify_result['OUTPUT']
+            
+            if simplified_layer and simplified_layer.isValid():
+                original_vertices = sum(f.geometry().constGet().nCoordinates() 
+                                       for f in source_layer.getFeatures() 
+                                       if f.geometry() and not f.geometry().isNull())
+                simplified_vertices = sum(f.geometry().constGet().nCoordinates() 
+                                         for f in simplified_layer.getFeatures() 
+                                         if f.geometry() and not f.geometry().isNull())
+                
+                reduction_pct = ((original_vertices - simplified_vertices) / original_vertices * 100) if original_vertices > 0 else 0
+                self.log_info(f"  ✓ Simplified: {original_vertices:,} → {simplified_vertices:,} vertices ({reduction_pct:.1f}% reduction)")
+                
+                return simplified_layer
+            else:
+                self.log_warning("Simplification returned invalid layer, using original")
+                return source_layer
+                
+        except Exception as e:
+            self.log_warning(f"Geometry simplification failed: {e}, using original layer")
+            return source_layer
+
     def _apply_buffer(self, source_layer, buffer_value):
         """Apply buffer to source layer if specified.
         
@@ -918,6 +1008,12 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         'OUTPUT': 'memory:'
                     }, context=context, feedback=feedback)
                     fixed_layer = fix_result['OUTPUT']
+                    self.log_debug(f"Fixed geometries: {fixed_layer.featureCount()} features")
+                    
+                    # v2.6.x: Apply geometry simplification before buffer if tolerance is set
+                    simplify_tolerance = self._get_simplify_tolerance()
+                    if simplify_tolerance > 0:
+                        fixed_layer = self._apply_simplify(fixed_layer, simplify_tolerance)
                     self.log_debug(f"Fixed geometries: {fixed_layer.featureCount()} features")
                 except Exception as fix_error:
                     self.log_warning(f"fixgeometries failed: {fix_error}, using original layer")

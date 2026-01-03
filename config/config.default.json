@@ -276,6 +276,29 @@
           "choices": [true, false],
           "description": "Automatically simplify complex geometries (LOSSY - may reduce precision). Disabled by default."
         },
+        "auto_simplify_before_buffer": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically simplify geometries before buffer operations (positive or negative). Improves buffer performance without affecting spatial results."
+        },
+        "buffer_simplify_vertex_threshold": {
+          "value": 50,
+          "min": 10,
+          "max": 500,
+          "description": "Average vertices per feature threshold for auto-simplifying before buffer"
+        },
+        "buffer_simplify_feature_threshold": {
+          "value": 1000,
+          "min": 100,
+          "max": 100000,
+          "description": "Feature count threshold for auto-simplifying before buffer"
+        },
+        "buffer_simplify_default_tolerance": {
+          "value": 1.0,
+          "min": 0.1,
+          "max": 100.0,
+          "description": "Default simplification tolerance in meters for buffer operations"
+        },
         "auto_strategy_selection": {
           "value": true,
           "choices": [true, false],

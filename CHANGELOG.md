@@ -2,6 +2,161 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.7.14] - 2025-01-03 - WKT Coordinate Precision Optimization
+
+### 🚀 Performance: Réduction Drastique de la Taille des WKT (60-70%)
+
+- **NOUVEAU**: Précision des coordonnées WKT optimisée selon le CRS
+
+  - **Problème**: Les coordonnées WKT utilisaient 17 décimales par défaut (ex: `6180098.79999999981373549`)
+  - **Impact**: WKT de 4.6 Mo réduit à ~1.5 Mo sans perte de qualité spatiale
+
+  - **Solution**: Nouvelles méthodes `_get_wkt_precision()` et `_geometry_to_wkt()`:
+
+    - **CRS métriques** (EPSG:2154, etc.): 2 décimales = précision centimétrique
+    - **CRS géographiques** (EPSG:4326): 8 décimales = précision millimétrique
+
+  - **Exemple**:
+    - Avant: `508746.09999999997671694 6179439.5`
+    - Après: `508746.10 6179439.50`
+
+- **AMÉLIORATION**: Tous les `asWkt()` dans filter_task.py utilisent maintenant la précision optimisée:
+  - `prepare_spatialite_source_geom()`: WKT pour ST_GeomFromText
+  - `_simplify_geometry_adaptive()`: Mesure de la taille pendant simplification
+  - Fallbacks (Convex Hull, Bounding Box): Même précision appliquée
+
+### 📈 Bénéfices Attendus
+
+- WKT 60-70% plus compact pour les CRS métriques
+- Expressions SQL plus courtes et plus lisibles
+- Moins de charge réseau pour les requêtes PostgreSQL
+- Simplification moins agressive nécessaire (géométrie mieux préservée)
+
+---
+
+## [2.7.13] - 2025-01-03 - Aggressive WKT Simplification & Enhanced Diagnostics
+
+### 🚀 Amélioration: Simplification Agressive des WKT Très Volumineux
+
+- **NOUVEAU**: Fallbacks agressifs pour les géométries trop complexes
+
+  - **Problème**: WKT de 4.6 Mo (commune avec contours détaillés) trop grand même après simplification standard
+  - **Solution**: Cascade de fallbacks quand la simplification ne suffit pas:
+    1. **Convex Hull**: Enveloppe convexe (perd les détails concaves)
+    2. **Oriented Bounding Box**: Rectangle englobant orienté
+    3. **Bounding Box**: Rectangle simple (dernier recours)
+  - **Résultat**: Garantit toujours un WKT utilisable, avec avertissement de perte de précision
+
+- **AMÉLIORATION**: Tolérance maximale dynamique pour les WKT extrêmes
+  - Pour les réductions >99% nécessaires, la tolérance max est automatiquement augmentée
+  - Formule: `max_tolerance * min(1/reduction_ratio, 100)`
+  - Permet des simplifications beaucoup plus agressives quand nécessaire
+
+### 🔧 Diagnostic: Logs QgsMessageLog Améliorés
+
+- **NOUVEAU**: Logs visibles dans l'interface QGIS pour EXISTS et simplification WKT
+  - `v2.7.13 EXISTS WHERE: clauses=X, has_source_filter=Y` - Vérifie si le filtre source est inclus
+  - `v2.7.13 EXISTS: source_filter SKIPPED` - Si le filtre est ignoré (avec raison)
+  - `v2.7.13 WKT: Simplifying X chars → target Y` - Début de simplification
+  - `v2.7.13 WKT: Simplified to X chars (Y% reduction)` - Résultat
+
+### 🎯 Objectif
+
+Résoudre les problèmes de filtrage des couches distantes PostgreSQL quand la géométrie source est très complexe.
+
+---
+
+## [2.7.12] - 2025-01-03 - Enhanced EXISTS Diagnostic Logging
+
+### 🔧 Diagnostic: Logging Amélioré pour EXISTS Subquery
+
+- **NOUVEAU**: Log détaillé du nombre et contenu des clauses WHERE dans EXISTS
+
+  - Affiche le nombre de clauses WHERE avant le join
+  - Log chaque clause individuellement pour tracer si le source_filter est inclus
+  - Utilise QgsMessageLog pour visibilité dans l'interface QGIS
+
+- **Diagnostic ajouté**:
+  - `v2.7.12 EXISTS DEBUG: source_filter=len=XX, table=XXX`
+  - `🔍 WHERE CLAUSES COUNT: X`
+  - Affiche chaque clause `[0]`, `[1]`, etc.
+
+### 🎯 Objectif
+
+Ce diagnostic aide à identifier pourquoi le `source_filter` (filtre de sélection comme `"commune"."fid" IN (452)`)
+n'est parfois pas inclus dans la requête EXISTS, causant le retour de TOUTES les features au lieu du sous-ensemble filtré.
+
+---
+
+## [2.7.11] - 2025-01-03 - Buffer-Aware Geometry Simplification & Diagnostic Logging
+
+### 🚀 Amélioration: Simplification Intelligente des Géométries Bufferisées
+
+- **NOUVEAU**: Calcul de tolérance basé sur les paramètres de buffer (segments, type)
+
+  - **Problème d'origine**: Les géométries bufferisées généraient des WKT très volumineux (4+ millions de caractères) causant des problèmes de performance.
+  - **Solution**: La tolérance de simplification est maintenant calculée en fonction de:
+    - `buffer_segments` (quad_segs): Plus le nombre de segments est élevé, plus la tolérance est fine
+    - `buffer_type` (endcap): Les buffers flat/square permettent une simplification plus agressive
+    - Formule mathématique basée sur l'erreur arc-corde: `r * (1 - cos(π/(4*N)))`
+  - **Résultat**: Réduction significative de la taille du WKT tout en préservant la précision du buffer
+
+### 🔧 Diagnostic Amélioré
+
+- **NOUVEAU**: Logs de diagnostic complets pour tracer le flux source_filter dans EXISTS
+  - `_prepare_source_geometry`: Log quel chemin est pris (postgresql_source_geom vs WKT)
+  - `build_expression`: Log de source_filter, stratégie sélectionnée, source_table_ref
+  - `_parse_source_table_reference`: Log des patterns matchés et valeurs extraites
+  - Préfixe 🔍 pour identifier facilement les logs de diagnostic
+
+### 📊 Logs de Calcul de Tolérance
+
+```
+📐 Buffer-aware tolerance calculation:
+   buffer=-500m, segments=5, type=0
+   angle_per_segment=18.00°
+   max_arc_error=1.23m
+   base_tolerance=1.23 map units
+```
+
+---
+
+## [2.7.10] - 2025-01-XX - Fix: Negative Buffer Refiltering Returns All Features
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: PostgreSQL refiltering with negative buffer returns ALL features instead of filtered subset**
+
+  - **Problème**: Lors d'un refiltrage avec buffer négatif (-500m) sur une sélection unique (ex: 1 commune), TOUTES les features distantes étaient retournées au lieu des seules features intersectant la géométrie érodée.
+  - **Symptômes**:
+    - Premier filtre (sans buffer) → fonctionne correctement (116 batiments)
+    - Deuxième filtre (-500m buffer) → retourne 738,254 batiments (TOUS)
+    - Le WKT de la géométrie bufferisée dépasse MAX_WKT_LENGTH (4.6M chars)
+  - **Cause Racine**:
+    1. Premier filtre crée un EXISTS sur la couche source: `subsetString = "EXISTS (...)"`
+    2. Deuxième filtre récupère ce subsetString comme `source_filter`
+    3. Dans `postgresql_backend.build_expression()`, le code détecte `EXISTS(` dans source_filter
+    4. Le filtre est IGNORÉ car il contient un pattern qui serait de toute façon sauté
+    5. EXISTS subquery n'a AUCUN filtre → match TOUTES les features source → TOUTES les features distantes
+  - **Solution**:
+    1. Dans `_build_backend_expression()`, vérifier si `source_subset` contient des patterns qui seraient ignorés
+    2. Si oui, ne pas utiliser comme source_filter mais générer un filtre depuis `task_features`
+    3. Cela crée correctement `"commune"."fid" IN (135)` au lieu de passer l'EXISTS qui sera ignoré
+  - **Impact**: Le refiltrage avec buffer négatif fonctionne maintenant correctement
+
+### 🔧 Changements Techniques
+
+- `filter_task.py` (`_build_backend_expression`):
+  - **NOUVEAU**: Détection préalable des patterns qui seraient ignorés dans source_subset
+  - Patterns vérifiés: `__SOURCE`, `EXISTS(`, `EXISTS (`, références MV FilterMate
+  - Si détecté: log d'avertissement et fall-through vers génération depuis task_features
+
+### 📚 Documentation
+
+- Nouveau fichier: `docs/FIX_NEGATIVE_BUFFER_REFILTER_2025-01.md`
+
+---
+
 ## [2.7.6] - 2026-01-03 - Fix: PostgreSQL EXISTS Filter for Selected Features
 
 ### 🐛 Correction de Bug Critique

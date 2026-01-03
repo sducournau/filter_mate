@@ -355,6 +355,8 @@ def reload_config():
     Use this to apply configuration changes without restarting QGIS.
     Updates ENV_VARS['CONFIG_DATA'] with latest values from disk.
     
+    If environment variables are not initialized, calls init_env_vars() first.
+    
     Returns:
         bool: True if reload successful, False otherwise
     """
@@ -362,6 +364,11 @@ def reload_config():
     
     try:
         config_json_path = ENV_VARS.get("CONFIG_JSON_PATH")
+        
+        # If CONFIG_JSON_PATH not set, initialize environment first
+        if not config_json_path:
+            init_env_vars()
+            config_json_path = ENV_VARS.get("CONFIG_JSON_PATH")
         
         if not config_json_path or not os.path.exists(config_json_path):
             QgsMessageLog.logMessage(

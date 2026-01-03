@@ -164,7 +164,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     # MV optimization flags
     ENABLE_MV_CLUSTER = True       # CLUSTER operation (improves seq scans but slow to create)
     ENABLE_MV_ANALYZE = True       # ANALYZE for query optimizer statistics
-    ENABLE_MV_UNLOGGED = True      # UNLOGGED MV (30-50% faster, no crash recovery)
+    # Note: PostgreSQL does NOT support UNLOGGED for materialized views (only regular tables)
+    # Setting to False to prevent "materialized views cannot be unlogged" error
+    ENABLE_MV_UNLOGGED = False     # UNLOGGED not supported for MVs in PostgreSQL
     MV_INDEX_FILLFACTOR = 90       # Index fill factor (90 = good for read-heavy, 70 = for updates)
     
     def __init__(self, task_params: Dict):
@@ -234,12 +236,45 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Using buffer segments (quad_segs): {segments}")
         return int(segments)
     
+    def _get_simplify_tolerance(self) -> float:
+        """
+        Get the geometry simplification tolerance from task_params.
+        
+        When simplify_tolerance > 0, geometries are simplified using
+        ST_SimplifyPreserveTopology before applying buffer. This reduces
+        vertex count and improves performance for complex geometries.
+        
+        PostGIS ST_SimplifyPreserveTopology:
+        - Preserves topology (no self-intersections)
+        - Tolerance in same units as geometry (meters for projected CRS)
+        - Value of 0 means no simplification
+        
+        Returns:
+            Simplification tolerance (0 = disabled)
+        """
+        if not self.task_params:
+            return 0.0
+        
+        filtering_params = self.task_params.get("filtering", {})
+        
+        # Check if simplification is enabled
+        if not filtering_params.get("has_simplify_tolerance", False):
+            return 0.0
+        
+        tolerance = filtering_params.get("simplify_tolerance", 0.0)
+        if tolerance and tolerance > 0:
+            self.log_debug(f"Using geometry simplification tolerance: {tolerance}")
+        return float(tolerance) if tolerance else 0.0
+    
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
         """
         Build ST_Buffer expression with endcap style from task_params.
         
         Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
         Negative buffers only work on polygon geometries - they shrink the polygon inward.
+        
+        v2.6.x: Optionally applies ST_SimplifyPreserveTopology before buffer to reduce
+        vertex count and improve performance for complex geometries.
         
         Args:
             geom_expr: Geometry expression to buffer
@@ -254,13 +289,22 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             - Very large negative buffers may collapse the polygon entirely
             - Negative buffers are wrapped in ST_MakeValid() to prevent invalid geometries
             - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
+            - Simplification uses ST_SimplifyPreserveTopology to maintain topology
         """
         endcap_style = self._get_buffer_endcap_style()
         quad_segs = self._get_buffer_segments()
+        simplify_tolerance = self._get_simplify_tolerance()
         
         # Log negative buffer usage for visibility
         if buffer_value < 0:
             self.log_debug(f"📐 Using negative buffer (erosion): {buffer_value}m")
+        
+        # v2.6.x: Apply geometry simplification before buffer if tolerance is set
+        # ST_SimplifyPreserveTopology maintains valid topology (no self-intersections)
+        working_geom = geom_expr
+        if simplify_tolerance > 0:
+            working_geom = f"ST_SimplifyPreserveTopology({geom_expr}, {simplify_tolerance})"
+            self.log_info(f"  📐 Applying ST_SimplifyPreserveTopology({simplify_tolerance}m) before buffer")
         
         # Build base buffer expression with quad_segs and endcap style
         # PostGIS ST_Buffer syntax: ST_Buffer(geom, distance, 'quad_segs=N endcap=style')
@@ -268,7 +312,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         if endcap_style != 'round':
             style_params += f" endcap={endcap_style}"
         
-        buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value}, '{style_params}')"
+        buffer_expr = f"ST_Buffer({working_geom}, {buffer_value}, '{style_params}')"
         self.log_debug(f"Buffer expression: {buffer_expr}")
         
         # CRITICAL FIX v2.3.9: Wrap negative buffers in ST_MakeValid()
@@ -412,19 +456,25 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             return buffer_expr
         
+        # v2.7.11 DIAGNOSTIC: Log source_geom being parsed
+        self.log_info(f"🔍 _parse_source_table_reference: source_geom length={len(source_geom)}")
+        self.log_info(f"   Preview: '{source_geom[:120]}...'")
+        
         # CRITICAL FIX v2.7.5: Handle CASE WHEN wrapper for negative buffers
         # When postgresql_source_geom contains a negative buffer, it's wrapped as:
         # CASE WHEN ST_IsEmpty(ST_MakeValid(ST_Buffer("schema"."table"."geom", -100))) THEN NULL ELSE ... END
         # This must be parsed to extract the table reference, then rebuilt with __source alias
         # Pattern: CASE WHEN ... ST_Buffer("schema"."table"."geom", value) ...
         if source_geom.upper().startswith('CASE WHEN'):
-            self.log_debug(f"Detected CASE WHEN wrapper for negative buffer expression")
+            self.log_info(f"🔍 CASE WHEN detected - trying inner patterns")
             
             # Try to find 3-part table reference inside ST_Buffer
             inner_3part_pattern = r'ST_Buffer\s*\(\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*\.\s*\"([^\"]+)\"\s*,\s*([^,)]+)'
             inner_match = re.search(inner_3part_pattern, source_geom, re.IGNORECASE)
+            self.log_info(f"🔍 3-part pattern match: {inner_match is not None}")
             if inner_match:
                 schema, table, geom_field, buffer_value = inner_match.groups()
+                self.log_info(f"🔍 Extracted: schema='{schema}', table='{table}', geom='{geom_field}', buffer='{buffer_value}'")
                 # Skip materialized views
                 if table.startswith('mv_') and table.endswith('_dump'):
                     self.log_debug(f"Source is materialized view '{table}' with CASE wrapper - using direct reference")
@@ -518,6 +568,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             }
         
         # Not a table reference (could be WKT, ST_GeomFromText, etc.)
+        self.log_info(f"🔍 _parse_source_table_reference: NO PATTERN MATCHED - returning None")
         self.log_debug(f"Source geometry is not a table reference - using direct expression")
         return None
 
@@ -892,6 +943,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         self.log_debug(f"Building PostgreSQL expression for {layer_props.get('layer_name', 'unknown')}, buffer={buffer_value}")
         
+        # v2.7.10 DIAGNOSTIC: Log source_filter value
+        self.log_info(f"🔍 build_expression DEBUG: source_filter={'None' if source_filter is None else f'len={len(source_filter)}'}")
+        if source_filter:
+            self.log_info(f"   → source_filter preview: '{source_filter[:80]}...'")
+        
         # Extract layer properties
         schema = layer_props.get("layer_schema", "public")
         # Use layer_table_name (actual source table) if available, fallback to layer_name (display name)
@@ -978,6 +1034,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             if wkt_length > self.WKT_SIMPLIFY_THRESHOLD:
                 self.log_warning(f"  ⚠️ Very large geometry ({wkt_length} chars) - consider reducing buffer or simplifying source")
         
+        # v2.7.11 DIAGNOSTIC: Log use_simple_wkt decision and source_geom info
+        self.log_info(f"🔍 Strategy selection:")
+        self.log_info(f"   use_simple_wkt: {use_simple_wkt}")
+        self.log_info(f"   source_geom type: {type(source_geom).__name__ if source_geom else 'None'}")
+        self.log_info(f"   source_geom preview: '{str(source_geom)[:80]}...'" if source_geom else "   source_geom: None")
+        
         # Build predicate expressions with OPTIMIZED order
         # Sort predicates for better query performance:
         # - Most selective predicates first = faster short-circuit evaluation
@@ -1025,6 +1087,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 
                 # Parse source_geom to extract table reference
                 source_table_ref = self._parse_source_table_reference(source_geom)
+                
+                # v2.7.11 DIAGNOSTIC
+                self.log_info(f"🔍 STRATEGY 2: source_table_ref = {'None' if source_table_ref is None else source_table_ref}")
                 
                 if source_table_ref:
                     # Use EXISTS subquery to avoid "missing FROM-clause entry" error
@@ -1120,9 +1185,38 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     
                     # CRITICAL FIX v2.5.6: Initialize where_clauses with the spatial predicate
                     # The spatial predicate MUST be the first clause in the WHERE clause
-                    spatial_predicate = f"{predicate_func}({geom_expr}, {source_geom_in_subquery})"
+                    # 
+                    # CRITICAL FIX v2.7.16: Qualify target geometry column with table name for EXISTS
+                    # When EXISTS expression is used in TwoPhaseFilter Phase 2, PostgreSQL executes:
+                    #   SELECT pk FROM target WHERE pk IN (candidates) AND (EXISTS (...))
+                    # Without table qualification, "geometrie" in ST_Intersects("geometrie", __source."geometrie")
+                    # could refer to __source."geometrie" instead of target."geometrie" due to PostgreSQL's
+                    # identifier resolution order (inner scope first).
+                    # 
+                    # For setSubsetString (DIRECT mode), unqualified is OK because there's only one FROM clause.
+                    # But for TwoPhaseFilter (Phase 2 query with explicit FROM), we MUST qualify.
+                    # Solution: Use table-qualified geometry column in EXISTS context.
+                    qualified_geom_expr = f'"{table}"."{geom_field}"'
+                    self.log_info(f"  ✓ v2.7.16: Qualified geom for EXISTS: {qualified_geom_expr}")
+                    
+                    # v2.7.16: Log to QGIS Message Panel for diagnostic visibility
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        f"v2.7.16: Using qualified geometry in EXISTS: {qualified_geom_expr}",
+                        "FilterMate", Qgis.Info
+                    )
+                    
+                    spatial_predicate = f"{predicate_func}({qualified_geom_expr}, {source_geom_in_subquery})"
                     where_clauses = [spatial_predicate]
                     self.log_debug(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
+                    
+                    # v2.7.12 DIAGNOSTIC: Log source_filter processing in EXISTS path via QgsMessageLog
+                    source_filter_status = 'None' if source_filter is None else f'len={len(source_filter)}'
+                    self.log_info(f"  🔍 EXISTS path: source_filter={source_filter_status}")
+                    QgsMessageLog.logMessage(
+                        f"v2.7.12 EXISTS DEBUG: source_filter={source_filter_status}, table={source_table_name}",
+                        "FilterMate", Qgis.Info
+                    )
                     
                     if source_filter:
                         # CRITICAL FIX v2.5.11: Include source layer's spatial filter in EXISTS
@@ -1198,6 +1292,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         if skip_filter:
                             self.log_warning(f"  ⚠️ Source filter contains __source, EXISTS, MV, or external table reference - SKIPPING")
                             self.log_warning(f"  → Filter: '{source_filter[:100]}'...")
+                            # v2.7.13: Log to QGIS panel
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"v2.7.13 EXISTS: source_filter SKIPPED - contains disallowed pattern",
+                                "FilterMate", Qgis.Warning
+                            )
                         else:
                             # CRITICAL: Replace table references with __source alias
                             # The source_filter comes from setSubsetString and contains qualified table names
@@ -1221,6 +1321,25 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 where_clauses.append(f"({adapted_filter})")
                                 self.log_info(f"  - Adapted: '{adapted_filter[:100]}'...")
                                 self.log_info(f"  ✓ EXISTS will filter source to match QGIS view")
+                                # v2.7.13: Log to QGIS panel for visibility
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"v2.7.13 EXISTS: source_filter INCLUDED → {adapted_filter[:60]}...",
+                                    "FilterMate", Qgis.Info
+                                )
+                    
+                    # v2.7.12 DIAGNOSTIC: Log WHERE clauses BEFORE joining
+                    self.log_info(f"  🔍 WHERE CLAUSES COUNT: {len(where_clauses)}")
+                    for i, clause in enumerate(where_clauses):
+                        self.log_info(f"     [{i}] {clause[:80]}...")
+                    
+                    # v2.7.13 DIAGNOSTIC: Log WHERE clause count to QGIS Message Panel for visibility
+                    from qgis.core import QgsMessageLog, Qgis
+                    has_source_filter_in_where = any('__source' in c and 'fid' in c.lower() for c in where_clauses)
+                    QgsMessageLog.logMessage(
+                        f"v2.7.13 EXISTS WHERE: clauses={len(where_clauses)}, has_source_filter={has_source_filter_in_where}",
+                        "FilterMate", Qgis.Info
+                    )
                     
                     where_clause = ' AND '.join(where_clauses)
                     
@@ -1232,6 +1351,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                         f')'
                     )
                     self.log_info(f"  ✓ Built EXISTS expression: '{expr[:150]}'...")
+                    self.log_info(f"  🔍 EXISTS WHERE clause length: {len(where_clause)} chars")
                     self.log_debug(f"Using EXISTS subquery to avoid missing FROM-clause error")
                 else:
                     # Simple expression (WKT, geometry literal, etc.) - can use directly
@@ -1329,7 +1449,21 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                 self.log_error(f"  → source_geom: {source_geom is not None}")
                 self.log_error(f"  → source_wkt: {source_wkt is not None}")
                 self.log_error(f"  → source_srid: {source_srid}")
-                self.log_error(f"  → This will result in an empty filter returning ALL features!")
+                
+                # v2.8.2 FIX: Return "0 features" filter instead of empty string
+                # When no valid geometry source is available, this means no intersection is possible.
+                # Instead of returning "" (which causes old filter to persist or fallback to show all features),
+                # we return an IMPOSSIBLE condition that filters to 0 features.
+                self.log_warning(f"  → v2.8.2: Generating '0 features' filter instead of empty expression")
+                layer = layer_props.get('layer')
+                if layer:
+                    from ..appUtils import get_primary_key_name
+                    key_column = get_primary_key_name(layer)
+                    zero_filter = f'"{key_column}" IS NULL AND "{key_column}" IS NOT NULL'
+                    self.log_info(f"  ✓ Zero filter: {zero_filter}")
+                    predicate_expressions.append(zero_filter)
+                else:
+                    self.log_error(f"  → Cannot generate zero filter: no layer in layer_props")
         
         # Combine predicates with OR
         if predicate_expressions:
@@ -1337,7 +1471,10 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"PostgreSQL FINAL expression ({len(combined)} chars): {combined[:200]}...")
             return combined
         
-        return ""
+        # v2.8.2 FIX: If still no expressions, return a hard-coded impossible condition
+        # This ensures 0 features are displayed instead of all features
+        self.log_warning(f"❌ No predicate expressions generated - returning impossible filter for 0 features")
+        return "1 = 0"  # Universal FALSE condition that all SQL databases understand
     
     def apply_filter(
         self,

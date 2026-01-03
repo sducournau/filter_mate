@@ -369,12 +369,45 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Using buffer segments (quad_segs): {segments}")
         return int(segments)
     
+    def _get_simplify_tolerance(self) -> float:
+        """
+        Get the geometry simplification tolerance from task_params.
+        
+        When simplify_tolerance > 0, geometries are simplified using
+        SimplifyPreserveTopology before applying buffer. This reduces
+        vertex count and improves performance for complex geometries.
+        
+        Spatialite SimplifyPreserveTopology:
+        - Preserves topology (no self-intersections)
+        - Tolerance in same units as geometry (meters for projected CRS)
+        - Value of 0 means no simplification
+        
+        Returns:
+            Simplification tolerance (0 = disabled)
+        """
+        if not self.task_params:
+            return 0.0
+        
+        filtering_params = self.task_params.get("filtering", {})
+        
+        # Check if simplification is enabled
+        if not filtering_params.get("has_simplify_tolerance", False):
+            return 0.0
+        
+        tolerance = filtering_params.get("simplify_tolerance", 0.0)
+        if tolerance and tolerance > 0:
+            self.log_debug(f"Using geometry simplification tolerance: {tolerance}")
+        return float(tolerance) if tolerance else 0.0
+    
     def _build_st_buffer_with_style(self, geom_expr: str, buffer_value: float) -> str:
         """
         Build ST_Buffer expression with endcap style from task_params.
         
         Supports both positive buffers (expansion) and negative buffers (erosion/shrinking).
         Negative buffers only work on polygon geometries - they shrink the polygon inward.
+        
+        v2.6.x: Optionally applies SimplifyPreserveTopology before buffer to reduce
+        vertex count and improve performance for complex geometries.
         
         Args:
             geom_expr: Geometry expression to buffer
@@ -389,13 +422,22 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             - Very large negative buffers may collapse the polygon entirely
             - Negative buffers are wrapped in MakeValid() to prevent invalid geometries
             - Returns NULL if buffer produces empty geometry (v2.4.23 fix for negative buffers)
+            - Simplification uses SimplifyPreserveTopology to maintain topology
         """
         endcap_style = self._get_buffer_endcap_style()
         quad_segs = self._get_buffer_segments()
+        simplify_tolerance = self._get_simplify_tolerance()
         
         # Log negative buffer usage for visibility
         if buffer_value < 0:
             self.log_info(f"📐 Using negative buffer (erosion): {buffer_value}m")
+        
+        # v2.6.x: Apply geometry simplification before buffer if tolerance is set
+        # SimplifyPreserveTopology maintains valid topology (no self-intersections)
+        working_geom = geom_expr
+        if simplify_tolerance > 0:
+            working_geom = f"SimplifyPreserveTopology({geom_expr}, {simplify_tolerance})"
+            self.log_info(f"  📐 Applying SimplifyPreserveTopology({simplify_tolerance}m) before buffer")
         
         # Build base buffer expression with quad_segs and endcap style
         # Spatialite ST_Buffer syntax: ST_Buffer(geom, distance, 'quad_segs=N endcap=style')
@@ -403,7 +445,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         if endcap_style != 'round':
             style_params += f" endcap={endcap_style}"
         
-        buffer_expr = f"ST_Buffer({geom_expr}, {buffer_value}, '{style_params}')"
+        buffer_expr = f"ST_Buffer({working_geom}, {buffer_value}, '{style_params}')"
         self.log_debug(f"Buffer expression: {buffer_expr}")
         
         # CRITICAL FIX v2.3.9: Wrap negative buffers in MakeValid()
@@ -1592,12 +1634,16 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         
         # Source geometry should be WKT string from prepare_spatialite_source_geom
         if not source_geom:
+            # v2.8.2 FIX: Return "0 features" filter instead of empty string
             self.log_error("No source geometry provided for Spatialite filter")
-            return ""
+            self.log_warning("  → v2.8.2: Returning '0 features' filter instead of empty expression")
+            return "1 = 0"  # Universal FALSE condition
         
         if not isinstance(source_geom, str):
+            # v2.8.2 FIX: Return "0 features" filter instead of empty string
             self.log_error(f"Invalid source geometry type for Spatialite: {type(source_geom)}")
-            return ""
+            self.log_warning("  → v2.8.2: Returning '0 features' filter instead of empty expression")
+            return "1 = 0"  # Universal FALSE condition
         
         wkt_length = len(source_geom)
         self.log_debug(f"Source WKT length: {wkt_length} chars")
@@ -1894,8 +1940,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             return combined
         
-        self.log_warning("No predicates to apply")
-        return ""
+        # v2.8.2 FIX: Return "0 features" filter instead of empty string
+        # When no predicates could be built, return an impossible condition to filter 0 features
+        self.log_warning("No predicates to apply - returning '0 features' filter")
+        return "1 = 0"  # Universal FALSE condition
     
     def apply_filter(
         self,

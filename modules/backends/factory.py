@@ -605,7 +605,9 @@ def get_optimization_plan(
     source_wkt_length: int = 0,
     predicates: Optional[Dict] = None,
     attribute_filter: Optional[str] = None,
-    user_requested_centroids: Optional[bool] = None
+    user_requested_centroids: Optional[bool] = None,
+    has_buffer: bool = False,
+    buffer_value: float = 0.0
 ) -> Optional['OptimizationPlan']:
     """
     Get an optimization plan for a filtering operation.
@@ -615,6 +617,7 @@ def get_optimization_plan(
     - Using centroids for distant/remote layers
     - Progressive chunking for large datasets
     - Attribute-first filtering for selective expressions
+    - Geometry simplification before buffer operations
     
     Args:
         target_layer: Layer being filtered
@@ -623,6 +626,8 @@ def get_optimization_plan(
         predicates: Spatial predicates being used
         attribute_filter: Attribute filter expression
         user_requested_centroids: Explicit user choice (None = auto)
+        has_buffer: Whether buffer is being applied
+        buffer_value: Buffer distance (positive or negative)
         
     Returns:
         OptimizationPlan with recommendations, or None if optimizer not available
@@ -644,7 +649,9 @@ def get_optimization_plan(
             source_wkt_length=source_wkt_length,
             predicates=predicates,
             attribute_filter=attribute_filter,
-            user_requested_centroids=user_requested_centroids
+            user_requested_centroids=user_requested_centroids,
+            has_buffer=has_buffer,
+            buffer_value=buffer_value
         )
     except Exception as e:
         logger.warning(f"Error creating optimization plan: {e}")

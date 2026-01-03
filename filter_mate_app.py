@@ -1669,7 +1669,13 @@ class FilterMateApp:
 
         assert task_name in list(self.tasks_descriptions.keys())
         
-        logger.debug(f"manage_task called with task_name={task_name}, data={type(data)}")
+        # v2.7.17: Enhanced logging for task reception
+        logger.info(f"=" * 60)
+        logger.info(f"manage_task: RECEIVED task_name='{task_name}'")
+        if self.dockwidget and hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
+            logger.info(f"  current_layer: {self.dockwidget.current_layer.name()}")
+            logger.info(f"  current_exploring_groupbox: {getattr(self.dockwidget, 'current_exploring_groupbox', 'unknown')}")
+        logger.info(f"=" * 60)
         
         # STABILITY FIX: Check and reset stale flags before processing
         self._check_and_reset_stale_flags()
@@ -2317,8 +2323,17 @@ class FilterMateApp:
                 if not analysis:
                     continue
                 
-                # Get recommendations
-                recommendations = optimizer.get_recommendations(analysis)
+                # v2.7.15: Check if centroid is already enabled for this layer
+                # Don't recommend if user already has centroids enabled via checkbox or override
+                user_centroid_enabled = False
+                if self.dockwidget:
+                    user_centroid_enabled = self.dockwidget._is_centroid_already_enabled(layer) if hasattr(self.dockwidget, '_is_centroid_already_enabled') else False
+                
+                # Get recommendations - skip centroid if already enabled
+                recommendations = optimizer.get_recommendations(
+                    analysis, 
+                    user_centroid_enabled=user_centroid_enabled
+                )
                 
                 # Check if centroid is recommended
                 for rec in recommendations:
@@ -2812,8 +2827,28 @@ class FilterMateApp:
                 logger.debug(f"_build_common_task_params: Rejecting display expression '{expression}' - no comparison operators")
                 validated_expression = ''
         
+        # v2.7.16: Store feature IDs (FIDs) for thread-safe recovery
+        # QgsFeature objects can become invalid when accessed from background threads
+        # FIDs allow us to refetch features from the source layer if validation fails
+        feature_fids = []
+        if features:
+            for f in features:
+                try:
+                    if hasattr(f, 'id') and callable(f.id):
+                        fid = f.id()
+                        if fid is not None and fid >= 0:  # Valid FID
+                            feature_fids.append(fid)
+                except Exception as e:
+                    logger.warning(f"_build_common_task_params: Could not get FID from feature: {e}")
+        
+        # v2.7.16: Log FIDs for diagnostic
+        logger.info(f"_build_common_task_params: Extracted {len(feature_fids)} FIDs from {len(features) if features else 0} features")
+        if feature_fids:
+            logger.info(f"  FIDs: {feature_fids[:10]}{'...' if len(feature_fids) > 10 else ''}")
+        
         params = {
             "features": features,
+            "feature_fids": feature_fids,  # v2.7.15: Thread-safe FIDs for recovery
             "expression": validated_expression,
             "options": self.dockwidget.project_props["OPTIONS"],
             "layers": layers_to_filter,
@@ -3026,7 +3061,16 @@ class FilterMateApp:
                     task_parameters["filtering"]["layers_to_filter"] = current_layers_to_filter
                     self.PROJECT_LAYERS[current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
 
+            # v2.7.17: Enhanced logging before getting features
+            logger.info(f"get_task_parameters: Calling get_current_features()...")
             features, expression = self.dockwidget.get_current_features()
+            logger.info(f"get_task_parameters: get_current_features() returned {len(features)} features, expression='{expression}'")
+            
+            # v2.7.17: CRITICAL CHECK - Warn if no features and no expression
+            if len(features) == 0 and not expression:
+                logger.warning(f"⚠️ get_task_parameters: NO FEATURES and NO EXPRESSION!")
+                logger.warning(f"   current_exploring_groupbox: {self.dockwidget.current_exploring_groupbox}")
+                logger.warning(f"   This may cause the filter task to abort or filter incorrectly")
 
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter

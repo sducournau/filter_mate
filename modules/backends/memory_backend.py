@@ -403,6 +403,27 @@ class MemoryGeometricFilter(GeometricFilterBackend):
         
         return False
     
+    def _get_simplify_tolerance(self) -> float:
+        """
+        Get the geometry simplification tolerance from task_params.
+        
+        When simplify_tolerance > 0, geometries are simplified using
+        native:simplifygeometries before applying buffer.
+        
+        Returns:
+            Simplification tolerance (0 = disabled)
+        """
+        if not self.task_params:
+            return 0.0
+        
+        filtering_params = self.task_params.get("filtering", {})
+        
+        if not filtering_params.get("has_simplify_tolerance", False):
+            return 0.0
+        
+        tolerance = filtering_params.get("simplify_tolerance", 0.0)
+        return float(tolerance) if tolerance else 0.0
+    
     def _apply_buffer_to_layer(
         self, 
         source_layer: QgsVectorLayer, 
@@ -410,6 +431,8 @@ class MemoryGeometricFilter(GeometricFilterBackend):
     ) -> Optional[QgsVectorLayer]:
         """
         Apply buffer to source layer geometries.
+        
+        v2.6.x: Optionally applies geometry simplification before buffer.
         
         Args:
             source_layer: Layer to buffer
@@ -435,8 +458,27 @@ class MemoryGeometricFilter(GeometricFilterBackend):
             
             self.log_debug(f"Applying buffer {buffer_value} to {source_layer.name()} (type={buffer_type}, segments={buffer_segments})")
             
+            # v2.6.x: Apply geometry simplification before buffer if tolerance is set
+            simplify_tolerance = self._get_simplify_tolerance()
+            working_layer = source_layer
+            if simplify_tolerance > 0:
+                self.log_info(f"📐 Applying geometry simplification (tolerance={simplify_tolerance}m)")
+                try:
+                    simplify_result = processing.run("native:simplifygeometries", {
+                        'INPUT': source_layer,
+                        'METHOD': 0,  # Douglas-Peucker
+                        'TOLERANCE': float(simplify_tolerance),
+                        'OUTPUT': 'memory:'
+                    })
+                    simplified = simplify_result.get('OUTPUT')
+                    if simplified and simplified.isValid():
+                        working_layer = simplified
+                        self.log_debug(f"  ✓ Geometry simplified with tolerance {simplify_tolerance}m")
+                except Exception as e:
+                    self.log_warning(f"Simplification failed: {e}, using original layer")
+            
             result = processing.run("native:buffer", {
-                'INPUT': source_layer,
+                'INPUT': working_layer,
                 'DISTANCE': buffer_value,
                 'SEGMENTS': int(buffer_segments),
                 'END_CAP_STYLE': buffer_type,
