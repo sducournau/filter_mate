@@ -812,7 +812,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         source_filter: Optional[str] = None,
         source_wkt: Optional[str] = None,
         source_srid: Optional[int] = None,
-        source_feature_count: Optional[int] = None
+        source_feature_count: Optional[int] = None,
+        use_centroids: bool = False
     ) -> str:
         """
         Build PostGIS filter expression.
@@ -828,6 +829,7 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             buffer_value: Buffer distance
             buffer_expression: Expression for dynamic buffer
             source_filter: Optional filter expression for source layer (for EXISTS subqueries)
+            use_centroids: If True, use ST_Centroid() on distant layer geometries for faster queries
             source_wkt: Optional WKT string for simple mode (when few source features)
             source_srid: SRID for the source WKT geometry
             source_feature_count: Number of source features (to choose strategy)
@@ -868,7 +870,18 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"Using geometry field: '{geom_field}'")
         
         # Build geometry expression for target layer
-        geom_expr = f'"{table}"."{geom_field}"'
+        # CRITICAL FIX v2.6.7: Use UNQUALIFIED column name (without table prefix)
+        # In setSubsetString context, PostgreSQL generates: SELECT * FROM schema.table WHERE <expression>
+        # The target table is IMPLICIT, so using "table"."column" causes "missing FROM-clause entry" error
+        # The geometry column should be referenced directly as "column" since it belongs to the target table
+        geom_expr = f'"{geom_field}"'
+        
+        # CENTROID OPTIMIZATION: Convert distant layer geometry to centroid if enabled
+        # This significantly speeds up queries for complex polygons (e.g., buildings)
+        # Applies ST_Centroid() to the distant layer geometry before spatial predicates
+        if use_centroids:
+            geom_expr = f"ST_Centroid({geom_expr})"
+            self.log_info(f"✓ PostgreSQL: Using ST_Centroid for distant layer geometry (faster queries)")
         
         # NOTE: Buffer is applied to SOURCE geometry, not target geometry
         # The buffer_value will be passed to source geometry expression builders

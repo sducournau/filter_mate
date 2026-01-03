@@ -7,17 +7,40 @@ slug: /
 
 **FilterMate** é um plugin QGIS pronto para produção que oferece capacidades avançadas de filtragem e exportação para dados vetoriais - funciona com QUALQUER fonte de dados!
 
-## 🎉 Novidades na v2.5.4 - Correção crítica: Backend OGR
+## 🎉 Novidades na v2.6.6 - Correção: Congelamento do filtro Spatialite
 
-Esta versão corrige um bug crítico no backend OGR que causava a falha de todos os filtros devido à contagem incorreta de feições em camadas de memória.
+Esta versão corrige um bug crítico que causava o congelamento do QGIS ao filtrar com backends Spatialite/GeoPackage.
 
 ### 🐛 Correções críticas
 
-| Problema                  | Solução                                                     |
-| ------------------------- | ----------------------------------------------------------- |
-| **Contagem Memory Layer** | Mecanismo de repetição inteligente para contagem de feições |
-| **Falso "0 feições"**     | Diagnósticos e validação aprimorados                        |
-| **Falhas filtros OGR**    | Evita a rejeição prematura de camadas válidas               |
+| Problema                               | Solução                                                         |
+| -------------------------------------- | --------------------------------------------------------------- |
+| **Congelamento Spatialite/GeoPackage** | Remoção das chamadas `reloadData()` para camadas OGR/Spatialite |
+| **Bloqueio do thread UI**              | Apenas PostgreSQL usa `reloadData()` para filtros MV            |
+| **Responsividade melhorada**           | Melhor reatividade UI para fontes de dados locais               |
+
+### 🔧 Mudanças técnicas
+
+| Mudança                    | Descrição                                               |
+| -------------------------- | ------------------------------------------------------- |
+| **Escopo de reloadData()** | Reservado exclusivamente para operações PostgreSQL MV   |
+| **Camadas OGR/Spatialite** | Não chamam mais `reloadData()` após filtragem           |
+| **Segurança de threads**   | Previne bloqueio do thread principal em arquivos locais |
+
+### Versões anteriores
+
+## 🎯 v2.6.5 - Prevenção de congelamento UI para grandes camadas
+
+- **Congelamento QGIS ao recarregar plugin** com grandes camadas (batiment, etc.) - Corrigido
+- **get_filtered_layer_extent()** agora limita iteração a 10k feições
+- **Cálculo de extensão seleção múltipla** limitado a 500 itens
+- Usa **updateExtents()** para grandes conjuntos de dados filtrados
+
+## 🎯 v2.6.4 - Segurança threads SQLite & WKT grandes
+
+- **Erro "SQLite objects created in a thread"** - Corrigido com `check_same_thread=False`
+- **Congelamento QGIS com grandes geometrias fonte** (>100K chars WKT) - Corrigido
+- **Otimização R-tree automática** para WKT grandes (LARGE_WKT_THRESHOLD=100K)
 
 ### Versões anteriores
 

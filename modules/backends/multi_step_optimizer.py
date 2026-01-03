@@ -742,7 +742,8 @@ class OGROptimizer:
             Subset string expression
         """
         if not fids:
-            return "1 = 0"  # Match nothing
+            # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+            return 'fid = -1'  # Match nothing (no valid FID is -1)
         
         if len(fids) == 1:
             return f'fid = {next(iter(fids))}'

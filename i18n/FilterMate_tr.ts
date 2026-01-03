@@ -143,6 +143,108 @@ Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</t
         <source>Number of segments for buffer precision</source>
         <translation>Tampon hassasiyeti için segment sayısı</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Ağırlık Merkezleri</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Uzak katmanlar için tam geometriler yerine ağırlık merkezlerini kullanın (binalar gibi karmaşık çokgenler için daha hızlı)</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>Eski bir yapılandırma ({}) tespit edildi.
+
+Varsayılan ayarlara sıfırlamak istiyor musunuz?
+
+• Evet: Sıfırla (bir yedek oluşturulacak)
+• Hayır: Mevcut yapılandırmayı koru (sorunlara neden olabilir)</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>Yapılandırma dosyası bozuk ve okunamıyor.
+
+Varsayılan ayarlara sıfırlamak istiyor musunuz?
+
+• Evet: Sıfırla (mümkünse bir yedek oluşturulacak)
+• Hayır: İptal (eklenti düzgün çalışmayabilir)</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>Yapılandırma sıfırlama</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>Yapılandırmanın sıfırlanması gerekiyor.
+
+Devam etmek istiyor musunuz?</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>Yapılandırma geçişi sırasında hata: {}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>Varsayılan yapılandırmaya sıfırlamak istediğinizden emin misiniz?
+
+Bu:
+- Varsayılan ayarları geri yükleyecek
+- Katman veritabanını silecek
+
+Değişiklikleri uygulamak için QGIS yeniden başlatılmalıdır.</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>Yapılandırma sıfırlandı.
+
+Değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

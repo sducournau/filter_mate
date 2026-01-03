@@ -143,6 +143,108 @@ Please restart QGIS to apply all changes.</source>
         <source>Number of segments for buffer precision</source>
         <translation>缓冲区精度的段数</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>质心</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>使用质心而不是完整几何图形用于远程图层（对于建筑物等复杂多边形更快）</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>检测到过时的配置 ({})。
+
+是否要重置为默认设置？
+
+• 是：重置（将创建备份）
+• 否：保留当前配置（可能导致问题）</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>配置文件已损坏，无法读取。
+
+是否要重置为默认设置？
+
+• 是：重置（如果可能，将创建备份）
+• 否：取消（插件可能无法正常工作）</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>重置配置</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>配置需要重置。
+
+是否要继续？</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>配置迁移时出错：{}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>您确定要重置为默认配置吗？
+
+这将：
+- 恢复默认设置
+- 删除图层数据库
+
+必须重启 QGIS 才能应用更改。</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>配置已重置。
+
+请重启 QGIS 以应用更改。</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

@@ -237,6 +237,14 @@ Please restart QGIS to apply the changes.</translation>
         <source>Number of segments for buffer precision</source>
         <translation>Number of segments for buffer precision</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Centroids</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

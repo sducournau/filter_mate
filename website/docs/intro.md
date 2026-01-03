@@ -7,46 +7,42 @@ slug: /
 
 **FilterMate** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.6.1 - Performance: Optimized MVs & Source Tables
+## 🎉 What's New in v2.6.6 - Fix: Spatialite Filtering Freeze
 
-This release brings significant performance improvements for both PostgreSQL and Spatialite backends through optimized materialized views and source tables.
+This release fixes a critical bug that caused QGIS to freeze when filtering with Spatialite/GeoPackage backends.
 
-### 🚀 PostgreSQL: Lightweight Materialized Views
+### 🐛 Critical Fixes
 
-| Feature                 | Description                                                      |
-| ----------------------- | ---------------------------------------------------------------- |
-| **ID + Geometry Only**  | MVs now store only pk + geom instead of SELECT \* (3-5× smaller) |
-| **Pre-computed Buffer** | `geom_buffered` column avoids recalculating ST_Buffer            |
-| **Dual GIST Index**     | Indexes on both `geom` and `geom_buffered` for fast lookups      |
-| **EXISTS Optimization** | Final query uses `EXISTS (SELECT 1 FROM mv WHERE pk = ...)`      |
+| Issue                            | Solution                                                 |
+| -------------------------------- | -------------------------------------------------------- |
+| **Spatialite/GeoPackage Freeze** | Removed `reloadData()` calls for OGR/Spatialite layers   |
+| **UI Thread Blocking**           | Only PostgreSQL uses `reloadData()` for MV-based filters |
+| **Improved Responsiveness**      | Better UI reactivity for local data sources              |
 
-### 📦 Spatialite: R-tree Source Tables
+### 🔧 Technical Changes
 
-| Feature                     | Description                                               |
-| --------------------------- | --------------------------------------------------------- |
-| **Permanent Source Tables** | `_fm_source_{timestamp}_{uuid}` with R-tree spatial index |
-| **O(log n) Lookups**        | R-tree index vs O(n) for inline WKT parsing               |
-| **Pre-computed Buffer**     | Buffer geometry stored once, reused for all features      |
-| **Auto Cleanup**            | Tables older than 1 hour automatically removed            |
+| Change                    | Description                                            |
+| ------------------------- | ------------------------------------------------------ |
+| **reloadData() Scope**    | Reserved exclusively for PostgreSQL MV operations      |
+| **OGR/Spatialite Layers** | No longer call `reloadData()` after filtering          |
+| **Thread Safety**         | Prevents main thread blocking on local file operations |
 
-### 🎯 Buffer Segments Control
+### Previous Releases
 
-| Feature                 | Description                                    |
-| ----------------------- | ---------------------------------------------- |
-| **New UI Spinbox**      | Control buffer precision (1-100 segments)      |
-| **quad_segs Parameter** | Passed to ST_Buffer for smoother/faster curves |
-| **21 Languages**        | Tooltip translated in all supported languages  |
+## 🎯 v2.6.5 - UI Freeze Prevention for Large Layers
 
-### 📊 Performance Gains
+- **QGIS freeze on plugin reload** with large layers (batiment, etc.) - Fixed
+- **get_filtered_layer_extent()** now limits iteration to 10k features
+- **Multiple selection extent** calculation limited to 500 items
+- Uses **updateExtents()** for large filtered datasets instead of iterating
 
-| Backend    | Optimization            | Improvement                      |
-| ---------- | ----------------------- | -------------------------------- |
-| PostgreSQL | Lightweight MVs         | **3-5× less RAM**                |
-| PostgreSQL | Pre-computed buffer     | **N× fewer calculations**        |
-| Spatialite | R-tree source tables    | **5-20× faster** (>10k features) |
-| All        | Buffer segments control | **Precision vs speed tradeoff**  |
+## 🎯 v2.6.4 - SQLite Thread-Safety & Large WKT
 
-### Previous Release: v2.6.0
+- **"SQLite objects created in a thread" error** - Fixed with `check_same_thread=False`
+- **QGIS freeze with large source geometries** (>100K chars WKT) - Fixed
+- **Automatic R-tree optimization** for large WKT (LARGE_WKT_THRESHOLD=100K)
+
+## 🎯 v2.6.1 - Performance: Optimized MVs & Source Tables
 
 ## 🎯 v2.6.0 - Major Release: Performance & Stability
 

@@ -251,6 +251,42 @@
           "description": "Backend to use: 'ogr_memory' (fastest) or 'qgis_processing' (compatible)"
         }
       },
+      "AUTO_OPTIMIZATION": {
+        "description": "Intelligent automatic optimization based on layer characteristics (v2.7.0). Recommends and applies optimizations for distant layers, large datasets, and complex geometries.",
+        "enabled": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Enable/disable automatic optimization analysis"
+        },
+        "auto_centroid_for_distant": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically use ST_Centroid() for remote layers (WFS, ArcGIS) with many features. Reduces network data transfer by ~90%."
+        },
+        "centroid_threshold_distant": {
+          "value": 5000,
+          "description": "Feature count threshold for auto-enabling centroid on distant layers"
+        },
+        "centroid_threshold_local": {
+          "value": 50000,
+          "description": "Feature count threshold for auto-enabling centroid on large local layers with complex geometries"
+        },
+        "auto_simplify_geometry": {
+          "value": false,
+          "choices": [true, false],
+          "description": "Automatically simplify complex geometries (LOSSY - may reduce precision). Disabled by default."
+        },
+        "auto_strategy_selection": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically select optimal filtering strategy (attribute-first, bbox-prefilter, progressive chunks)"
+        },
+        "show_optimization_hints": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Show optimization hints in message bar when recommendations are available"
+        }
+      },
       "PROGRESSIVE_FILTERING": {
         "description": "Progressive/two-phase filtering for complex queries on large PostgreSQL datasets (v2.5.9 optimization)",
         "enabled": {

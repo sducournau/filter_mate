@@ -143,6 +143,108 @@ Vui lòng khởi động lại QGIS để áp dụng tất cả các thay đổi
         <source>Number of segments for buffer precision</source>
         <translation>Số đoạn cho độ chính xác đệm</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Trọng tâm</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Sử dụng trọng tâm thay vì hình học đầy đủ cho các lớp xa (nhanh hơn cho đa giác phức tạp như tòa nhà)</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>Đã phát hiện cấu hình lỗi thời ({}).
+
+Bạn có muốn đặt lại về cài đặt mặc định không?
+
+• Có: Đặt lại (sẽ tạo bản sao lưu)
+• Không: Giữ cấu hình hiện tại (có thể gây ra sự cố)</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>Tệp cấu hình bị hỏng và không thể đọc được.
+
+Bạn có muốn đặt lại về cài đặt mặc định không?
+
+• Có: Đặt lại (sẽ tạo bản sao lưu nếu có thể)
+• Không: Hủy (plugin có thể không hoạt động chính xác)</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>Đặt lại cấu hình</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>Cấu hình cần được đặt lại.
+
+Bạn có muốn tiếp tục không?</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>Lỗi trong quá trình di chuyển cấu hình: {}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>Bạn có chắc chắn muốn đặt lại về cấu hình mặc định không?
+
+Điều này sẽ:
+- Khôi phục cài đặt mặc định
+- Xóa cơ sở dữ liệu lớp
+
+QGIS phải được khởi động lại để áp dụng các thay đổi.</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>Cấu hình đã được đặt lại.
+
+Vui lòng khởi động lại QGIS để áp dụng các thay đổi.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

@@ -221,6 +221,7 @@ class MemoryGeometricFilter(GeometricFilterBackend):
         buffer_value: Optional[float] = None,
         buffer_expression: Optional[str] = None,
         source_filter: Optional[str] = None,
+        use_centroids: bool = False,
         **kwargs
     ) -> str:
         """
@@ -237,6 +238,7 @@ class MemoryGeometricFilter(GeometricFilterBackend):
             buffer_value: Buffer distance (optional)
             buffer_expression: Dynamic buffer expression (optional)
             source_filter: Source filter expression (optional)
+            use_centroids: If True, use centroids (already applied in source geometry preparation)
             **kwargs: Additional parameters
         
         Returns:

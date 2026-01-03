@@ -1804,7 +1804,34 @@ class FilterMateApp:
             else:
                 current_layer = self.dockwidget.current_layer 
 
-
+            # v2.6.7: Cancel any pending async expression evaluation before starting filter task
+            # This prevents race conditions where the expression task uses stale feature sources
+            if hasattr(self.dockwidget, 'cancel_async_expression_evaluation'):
+                try:
+                    self.dockwidget.cancel_async_expression_evaluation()
+                    logger.debug("Cancelled pending async expression evaluation before filter task")
+                except Exception as e:
+                    logger.debug(f"Could not cancel async expression evaluation: {e}")
+            
+            # v2.7.0: AUTO-OPTIMIZATION - Check for optimization recommendations before filtering
+            # Only show confirmation if task is 'filter' and ask_before is enabled
+            approved_optimizations = {}
+            auto_apply_optimizations = False
+            if task_name == 'filter':
+                try:
+                    approved_optimizations, auto_apply_optimizations = self._check_and_confirm_optimizations(
+                        current_layer, task_parameters
+                    )
+                except Exception as e:
+                    logger.warning(f"Optimization check failed: {e}")
+            
+            # Pass approved optimizations to task parameters
+            if approved_optimizations:
+                if "task" not in task_parameters:
+                    task_parameters["task"] = {}
+                task_parameters["task"]["approved_optimizations"] = approved_optimizations
+                task_parameters["task"]["auto_apply_optimizations"] = auto_apply_optimizations
+                logger.info(f"Passing approved optimizations to task: {approved_optimizations}")
                 
             layers = []
             self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
@@ -2211,6 +2238,151 @@ class FilterMateApp:
         self.dockwidget.disconnect_widgets_signals()
         self.dockwidget.reset_multiple_checkable_combobox()
     
+    # ========================================
+    # AUTO-OPTIMIZATION METHODS
+    # ========================================
+    
+    def _check_and_confirm_optimizations(self, current_layer, task_parameters):
+        """
+        Check for optimization opportunities and ask user for confirmation.
+        
+        This method analyzes the layers being filtered and determines if any
+        optimizations (like centroid usage) would benefit the operation.
+        If optimizations are available and the "ask before apply" setting is
+        enabled, it shows a confirmation dialog to the user.
+        
+        Args:
+            current_layer: The source layer for filtering
+            task_parameters: The task parameters dictionary
+            
+        Returns:
+            tuple: (approved_optimizations dict, auto_apply_optimizations bool)
+                - approved_optimizations: {layer_id: {optimization_type: bool}}
+                - auto_apply_optimizations: True if auto-apply is enabled
+        """
+        approved_optimizations = {}
+        auto_apply = False
+        
+        # Check if optimization system is enabled
+        optimization_enabled = getattr(self.dockwidget, '_optimization_enabled', True) if self.dockwidget else True
+        if not optimization_enabled:
+            logger.debug("Auto-optimization disabled by user setting")
+            return approved_optimizations, auto_apply
+        
+        # Check if we should ask before applying
+        ask_before = getattr(self.dockwidget, '_optimization_ask_before', True) if self.dockwidget else True
+        centroid_auto = getattr(self.dockwidget, '_centroid_auto_enabled', True) if self.dockwidget else True
+        
+        if not centroid_auto:
+            logger.debug("Auto-centroid disabled by user setting")
+            return approved_optimizations, auto_apply
+        
+        # If not asking, return auto_apply = True (will be handled in task)
+        if not ask_before:
+            auto_apply = True
+            logger.info("Auto-apply optimizations enabled (no confirmation dialog)")
+            return approved_optimizations, auto_apply
+        
+        # Analyze layers for optimization opportunities
+        try:
+            from .modules.backends.auto_optimizer import (
+                LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE, OptimizationType
+            )
+            
+            if not AUTO_OPTIMIZER_AVAILABLE:
+                return approved_optimizations, auto_apply
+            
+            analyzer = LayerAnalyzer()
+            optimizer = AutoOptimizer()
+            
+            # Collect all layers that need optimization
+            layers_needing_optimization = []
+            
+            # Get layers to filter from task parameters
+            task_layers = task_parameters.get("task", {}).get("layers", [])
+            
+            for layer_props in task_layers:
+                layer_id = layer_props.get("layer_id")
+                if not layer_id:
+                    continue
+                
+                # Get actual layer object
+                layer = self.PROJECT.mapLayer(layer_id)
+                if not layer or not layer.isValid():
+                    continue
+                
+                # Analyze the layer
+                analysis = analyzer.analyze_layer(layer)
+                if not analysis:
+                    continue
+                
+                # Get recommendations
+                recommendations = optimizer.get_recommendations(analysis)
+                
+                # Check if centroid is recommended
+                for rec in recommendations:
+                    if rec.optimization_type == OptimizationType.USE_CENTROID and rec.auto_applicable:
+                        layers_needing_optimization.append({
+                            'layer': layer,
+                            'layer_id': layer_id,
+                            'analysis': analysis,
+                            'recommendations': recommendations
+                        })
+                        break
+            
+            if not layers_needing_optimization:
+                logger.debug("No optimization recommendations for current filtering operation")
+                return approved_optimizations, auto_apply
+            
+            # Show confirmation dialog
+            logger.info(f"Found {len(layers_needing_optimization)} layer(s) with optimization recommendations")
+            
+            from .modules.optimization_dialogs import OptimizationRecommendationDialog
+            
+            # For now, show dialog for the first layer (most impactful)
+            # Future: Could show multi-layer dialog
+            first_layer_info = layers_needing_optimization[0]
+            layer = first_layer_info['layer']
+            analysis = first_layer_info['analysis']
+            recommendations = first_layer_info['recommendations']
+            
+            dialog = OptimizationRecommendationDialog(
+                layer_name=layer.name(),
+                recommendations=[r.to_dict() for r in recommendations],
+                feature_count=analysis.feature_count,
+                location_type=analysis.location_type.value,
+                parent=self.dockwidget
+            )
+            
+            result = dialog.exec_()
+            
+            if result:
+                selected = dialog.get_selected_optimizations()
+                
+                # Apply to all similar layers
+                for layer_info in layers_needing_optimization:
+                    approved_optimizations[layer_info['layer_id']] = selected
+                
+                # Check if user wants to remember
+                if dialog.should_remember():
+                    # Store in dockwidget for session persistence
+                    if not hasattr(self.dockwidget, '_session_optimization_choices'):
+                        self.dockwidget._session_optimization_choices = {}
+                    
+                    for layer_info in layers_needing_optimization:
+                        self.dockwidget._session_optimization_choices[layer_info['layer_id']] = selected
+                
+                logger.info(f"User approved optimizations: {approved_optimizations}")
+            else:
+                logger.info("User skipped optimizations")
+            
+        except ImportError as e:
+            logger.debug(f"Auto-optimizer not available: {e}")
+        except Exception as e:
+            logger.warning(f"Error in optimization check: {e}")
+        
+        return approved_optimizations, auto_apply
+    
     def _build_layers_to_filter(self, current_layer):
         """Build list of layers to filter with validation.
         
@@ -2238,20 +2410,10 @@ class FilterMateApp:
         logger.info(f"  Raw layers_to_filter list (user-selected): {raw_layers_list}")
         logger.info(f"  Number of user-selected layers: {len(raw_layers_list)}")
         
-        # AUTO-INCLUDE: Add layers from same GeoPackage if source is GeoPackage
-        from .modules.appUtils import get_geopackage_related_layers
-        related_gpkg_layers = get_geopackage_related_layers(current_layer, self.PROJECT_LAYERS)
-        
-        if related_gpkg_layers:
-            logger.info(f"🔗 Auto-including {len(related_gpkg_layers)} layer(s) from same GeoPackage")
-            # Merge with user-selected layers, avoiding duplicates
-            combined_list = list(set(raw_layers_list + related_gpkg_layers))
-            logger.info(f"  Combined list size: {len(combined_list)} layers (user + auto)")
-            raw_layers_list = combined_list
-        else:
-            logger.debug(f"  No related GeoPackage layers found (source is not GeoPackage or is single-layer)")
-        
-        logger.info(f"  Final layers to process: {len(raw_layers_list)}")
+        # FIX v2.5.15: Disabled auto-inclusion of GeoPackage layers
+        # User selection is now strictly respected - only explicitly checked layers are filtered
+        # Previously, all layers from the same GeoPackage were auto-included, ignoring user selection
+        logger.info(f"  Final layers to process: {len(raw_layers_list)} (user selection only)")
         
         for key in raw_layers_list:
             if key in self.PROJECT_LAYERS:
@@ -2679,6 +2841,27 @@ class FilterMateApp:
                     task_parameters["filtering"]["buffer_type"] = current_buffer_type
                     self.PROJECT_LAYERS[current_layer.id()]["filtering"]["buffer_type"] = current_buffer_type
 
+            # CENTROID OPTIMIZATION v2.5.12: Synchronize use_centroids checkboxes (source and distant layers)
+            if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_source_layer'):
+                current_use_centroids_source = self.dockwidget.checkBox_filtering_use_centroids_source_layer.isChecked()
+                stored_use_centroids_source = task_parameters.get("filtering", {}).get("use_centroids_source_layer", False)
+                if current_use_centroids_source != stored_use_centroids_source:
+                    logger.info(f"SYNC use_centroids_source_layer: checkbox={current_use_centroids_source}, stored={stored_use_centroids_source} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["use_centroids_source_layer"] = current_use_centroids_source
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["use_centroids_source_layer"] = current_use_centroids_source
+            
+            if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
+                current_use_centroids_distant = self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked()
+                stored_use_centroids_distant = task_parameters.get("filtering", {}).get("use_centroids_distant_layers", False)
+                if current_use_centroids_distant != stored_use_centroids_distant:
+                    logger.info(f"SYNC use_centroids_distant_layers: checkbox={current_use_centroids_distant}, stored={stored_use_centroids_distant} → updating")
+                    if "filtering" not in task_parameters:
+                        task_parameters["filtering"] = {}
+                    task_parameters["filtering"]["use_centroids_distant_layers"] = current_use_centroids_distant
+                    self.PROJECT_LAYERS[current_layer.id()]["filtering"]["use_centroids_distant_layers"] = current_use_centroids_distant
+
             if current_layer.subsetString() != '':
                 self.PROJECT_LAYERS[current_layer.id()]["infos"]["is_already_subset"] = True
             else:
@@ -2704,15 +2887,17 @@ class FilterMateApp:
                 )
                 
                 # NOUVEAU: Détecter si le filtre source doit être ignoré
-                # Cas: custom_selection active ET expression est juste un champ (pas complexe)
+                # Cas: custom_selection active ET expression n'est pas un filtre valide
+                # (pas d'opérateurs de comparaison - ex: juste un nom de champ ou expression display)
                 skip_source_filter = False
                 if (task_name == 'filter' and 
-                    self.dockwidget.current_exploring_groupbox == "custom_selection" and
-                    expression):
-                    qgs_expr = QgsExpression(expression)
-                    if qgs_expr.isValid() and qgs_expr.isField():
+                    self.dockwidget.current_exploring_groupbox == "custom_selection"):
+                    # L'expression validée est vide si l'expression originale n'était pas un filtre
+                    # (car _build_common_task_params la vide si pas d'opérateurs de comparaison)
+                    validated_expr = task_parameters["task"].get("expression", "")
+                    if not validated_expr or not validated_expr.strip():
                         skip_source_filter = True
-                        logger.info(f"FilterMate: Custom selection with field-only expression '{expression}' - will skip source layer filter")
+                        logger.info(f"FilterMate: Custom selection with non-filter expression '{expression}' - will use ALL features from source layer")
                 
                 task_parameters["task"]["skip_source_filter"] = skip_source_filter
                 
@@ -2785,26 +2970,44 @@ class FilterMateApp:
         
         Uses GdalErrorHandler to suppress transient GDAL warnings during refresh.
         
+        v2.6.5: PERFORMANCE FIX - Skip updateExtents() for large layers to prevent freeze.
+        v2.6.7: FREEZE FIX - Replace blocking time.sleep() with non-blocking QTimer.
+        
         Args:
             source_layer (QgsVectorLayer): Layer to refresh
         """
+        from qgis.PyQt.QtCore import QTimer
+        
         # Check if layer is Spatialite or OGR (local file-based SQLite)
         provider_type = source_layer.providerType() if source_layer else None
         needs_stabilization = provider_type in ('spatialite', 'ogr')
         
-        if needs_stabilization:
-            # Brief stabilization delay to let SQLite connections settle
-            # This helps prevent "unable to open database file" errors
-            import time
-            stabilization_ms = STABILITY_CONSTANTS.get('SPATIALITE_STABILIZATION_MS', 200)
-            time.sleep(stabilization_ms / 1000.0)
+        def do_refresh():
+            """Perform the actual layer refresh (called immediately or after delay)."""
+            try:
+                # Use GDAL error handler to suppress transient SQLite warnings during refresh
+                with GdalErrorHandler():
+                    # v2.6.5: Skip updateExtents for large layers to prevent freeze
+                    MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000
+                    feature_count = source_layer.featureCount() if source_layer else 0
+                    if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                        source_layer.updateExtents()
+                    # else: skip expensive updateExtents for very large layers
+                    source_layer.triggerRepaint()
+                    # v2.6.7: Skip refreshAllLayers() - individual layer repaint is sufficient
+                    # This avoids redundant refresh when finished() already handles canvas refresh
+                    self.iface.mapCanvas().refresh()
+            except Exception as e:
+                logger.warning(f"_refresh_layers_and_canvas: refresh failed: {e}")
         
-        # Use GDAL error handler to suppress transient SQLite warnings during refresh
-        with GdalErrorHandler():
-            source_layer.updateExtents()
-            source_layer.triggerRepaint()
-            self.iface.mapCanvas().refreshAllLayers()
-            self.iface.mapCanvas().refresh()
+        if needs_stabilization:
+            # v2.6.7: NON-BLOCKING stabilization delay using QTimer
+            # This prevents UI freeze while allowing SQLite connections to settle
+            stabilization_ms = STABILITY_CONSTANTS.get('SPATIALITE_STABILIZATION_MS', 200)
+            QTimer.singleShot(stabilization_ms, do_refresh)
+        else:
+            # No delay needed for PostgreSQL and other providers
+            do_refresh()
     
     def _push_filter_to_history(self, source_layer, task_parameters, feature_count, provider_type, layer_count):
         """

@@ -143,6 +143,108 @@ Please restart QGIS to apply all changes.</source>
         <source>Number of segments for buffer precision</source>
         <translation>बफर सटीकता के लिए सेगमेंट की संख्या</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>केंद्रक</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>दूर की परतों के लिए पूर्ण ज्यामिति की बजाय केंद्रक का उपयोग करें (जटिल बहुभुजों जैसे भवनों के लिए तेज़)</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>एक पुरानी कॉन्फ़िगरेशन ({}) का पता चला है।
+
+क्या आप डिफ़ॉल्ट सेटिंग्स पर रीसेट करना चाहते हैं?
+
+• हाँ: रीसेट करें (एक बैकअप बनाया जाएगा)
+• नहीं: वर्तमान कॉन्फ़िगरेशन रखें (समस्याएँ हो सकती हैं)</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>कॉन्फ़िगरेशन फ़ाइल दूषित है और पढ़ी नहीं जा सकती।
+
+क्या आप डिफ़ॉल्ट सेटिंग्स पर रीसेट करना चाहते हैं?
+
+• हाँ: रीसेट करें (यदि संभव हो तो बैकअप बनाया जाएगा)
+• नहीं: रद्द करें (प्लगइन सही ढंग से काम नहीं कर सकता)</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>कॉन्फ़िगरेशन रीसेट</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>कॉन्फ़िगरेशन को रीसेट करने की आवश्यकता है।
+
+क्या आप जारी रखना चाहते हैं?</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>कॉन्फ़िगरेशन माइग्रेशन के दौरान त्रुटि: {}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>क्या आप वाकई डिफ़ॉल्ट कॉन्फ़िगरेशन पर रीसेट करना चाहते हैं?
+
+यह:
+- डिफ़ॉल्ट सेटिंग्स पुनर्स्थापित करेगा
+- लेयर डेटाबेस हटाएगा
+
+परिवर्तन लागू करने के लिए QGIS को पुनरारंभ करना होगा।</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>कॉन्फ़िगरेशन रीसेट कर दी गई है।
+
+परिवर्तन लागू करने के लिए कृपया QGIS पुनरारंभ करें।</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

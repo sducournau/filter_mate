@@ -33,6 +33,12 @@ v2.4.0 Improvements:
 ====================
 - Automatic spatial index creation for file-based formats
 - Improved index detection and management
+
+v2.6.2 Improvements:
+====================
+- CRITICAL FIX: Interruptible processing with cancellation support
+- CancellableFeedback class for immediate query termination
+- Task cancellation checks before and during processing operations
 """
 
 import threading
@@ -101,6 +107,45 @@ logger = get_tasks_logger()
 _ogr_operations_lock = threading.Lock()
 _last_operation_thread = None
 
+
+class CancellableFeedback(QgsProcessingFeedback):
+    """
+    v2.6.2: QgsProcessingFeedback subclass that checks for task cancellation.
+    
+    This allows processing algorithms to be interrupted when the parent task
+    is cancelled, preventing QGIS from freezing on long operations.
+    
+    Usage:
+        feedback = CancellableFeedback(cancel_check=lambda: task.isCanceled())
+        processing.run("native:selectbylocation", {...}, feedback=feedback)
+    """
+    
+    def __init__(self, cancel_check=None):
+        """
+        Initialize cancellable feedback.
+        
+        Args:
+            cancel_check: Callable that returns True if operation should be cancelled
+        """
+        super().__init__()
+        self._cancel_check = cancel_check
+        self._is_canceled = False
+    
+    def isCanceled(self) -> bool:
+        """Check if operation is cancelled."""
+        if self._is_canceled:
+            return True
+        if self._cancel_check and self._cancel_check():
+            self._is_canceled = True
+            return True
+        return super().isCanceled()
+    
+    def cancel(self):
+        """Cancel the operation."""
+        self._is_canceled = True
+        super().cancel()
+
+
 def escape_ogr_identifier(identifier: str) -> str:
     """
     Escape identifier for OGR SQL expressions.
@@ -142,6 +187,28 @@ class OGRGeometricFilter(GeometricFilterBackend):
         """
         super().__init__(task_params)
         self.logger = logger
+    
+    def _is_task_canceled(self) -> bool:
+        """
+        v2.6.2: Check if the parent task was canceled.
+        
+        Returns:
+            True if task was canceled, False otherwise
+        """
+        if hasattr(self, 'task_params') and self.task_params:
+            task = self.task_params.get('_parent_task')
+            if task and hasattr(task, 'isCanceled'):
+                return task.isCanceled()
+        return False
+    
+    def _create_cancellable_feedback(self) -> CancellableFeedback:
+        """
+        v2.6.2: Create a CancellableFeedback instance linked to parent task.
+        
+        Returns:
+            CancellableFeedback instance
+        """
+        return CancellableFeedback(cancel_check=self._is_task_canceled)
     
     def supports_layer(self, layer: QgsVectorLayer) -> bool:
         """
@@ -346,13 +413,15 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 if not prefiltered_fids:
                     # No matches - apply empty filter
+                    # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
                     self.log_info("Attribute pre-filter returned 0 matches")
+                    empty_filter = 'fid = -1'  # No valid FID is -1
                     queue_callback = self.task_params.get('_subset_queue_callback')
                     if queue_callback:
-                        queue_callback(layer, '1 = 0')
+                        queue_callback(layer, empty_filter)
                     else:
                         from ..appUtils import safe_set_subset_string
-                        safe_set_subset_string(layer, '1 = 0')
+                        safe_set_subset_string(layer, empty_filter)
                     return True
                 
                 self.log_info(
@@ -443,7 +512,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         
                         new_expression = f'"{pk_field}" IN ({pk_list})'
                     else:
-                        new_expression = '1 = 0'
+                        # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+                        new_expression = 'fid = -1'  # No valid FID is -1
                 else:
                     # Fall back to $id
                     selected_ids = [f.id() for f in temp_layer.selectedFeatures()]
@@ -451,7 +521,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         id_list = ','.join(str(fid) for fid in selected_ids)
                         new_expression = f'$id IN ({id_list})'
                     else:
-                        new_expression = '1 = 0'
+                        # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+                        new_expression = 'fid = -1'  # No valid FID is -1
                 
                 # Combine with old subset if needed
                 if old_subset and not self._should_clear_old_subset(old_subset):
@@ -499,6 +570,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
         buffer_value: Optional[float] = None,
         buffer_expression: Optional[str] = None,
         source_filter: Optional[str] = None,
+        use_centroids: bool = False,
         **kwargs
     ) -> str:
         """
@@ -514,6 +586,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             buffer_value: Buffer distance
             buffer_expression: Expression for dynamic buffer
             source_filter: Source layer filter (not used in OGR)
+            use_centroids: If True, source layer centroids are used (already applied in prepare_ogr_source_geom)
             **kwargs: Additional backend-specific parameters (ignored)
         
         Returns:
@@ -788,12 +861,16 @@ class OGRGeometricFilter(GeometricFilterBackend):
                               f"CRS: {source_layer.crs().authid()}, "
                               f"Features: {source_layer.featureCount()}")
                 
-                # STABILITY FIX v2.3.9: Use fixgeometries BEFORE buffer to prevent GEOS crashes
-                # This is critical because some source geometries can crash native:buffer
-                from qgis.core import QgsProcessingContext, QgsProcessingFeedback, QgsFeatureRequest
+                # v2.6.2: Use cancellable feedback for interruptible processing
+                from qgis.core import QgsProcessingContext, QgsFeatureRequest
                 context = QgsProcessingContext()
                 context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
-                feedback = QgsProcessingFeedback()
+                feedback = self._create_cancellable_feedback()
+                
+                # v2.6.2: Check cancellation before buffer
+                if self._is_task_canceled():
+                    self.log_info("Filter cancelled before buffer processing")
+                    return None
                 
                 try:
                     # First run fixgeometries to repair any invalid geometries
@@ -1399,10 +1476,17 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 return False
             
             # Configure processing context to handle invalid geometries gracefully
-            from qgis.core import QgsProcessingContext, QgsProcessingFeedback, QgsFeatureRequest
+            from qgis.core import QgsProcessingContext, QgsFeatureRequest
             context = QgsProcessingContext()
             context.setInvalidGeometryCheck(QgsFeatureRequest.GeometrySkipInvalid)
-            feedback = QgsProcessingFeedback()
+            
+            # v2.6.2: Use cancellable feedback for interruptible processing
+            feedback = self._create_cancellable_feedback()
+            
+            # v2.6.2: Check cancellation before starting
+            if self._is_task_canceled():
+                self.log_info("Filter cancelled before selectbylocation")
+                return False
             
             self.log_info(f"🔍 Preparing selectbylocation: input={input_layer.name()} ({input_layer.featureCount()} features), "
                          f"intersect={intersect_layer.name()} ({intersect_layer.featureCount()} features), "
@@ -1777,11 +1861,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_debug("No features selected by geometric filter")
                 # THREAD SAFETY FIX for empty result
+                # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+                empty_filter = 'fid = -1'  # No valid FID is -1
                 queue_callback = self.task_params.get('_subset_queue_callback')
                 if queue_callback:
-                    queue_callback(layer, '1 = 0')
+                    queue_callback(layer, empty_filter)
                 else:
-                    safe_set_subset_string(layer, '1 = 0')
+                    safe_set_subset_string(layer, empty_filter)
                 return True
                 
         except Exception as select_error:
@@ -2100,11 +2186,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_debug("No features selected by geometric filter")
                 # THREAD SAFETY FIX for empty result
+                # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+                empty_filter = 'fid = -1'  # No valid FID is -1
                 queue_callback = self.task_params.get('_subset_queue_callback')
                 if queue_callback:
-                    queue_callback(layer, '1 = 0')
+                    queue_callback(layer, empty_filter)
                 else:
-                    safe_set_subset_string(layer, '1 = 0')
+                    safe_set_subset_string(layer, empty_filter)
                 return True
                 
         except Exception as e:
@@ -2254,11 +2342,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug("No features selected by geometric filter (memory optimization)")
                 memory_layer.removeSelection()
                 # THREAD SAFETY FIX for empty result
+                # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+                empty_filter = 'fid = -1'  # No valid FID is -1
                 queue_callback = self.task_params.get('_subset_queue_callback')
                 if queue_callback:
-                    queue_callback(original_layer, '1 = 0')
+                    queue_callback(original_layer, empty_filter)
                 else:
-                    safe_set_subset_string(original_layer, '1 = 0')
+                    safe_set_subset_string(original_layer, empty_filter)
                 return True
                 
         except Exception as e:

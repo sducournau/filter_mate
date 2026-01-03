@@ -76,6 +76,40 @@ except ImportError:
     OGROptimizer = None
     MemoryOptimizer = None
 
+# v2.7.0: Auto-Optimizer for intelligent heuristics
+try:
+    from .auto_optimizer import (
+        AutoOptimizer,
+        LayerAnalyzer,
+        OptimizationPlan,
+        OptimizationType,
+        LayerLocationType,
+        OptimizationRecommendation,
+        LayerAnalysis,
+        recommend_optimizations,
+        get_auto_optimizer
+    )
+    from .factory import (
+        get_optimization_plan,
+        should_use_centroids,
+        analyze_layer_for_optimization,
+        AUTO_OPTIMIZER_AVAILABLE
+    )
+except ImportError:
+    AutoOptimizer = None
+    LayerAnalyzer = None
+    OptimizationPlan = None
+    OptimizationType = None
+    LayerLocationType = None
+    OptimizationRecommendation = None
+    LayerAnalysis = None
+    recommend_optimizations = None
+    get_auto_optimizer = None
+    get_optimization_plan = None
+    should_use_centroids = None
+    analyze_layer_for_optimization = None
+    AUTO_OPTIMIZER_AVAILABLE = False
+
 __all__ = [
     # Core backends
     'GeometricFilterBackend',
@@ -101,4 +135,18 @@ __all__ = [
     'SpatialiteOptimizer',
     'OGROptimizer',
     'MemoryOptimizer',
+    # v2.7.0 Auto-Optimizer
+    'AutoOptimizer',
+    'LayerAnalyzer',
+    'OptimizationPlan',
+    'OptimizationType',
+    'LayerLocationType',
+    'OptimizationRecommendation',
+    'LayerAnalysis',
+    'recommend_optimizations',
+    'get_auto_optimizer',
+    'get_optimization_plan',
+    'should_use_centroids',
+    'analyze_layer_for_optimization',
+    'AUTO_OPTIMIZER_AVAILABLE',
 ]

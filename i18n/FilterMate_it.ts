@@ -143,6 +143,108 @@ Riavvia QGIS per applicare tutte le modifiche.</translation>
         <source>Number of segments for buffer precision</source>
         <translation>Numero di segmenti per la precisione del buffer</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Centroidi</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Usa i centroidi invece delle geometrie complete per i layer distanti (più veloce per poligoni complessi come edifici)</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>È stata rilevata una configurazione obsoleta ({}).
+
+Vuoi ripristinare le impostazioni predefinite?
+
+• Sì: Ripristina (verrà creato un backup)
+• No: Mantieni la configurazione attuale (potrebbe causare problemi)</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>Il file di configurazione è corrotto e non può essere letto.
+
+Vuoi ripristinare le impostazioni predefinite?
+
+• Sì: Ripristina (verrà creato un backup se possibile)
+• No: Annulla (il plugin potrebbe non funzionare correttamente)</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>Ripristino configurazione</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>La configurazione deve essere ripristinata.
+
+Vuoi continuare?</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>Errore durante la migrazione della configurazione: {}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>Sei sicuro di voler ripristinare la configurazione predefinita?
+
+Questo:
+- Ripristinerà le impostazioni predefinite
+- Eliminerà il database dei layer
+
+QGIS deve essere riavviato per applicare le modifiche.</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>La configurazione è stata ripristinata.
+
+Riavvia QGIS per applicare le modifiche.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

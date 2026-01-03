@@ -40,6 +40,7 @@ class GeometricFilterBackend(ABC):
         buffer_value: Optional[float] = None,
         buffer_expression: Optional[str] = None,
         source_filter: Optional[str] = None,
+        use_centroids: bool = False,
         **kwargs
     ) -> str:
         """
@@ -52,6 +53,7 @@ class GeometricFilterBackend(ABC):
             buffer_value: Buffer distance value (optional)
             source_filter: Source layer filter expression (optional, for EXISTS subqueries)
             buffer_expression: Expression for dynamic buffer (optional)
+            use_centroids: If True, use centroids instead of full geometries for distant layers (optional)
             **kwargs: Additional backend-specific parameters (e.g., source_wkt, source_srid)
         
         Returns:

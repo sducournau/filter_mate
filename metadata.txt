@@ -6,28 +6,32 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.6.3
+version=2.6.7
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.6.3 - PostgreSQL Transaction Fix & Memory Backend Improvements
+about=FilterMate v2.6.7 - PostgreSQL Distant Layer Geometric Filtering Fix
 
- NEW in v2.6.3:
- - 🐛 FIX: PostgreSQL "current transaction is aborted" errors now properly handled
- - 🔧 FIX: Memory backend now correctly stores source geometry for spatial filtering
- - 📋 NEW: Memory backend explicitly recognized in filter task (no more "Unknown backend" warnings)
- - 🔄 IMPROVE: Transaction rollback before connection close prevents cascade failures
+ NEW in v2.6.7:
+ - 🐛 FIX: PostgreSQL distant layers not filtered with EXISTS spatial expressions
+ - 🐛 FIX: Expression now uses unqualified column name for setSubsetString context
+ - ✓ Correct expression: EXISTS (SELECT 1 FROM "schema"."source" AS __source WHERE ST_Intersects("geom", __source."geom"))
 
- Previous version (v2.6.2):
- - 🚀 POSTGRESQL LIGHTWEIGHT MVs: Stores only ID + geometry (3-5× smaller)
- - 📦 SPATIALITE R-TREE SOURCE TABLES: Permanent tables with spatial index for large datasets
- - ⚡ PRE-COMPUTED BUFFER: geom_buffered stored in MV/source table for faster queries
- 
- Previous version (v2.5.x):
- - 🛡️ PostgreSQL statement timeout protection with OGR fallback
- - ✨ Bidirectional QGIS selection ↔ widgets synchronization
- - 🐛 PostgreSQL ST_IsEmpty() for all empty geometry types
- - 🎨 HiDPI UI profile for 4K/Retina displays with auto-detection
+ Previous version (v2.6.6):
+ - 🐛 FIX: QGIS freeze when filtering with Spatialite/GeoPackage backend
+ - 🐛 FIX: Removed reloadData() calls for OGR/Spatialite layers (causes freeze)
+ - 🚀 PERF: Only PostgreSQL uses reloadData() for MV-based complex filters
+
+ Previous version (v2.6.5):
+ - 🐛 FIX: QGIS freeze on plugin reload with large layers (batiment, etc.)
+ - 🐛 FIX: get_filtered_layer_extent() now limits iteration to 10k features
+ - 🐛 FIX: Multiple selection extent calculation limited to 500 items
+ - 🚀 PERF: Uses updateExtents() for large filtered datasets instead of iterating
+
+ Previous version (v2.6.4):
+ - 🐛 FIX: "SQLite objects created in a thread" error (check_same_thread=False)
+ - 🐛 FIX: QGIS freeze with large source geometries (>100K chars WKT)
+ - 🚀 NEW: Automatic R-tree optimization for large WKT (LARGE_WKT_THRESHOLD=100K)
  
  Core features:
  - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)

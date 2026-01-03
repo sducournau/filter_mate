@@ -1740,6 +1740,44 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         force_all_action.setData('__FORCE_ALL__')
         force_all_action.setToolTip(force_all_tooltip)
         
+        # Add Optimization settings submenu
+        menu.addSeparator()
+        opt_submenu = menu.addMenu("🔧 Optimization Settings")
+        
+        # Get current optimization settings
+        opt_enabled = getattr(self, '_optimization_enabled', True)
+        centroid_auto = getattr(self, '_centroid_auto_enabled', True)
+        ask_before = getattr(self, '_optimization_ask_before', True)
+        
+        # Toggle optimization enabled
+        opt_enabled_text = "✓ Enable auto-optimization" if opt_enabled else "  Enable auto-optimization"
+        opt_enabled_action = opt_submenu.addAction(opt_enabled_text)
+        opt_enabled_action.setData('__OPT_TOGGLE_ENABLED__')
+        opt_enabled_action.setToolTip("Enable/disable automatic optimization recommendations")
+        
+        # Toggle centroid auto-detection
+        centroid_text = "✓ Auto-centroid for distant layers" if centroid_auto else "  Auto-centroid for distant layers"
+        centroid_action = opt_submenu.addAction(centroid_text)
+        centroid_action.setData('__OPT_TOGGLE_CENTROID__')
+        centroid_action.setToolTip("Automatically suggest centroids for WFS, ArcGIS, remote PostgreSQL layers")
+        
+        # Toggle ask before applying
+        ask_text = "✓ Ask before applying optimizations" if ask_before else "  Ask before applying optimizations"
+        ask_action = opt_submenu.addAction(ask_text)
+        ask_action.setData('__OPT_TOGGLE_ASK__')
+        ask_action.setToolTip("Show confirmation dialog before applying optimizations")
+        
+        opt_submenu.addSeparator()
+        
+        # Analyze current layer
+        analyze_action = opt_submenu.addAction("📊 Analyze current layer")
+        analyze_action.setData('__OPT_ANALYZE_LAYER__')
+        analyze_action.setToolTip("Show optimization recommendations for the current layer")
+        
+        # Open settings dialog
+        settings_action = opt_submenu.addAction("⚙️ Advanced settings...")
+        settings_action.setData('__OPT_SETTINGS_DIALOG__')
+        
         # Add PostgreSQL maintenance section if PostgreSQL is available
         if POSTGRESQL_AVAILABLE:
             menu.addSeparator()
@@ -1805,6 +1843,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             if selected_backend == '__PG_SESSION_INFO__':
                 self._show_postgresql_session_info()
+                return
+            
+            # Handle Optimization actions
+            if selected_backend == '__OPT_TOGGLE_ENABLED__':
+                self._toggle_optimization_enabled()
+                return
+            
+            if selected_backend == '__OPT_TOGGLE_CENTROID__':
+                self._toggle_centroid_auto()
+                return
+            
+            if selected_backend == '__OPT_TOGGLE_ASK__':
+                self._toggle_optimization_ask_before()
+                return
+            
+            if selected_backend == '__OPT_ANALYZE_LAYER__':
+                self._analyze_layer_optimizations()
+                return
+            
+            if selected_backend == '__OPT_SETTINGS_DIALOG__':
+                self._show_optimization_settings_dialog()
                 return
             
             self._set_forced_backend(current_layer.id(), selected_backend)
@@ -3388,6 +3447,243 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         QMessageBox.information(self, "PostgreSQL Session Info", info_text)
 
+    # ========================================
+    # OPTIMIZATION SETTINGS METHODS
+    # ========================================
+    
+    def _toggle_optimization_enabled(self):
+        """Toggle automatic optimization recommendations on/off."""
+        current_state = getattr(self, '_optimization_enabled', True)
+        self._optimization_enabled = not current_state
+        
+        if self._optimization_enabled:
+            show_success("FilterMate", "Auto-optimization enabled. Recommendations will be shown before filtering.")
+        else:
+            show_info("FilterMate", "Auto-optimization disabled. No optimization suggestions will be shown.")
+        
+        logger.info(f"Optimization toggled: {self._optimization_enabled}")
+    
+    def _toggle_centroid_auto(self):
+        """Toggle automatic centroid suggestion for distant layers."""
+        current_state = getattr(self, '_centroid_auto_enabled', True)
+        self._centroid_auto_enabled = not current_state
+        
+        if self._centroid_auto_enabled:
+            show_success("FilterMate", "Auto-centroid enabled for distant layers (WFS, ArcGIS, remote PostgreSQL)")
+        else:
+            show_info("FilterMate", "Auto-centroid disabled. Centroids will not be auto-suggested.")
+        
+        logger.info(f"Centroid auto toggled: {self._centroid_auto_enabled}")
+    
+    def _toggle_optimization_ask_before(self):
+        """Toggle whether to ask user before applying optimizations."""
+        current_state = getattr(self, '_optimization_ask_before', True)
+        self._optimization_ask_before = not current_state
+        
+        if self._optimization_ask_before:
+            show_success("FilterMate", "Confirmation dialog enabled. You will be asked before optimizations are applied.")
+        else:
+            show_info("FilterMate", "Confirmation dialog disabled. Optimizations will be applied automatically.")
+        
+        logger.info(f"Optimization ask before toggled: {self._optimization_ask_before}")
+    
+    def _analyze_layer_optimizations(self):
+        """
+        Analyze the current layer and show optimization recommendations.
+        This shows the recommendation dialog even if no filter is being applied.
+        """
+        current_layer = self.current_layer
+        if not current_layer:
+            show_warning("FilterMate", "No layer selected. Please select a layer first.")
+            return
+        
+        try:
+            from .modules.backends.auto_optimizer import (
+                LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
+            )
+            
+            if not AUTO_OPTIMIZER_AVAILABLE:
+                show_warning("FilterMate", "Auto-optimizer module not available")
+                return
+            
+            # Analyze the layer
+            analyzer = LayerAnalyzer()
+            layer_analysis = analyzer.analyze_layer(current_layer)
+            
+            if not layer_analysis:
+                show_info("FilterMate", f"Could not analyze layer '{current_layer.name()}'")
+                return
+            
+            # Get recommendations
+            optimizer = AutoOptimizer()
+            recommendations = optimizer.get_recommendations(layer_analysis)
+            
+            if not recommendations:
+                show_success("FilterMate", 
+                    f"Layer '{current_layer.name()}' is already optimally configured.\n"
+                    f"Type: {layer_analysis.location_type.value}\n"
+                    f"Features: {layer_analysis.feature_count:,}"
+                )
+                return
+            
+            # Show the recommendations dialog
+            from .modules.optimization_dialogs import OptimizationRecommendationDialog
+            
+            dialog = OptimizationRecommendationDialog(
+                layer_name=current_layer.name(),
+                recommendations=[r.to_dict() for r in recommendations],
+                feature_count=layer_analysis.feature_count,
+                location_type=layer_analysis.location_type.value,
+                parent=self
+            )
+            
+            result = dialog.exec_()
+            
+            if result:
+                selected = dialog.get_selected_optimizations()
+                
+                # Apply selected optimizations
+                applied = []
+                if selected.get('use_centroid', False):
+                    # Store centroid preference for this layer
+                    if not hasattr(self, '_layer_centroid_overrides'):
+                        self._layer_centroid_overrides = {}
+                    self._layer_centroid_overrides[current_layer.id()] = True
+                    applied.append("Use Centroids")
+                
+                if applied:
+                    show_success("FilterMate", 
+                        f"Applied to '{current_layer.name()}':\n" + "\n".join(f"• {a}" for a in applied)
+                    )
+                else:
+                    show_info("FilterMate", "No optimizations selected to apply.")
+                    
+        except ImportError as e:
+            show_warning("FilterMate", f"Auto-optimizer not available: {e}")
+            logger.warning(f"Could not import auto-optimizer: {e}")
+        except Exception as e:
+            show_warning("FilterMate", f"Error analyzing layer: {str(e)[:50]}")
+            logger.error(f"Error in layer analysis: {e}")
+    
+    def _show_optimization_settings_dialog(self):
+        """Show the advanced optimization settings dialog."""
+        try:
+            from .modules.optimization_dialogs import OptimizationSettingsDialog
+            
+            dialog = OptimizationSettingsDialog(self)
+            result = dialog.exec_()
+            
+            if result:
+                settings = dialog.get_settings()
+                
+                # Apply settings
+                self._optimization_enabled = settings.get('enabled', True)
+                self._centroid_auto_enabled = settings.get('auto_centroid_for_distant', True)
+                self._optimization_ask_before = settings.get('ask_before_apply', True)
+                
+                # Store thresholds
+                if not hasattr(self, '_optimization_thresholds'):
+                    self._optimization_thresholds = {}
+                self._optimization_thresholds['centroid_distant'] = settings.get('centroid_threshold_distant', 5000)
+                
+                logger.info(f"Applied optimization settings: {settings}")
+                show_success("FilterMate", "Optimization settings saved")
+                
+        except ImportError as e:
+            show_warning("FilterMate", f"Settings dialog not available: {e}")
+            logger.warning(f"Could not import optimization dialog: {e}")
+        except Exception as e:
+            show_warning("FilterMate", f"Error showing settings: {str(e)[:50]}")
+            logger.error(f"Error in optimization settings dialog: {e}")
+    
+    def should_use_centroid_for_layer(self, layer) -> bool:
+        """
+        Check if centroid optimization should be used for a layer.
+        
+        Considers:
+        1. User override for specific layer
+        2. Auto-centroid setting for distant layers
+        3. Layer analysis (if enabled)
+        
+        Args:
+            layer: QgsVectorLayer to check
+            
+        Returns:
+            bool: True if centroids should be used
+        """
+        # Check layer-specific override first
+        if hasattr(self, '_layer_centroid_overrides'):
+            override = self._layer_centroid_overrides.get(layer.id() if layer else None)
+            if override is not None:
+                return override
+        
+        # Check if auto-optimization is enabled
+        if not getattr(self, '_optimization_enabled', True):
+            return False
+        
+        # Check if auto-centroid is enabled
+        if not getattr(self, '_centroid_auto_enabled', True):
+            return False
+        
+        # Analyze the layer
+        try:
+            from .modules.backends.auto_optimizer import (
+                LayerAnalyzer, LayerLocationType, AUTO_OPTIMIZER_AVAILABLE
+            )
+            
+            if not AUTO_OPTIMIZER_AVAILABLE:
+                return False
+            
+            analyzer = LayerAnalyzer()
+            analysis = analyzer.analyze_layer(layer)
+            
+            if not analysis:
+                return False
+            
+            # Check if it's a distant layer
+            threshold = 5000
+            if hasattr(self, '_optimization_thresholds'):
+                threshold = self._optimization_thresholds.get('centroid_distant', 5000)
+            
+            if analysis.location_type in (LayerLocationType.REMOTE_SERVICE, 
+                                          LayerLocationType.REMOTE_DATABASE):
+                return analysis.feature_count >= threshold
+            
+        except Exception as e:
+            logger.debug(f"Error checking centroid for layer: {e}")
+        
+        return False
+    
+    def get_optimization_state(self) -> dict:
+        """
+        Get the current optimization state for storage/restore.
+        
+        Returns:
+            dict: Current optimization settings
+        """
+        return {
+            'enabled': getattr(self, '_optimization_enabled', True),
+            'centroid_auto': getattr(self, '_centroid_auto_enabled', True),
+            'ask_before': getattr(self, '_optimization_ask_before', True),
+            'thresholds': getattr(self, '_optimization_thresholds', {}),
+            'layer_overrides': getattr(self, '_layer_centroid_overrides', {}),
+        }
+    
+    def restore_optimization_state(self, state: dict):
+        """
+        Restore optimization state from saved settings.
+        
+        Args:
+            state: Dictionary with optimization settings
+        """
+        self._optimization_enabled = state.get('enabled', True)
+        self._centroid_auto_enabled = state.get('centroid_auto', True)
+        self._optimization_ask_before = state.get('ask_before', True)
+        self._optimization_thresholds = state.get('thresholds', {})
+        self._layer_centroid_overrides = state.get('layer_overrides', {})
+        
+        logger.info(f"Restored optimization state: enabled={self._optimization_enabled}")
+
     def auto_select_optimal_backends(self):
         """
         Automatically select optimal backend for all layers in the project.
@@ -4276,8 +4572,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Configure widgets for the Filtering tab.
         
         Sets up comboBox_filtering_current_layer (VectorLayer filter), creates and configures
-        checkableComboBoxLayer_filtering_layers_to_filter. Layer initialization is deferred
-        to manage_interactions() to prevent blocking during project load.
+        checkableComboBoxLayer_filtering_layers_to_filter with checkbox for distant layer centroids.
+        Layer initialization is deferred to manage_interactions() to prevent blocking during project load.
         """
         # Filter comboBox_filtering_current_layer to show only vector layers
         self.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
@@ -4285,13 +4581,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # NOTE: setLayer() and backend indicator update are deferred to manage_interactions()
         # via _deferred_manage_interactions() to prevent blocking during project load.
 
+        # Set centroid icon dynamically for source layer checkbox (from UI)
+        import os
+        icon_path = os.path.join(os.path.dirname(__file__), "icons", "centroid.png")
+        if os.path.exists(icon_path) and hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
+            self.checkBox_filtering_use_centroids_source_layer.setIcon(QtGui.QIcon(icon_path))
+            self.checkBox_filtering_use_centroids_source_layer.setText("")  # Ensure no text
+            # Put icon/text on left, checkbox indicator on right
+            self.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
+
         # Create custom checkable combobox for layers to filter
         # Parent must be dockWidgetContents, not self (the dock widget), to avoid widget appearing in dock title bar
         self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
         
+        # Create checkbox for distant layers centroids (with centroid icon, no text)
+        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
+        self.checkBox_filtering_use_centroids_distant_layers.setText("")  # No text, icon only
+        self.checkBox_filtering_use_centroids_distant_layers.setToolTip(
+            self.tr("Use centroids instead of full geometries for distant layers (faster for complex polygons)")
+        )
+        self.checkBox_filtering_use_centroids_distant_layers.setChecked(False)
+        self.checkBox_filtering_use_centroids_distant_layers.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        # Set centroid icon for distant layers checkbox
+        if os.path.exists(icon_path):
+            self.checkBox_filtering_use_centroids_distant_layers.setIcon(QtGui.QIcon(icon_path))
+        # Put icon/text on left, checkbox indicator on right
+        self.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
+        font = QtGui.QFont()
+        font.setFamily("Segoe UI")
+        font.setPointSize(8)
+        self.checkBox_filtering_use_centroids_distant_layers.setFont(font)
+        self.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
+        
+        # Create horizontal layout to hold combobox + checkbox
+        self.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_filtering_distant_layers.setSpacing(4)
+        self.horizontalLayout_filtering_distant_layers.addWidget(self.checkableComboBoxLayer_filtering_layers_to_filter)
+        self.horizontalLayout_filtering_distant_layers.addWidget(self.checkBox_filtering_use_centroids_distant_layers)
+        
         # Insert into layout - position just above verticalSpacer_filtering_values_search_bottom (index 2)
         layout = self.verticalLayout_filtering_values
-        layout.insertWidget(2, self.checkableComboBoxLayer_filtering_layers_to_filter)
+        layout.insertLayout(2, self.horizontalLayout_filtering_distant_layers)
         
         # Apply height constraints (these widgets are created before apply_dynamic_dimensions())
         from .modules.ui_config import UIConfig
@@ -4300,7 +4632,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.checkableComboBoxLayer_filtering_layers_to_filter.setMinimumHeight(combobox_height)
             self.checkableComboBoxLayer_filtering_layers_to_filter.setMaximumHeight(combobox_height)
             self.checkableComboBoxLayer_filtering_layers_to_filter.setSizePolicy(
-                self.checkableComboBoxLayer_filtering_layers_to_filter.sizePolicy().horizontalPolicy(),
+                QtWidgets.QSizePolicy.Preferred,
                 QtWidgets.QSizePolicy.Fixed
             )
         except Exception as e:
@@ -4427,7 +4759,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.layer_properties_tuples_dict =   {
                                                 "is":(("exploring","is_selecting"),("exploring","is_tracking"),("exploring","is_linking")),
                                                 "selection_expression":(("exploring","single_selection_expression"),("exploring","multiple_selection_expression"),("exploring","custom_selection_expression")),
-                                                "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter")),
+                                                "source_layer":(("filtering","use_centroids_source_layer"),),
+                                                "layers_to_filter":(("filtering","has_layers_to_filter"),("filtering","layers_to_filter"),("filtering","use_centroids_distant_layers")),
                                                 "combine_operator":(("filtering", "has_combine_operator"), ("filtering", "source_layer_combine_operator"),("filtering", "other_layers_combine_operator")),
                                                 "buffer_type":(("filtering","has_buffer_type"),("filtering","buffer_type"),("filtering","buffer_segments")),
                                                 "buffer_value":(("filtering", "has_buffer_value"),("filtering","has_buffer_type"),("filtering", "buffer_value"),("filtering", "buffer_value_expression"),("filtering", "buffer_value_property")),
@@ -4494,9 +4827,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         self.widgets["FILTERING"] = {
                                     "AUTO_CURRENT_LAYER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_auto_current_layer, "SIGNALS":[("clicked", lambda state : self.filtering_auto_current_layer_changed(state))], "ICON":None},
-                                    "HAS_LAYERS_TO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_layers_to_filter, "SIGNALS":[("clicked", lambda state, x='has_layers_to_filter': self.layer_property_changed(x, state))], "ICON":None},
-                                    "HAS_COMBINE_OPERATOR":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", lambda state, x='has_combine_operator': self.layer_property_changed(x, state))], "ICON":None},
-                                    "HAS_GEOMETRIC_PREDICATES":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", lambda state, x='has_geometric_predicates': self.layer_property_changed(x, state))], "ICON":None},
+                                    "HAS_LAYERS_TO_FILTER":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_layers_to_filter, "SIGNALS":[("clicked", lambda state, x='has_layers_to_filter', custom_functions={"ON_CHANGE": lambda x: self.filtering_layers_to_filter_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "HAS_COMBINE_OPERATOR":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_current_layer_combine_operator, "SIGNALS":[("clicked", lambda state, x='has_combine_operator', custom_functions={"ON_CHANGE": lambda x: self.filtering_combine_operator_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
+                                    "HAS_GEOMETRIC_PREDICATES":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_geometric_predicates, "SIGNALS":[("clicked", lambda state, x='has_geometric_predicates', custom_functions={"ON_CHANGE": lambda x: self.filtering_geometric_predicates_state_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_BUFFER_VALUE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_value, "SIGNALS":[("clicked", lambda state, x='has_buffer_value', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "HAS_BUFFER_TYPE":{"TYPE":"PushButton", "WIDGET":self.pushButton_checkable_filtering_buffer_type, "SIGNALS":[("clicked", lambda state, x='has_buffer_type', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed()}: self.layer_property_changed(x, state, custom_functions))], "ICON":None},
                                     "CURRENT_LAYER":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_current_layer, "SIGNALS":[("layerChanged", self.current_layer_changed)]},
@@ -4504,6 +4837,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='source_layer_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
                                     "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='other_layers_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
+                                    "USE_CENTROIDS_SOURCE_LAYER":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_source_layer, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_source_layer': self.layer_property_changed(x, bool(state)))]},
+                                    "USE_CENTROIDS_DISTANT_LAYERS":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_distant_layers, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_distant_layers': self.layer_property_changed(x, bool(state)))]},
                                     "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed_with_buffer_style(x, state))]},
                                     "BUFFER_VALUE_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_value_property, "SIGNALS":[("changed", lambda state=None, x='buffer_value_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed(), "CUSTOM_DATA": lambda x: self.get_buffer_property_state()}: self.layer_property_changed(x, state, custom_functions))]},
                                     "BUFFER_TYPE":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_buffer_type, "SIGNALS":[("currentTextChanged", lambda state, x='buffer_type': self.layer_property_changed(x, state))]},
@@ -6758,6 +7093,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         features, rather than using the cached layer extent which may include
         features that are filtered out.
         
+        v2.6.5 PERFORMANCE FIX: Added feature limit to prevent UI freeze on large layers.
+        For very large layers, uses updateExtents() instead of iterating all features.
+        
         Args:
             layer (QgsVectorLayer): Layer to calculate extent for
             
@@ -6768,15 +7106,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return None
             
         try:
+            # v2.6.5: PERFORMANCE FIX - Use updateExtents() for large layers
+            # Iterating 100k+ features causes QGIS freeze
+            MAX_FEATURES_FOR_EXTENT_CALC = 10000  # Beyond this, use updateExtents()
+            
             # Force recalculation of extent for filtered features
             layer.updateExtents()
+            
+            # Quick check: if layer has filter and provider supports extent calculation
+            filtered_count = layer.featureCount()
+            if filtered_count > MAX_FEATURES_FOR_EXTENT_CALC:
+                # For large filtered datasets, trust updateExtents() result
+                logger.debug(f"get_filtered_layer_extent: Large layer ({filtered_count} features), using updateExtents()")
+                return layer.extent()
             
             # Get extent from provider with current subset filter applied
             extent = QgsRectangle()
             
-            # Iterate through all filtered features to compute real extent
-            request = QgsFeatureRequest().setNoAttributes().setFlags(QgsFeatureRequest.NoGeometry)
-            # We need geometry for extent calculation, so remove NoGeometry flag
+            # Iterate through filtered features to compute real extent (with limit)
             request = QgsFeatureRequest().setNoAttributes()
             
             feature_count = 0
@@ -6787,6 +7134,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     else:
                         extent.combineExtentWith(feature.geometry().boundingBox())
                     feature_count += 1
+                    # Safety limit even for smaller layers
+                    if feature_count >= MAX_FEATURES_FOR_EXTENT_CALC:
+                        logger.debug(f"get_filtered_layer_extent: Reached limit of {MAX_FEATURES_FOR_EXTENT_CALC} features")
+                        break
                     
             if extent.isEmpty():
                 # Fallback to layer extent if no features with geometry
@@ -6840,6 +7191,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if combo:
                     checked_items = combo.checkedItems()
                     if checked_items:
+                        # PERFORMANCE FIX v2.6.5: Limit number of items to process
+                        MAX_ITEMS_FOR_EXTENT = 500  # Beyond this, use layer extent
+                        if len(checked_items) > MAX_ITEMS_FOR_EXTENT:
+                            logger.debug(f"_compute_zoom_extent_for_mode: Too many items ({len(checked_items)}), using layer extent")
+                            return self.get_filtered_layer_extent(self.current_layer)
+                        
                         # Try to get features by their IDs
                         layer_props = self.PROJECT_LAYERS.get(self.current_layer.id(), {})
                         pk_name = layer_props.get("infos", {}).get("primary_key_name")
@@ -6880,6 +7237,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         if qgs_expr.isValid() and not qgs_expr.isField():
                             try:
                                 request = QgsFeatureRequest(qgs_expr)
+                                # PERFORMANCE FIX: Limit features processed for extent calculation
+                                MAX_EXTENT_FEATURES = 5000  # Enough for good extent, prevents freeze
                                 for feat in self.current_layer.getFeatures(request):
                                     if feat.hasGeometry() and not feat.geometry().isEmpty():
                                         if extent.isEmpty():
@@ -6887,6 +7246,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                         else:
                                             extent.combineExtentWith(feat.geometry().boundingBox())
                                         features_found += 1
+                                        # Safety limit to prevent UI freeze
+                                        if features_found >= MAX_EXTENT_FEATURES:
+                                            logger.debug(f"_compute_zoom_extent_for_mode: Stopped at {MAX_EXTENT_FEATURES} features for extent")
+                                            break
                             except Exception as e:
                                 logger.warning(f"_compute_zoom_extent_for_mode: Error fetching custom features: {e}")
             
@@ -6940,6 +7303,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     qgs_expr = QgsExpression(expression)
                     if qgs_expr.isValid():
                         request = QgsFeatureRequest(qgs_expr)
+                        # PERFORMANCE FIX: Limit features fetched for zoom
+                        request.setLimit(5000)  # Enough for zoom extent calculation
                         features = list(self.current_layer.getFeatures(request))
                         logger.debug(f"zooming_to_features: Fetched {len(features)} features from expression")
                 except Exception as e:
@@ -7965,13 +8330,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     return [], expression
                 
                 # Synchronous evaluation for smaller layers
+                # PERFORMANCE FIX: Add limit to prevent UI freeze on unexpected large result sets
+                MAX_SYNC_FEATURES = 10000  # Limit synchronous iteration
                 features_iterator = self.current_layer.getFeatures(QgsFeatureRequest(QgsExpression(expression)))
                 done_looping = False
+                feature_count_iter = 0
                 
                 while not done_looping:
                     try:
                         feature = next(features_iterator)
                         features.append(feature)
+                        feature_count_iter += 1
+                        # Safety limit to prevent UI freeze
+                        if feature_count_iter >= MAX_SYNC_FEATURES:
+                            logger.warning(f"get_exploring_features: Stopped at {MAX_SYNC_FEATURES} features to prevent UI freeze")
+                            done_looping = True
                     except StopIteration:
                         done_looping = True
             else:
@@ -8112,7 +8485,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
             custom_filter = None
-            layer_features_source = self.current_layer.dataProvider().featureSource() 
+            # NOTE: featureSource() removed - was unused dead code causing potential slowdown
             
             # Ensure is_linking property exists (backward compatibility)
             if "is_linking" not in layer_props["exploring"]:
@@ -8573,7 +8946,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for group_name in self.layer_properties_tuples_dict:
             tuple_group = self.layer_properties_tuples_dict[group_name]
             group_state = True
-            if group_name not in ('is','selection_expression'):
+            # NOTE: 'source_layer' group excluded because use_centroids_source_layer checkbox
+            # should always be enabled (no parent toggle controls it)
+            if group_name not in ('is', 'selection_expression', 'source_layer'):
                 group_enabled_property = tuple_group[0]
                 group_state = layer_props[group_enabled_property[0]][group_enabled_property[1]]
                 if group_state is False:
@@ -8632,6 +9007,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'QgsSpinBox':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setValue(layer_props[property_tuple[0]][property_tuple[1]])
+                    elif widget_type == 'CheckBox':
+                        # Synchronize CheckBox state from layer properties
+                        widget = self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"]
+                        widget.blockSignals(True)
+                        widget.setChecked(layer_props[property_tuple[0]][property_tuple[1]])
+                        widget.blockSignals(False)
                     elif widget_type == 'LineEdit':
                         self.widgets[property_tuple[0].upper()][property_tuple[1].upper()]["WIDGET"].setText(layer_props[property_tuple[0]][property_tuple[1]])
                     elif widget_type == 'QgsProjectionSelectionWidget':
@@ -8648,6 +9029,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'disconnect')
         self.filtering_populate_layers_chekableCombobox()
         self.manageSignal(["FILTERING","LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+        
+        # Synchronize checkable button associated widgets enabled state
+        self.filtering_layers_to_filter_state_changed()
+        self.filtering_combine_operator_state_changed()
+        self.filtering_geometric_predicates_state_changed()
     
     def _reload_exploration_widgets(self, layer, layer_props):
         """
@@ -9154,12 +9540,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             tuple: (properties_group_key, property_path, properties_tuples, index)
         """
         for properties_tuples_key in self.layer_properties_tuples_dict:
-            if input_property.find(properties_tuples_key) >= 0:
-                properties_group_key = properties_tuples_key
-                properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
-                for i, property_tuple in enumerate(properties_tuples):
-                    if property_tuple[1] == input_property:
-                        return properties_group_key, property_tuple, properties_tuples, i
+            properties_tuples = self.layer_properties_tuples_dict[properties_tuples_key]
+            for i, property_tuple in enumerate(properties_tuples):
+                if property_tuple[1] == input_property:
+                    return properties_tuples_key, property_tuple, properties_tuples, i
         return None, None, None, None
 
     def _update_is_property(self, property_path, layer_props, input_data, custom_functions):
@@ -9245,14 +9629,25 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             bool: True if value changed
         """
         flag_value_changed = False
-        group_enabled_property = properties_tuples[0]
-        group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
+        
+        # Safety guard: ensure properties_tuples is not None
+        if properties_tuples is None or len(properties_tuples) == 0:
+            logger.warning(f"_update_other_property: properties_tuples is None or empty for property_path={property_path}")
+            return False
+        
+        # NOTE: 'source_layer' group has no parent toggle (no HAS_* button), so always treat as enabled
+        # This allows use_centroids_source_layer checkbox to always be interactive
+        if properties_group_key == 'source_layer':
+            group_state = True
+        else:
+            group_enabled_property = properties_tuples[0]
+            group_state = self.widgets[group_enabled_property[0].upper()][group_enabled_property[1].upper()]["WIDGET"].isChecked()
         
         # DIAGNOSTIC: Log the property update
         logger.info(f"=== _update_other_property DIAGNOSTIC ===")
         logger.info(f"  property_path: {property_path}")
-        logger.info(f"  group_enabled_property: {group_enabled_property}")
-        logger.info(f"  group_state (button checked): {group_state}")
+        logger.info(f"  properties_group_key: {properties_group_key}")
+        logger.info(f"  group_state: {group_state}")
 
         if group_state is False:
             logger.warning(f"  ⚠️ Group button NOT checked - resetting to defaults!")
@@ -9349,7 +9744,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             # Update by property type
             flag_value_changed = False
-            if properties_group_key == 'is':
+            if properties_group_key is None or property_path is None:
+                # Property not found in layer_properties_tuples_dict - skip update
+                logger.warning(f"layer_property_changed: property '{input_property}' not found in layer_properties_tuples_dict")
+            elif properties_group_key == 'is':
                 flag_value_changed = self._update_is_property(property_path, layer_props, input_data, custom_functions)
             elif properties_group_key == 'selection_expression':
                 flag_value_changed = self._update_selection_expression_property(property_path, layer_props, input_data, custom_functions)
@@ -9816,6 +10214,53 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_buffer_property_state(self):
         return self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].isActive()
+
+
+    def filtering_layers_to_filter_state_changed(self):
+        """Handle changes to the has_layers_to_filter checkable button.
+        
+        When checked (True): Enable layers_to_filter combobox and use_centroids_distant_layers checkbox
+        When unchecked (False): Disable these widgets
+        """
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
+            
+            # Enable/disable the associated widgets
+            self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
+            self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
+            
+            logger.debug(f"filtering_layers_to_filter_state_changed: is_checked={is_checked}")
+
+
+    def filtering_combine_operator_state_changed(self):
+        """Handle changes to the has_combine_operator checkable button.
+        
+        When checked (True): Enable combine operator comboboxes
+        When unchecked (False): Disable these widgets
+        """
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
+            
+            # Enable/disable the associated widgets
+            self.widgets["FILTERING"]["SOURCE_LAYER_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+            self.widgets["FILTERING"]["OTHER_LAYERS_COMBINE_OPERATOR"]["WIDGET"].setEnabled(is_checked)
+            
+            logger.debug(f"filtering_combine_operator_state_changed: is_checked={is_checked}")
+
+
+    def filtering_geometric_predicates_state_changed(self):
+        """Handle changes to the has_geometric_predicates checkable button.
+        
+        When checked (True): Enable geometric predicates combobox
+        When unchecked (False): Disable this widget
+        """
+        if self.widgets_initialized is True and self.has_loaded_layers is True:
+            is_checked = self.widgets["FILTERING"]["HAS_GEOMETRIC_PREDICATES"]["WIDGET"].isChecked()
+            
+            # Enable/disable the associated widgets
+            self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"].setEnabled(is_checked)
+            
+            logger.debug(f"filtering_geometric_predicates_state_changed: is_checked={is_checked}")
 
               
     def dialog_export_output_path(self):

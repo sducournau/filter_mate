@@ -2,6 +2,129 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.6.7] - 2026-01-03 - Fix: PostgreSQL Distant Layer Geometric Filtering
+
+### 🐛 Correction de Bug Critique
+
+- **FIX: PostgreSQL distant layers not filtered with EXISTS spatial expressions**
+
+  - **Problème**: Les couches PostgreSQL distantes n'étaient pas filtrées avec les expressions EXISTS/ST_Intersects. L'expression générée `EXISTS (SELECT 1 FROM "schema"."source" AS __source WHERE ST_Intersects("target"."geom", __source."geom"))` échouait silencieusement.
+  - **Cause**: `geom_expr` dans `build_expression()` incluait le préfixe de table (`"troncon_de_route"."geometrie"`) alors que dans le contexte `setSubsetString`, la table cible est implicite.
+  - **Explication**: PostgreSQL génère `SELECT * FROM target WHERE <expression>`. Dans `<expression>`, la référence `"target"."column"` n'a pas de clause FROM correspondante car la table est déjà implicite.
+  - **Solution**: Utiliser le nom de colonne non qualifié `"{geom_field}"` au lieu de `"{table}"."{geom_field}"` pour les expressions setSubsetString.
+  - **Expression corrigée**: `EXISTS (SELECT 1 FROM "public"."commune" AS __source WHERE ST_Intersects("geometrie", __source."geometrie"))`
+
+### 🔧 Changements Techniques
+
+- `build_expression()` dans `postgresql_backend.py` ligne 873: `geom_expr = f'"{geom_field}"'` (sans préfixe table)
+- Commentaire explicatif ajouté pour prévenir les régressions futures
+- Cohérent avec le backend Spatialite qui utilisait déjà le format non qualifié
+
+---
+
+## [2.6.6] - 2026-01-03 - Fix: Spatialite Filtering Freeze
+
+### 🐛 Corrections de Bugs Critiques
+
+- **FIX: QGIS freeze when filtering with Spatialite/GeoPackage backend**
+
+  - **Problème**: QGIS gelait lors du filtrage avec les backends Spatialite/GeoPackage
+  - **Cause**: `reloadData()` était appelé sur les couches OGR/Spatialite, ce qui bloque le thread principal
+  - **Solution**: Suppression des appels `reloadData()` pour les couches OGR/Spatialite
+  - **Impact**: Seul PostgreSQL utilise maintenant `reloadData()` pour les filtres complexes basés sur les vues matérialisées
+
+### 🔧 Changements Techniques
+
+- `reloadData()` réservé exclusivement au backend PostgreSQL avec MVs
+- Les backends Spatialite/OGR n'appellent plus `reloadData()` après filtrage
+- Amélioration de la réactivité UI pour les couches locales
+
+### 📁 Fichiers Modifiés
+
+- `modules/tasks/filter_task.py`: Condition sur le type de provider avant `reloadData()`
+- `filter_mate_app.py`: Suppression des appels `reloadData()` pour OGR/Spatialite
+
+---
+
+## [2.6.5] - 2026-01-03 - Fix: UI Freeze Prevention for Large Layers
+
+### 🐛 Corrections de Bugs Critiques
+
+- **FIX: QGIS freeze APRÈS filtrage avec couches volumineuses**
+
+  - **Problème**: Après un filtrage réussi, QGIS gelait pendant la phase de mise à jour UI
+  - **Cause**: `updateExtents()` était appelé sur TOUTES les couches dans `finished()`, `_single_canvas_refresh()` et `_refresh_layers_and_canvas()`
+  - **Solution**: Skip `updateExtents()` pour les couches > 50k features
+  - **Impact**: Filtrage fluide même avec des couches volumineuses (batiment, etc.)
+
+- **FIX: QGIS freeze au rechargement du plugin avec des couches volumineuses**
+
+  - **Problème**: QGIS gelait ("Ne répond pas") lors du rechargement de FilterMate avec des couches contenant des centaines de milliers de features (ex: bâtiments Toulouse)
+  - **Cause**: `get_filtered_layer_extent()` itérait sur TOUTES les features sans limite pour calculer l'emprise
+  - **Solution**:
+    - Limite à 10 000 features pour le calcul d'emprise
+    - Utilisation de `updateExtents()` pour les grandes couches au lieu d'itérer
+  - **Impact**: Rechargement du plugin sans freeze même avec des couches volumineuses
+
+- **FIX: Freeze potentiel dans \_compute_zoom_extent_for_mode()**
+  - **Problème**: La sélection multiple avec beaucoup d'items pouvait causer des centaines de requêtes SQL
+  - **Solution**: Limite de 500 items - au-delà, utilisation de l'emprise de la couche filtrée
+
+### 🔧 Changements Techniques
+
+- `MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000` dans filter_task.py et filter_mate_app.py
+- `MAX_FEATURES_FOR_EXTENT_CALC = 10000` dans filter_mate_dockwidget.py
+- `MAX_ITEMS_FOR_EXTENT = 500` pour la sélection multiple
+- `get_filtered_layer_extent()`: Vérifie `featureCount()` et utilise `updateExtents()` si > 10k features
+- `_compute_zoom_extent_for_mode()`: Limite à 500 items pour sélection multiple
+- `_single_canvas_refresh()`: Ne traite que les couches filtrées, skip updateExtents pour grandes couches
+- `finished()`: Skip updateExtents pour les couches > 50k features
+- `_refresh_layers_and_canvas()`: Skip updateExtents pour les couches > 50k features
+
+### 📁 Fichiers Modifiés
+
+- `filter_mate_dockwidget.py`: Limites de sécurité pour éviter les freezes
+- `modules/tasks/filter_task.py`: Optimisation dans finished() et \_single_canvas_refresh()
+- `filter_mate_app.py`: Optimisation dans \_refresh_layers_and_canvas()
+
+---
+
+## [2.6.4] - 2026-01-03 - Fix: SQLite Thread-Safety & Large WKT Freeze Prevention
+
+### 🐛 Corrections de Bugs Critiques
+
+- **FIX: "SQLite objects created in a thread can only be used in that same thread"**
+
+  - **Problème**: Le mode Direct SQL pour GeoPackage échouait avec l'erreur SQLite thread-safety
+  - **Cause**: `InterruptibleSQLiteQuery` exécute les requêtes dans un thread séparé pour permettre l'annulation, mais SQLite interdit par défaut le partage de connexions entre threads
+  - **Solution**: Ajout de `check_same_thread=False` à `sqlite3.connect()` pour les connexions utilisées avec `InterruptibleSQLiteQuery`
+  - **Impact**: Les filtres géométriques Direct SQL fonctionnent maintenant correctement sur GeoPackage
+
+- **FIX: QGIS freeze avec grands WKT (>100K caractères)**
+  - **Problème**: Les filtres géométriques avec beaucoup de features source causaient un gel de QGIS
+  - **Cause**: Les WKT volumineux (~800K chars) avec ST_Buffer dans une requête SQL inline sont extrêmement lourds pour SQLite/Spatialite
+  - **Solution**: Nouveau seuil `LARGE_WKT_THRESHOLD = 100000` chars - les grands WKT utilisent maintenant automatiquement l'optimisation R-tree avec table source permanente
+  - **Impact**: Filtrage géométrique sans gel même avec des milliers de features source
+
+### 🔍 Améliorations de Diagnostic
+
+- **NEW: Visibilité des erreurs SQL Spatialite dans QGIS Message Log**
+  - Ajout de `QgsMessageLog.logMessage()` pour toutes les erreurs critiques
+
+### 🔧 Changements Techniques
+
+- `sqlite3.connect(..., check_same_thread=False)` pour thread-safety
+- `LARGE_WKT_THRESHOLD = 100000` - déclenche optimisation R-tree pour grands WKT
+- L'optimisation source table s'active maintenant si:
+  - Target layer >= 10k features OU
+  - Source WKT >= 100k caractères
+
+### 📁 Fichiers Modifiés
+
+- `modules/backends/spatialite_backend.py`: Thread-safety, large WKT detection, logging
+
+---
+
 ## [2.6.2] - 2026-01-02 - Bugfix: External Table Reference in Geometric Filters
 
 ### 🐛 Correction de Bug Critique

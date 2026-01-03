@@ -180,6 +180,10 @@ class ExpressionEvaluationTask(QgsTask):
         self._start_time = time.time()
         
         try:
+            # v2.6.7: Refresh feature source at run() time to get current layer state
+            # This fixes stale data when filter was applied between task creation and execution
+            self._refresh_feature_source()
+            
             # Validate inputs
             if not self._validate_inputs():
                 return False
@@ -205,6 +209,24 @@ class ExpressionEvaluationTask(QgsTask):
             self.exception = e
             logger.error(f"Expression evaluation failed for '{self.layer_name}': {e}")
             return False
+    
+    def _refresh_feature_source(self):
+        """
+        Refresh the feature source from the layer's data provider.
+        
+        v2.6.7: Called at the start of run() to ensure we have the current layer state,
+        not a stale snapshot from when the task was created.
+        """
+        if self.layer and self.layer.isValid():
+            try:
+                provider = self.layer.dataProvider()
+                if provider:
+                    self._feature_source = provider.featureSource()
+                    self._total_count = provider.featureCount()
+                    logger.debug(f"Refreshed feature source for {self.layer_name}: {self._total_count} features")
+            except Exception as e:
+                logger.warning(f"Could not refresh feature source for {self.layer_name}: {e}")
+                # Keep the existing feature source if refresh fails
     
     def _validate_inputs(self) -> bool:
         """Validate task inputs before execution."""
@@ -275,8 +297,21 @@ class ExpressionEvaluationTask(QgsTask):
             if self.limit > 0:
                 estimated_total = min(estimated_total, self.limit)
             
+            # ROBUSTNESS: Check feature source is still valid before iteration
+            if self._feature_source is None:
+                self.exception = ValueError("Feature source became invalid")
+                return False
+            
+            # Get feature iterator - this can fail for invalid expressions
+            try:
+                feature_iterator = self._feature_source.getFeatures(request)
+            except Exception as e:
+                self.exception = ValueError(f"Failed to create feature iterator: {e}")
+                logger.error(f"Failed to create feature iterator for '{self.layer_name}': {e}")
+                return False
+            
             # Iterate with cancellation checks
-            for index, feature in enumerate(self._feature_source.getFeatures(request)):
+            for index, feature in enumerate(feature_iterator):
                 # Check for cancellation
                 if self.isCanceled():
                     logger.debug(f"Expression evaluation cancelled for '{self.layer_name}'")
@@ -312,23 +347,27 @@ class ExpressionEvaluationTask(QgsTask):
         Args:
             result: True if run() returned True
         """
-        if self.isCanceled():
-            self.signals.cancelled.emit(self.layer_id)
-            logger.debug(f"Expression evaluation was cancelled for '{self.layer_name}'")
-            
-        elif result:
-            # Success - emit results
-            self.signals.finished.emit(
-                self.result_features,
-                self.result_expression,
-                self.layer_id
-            )
-            
-        else:
-            # Error
-            error_msg = str(self.exception) if self.exception else "Unknown error"
-            self.signals.error.emit(error_msg, self.layer_id)
-            logger.error(f"Expression evaluation error: {error_msg}")
+        try:
+            if self.isCanceled():
+                self.signals.cancelled.emit(self.layer_id)
+                logger.debug(f"Expression evaluation was cancelled for '{self.layer_name}'")
+                
+            elif result:
+                # Success - emit results
+                self.signals.finished.emit(
+                    self.result_features,
+                    self.result_expression,
+                    self.layer_id
+                )
+                
+            else:
+                # Error
+                error_msg = str(self.exception) if self.exception else "Unknown error"
+                self.signals.error.emit(error_msg, self.layer_id)
+                logger.error(f"Expression evaluation error: {error_msg}")
+        except Exception as e:
+            # ROBUSTNESS: Catch any exception in finished() to prevent crashes
+            logger.error(f"Error in finished() callback for '{self.layer_name}': {e}")
     
     def cancel(self):
         """Cancel the task."""

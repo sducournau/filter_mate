@@ -210,6 +210,31 @@ FACTORY_CACHE_MAX_AGE = 300             # Max cache age (5 minutes)
 FACTORY_CACHE_CHECK_INTERVAL = 60       # Check cache validity every minute
 
 # ============================================================================
+# Auto-Optimization Constants (v2.7.0)
+# ============================================================================
+
+# Centroid optimization thresholds
+CENTROID_AUTO_THRESHOLD_DISTANT = 5000      # Auto-enable for distant layers > 5k features
+CENTROID_AUTO_THRESHOLD_LOCAL = 50000       # Auto-enable for local layers > 50k features
+
+# Geometry simplification thresholds
+SIMPLIFY_AUTO_THRESHOLD = 100000            # Auto-simplify for layers > 100k features
+SIMPLIFY_TOLERANCE_FACTOR = 0.001           # Tolerance as fraction of extent diagonal
+
+# Large WKT thresholds (chars)
+LARGE_WKT_THRESHOLD = 100000                # Use R-tree optimization above this
+VERY_LARGE_WKT_THRESHOLD = 500000           # Force aggressive optimization
+
+# Vertex complexity thresholds
+HIGH_COMPLEXITY_VERTICES = 50               # Average vertices per feature for "complex"
+VERY_HIGH_COMPLEXITY_VERTICES = 200         # Average vertices for "very complex"
+
+# Auto-optimization feature flags (can be overridden in config)
+AUTO_OPTIMIZE_CENTROID_ENABLED = True       # Enable automatic centroid for distant layers
+AUTO_OPTIMIZE_SIMPLIFY_ENABLED = False      # Enable automatic simplification (lossy, disabled)
+AUTO_OPTIMIZE_STRATEGY_ENABLED = True       # Enable automatic strategy selection
+
+# ============================================================================
 # Connection Pool Constants (v2.6.0)
 # ============================================================================
 

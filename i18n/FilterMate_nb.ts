@@ -143,6 +143,108 @@ Start QGIS på nytt for å bruke alle endringene.</translation>
         <source>Number of segments for buffer precision</source>
         <translation>Antall segmenter for bufferpresisjon</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Sentroider</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Bruk sentroider i stedet for fulle geometrier for fjerne lag (raskere for komplekse polygoner som bygninger)</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>En utdatert konfigurasjon ({}) har blitt oppdaget.
+
+Vil du tilbakestille til standardinnstillinger?
+
+• Ja: Tilbakestill (en sikkerhetskopi opprettes)
+• Nei: Behold nåværende konfigurasjon (kan forårsake problemer)</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>Konfigurasjonsfilen er ødelagt og kan ikke leses.
+
+Vil du tilbakestille til standardinnstillinger?
+
+• Ja: Tilbakestill (en sikkerhetskopi opprettes hvis mulig)
+• Nei: Avbryt (utvidelsen fungerer kanskje ikke riktig)</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>Konfigurasjonstilbakestilling</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>Konfigurasjonen må tilbakestilles.
+
+Vil du fortsette?</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>Feil under konfigurasjonsmigrering: {}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>Er du sikker på at du vil tilbakestille til standardkonfigurasjonen?
+
+Dette vil:
+- Gjenopprette standardinnstillinger
+- Slette lagdatabasen
+
+QGIS må startes på nytt for å bruke endringene.</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>Konfigurasjonen har blitt tilbakestilt.
+
+Start QGIS på nytt for å bruke endringene.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

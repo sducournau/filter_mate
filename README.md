@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.6.1** | January 2026 | **Production-Ready**
+**Version 2.6.6** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -27,14 +27,24 @@
 
 ## 📋 Recent Changes
 
-### v2.6.1 - Performance: Optimized Materialized Views & Source Tables (January 2026)
+### v2.6.6 - Fix: Spatialite Filtering Freeze (January 2026)
 
-- 🚀 **POSTGRESQL LIGHTWEIGHT MVs**: Stores only ID + geometry instead of all columns (3-5× smaller)
-- 📦 **SPATIALITE R-TREE SOURCE TABLES**: Permanent tables with spatial index for datasets >10k features
-- ⚡ **PRE-COMPUTED BUFFER**: `geom_buffered` stored in MV/source table avoids recalculation
-- 🎯 **BUFFER SEGMENTS UI**: New spinbox control for buffer precision (1-100 segments per quarter circle)
-- 🧹 **AUTO CLEANUP**: Old source tables automatically removed after 1 hour
-- 🌍 **21 LANGUAGES**: Buffer segments tooltip translated in all supported languages
+- 🐛 **FIX: QGIS freeze when filtering with Spatialite/GeoPackage backend**
+- 🐛 **FIX: Removed reloadData() calls for OGR/Spatialite layers (causes freeze)**
+- 🚀 **PERF: Only PostgreSQL uses reloadData() for MV-based complex filters**
+
+### v2.6.5 - Fix: UI Freeze Prevention for Large Layers (January 2026)
+
+- 🐛 **FIX: QGIS freeze on plugin reload with large layers**
+- 🐛 **FIX: get_filtered_layer_extent() now limits iteration to 10k features**
+- 🐛 **FIX: Multiple selection extent calculation limited to 500 items**
+- 🚀 **PERF: Uses updateExtents() for large filtered datasets instead of iterating**
+
+### v2.6.4 - Fix: SQLite Thread-Safety & Large WKT Freeze (January 2026)
+
+- 🐛 **FIX: "SQLite objects created in a thread" error (check_same_thread=False)**
+- 🐛 **FIX: QGIS freeze with large source geometries (>100K chars WKT)**
+- 🚀 **NEW: Automatic R-tree optimization for large WKT (LARGE_WKT_THRESHOLD=100K)**
 
 ### v2.6.0 - Major Release: Performance & Stability (January 2026)
 

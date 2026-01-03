@@ -143,6 +143,108 @@ Käynnistä QGIS uudelleen ottaaksesi kaikki muutokset käyttöön.</translation
         <source>Number of segments for buffer precision</source>
         <translation>Segmenttien määrä puskurin tarkkuudelle</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Keskipisteet</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Käytä keskipisteitä täysien geometrioiden sijaan etätasoille (nopeampi monimutkaisille monikulmioille kuten rakennuksille)</translation>
+    </message>
+    <message>
+        <source>An obsolete configuration ({}) has been detected.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created)
+• No: Keep current configuration (may cause issues)</source>
+        <translation>Vanhentunut konfiguraatio ({}) havaittu.
+
+Haluatko palauttaa oletusasetukset?
+
+• Kyllä: Palauta (varmuuskopio luodaan)
+• Ei: Säilytä nykyinen konfiguraatio (voi aiheuttaa ongelmia)</translation>
+    </message>
+    <message>
+        <source>The configuration file is corrupted and cannot be read.
+
+Do you want to reset to default settings?
+
+• Yes: Reset (a backup will be created if possible)
+• No: Cancel (the plugin may not work correctly)</source>
+        <translation>Konfiguraatiotiedosto on vioittunut eikä sitä voida lukea.
+
+Haluatko palauttaa oletusasetukset?
+
+• Kyllä: Palauta (varmuuskopio luodaan jos mahdollista)
+• Ei: Peruuta (lisäosa ei ehkä toimi oikein)</translation>
+    </message>
+    <message>
+        <source>Configuration reset</source>
+        <translation>Konfiguraation palautus</translation>
+    </message>
+    <message>
+        <source>The configuration needs to be reset.
+
+Do you want to continue?</source>
+        <translation>Konfiguraatio täytyy palauttaa.
+
+Haluatko jatkaa?</translation>
+    </message>
+    <message>
+        <source>Error during configuration migration: {}</source>
+        <translation>Virhe konfiguraation siirrossa: {}</translation>
+    </message>
+    <message>
+        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</source>
+        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+
+FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+
+• Features with invalid geometries could be silently excluded from exports and filters
+• FilterMate handles geometry validation internally with automatic repair options
+• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+
+Do you want to disable this setting now?
+
+• Yes: Disable filtering (recommended for FilterMate)
+• No: Keep current setting</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to reset to the default configuration?
+
+This will:
+- Restore default settings
+- Delete the layer database
+
+QGIS must be restarted to apply the changes.</source>
+        <translation>Haluatko varmasti palauttaa oletuskonfiguraation?
+
+Tämä:
+- Palauttaa oletusasetukset
+- Poistaa tasotietokannan
+
+QGIS on käynnistettävä uudelleen muutosten käyttöönottamiseksi.</translation>
+    </message>
+    <message>
+        <source>The configuration has been reset.
+
+Please restart QGIS to apply the changes.</source>
+        <translation>Konfiguraatio on palautettu.
+
+Käynnistä QGIS uudelleen ottaaksesi muutokset käyttöön.</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

@@ -314,7 +314,8 @@ class BackendFactory:
         layer_provider_type: str,
         layer: QgsVectorLayer,
         task_params: Dict,
-        return_memory_info: bool = False
+        return_memory_info: bool = False,
+        force_ogr: bool = False
     ) -> GeometricFilterBackend:
         """
         Get the appropriate backend for the given layer.
@@ -328,6 +329,8 @@ class BackendFactory:
             layer: QgsVectorLayer instance
             task_params: Task parameters dictionary
             return_memory_info: If True, return tuple (backend, memory_layer, use_optimization)
+            force_ogr: If True, skip all other backend selection and return OGR backend directly.
+                       Used for fallback when other backends fail (e.g., timeout, query error).
         
         Returns:
             GeometricFilterBackend instance (or tuple if return_memory_info=True)
@@ -336,6 +339,15 @@ class BackendFactory:
         logger.info(f"🔧 BackendFactory.get_backend() called for '{layer.name()}'")
         logger.info(f"   → layer_provider_type (requested): '{layer_provider_type}'")
         logger.info(f"   → layer.providerType() (QGIS native): '{layer.providerType()}'")
+        
+        # v2.6.12: Force OGR backend for fallback scenarios (e.g., Spatialite timeout)
+        # This bypasses all other backend selection logic to ensure OGR is used
+        if force_ogr:
+            logger.info(f"🔄 Force OGR mode: Returning OGR backend for '{layer.name()}' (bypassing auto-selection)")
+            backend = OGRGeometricFilter(task_params)
+            if return_memory_info:
+                return (backend, None, False)
+            return backend
         
         memory_layer = None
         use_optimization = False
@@ -538,3 +550,155 @@ class BackendFactory:
             return SpatialiteGeometricFilter(task_params)
         else:
             return OGRGeometricFilter(task_params)
+
+
+# =============================================================================
+# Auto-Optimization Integration (v2.7.0)
+# =============================================================================
+
+# Import auto-optimizer (optional, graceful fallback)
+try:
+    from .auto_optimizer import (
+        AutoOptimizer,
+        LayerAnalyzer,
+        OptimizationPlan,
+        OptimizationType,
+        LayerLocationType,
+        recommend_optimizations,
+        get_auto_optimizer,
+    )
+    AUTO_OPTIMIZER_AVAILABLE = True
+except ImportError as e:
+    logger.debug(f"Auto-optimizer not available: {e}")
+    AUTO_OPTIMIZER_AVAILABLE = False
+    AutoOptimizer = None
+    LayerAnalyzer = None
+    OptimizationPlan = None
+    recommend_optimizations = None
+
+
+def get_optimization_plan(
+    target_layer: QgsVectorLayer,
+    source_layer: Optional[QgsVectorLayer] = None,
+    source_wkt_length: int = 0,
+    predicates: Optional[Dict] = None,
+    attribute_filter: Optional[str] = None,
+    user_requested_centroids: Optional[bool] = None
+) -> Optional['OptimizationPlan']:
+    """
+    Get an optimization plan for a filtering operation.
+    
+    This function analyzes the target layer and source geometry to recommend
+    performance optimizations such as:
+    - Using centroids for distant/remote layers
+    - Progressive chunking for large datasets
+    - Attribute-first filtering for selective expressions
+    
+    Args:
+        target_layer: Layer being filtered
+        source_layer: Source/selection layer (if any)
+        source_wkt_length: Length of source WKT string
+        predicates: Spatial predicates being used
+        attribute_filter: Attribute filter expression
+        user_requested_centroids: Explicit user choice (None = auto)
+        
+    Returns:
+        OptimizationPlan with recommendations, or None if optimizer not available
+        
+    Example:
+        >>> plan = get_optimization_plan(my_layer, source_layer=selection)
+        >>> if plan and plan.final_use_centroids:
+        ...     # Use centroid optimization
+        ...     backend.build_expression(..., use_centroids=True)
+    """
+    if not AUTO_OPTIMIZER_AVAILABLE:
+        logger.debug("Auto-optimizer not available, skipping optimization analysis")
+        return None
+    
+    try:
+        return recommend_optimizations(
+            target_layer=target_layer,
+            source_layer=source_layer,
+            source_wkt_length=source_wkt_length,
+            predicates=predicates,
+            attribute_filter=attribute_filter,
+            user_requested_centroids=user_requested_centroids
+        )
+    except Exception as e:
+        logger.warning(f"Error creating optimization plan: {e}")
+        return None
+
+
+def should_use_centroids(
+    layer: QgsVectorLayer,
+    user_requested: Optional[bool] = None
+) -> bool:
+    """
+    Quick check if centroids should be used for a layer.
+    
+    This is a convenience function for simple use cases where you just
+    need a boolean decision about centroid usage.
+    
+    Args:
+        layer: Target layer
+        user_requested: Explicit user choice (None = auto-detect)
+        
+    Returns:
+        True if centroids should be used
+        
+    Example:
+        >>> use_centroids = should_use_centroids(my_distant_layer)
+        >>> # Will return True for large WFS/ArcGIS layers
+    """
+    # User explicitly chose
+    if user_requested is not None:
+        return user_requested
+    
+    # Auto-detect
+    if not AUTO_OPTIMIZER_AVAILABLE:
+        return False
+    
+    try:
+        plan = get_optimization_plan(layer)
+        return plan.final_use_centroids if plan else False
+    except Exception:
+        return False
+
+
+def analyze_layer_for_optimization(layer: QgsVectorLayer) -> Optional[Dict]:
+    """
+    Analyze a layer and return optimization metrics.
+    
+    Args:
+        layer: Layer to analyze
+        
+    Returns:
+        Dictionary with analysis results, or None if analyzer not available
+        
+    Example:
+        >>> info = analyze_layer_for_optimization(my_layer)
+        >>> print(f"Layer is {'distant' if info['is_distant'] else 'local'}")
+        >>> print(f"Features: {info['feature_count']}")
+    """
+    if not AUTO_OPTIMIZER_AVAILABLE:
+        return None
+    
+    try:
+        analysis = LayerAnalyzer.analyze_layer(layer)
+        return {
+            'layer_name': analysis.layer_name,
+            'provider_type': analysis.provider_type,
+            'location_type': analysis.location_type.value,
+            'feature_count': analysis.feature_count,
+            'geometry_type': analysis.geometry_type,
+            'has_spatial_index': analysis.has_spatial_index,
+            'avg_vertices': analysis.avg_vertices_per_feature,
+            'complexity': analysis.estimated_complexity,
+            'is_distant': analysis.is_distant,
+            'is_large': analysis.is_large,
+            'is_complex': analysis.is_complex,
+        }
+    except Exception as e:
+        logger.warning(f"Error analyzing layer: {e}")
+        return None
+

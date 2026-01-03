@@ -2157,45 +2157,87 @@
                   <item>
                    <layout class="QVBoxLayout" name="verticalLayout_filtering_values">
                     <item>
-                     <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer">
-                      <property name="sizePolicy">
-                       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                        <horstretch>0</horstretch>
-                        <verstretch>0</verstretch>
-                       </sizepolicy>
+                     <layout class="QHBoxLayout" name="horizontalLayout_filtering_source_layer">
+                      <property name="spacing">
+                       <number>4</number>
                       </property>
-                      <property name="font">
-                       <font>
-                        <family>Segoe UI Semibold</family>
-                        <pointsize>10</pointsize>
-                        <weight>75</weight>
-                        <italic>false</italic>
-                        <bold>true</bold>
-                        <underline>false</underline>
-                        <strikeout>false</strikeout>
-                        <stylestrategy>PreferAntialias</stylestrategy>
-                        <kerning>true</kerning>
-                       </font>
-                      </property>
-                      <property name="cursor">
-                       <cursorShape>PointingHandCursor</cursorShape>
-                      </property>
-                      <property name="layoutDirection">
-                       <enum>Qt::LeftToRight</enum>
-                      </property>
-                      <property name="maxVisibleItems">
-                       <number>20</number>
-                      </property>
-                      <property name="iconSize">
-                       <size>
-                        <width>36</width>
-                        <height>20</height>
-                       </size>
-                      </property>
-                      <property name="showCrs">
-                       <bool>true</bool>
-                      </property>
-                     </widget>
+                      <item>
+                       <widget class="QgsMapLayerComboBox" name="comboBox_filtering_current_layer">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                          <horstretch>1</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="font">
+                         <font>
+                          <family>Segoe UI Semibold</family>
+                          <pointsize>10</pointsize>
+                          <weight>75</weight>
+                          <italic>false</italic>
+                          <bold>true</bold>
+                          <underline>false</underline>
+                          <strikeout>false</strikeout>
+                          <stylestrategy>PreferAntialias</stylestrategy>
+                          <kerning>true</kerning>
+                         </font>
+                        </property>
+                        <property name="cursor">
+                         <cursorShape>PointingHandCursor</cursorShape>
+                        </property>
+                        <property name="layoutDirection">
+                         <enum>Qt::LeftToRight</enum>
+                        </property>
+                        <property name="maxVisibleItems">
+                         <number>20</number>
+                        </property>
+                        <property name="iconSize">
+                         <size>
+                          <width>36</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                        <property name="showCrs">
+                         <bool>true</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QCheckBox" name="checkBox_filtering_use_centroids_source_layer">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="font">
+                         <font>
+                          <family>Segoe UI</family>
+                          <pointsize>8</pointsize>
+                          <weight>75</weight>
+                          <italic>false</italic>
+                          <bold>true</bold>
+                          <underline>false</underline>
+                          <strikeout>false</strikeout>
+                          <stylestrategy>PreferAntialias</stylestrategy>
+                          <kerning>true</kerning>
+                         </font>
+                        </property>
+                        <property name="cursor">
+                         <cursorShape>PointingHandCursor</cursorShape>
+                        </property>
+                        <property name="toolTip">
+                         <string>Use centroids instead of full geometries for source layer (faster for complex polygons)</string>
+                        </property>
+                        <property name="text">
+                         <string/>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                     </layout>
                     </item>
                     <item>
                      <spacer name="verticalSpacer_filtering_values_search_top">
@@ -2350,7 +2392,7 @@
                      <widget class="QgsCheckableComboBox" name="comboBox_filtering_geometric_predicates">
                       <property name="sizePolicy">
                        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                        <horstretch>0</horstretch>
+                        <horstretch>1</horstretch>
                         <verstretch>0</verstretch>
                        </sizepolicy>
                       </property>

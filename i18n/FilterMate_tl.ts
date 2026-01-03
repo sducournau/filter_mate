@@ -237,6 +237,14 @@ Please restart QGIS to apply the changes.</translation>
         <source>Number of segments for buffer precision</source>
         <translation>Bilang ng mga segment para sa buffer precision</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Mga Sentro</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Gamitin ang mga sentro sa halip na buong mga heometriya para sa malalayong layer (mas mabilis para sa kumplikadong mga polygon tulad ng mga gusali)</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

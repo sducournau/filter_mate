@@ -237,6 +237,14 @@ Please restart QGIS to apply the changes.</translation>
         <source>Number of segments for buffer precision</source>
         <translation>ለቋት ትክክለኛነት የክፍሎች ቁጥር</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>ማዕከላዊ ነጥቦች</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>ለሩቅ ንብርብሮች ሙሉ ጂኦሜትሪዎች ፋንታ ማዕከላዊ ነጥቦችን ይጠቀሙ (እንደ ህንፃዎች ያሉ ውስብስብ ፖሊጎኖች ፈጣን)</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

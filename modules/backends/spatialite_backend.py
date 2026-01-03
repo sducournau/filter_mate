@@ -22,6 +22,18 @@ v2.4.21 Improvements:
 - CRITICAL FIX: Remote/distant layers detection before Spatialite testing
 - Prevents "unable to open database file" errors for WFS/HTTP/service layers
 - File existence verification before SQLite connection attempts
+
+v2.6.2 Improvements:
+- CRITICAL FIX: Interruptible SQLite queries to prevent QGIS freezing
+- Threaded query execution with progress callback and cancellation
+- SQLite interrupt mechanism for immediate query termination
+
+v2.6.5 Improvements:
+- LARGE WKT OPTIMIZATION: Store WKT in task_params for R-tree source table optimization
+- Lowered threshold for R-tree optimization from 100KB to 50KB
+- Bounding box pre-filter for very large WKT (>500KB) - O(log n) vs O(n)
+- Fallback WKT extraction from expression when not in task_params
+- Enhanced logging for optimization path selection
 """
 
 from typing import Dict, Optional, Tuple, List
@@ -29,6 +41,7 @@ import sqlite3
 import time
 import re
 import os
+import threading
 from qgis.core import QgsVectorLayer, QgsDataSourceUri
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
@@ -74,6 +87,95 @@ except ImportError:
 # Cache for mod_spatialite availability (tested once per session)
 _MOD_SPATIALITE_AVAILABLE: Optional[bool] = None
 _MOD_SPATIALITE_EXTENSION_NAME: Optional[str] = None
+
+# v2.6.2: Performance and timeout constants for complex geometric filters
+# These prevent QGIS freezing on large datasets
+SPATIALITE_QUERY_TIMEOUT = 120  # Maximum seconds for SQLite queries
+SPATIALITE_BATCH_SIZE = 5000    # Process FIDs in batches to avoid memory issues
+SPATIALITE_PROGRESS_INTERVAL = 1000  # Report progress every N features
+SPATIALITE_INTERRUPT_CHECK_INTERVAL = 0.5  # Check for cancellation every N seconds
+
+
+class InterruptibleSQLiteQuery:
+    """
+    v2.6.2: Execute SQLite queries in a separate thread with interrupt capability.
+    
+    This class solves the QGIS freeze problem by:
+    1. Running the query in a background thread
+    2. Periodically checking for cancellation
+    3. Using SQLite's interrupt() method to stop long-running queries
+    
+    Usage:
+        query = InterruptibleSQLiteQuery(conn, "SELECT * FROM table WHERE ...")
+        results = query.execute(timeout=60, cancel_check=lambda: task.isCanceled())
+    """
+    
+    def __init__(self, connection: sqlite3.Connection, sql: str):
+        self.connection = connection
+        self.sql = sql
+        self.results = []
+        self.error = None
+        self.completed = False
+        self._thread = None
+    
+    def _execute_query(self):
+        """Execute the query in background thread."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(self.sql)
+            self.results = cursor.fetchall()
+            self.completed = True
+        except Exception as e:
+            self.error = e
+            self.completed = True
+    
+    def execute(self, timeout: float = 120, cancel_check=None) -> Tuple[List, Optional[Exception]]:
+        """
+        Execute query with timeout and cancellation support.
+        
+        Args:
+            timeout: Maximum time in seconds to wait for query
+            cancel_check: Callable that returns True if operation should be cancelled
+        
+        Returns:
+            Tuple of (results list, error or None)
+        """
+        # Start query in background thread
+        self._thread = threading.Thread(target=self._execute_query, daemon=True)
+        self._thread.start()
+        
+        # Wait for completion with periodic cancellation checks
+        start_time = time.time()
+        while not self.completed:
+            # Check timeout
+            elapsed = time.time() - start_time
+            if elapsed > timeout:
+                # Interrupt the SQLite query
+                try:
+                    self.connection.interrupt()
+                except Exception:
+                    pass
+                return [], Exception(f"Query timeout after {timeout}s")
+            
+            # Check for cancellation
+            if cancel_check and cancel_check():
+                # Interrupt the SQLite query immediately
+                try:
+                    self.connection.interrupt()
+                except Exception:
+                    pass
+                return [], Exception("Query cancelled by user")
+            
+            # Sleep briefly before next check
+            time.sleep(SPATIALITE_INTERRUPT_CHECK_INTERVAL)
+        
+        # Wait for thread to finish (should be immediate since completed=True)
+        self._thread.join(timeout=1.0)
+        
+        if self.error:
+            return [], self.error
+        
+        return self.results, None
 
 
 def _test_mod_spatialite_available() -> Tuple[bool, Optional[str]]:
@@ -529,7 +631,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         if Spatialite functions work for the whole file.
         
         IMPROVED v2.4.1: Better detection of geometry column for GeoPackage layers
-        - Tries layer.geometryColumn() first
+        - Tries dataProvider().geometryColumn() first (v2.6.6: fixed method name)
         - Falls back to common column names (geometry, geom)
         - Uses simpler test expressions that are more likely to succeed
         - Cache by source file for multi-layer GeoPackages
@@ -585,7 +687,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             original_subset = layer.subsetString()
             
             # Get geometry column name - try multiple methods
-            geom_col = layer.geometryColumn()
+            # v2.6.6: Use dataProvider().geometryColumn() - QgsVectorLayer doesn't have geometryColumn() directly
+            try:
+                geom_col = layer.dataProvider().geometryColumn()
+            except (AttributeError, RuntimeError):
+                geom_col = None
             
             # EARLY CHECK: Detect layers without geometry
             # These layers can still use Spatialite for attribute filtering
@@ -760,7 +866,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             original_subset = layer.subsetString()
             
             # Get geometry column name
-            geom_col = layer.geometryColumn()
+            # v2.6.6: Use dataProvider().geometryColumn() - QgsVectorLayer doesn't have geometryColumn() directly
+            try:
+                geom_col = layer.dataProvider().geometryColumn()
+            except (AttributeError, RuntimeError):
+                geom_col = None
             
             # Check for non-geometry layers
             has_geometry = layer.geometryType() != 4  # 4 = QgsWkbTypes.NullGeometry
@@ -1011,7 +1121,39 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
 
     # v2.6.1: Threshold for using permanent source tables
     LARGE_DATASET_THRESHOLD = 10000  # Features count for permanent table strategy
+    # v2.6.5: Lowered threshold for large WKT - use source table to avoid inline WKT freezing
+    # Previously 100KB, now 50KB - triggers R-tree optimization more aggressively
+    LARGE_WKT_THRESHOLD = 50000  # WKT chars - above this, inline SQL can freeze QGIS
+    # v2.6.5: Very large WKT threshold - use bounding box pre-filter for extreme cases
+    VERY_LARGE_WKT_THRESHOLD = 500000  # WKT chars - above this, use bbox pre-filter
     SOURCE_TABLE_PREFIX = "_fm_source_"  # Prefix for permanent source tables
+    
+    def _extract_wkt_from_expression(self, expression: str) -> Optional[str]:
+        """
+        v2.6.5: Extract WKT string from a Spatialite expression as fallback.
+        
+        Parses expressions like:
+            ST_Intersects(GeomFromGPB("geom"), GeomFromText('MULTILINESTRING(...)', 2154))
+        
+        Args:
+            expression: Spatialite SQL expression containing GeomFromText
+        
+        Returns:
+            WKT string if found, None otherwise
+        """
+        import re
+        
+        # Pattern to match GeomFromText('...WKT...', SRID) - handles escaped quotes
+        pattern = r"GeomFromText\s*\(\s*'((?:[^']|'')+)'\s*,\s*\d+\s*\)"
+        
+        match = re.search(pattern, expression, re.IGNORECASE | re.DOTALL)
+        if match:
+            wkt = match.group(1)
+            # Unescape SQL single quotes
+            wkt = wkt.replace("''", "'")
+            return wkt
+        
+        return None
     
     def _create_permanent_source_table(
         self,
@@ -1099,36 +1241,92 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Insert geometries
             inserted_count = 0
             
+            # v2.6.10: DISABLED - ST_Simplify in Spatialite was producing invalid/empty geometry
+            # that caused 0 features matched. Rely on Python-side simplification instead.
+            # The improved tolerance scaling in filter_task.py should handle large WKT now.
+            # 
+            # If Python simplification isn't aggressive enough, the OGR fallback will be triggered
+            # when 0 features are matched on a large dataset.
+            needs_spatialite_simplify = False  # Disabled - use Python simplification only
+            # LARGE_WKT_THRESHOLD_SIMPLIFY = 500000  # 500KB
+            # needs_spatialite_simplify = len(source_wkt) > LARGE_WKT_THRESHOLD_SIMPLIFY
+            # simplify_tolerance = 10.0  # 10 meters
+            
             if source_features and len(source_features) > 0:
                 # Multi-feature source (from selection or filtered layer)
                 for fid, wkt in source_features:
                     if has_buffer:
-                        cursor.execute(f'''
-                            INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                            VALUES (?, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
-                        ''', (fid, wkt, source_srid, wkt, source_srid, buffer_value))
+                        if needs_spatialite_simplify:
+                            cursor.execute(f'''
+                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                VALUES (?, ST_Simplify(GeomFromText(?, ?), ?), ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?))
+                            ''', (fid, wkt, source_srid, simplify_tolerance, wkt, source_srid, simplify_tolerance, buffer_value))
+                        else:
+                            cursor.execute(f'''
+                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                VALUES (?, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
+                            ''', (fid, wkt, source_srid, wkt, source_srid, buffer_value))
                     else:
-                        cursor.execute(f'''
-                            INSERT INTO "{table_name}" (source_fid, geom)
-                            VALUES (?, GeomFromText(?, ?))
-                        ''', (fid, wkt, source_srid))
+                        if needs_spatialite_simplify:
+                            cursor.execute(f'''
+                                INSERT INTO "{table_name}" (source_fid, geom)
+                                VALUES (?, ST_Simplify(GeomFromText(?, ?), ?))
+                            ''', (fid, wkt, source_srid, simplify_tolerance))
+                        else:
+                            cursor.execute(f'''
+                                INSERT INTO "{table_name}" (source_fid, geom)
+                                VALUES (?, GeomFromText(?, ?))
+                            ''', (fid, wkt, source_srid))
                     inserted_count += 1
             else:
                 # Single geometry source
                 if has_buffer:
-                    cursor.execute(f'''
-                        INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                        VALUES (0, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
-                    ''', (source_wkt, source_srid, source_wkt, source_srid, buffer_value))
+                    if needs_spatialite_simplify:
+                        cursor.execute(f'''
+                            INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                            VALUES (0, ST_Simplify(GeomFromText(?, ?), ?), ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?))
+                        ''', (source_wkt, source_srid, simplify_tolerance, source_wkt, source_srid, simplify_tolerance, buffer_value))
+                    else:
+                        cursor.execute(f'''
+                            INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                            VALUES (0, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
+                        ''', (source_wkt, source_srid, source_wkt, source_srid, buffer_value))
                 else:
-                    cursor.execute(f'''
-                        INSERT INTO "{table_name}" (source_fid, geom)
-                        VALUES (0, GeomFromText(?, ?))
-                    ''', (source_wkt, source_srid))
+                    if needs_spatialite_simplify:
+                        cursor.execute(f'''
+                            INSERT INTO "{table_name}" (source_fid, geom)
+                            VALUES (0, ST_Simplify(GeomFromText(?, ?), ?))
+                        ''', (source_wkt, source_srid, simplify_tolerance))
+                    else:
+                        cursor.execute(f'''
+                            INSERT INTO "{table_name}" (source_fid, geom)
+                            VALUES (0, GeomFromText(?, ?))
+                        ''', (source_wkt, source_srid))
                 inserted_count = 1
             
             conn.commit()
             self.log_info(f"  → Inserted {inserted_count} source geometries")
+            
+            # v2.6.6: CRITICAL - Validate that geometry was actually inserted (not NULL)
+            # Large WKT strings (>500KB) can cause GeomFromText to fail silently, returning NULL
+            cursor.execute(f'SELECT COUNT(*) FROM "{table_name}" WHERE geom IS NOT NULL')
+            valid_geom_count = cursor.fetchone()[0]
+            
+            if valid_geom_count == 0:
+                from qgis.core import QgsMessageLog, Qgis
+                error_msg = f"Source geometry is NULL after insertion (WKT too large: {len(source_wkt):,} chars)"
+                self.log_error(error_msg)
+                QgsMessageLog.logMessage(
+                    f"_create_permanent_source_table FAILED: {error_msg}",
+                    "FilterMate", Qgis.Warning
+                )
+                # Clean up the empty table
+                cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                conn.commit()
+                conn.close()
+                return None, False
+            
+            self.log_info(f"  ✓ Validated {valid_geom_count} non-NULL geometries")
             
             # Create R-tree spatial index on geom column
             try:
@@ -1273,6 +1471,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         buffer_value: Optional[float] = None,
         buffer_expression: Optional[str] = None,
         source_filter: Optional[str] = None,
+        use_centroids: bool = False,
         **kwargs
     ) -> str:
         """
@@ -1293,6 +1492,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             buffer_value: Buffer distance
             buffer_expression: Expression for dynamic buffer
             source_filter: Source layer filter (not used in Spatialite)
+            use_centroids: If True, use ST_Centroid() on distant layer geometries for faster queries
         
         Returns:
             Spatialite SQL expression string
@@ -1312,11 +1512,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         detected_geom_field = None
         if layer:
             try:
-                # METHOD 0: Directly ask the layer (most reliable and cheap)
-                geom_col_from_layer = layer.geometryColumn()
+                # METHOD 0: Directly ask the layer via dataProvider (most reliable and cheap)
+                # v2.6.6: Use dataProvider().geometryColumn() - QgsVectorLayer doesn't have geometryColumn() directly
+                try:
+                    geom_col_from_layer = layer.dataProvider().geometryColumn()
+                except (AttributeError, RuntimeError):
+                    geom_col_from_layer = None
                 if geom_col_from_layer and geom_col_from_layer.strip():
                     detected_geom_field = geom_col_from_layer
-                    self.log_debug(f"Geometry column from layer.geometryColumn(): '{detected_geom_field}'")
+                    self.log_debug(f"Geometry column from dataProvider().geometryColumn(): '{detected_geom_field}'")
                 
                 # METHOD 1: QGIS provider URI parsing (only if METHOD 0 failed)
                 if not detected_geom_field:
@@ -1441,6 +1645,13 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         if is_geopackage:
             geom_expr = f'GeomFromGPB({geom_expr})'
             self.log_info(f"GeoPackage detected: using GeomFromGPB() for geometry conversion")
+        
+        # CENTROID OPTIMIZATION: Convert distant layer geometry to centroid if enabled
+        # This significantly speeds up queries for complex polygons (e.g., buildings)
+        # Applies ST_Centroid() to the distant layer geometry before spatial predicates
+        if use_centroids:
+            geom_expr = f"ST_Centroid({geom_expr})"
+            self.log_info(f"✓ Spatialite: Using ST_Centroid for distant layer geometry (faster queries)")
         
         self.log_info(f"Geometry column detected: '{geom_field}' for layer {layer_props.get('layer_name', 'unknown')}")
         
@@ -1700,6 +1911,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         support Spatialite SQL but mod_spatialite is available. In this mode,
         we query matching FIDs via direct SQL and apply a simple "fid IN (...)" filter.
         
+        v2.6.5: Enhanced WKT detection with fallback extraction from expression.
+        
         Args:
             layer: Spatialite layer to filter
             expression: Spatialite SQL expression
@@ -1728,19 +1941,45 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             feature_count = layer.featureCount()
             use_source_table = False
             
-            if use_direct_sql and feature_count >= self.LARGE_DATASET_THRESHOLD:
-                # Check if we have source geometry in task_params
-                has_source_wkt = False
-                if hasattr(self, 'task_params') and self.task_params:
-                    infos = self.task_params.get('infos', {})
-                    has_source_wkt = bool(infos.get('source_geom_wkt'))
-                
-                # Check if mod_spatialite is available
+            # v2.6.5: Enhanced WKT detection - check task_params first, then extract from expression
+            source_wkt_size = 0
+            has_source_wkt = False
+            source_wkt = None
+            
+            # Method 1: Check task_params (preferred - WKT stored by filter_task)
+            if hasattr(self, 'task_params') and self.task_params:
+                infos = self.task_params.get('infos', {})
+                source_wkt = infos.get('source_geom_wkt', '')
+                if source_wkt:
+                    has_source_wkt = True
+                    source_wkt_size = len(source_wkt)
+                    self.log_debug(f"WKT from task_params: {source_wkt_size} chars")
+            
+            # Method 2: Fallback - extract WKT from expression (handles legacy/edge cases)
+            if not has_source_wkt and expression:
+                extracted_wkt = self._extract_wkt_from_expression(expression)
+                if extracted_wkt:
+                    source_wkt = extracted_wkt
+                    has_source_wkt = True
+                    source_wkt_size = len(extracted_wkt)
+                    self.log_info(f"📋 WKT extracted from expression: {source_wkt_size} chars")
+                    # Store for future use in this session
+                    if hasattr(self, 'task_params') and self.task_params:
+                        if 'infos' not in self.task_params:
+                            self.task_params['infos'] = {}
+                        self.task_params['infos']['source_geom_wkt'] = extracted_wkt
+            
+            # Use source table optimization for EITHER large target OR large source WKT
+            if use_direct_sql and has_source_wkt:
                 mod_available, _ = _test_mod_spatialite_available()
                 
-                if has_source_wkt and mod_available:
-                    use_source_table = True
-                    self.log_info(f"📊 Large dataset detected ({feature_count} features >= {self.LARGE_DATASET_THRESHOLD})")
+                if mod_available:
+                    if feature_count >= self.LARGE_DATASET_THRESHOLD:
+                        use_source_table = True
+                        self.log_info(f"📊 Large target dataset ({feature_count} features >= {self.LARGE_DATASET_THRESHOLD})")
+                    elif source_wkt_size >= self.LARGE_WKT_THRESHOLD:
+                        use_source_table = True
+                        self.log_info(f"📊 Large source WKT ({source_wkt_size} chars >= {self.LARGE_WKT_THRESHOLD}) - using R-tree optimization to prevent freeze")
             
             # v2.4.20: Log which mode is being used for debugging
             from qgis.core import QgsMessageLog, Qgis
@@ -1762,7 +2001,30 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             if use_direct_sql:
                 self.log_info(f"🚀 Using DIRECT SQL mode for {layer.name()} (bypassing GDAL/OGR)")
-                return self._apply_filter_direct_sql(layer, expression, old_subset, combine_operator)
+                # v2.6.3: Add QgsMessageLog before calling to debug silent failures
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"apply_filter: CALLING _apply_filter_direct_sql for {layer.name()}",
+                    "FilterMate", Qgis.Info
+                )
+                try:
+                    result = self._apply_filter_direct_sql(layer, expression, old_subset, combine_operator)
+                    QgsMessageLog.logMessage(
+                        f"apply_filter: _apply_filter_direct_sql returned {result} for {layer.name()}",
+                        "FilterMate", Qgis.Info
+                    )
+                    return result
+                except Exception as e:
+                    QgsMessageLog.logMessage(
+                        f"apply_filter: EXCEPTION in _apply_filter_direct_sql for {layer.name()}: {e}",
+                        "FilterMate", Qgis.Critical
+                    )
+                    import traceback
+                    QgsMessageLog.logMessage(
+                        f"Traceback: {traceback.format_exc()[:500]}",
+                        "FilterMate", Qgis.Critical
+                    )
+                    return False
             
             # NATIVE MODE: Using setSubsetString with Spatialite SQL
             self.log_info(f"📝 Using NATIVE mode for {layer.name()} (setSubsetString with Spatialite SQL)")
@@ -1840,7 +2102,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             else:
                 self.log_error(f"✗ Filter failed for {layer.name()}")
                 self.log_error(f"  → Provider: {layer.providerType()}")
-                self.log_error(f"  → Geometry column from layer: '{layer.geometryColumn()}'")
+                try:
+                    geom_col_debug = layer.dataProvider().geometryColumn()
+                except (AttributeError, RuntimeError):
+                    geom_col_debug = 'unknown'
+                self.log_error(f"  → Geometry column from layer: '{geom_col_debug}'")
                 self.log_error(f"  → Expression length: {len(final_expression)} chars")
                 self.log_error(f"  → Expression preview: {final_expression[:500]}...")
                 
@@ -1870,7 +2136,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     if not is_layer_source_available(layer):
                         self.log_warning("Layer invalid or source missing; skipping test expression")
                     else:
-                        geom_col = layer.geometryColumn()
+                        # v2.6.6: Use dataProvider().geometryColumn()
+                        try:
+                            geom_col = layer.dataProvider().geometryColumn()
+                        except (AttributeError, RuntimeError):
+                            geom_col = None
                         
                         # Test 1: Simple geometry not null
                         if geom_col:
@@ -1915,7 +2185,136 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_error(f"Exception while applying filter: {str(e)}")
             import traceback
             self.log_debug(f"Traceback: {traceback.format_exc()}")
+            # v2.6.3: Also log to QGIS Message Log for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"apply_filter EXCEPTION for {layer.name() if layer else 'unknown'}: {str(e)}",
+                "FilterMate", Qgis.Critical
+            )
+            QgsMessageLog.logMessage(
+                f"Traceback: {traceback.format_exc()[:500]}",
+                "FilterMate", Qgis.Critical
+            )
             return False
+    
+    def _is_task_canceled(self) -> bool:
+        """
+        v2.6.2: Check if the parent task was canceled.
+        
+        Returns:
+            True if task was canceled, False otherwise
+        """
+        if hasattr(self, 'task_params') and self.task_params:
+            task = self.task_params.get('_parent_task')
+            if task and hasattr(task, 'isCanceled'):
+                return task.isCanceled()
+        return False
+    
+    def _report_progress(self, current: int, total: int, operation: str = "Filtering"):
+        """
+        v2.6.2: Report progress to parent task if available.
+        
+        Args:
+            current: Current progress value
+            total: Total value
+            operation: Description of current operation
+        """
+        if hasattr(self, 'task_params') and self.task_params:
+            task = self.task_params.get('_parent_task')
+            if task and hasattr(task, 'setProgress'):
+                progress = int((current / total) * 100) if total > 0 else 0
+                task.setProgress(min(progress, 99))  # Leave 1% for final steps
+    
+    def _get_wkt_bounding_box(self, wkt: str) -> Optional[Tuple[float, float, float, float]]:
+        """
+        v2.6.5: Extract bounding box from WKT geometry for pre-filtering.
+        
+        Uses QGIS geometry parsing to get accurate bbox.
+        
+        Args:
+            wkt: WKT geometry string (may have escaped quotes)
+        
+        Returns:
+            Tuple (minx, miny, maxx, maxy) or None if parsing fails
+        """
+        try:
+            from qgis.core import QgsGeometry
+            # Unescape SQL quotes
+            clean_wkt = wkt.replace("''", "'")
+            geom = QgsGeometry.fromWkt(clean_wkt)
+            if geom and not geom.isEmpty():
+                bbox = geom.boundingBox()
+                return (bbox.xMinimum(), bbox.yMinimum(), bbox.xMaximum(), bbox.yMaximum())
+        except Exception as e:
+            self.log_debug(f"Could not parse WKT bbox: {e}")
+        return None
+    
+    def _build_bbox_prefilter(
+        self,
+        geom_col: str,
+        bbox: Tuple[float, float, float, float],
+        srid: int,
+        is_geopackage: bool = True
+    ) -> str:
+        """
+        v2.6.5: Build a bounding box pre-filter for Spatialite.
+        
+        Uses R-tree index if available for O(log n) performance.
+        
+        Args:
+            geom_col: Geometry column name
+            bbox: Bounding box (minx, miny, maxx, maxy)
+            srid: SRID of the geometry
+            is_geopackage: Whether this is a GeoPackage layer
+        
+        Returns:
+            SQL expression for bbox filter
+        """
+        minx, miny, maxx, maxy = bbox
+        
+        # Build bbox as Spatialite envelope
+        bbox_wkt = f"POLYGON(({minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}))"
+        
+        if is_geopackage:
+            # GeoPackage uses GPB format
+            geom_expr = f'GeomFromGPB("{geom_col}")'
+        else:
+            geom_expr = f'"{geom_col}"'
+        
+        # Use MbrIntersects for fast bbox check (uses R-tree if available)
+        return f"MbrIntersects({geom_expr}, GeomFromText('{bbox_wkt}', {srid})) = 1"
+    
+    def _build_chunked_fid_filter(self, pk_col: str, fids: List[int], chunk_size: int = 5000) -> str:
+        """
+        v2.6.5: Build FID filter with chunked IN clauses to prevent expression parsing freeze.
+        
+        SQLite/QGIS can freeze when parsing very long IN (...) expressions.
+        Breaking into chunks with OR helps the parser.
+        
+        Args:
+            pk_col: Primary key column name
+            fids: List of FIDs to filter
+            chunk_size: Maximum FIDs per IN clause
+        
+        Returns:
+            SQL expression with chunked IN clauses
+        """
+        sorted_fids = sorted(fids)
+        
+        # If small enough, use single IN
+        if len(sorted_fids) <= chunk_size:
+            return f'"{pk_col}" IN ({", ".join(str(f) for f in sorted_fids)})'
+        
+        # Build chunked expression
+        chunks = []
+        for i in range(0, len(sorted_fids), chunk_size):
+            chunk = sorted_fids[i:i + chunk_size]
+            chunks.append(f'"{pk_col}" IN ({", ".join(str(f) for f in chunk)})')
+        
+        # Combine with OR
+        result = "(" + " OR ".join(chunks) + ")"
+        self.log_info(f"  📊 Using CHUNKED IN filter ({len(chunks)} chunks of {chunk_size})")
+        return result
     
     def _apply_filter_direct_sql(
         self,
@@ -1934,6 +2333,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         v2.4.14: New method for GeoPackage support when GDAL doesn't support
         Spatialite SQL in setSubsetString.
         
+        v2.6.2: Added timeout, cancellation checks, and batch processing
+        to prevent QGIS freezing on complex geometric filters.
+        
         Args:
             layer: GeoPackage/SQLite layer to filter
             expression: Spatialite SQL expression (will be adapted for direct SQL)
@@ -1946,6 +2348,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         import time
         start_time = time.time()
         
+        # v2.6.3: Add entry log for debugging silent failures
+        self.log_info(f"_apply_filter_direct_sql: Starting for {layer.name()}")
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"_apply_filter_direct_sql: Starting for {layer.name()}",
+            "FilterMate", Qgis.Info
+        )
+        
+        # v2.6.2: Check cancellation before starting
+        if self._is_task_canceled():
+            self.log_info("Filter cancelled before starting direct SQL")
+            return False
+        
         try:
             # Get file path and table name
             source = layer.source()
@@ -1957,11 +2372,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             remote_prefixes = ('http://', 'https://', 'ftp://', 'wfs:', 'wms:', 'wcs://', '/vsicurl/')
             if any(source_lower.startswith(prefix) for prefix in remote_prefixes):
                 self.log_error(f"Cannot use direct SQL on remote source: {layer.name()}")
+                QgsMessageLog.logMessage(
+                    f"_apply_filter_direct_sql FAILED: Remote source not supported for {layer.name()}",
+                    "FilterMate", Qgis.Warning
+                )
                 return False
             
             if not os.path.isfile(source_path):
                 self.log_error(f"Source file not found for direct SQL: {source_path}")
                 self.log_error(f"  → This may be a remote or virtual source")
+                QgsMessageLog.logMessage(
+                    f"_apply_filter_direct_sql FAILED: Source file not found: {source_path}",
+                    "FilterMate", Qgis.Warning
+                )
                 return False
             
             # Get table name
@@ -1976,19 +2399,49 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             if not table_name:
                 self.log_error(f"Could not determine table name for direct SQL mode")
+                QgsMessageLog.logMessage(
+                    f"_apply_filter_direct_sql FAILED: Could not determine table name for {layer.name()}",
+                    "FilterMate", Qgis.Warning
+                )
                 return False
             
             # Get mod_spatialite extension name
             mod_available, ext_name = _test_mod_spatialite_available()
             if not mod_available or not ext_name:
                 self.log_error(f"mod_spatialite not available for direct SQL mode")
+                QgsMessageLog.logMessage(
+                    f"_apply_filter_direct_sql FAILED: mod_spatialite not available",
+                    "FilterMate", Qgis.Warning
+                )
                 return False
             
-            # Connect to the database with mod_spatialite
-            conn = sqlite3.connect(source_path)
-            conn.enable_load_extension(True)
-            conn.load_extension(ext_name)
-            cursor = conn.cursor()
+            # v2.6.2: Connect to the database with mod_spatialite and timeout
+            QgsMessageLog.logMessage(
+                f"_apply_filter_direct_sql: Connecting to {source_path} (table: {table_name})",
+                "FilterMate", Qgis.Info
+            )
+            
+            # v2.6.4: Wrap connection in detailed try/except for debugging
+            # v2.6.4: Use check_same_thread=False to allow InterruptibleSQLiteQuery
+            #         to use the connection from a background thread
+            try:
+                conn = sqlite3.connect(
+                    source_path, 
+                    timeout=SPATIALITE_QUERY_TIMEOUT,
+                    check_same_thread=False  # Required for InterruptibleSQLiteQuery background thread
+                )
+                conn.enable_load_extension(True)
+                conn.load_extension(ext_name)
+                cursor = conn.cursor()
+            except Exception as conn_error:
+                QgsMessageLog.logMessage(
+                    f"_apply_filter_direct_sql CONNECTION ERROR for {layer.name()}: {str(conn_error)}",
+                    "FilterMate", Qgis.Critical
+                )
+                return False
+            
+            # v2.6.2: Set SQLite busy timeout to prevent freezing
+            cursor.execute(f"PRAGMA busy_timeout = {SPATIALITE_QUERY_TIMEOUT * 1000}")
             
             # Build a SELECT query to get matching FIDs
             # The expression is a WHERE clause, we need to extract the conditions
@@ -2004,18 +2457,134 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             except Exception:
                 pass
             
+            # v2.6.5: Check for very large WKT and use bounding box pre-filter
+            # This dramatically reduces the number of geometry comparisons needed
+            # v2.6.8: CRITICAL FIX - Validate geometry column exists in table
+            #         OGR providers may return 'geometry' as default even when actual column is 'geom'
+            geom_col = None
+            provider_geom_col = None
+            try:
+                provider_geom_col = layer.dataProvider().geometryColumn()
+            except (AttributeError, RuntimeError):
+                pass
+            
+            # Get actual columns from table to validate
+            actual_columns = []
+            try:
+                cursor.execute(f'PRAGMA table_info("{table_name}")')
+                actual_columns = [row[1] for row in cursor.fetchall()]
+            except Exception:
+                pass
+            
+            # Only trust provider's geometry column if it exists in the table
+            if provider_geom_col and actual_columns and provider_geom_col in actual_columns:
+                geom_col = provider_geom_col
+            elif actual_columns:
+                # Fallback: detect from table columns
+                if 'geom' in actual_columns:
+                    geom_col = 'geom'
+                elif 'geometry' in actual_columns:
+                    geom_col = 'geometry'
+                else:
+                    # Look for any geometry-like column
+                    for col in actual_columns:
+                        if 'geom' in col.lower():
+                            geom_col = col
+                            break
+            
+            if not geom_col:
+                geom_col = 'geom'  # Default for GeoPackage (most common)
+            
+            is_geopackage = '.gpkg' in layer.source().lower()
+            
+            use_bbox_prefilter = False
+            bbox_filter = None
+            source_wkt = None
+            
+            if hasattr(self, 'task_params') and self.task_params:
+                infos = self.task_params.get('infos', {})
+                source_wkt = infos.get('source_geom_wkt', '')
+                
+                if source_wkt and len(source_wkt) >= self.VERY_LARGE_WKT_THRESHOLD:
+                    # Very large WKT - use bbox pre-filter
+                    bbox = self._get_wkt_bounding_box(source_wkt)
+                    if bbox:
+                        # Get target layer SRID
+                        target_srid = 4326
+                        crs = layer.crs()
+                        if crs and crs.isValid() and ':' in crs.authid():
+                            try:
+                                target_srid = int(crs.authid().split(':')[1])
+                            except (ValueError, IndexError):
+                                pass
+                        
+                        bbox_filter = self._build_bbox_prefilter(geom_col, bbox, target_srid, is_geopackage)
+                        use_bbox_prefilter = True
+                        self.log_info(f"📦 Very large WKT ({len(source_wkt)} chars) - using bbox pre-filter for performance")
+            
             # Build the SELECT query
             # The expression is the WHERE clause from build_expression
-            select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {expression}'
+            if use_bbox_prefilter and bbox_filter:
+                # Use two-stage filtering: fast bbox check first, then precise geometry test
+                select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE ({bbox_filter}) AND ({expression})'
+                self.log_info(f"  → Using two-stage filter: bbox → geometry")
+            else:
+                select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {expression}'
             
             self.log_info(f"  → Direct SQL query: {select_query[:200]}...")
+            # v2.6.4: Also log to QgsMessageLog for visibility
+            QgsMessageLog.logMessage(
+                f"_apply_filter_direct_sql: Executing query ({len(select_query)} chars) for {layer.name()}",
+                "FilterMate", Qgis.Info
+            )
             
-            # Execute the query
+            # v2.6.2: Check cancellation before long query
+            if self._is_task_canceled():
+                self.log_info("Filter cancelled before SQL execution")
+                conn.close()
+                return False
+            
+            # v2.6.2: Execute the query using interruptible wrapper
+            # This runs the query in a background thread and allows cancellation
+            self.log_info(f"  → Executing interruptible query (timeout: {SPATIALITE_QUERY_TIMEOUT}s)...")
+            
             try:
-                cursor.execute(select_query)
-                matching_fids = [row[0] for row in cursor.fetchall()]
+                interruptible_query = InterruptibleSQLiteQuery(conn, select_query)
+                results, error = interruptible_query.execute(
+                    timeout=SPATIALITE_QUERY_TIMEOUT,
+                    cancel_check=self._is_task_canceled
+                )
+                
+                if error:
+                    error_msg = str(error)
+                    # v2.6.4: Log errors to QgsMessageLog for visibility
+                    QgsMessageLog.logMessage(
+                        f"_apply_filter_direct_sql SQL ERROR for {layer.name()}: {error_msg}",
+                        "FilterMate", Qgis.Warning
+                    )
+                    if "cancelled" in error_msg.lower():
+                        self.log_info(f"Query cancelled by user")
+                        conn.close()
+                        return False
+                    elif "timeout" in error_msg.lower():
+                        self.log_error(f"Query timeout after {SPATIALITE_QUERY_TIMEOUT}s - geometry too complex")
+                        self.log_error(f"  → Consider using smaller source geometry or PostgreSQL backend")
+                        conn.close()
+                        return False
+                    else:
+                        self.log_error(f"Direct SQL query failed: {error}")
+                        conn.close()
+                        return False
+                
+                matching_fids = [row[0] for row in results]
+                        
             except Exception as sql_error:
                 self.log_error(f"Direct SQL query failed: {sql_error}")
+                # v2.6.4: Log exception to QgsMessageLog for visibility
+                QgsMessageLog.logMessage(
+                    f"_apply_filter_direct_sql SQL EXCEPTION for {layer.name()}: {str(sql_error)}",
+                    "FilterMate", Qgis.Warning
+                )
                 conn.close()
                 return False
             
@@ -2030,13 +2599,43 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_info(f"  → Found {len(matching_fids)} matching features via direct SQL")
             
             if len(matching_fids) == 0:
-                # No matching features - apply empty filter
-                fid_expression = "1 = 0"  # No features will match
+                # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
+                fid_expression = 'fid = -1'  # No valid FID is -1
+                self.log_info(f"  → No matching features, applying: {fid_expression}")
+            elif len(matching_fids) > 50000:
+                # v2.6.5: VERY large result set - check if we can use range-based filter
+                # If FIDs are mostly consecutive, a range is much more efficient
+                sorted_fids = sorted(matching_fids)
+                min_fid, max_fid = sorted_fids[0], sorted_fids[-1]
+                fid_range = max_fid - min_fid + 1
+                coverage = len(matching_fids) / fid_range if fid_range > 0 else 0
+                
+                if coverage >= 0.8:
+                    # 80%+ coverage - use range filter (much faster to parse)
+                    # Find excluded FIDs (smaller list)
+                    all_in_range = set(range(min_fid, max_fid + 1))
+                    excluded_fids = all_in_range - set(sorted_fids)
+                    
+                    if len(excluded_fids) < 1000:
+                        # Few exclusions - use range with NOT IN
+                        if excluded_fids:
+                            excluded_str = ", ".join(str(f) for f in sorted(excluded_fids))
+                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid} AND "{pk_col}" NOT IN ({excluded_str}))'
+                        else:
+                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid})'
+                        self.log_info(f"  📊 Using RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
+                    else:
+                        # Too many exclusions, fall back to chunked IN
+                        fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                else:
+                    # Sparse FIDs - use chunked IN filter
+                    fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                    
             elif len(matching_fids) > 10000:
-                # Too many FIDs - use range-based filter if possible
+                # Large result set - warn but still use IN filter
                 self.log_warning(
                     f"Large result set ({len(matching_fids)} FIDs). "
-                    f"Performance may be affected. Consider PostgreSQL for better performance."
+                    f"Consider PostgreSQL for better performance."
                 )
                 fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
             else:
@@ -2101,6 +2700,12 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_error(f"Exception in direct SQL filter: {str(e)}")
             import traceback
             self.log_debug(f"Traceback: {traceback.format_exc()}")
+            # v2.6.3: Also log to QGIS Message Log for user visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"_apply_filter_direct_sql EXCEPTION for {layer.name()}: {str(e)}",
+                "FilterMate", Qgis.Critical
+            )
             return False
     
     def get_backend_name(self) -> str:
@@ -2144,6 +2749,26 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         import time
         start_time = time.time()
         
+        # v2.6.6: Log entry to QgsMessageLog for debugging
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"_apply_filter_with_source_table: Starting for {layer.name()}",
+            "FilterMate", Qgis.Info
+        )
+        
+        # v2.6.2: Check cancellation before starting
+        if self._is_task_canceled():
+            self.log_info("Filter cancelled before starting source table optimization")
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"{layer.name()}: Filter cancelled before starting source table optimization",
+                "FilterMate", Qgis.Warning
+            )
+            return False
+        
+        # v2.6.10: Get feature count for progress estimation
+        feature_count = layer.featureCount()
+        
         try:
             # Get file path
             source = layer.source()
@@ -2185,7 +2810,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                         pass
                 
                 # Get buffer value
-                buffer_value = self.task_params.get('buffer_value', 0) or 0
+                # v2.6.11 FIX: buffer_value is nested under 'filtering' in task_params
+                filtering_params = self.task_params.get('filtering', {})
+                buffer_value = filtering_params.get('buffer_value', 0) or 0
                 
                 # Get predicates
                 predicates = self.task_params.get('predicates', {})
@@ -2213,6 +2840,14 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             self.log_info(f"  → Target: {target_table}, SRID: {target_srid}")
             self.log_info(f"  → Buffer: {buffer_value}m, Geographic: {is_geographic}")
             
+            # v2.6.11: Log buffer value to QGIS MessageLog for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            if buffer_value != 0:
+                QgsMessageLog.logMessage(
+                    f"{layer.name()}: Using buffer={buffer_value}m for source table optimization",
+                    "FilterMate", Qgis.Info
+                )
+            
             # Create permanent source table with geometry (and buffer if needed)
             # For geographic CRS with buffer, we need to handle projection
             effective_buffer = 0
@@ -2230,25 +2865,117 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             )
             
             if not source_table:
+                from qgis.core import QgsMessageLog, Qgis
                 self.log_warning("Could not create source table - falling back to inline WKT")
+                QgsMessageLog.logMessage(
+                    f"Source table creation failed for {layer.name()} - WKT may be too large ({len(source_wkt) if source_wkt else 0:,} chars)",
+                    "FilterMate", Qgis.Warning
+                )
                 return False
             
             # Get mod_spatialite extension
             mod_available, ext_name = _test_mod_spatialite_available()
             if not mod_available:
                 self.log_error("mod_spatialite not available")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"{layer.name()}: mod_spatialite extension not available - cannot use source table optimization",
+                    "FilterMate", Qgis.Warning
+                )
                 return False
             
-            # Connect and build optimized query
-            conn = sqlite3.connect(source_path)
+            # v2.6.2: Check cancellation before connecting
+            if self._is_task_canceled():
+                self.log_info("Filter cancelled before database connection")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"{layer.name()}: Filter cancelled before database connection",
+                    "FilterMate", Qgis.Warning
+                )
+                self._drop_source_table(source_path, source_table)
+                return False
+            
+            # v2.6.2: Connect and build optimized query with timeout
+            # v2.6.4: Use check_same_thread=False for InterruptibleSQLiteQuery background thread
+            conn = sqlite3.connect(
+                source_path, 
+                timeout=SPATIALITE_QUERY_TIMEOUT,
+                check_same_thread=False  # Required for InterruptibleSQLiteQuery background thread
+            )
             conn.enable_load_extension(True)
             conn.load_extension(ext_name)
             cursor = conn.cursor()
             
+            # v2.6.2: Set SQLite busy timeout to prevent freezing
+            cursor.execute(f"PRAGMA busy_timeout = {SPATIALITE_QUERY_TIMEOUT * 1000}")
+            
             # Get geometry column of target layer
-            geom_col = layer.geometryColumn()
+            # v2.6.6: Use dataProvider().geometryColumn() - QgsVectorLayer doesn't have geometryColumn() directly
+            # v2.6.8: CRITICAL FIX - Validate the column actually exists in the table
+            #         OGR providers may return 'geometry' as default even when actual column is 'geom'
+            geom_col = None
+            provider_geom_col = None
+            try:
+                provider_geom_col = layer.dataProvider().geometryColumn()
+            except (AttributeError, RuntimeError):
+                pass
+            
+            # v2.6.8: Get actual columns from table to validate provider's answer
+            actual_columns = []
+            try:
+                cursor.execute(f'PRAGMA table_info("{target_table}")')
+                actual_columns = [row[1] for row in cursor.fetchall()]
+            except Exception as e:
+                self.log_debug(f"Could not query table_info for validation: {e}")
+            
+            # v2.6.8: Only trust provider's geometry column if it actually exists in the table
+            if provider_geom_col and provider_geom_col in actual_columns:
+                geom_col = provider_geom_col
+                self.log_info(f"  → Geometry column from provider (validated): '{geom_col}'")
+            
+            # v2.6.7: If provider doesn't return valid geometry column, query gpkg_geometry_columns table
             if not geom_col:
-                geom_col = 'geometry'  # Default for GeoPackage
+                try:
+                    cursor.execute(
+                        "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
+                        (target_table,)
+                    )
+                    result = cursor.fetchone()
+                    if result and result[0]:
+                        geom_col = result[0]
+                        self.log_info(f"  → Geometry column from gpkg_geometry_columns: '{geom_col}'")
+                except Exception as e:
+                    self.log_debug(f"Could not query gpkg_geometry_columns: {e}")
+            
+            # Final fallback - try 'geom' first (common in GeoPackage), then 'geometry'
+            if not geom_col:
+                # v2.6.8: Use already-fetched actual_columns to avoid re-query
+                columns = actual_columns
+                if not columns:
+                    # Fallback if we don't have columns yet
+                    try:
+                        cursor.execute(f'PRAGMA table_info("{target_table}")')
+                        columns = [row[1] for row in cursor.fetchall()]
+                    except Exception as e:
+                        self.log_debug(f"Could not query table_info: {e}")
+                
+                if columns:
+                    if 'geom' in columns:
+                        geom_col = 'geom'
+                    elif 'geometry' in columns:
+                        geom_col = 'geometry'
+                    else:
+                        # Look for any geometry-like column name
+                        for col in columns:
+                            if 'geom' in col.lower():
+                                geom_col = col
+                                break
+                    if geom_col:
+                        self.log_info(f"  → Geometry column detected from PRAGMA: '{geom_col}'")
+            
+            if not geom_col:
+                geom_col = 'geom'  # Default for GeoPackage (most common)
+                self.log_warning(f"  → Using default geometry column: '{geom_col}'")
             
             # Get primary key column
             pk_col = 'fid'  # Default for GeoPackage
@@ -2295,6 +3022,16 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 '4': 'ST_Touches', '5': 'ST_Overlaps', '6': 'ST_Within', '7': 'ST_Crosses'
             }
             
+            # v2.6.6: CRITICAL FIX - GeoPackage stores geometry in GPB format
+            # We need GeomFromGPB() to convert to Spatialite geometry before spatial predicates
+            # Check if target is GeoPackage by file extension
+            is_geopackage = source_path.lower().endswith('.gpkg')
+            if is_geopackage:
+                target_geom_expr = f'GeomFromGPB(t."{geom_col}")'
+                self.log_info(f"  → GeoPackage detected: using GeomFromGPB() for target geometry")
+            else:
+                target_geom_expr = f't."{geom_col}"'
+            
             predicate_conditions = []
             for key in predicates.keys():
                 if key in index_to_func:
@@ -2304,32 +3041,227 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 else:
                     func = f'ST_{key.capitalize()}'
                 
-                predicate_conditions.append(f'{func}(t."{geom_col}", {source_expr}) = 1')
+                predicate_conditions.append(f'{func}({target_geom_expr}, {source_expr}) = 1')
             
             if not predicate_conditions:
                 # Default to intersects
-                predicate_conditions = [f'ST_Intersects(t."{geom_col}", {source_expr}) = 1']
+                predicate_conditions = [f'ST_Intersects({target_geom_expr}, {source_expr}) = 1']
             
-            # Build EXISTS query - highly optimized with R-tree index
+            # v2.6.9: CRITICAL PERFORMANCE FIX - Add bounding box pre-filter
+            # The EXISTS query was scanning ALL target features (O(n)) without using
+            # the target table's R-tree spatial index. Adding MbrIntersects pre-filter
+            # reduces the search space dramatically (from 119k to ~1k features).
+            # Get bounding box from source table for pre-filtering
+            bbox_prefilter = ""
+            rtree_prefilter = ""
+            try:
+                source_geom_for_bbox = 'geom_buffered' if has_buffer else 'geom'
+                cursor.execute(f'''
+                    SELECT MbrMinX({source_geom_for_bbox}), MbrMinY({source_geom_for_bbox}),
+                           MbrMaxX({source_geom_for_bbox}), MbrMaxY({source_geom_for_bbox})
+                    FROM "{source_table}"
+                    WHERE {source_geom_for_bbox} IS NOT NULL
+                    LIMIT 1
+                ''')
+                bbox_result = cursor.fetchone()
+                if bbox_result and all(v is not None for v in bbox_result):
+                    minx, miny, maxx, maxy = bbox_result
+                    # Add small expansion to bbox for edge cases (0.1% of extent)
+                    dx = max((maxx - minx) * 0.001, 1.0)  # At least 1 unit
+                    dy = max((maxy - miny) * 0.001, 1.0)
+                    minx -= dx
+                    miny -= dy
+                    maxx += dx
+                    maxy += dy
+                    
+                    # v2.6.9: For GeoPackage, check if R-tree table exists and use it directly
+                    # GeoPackage R-tree tables are named rtree_<table>_<geom>
+                    if is_geopackage:
+                        rtree_table = f"rtree_{target_table}_{geom_col}"
+                        try:
+                            # Check if R-tree table exists
+                            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (rtree_table,))
+                            if cursor.fetchone():
+                                # Use R-tree virtual table for O(log n) filtering
+                                rtree_prefilter = f'''t."{pk_col}" IN (
+                                    SELECT id FROM "{rtree_table}"
+                                    WHERE minx <= {maxx} AND maxx >= {minx}
+                                    AND miny <= {maxy} AND maxy >= {miny}
+                                ) AND '''
+                                self.log_info(f"  → Using GeoPackage R-tree: {rtree_table}")
+                                self.log_info(f"  → BBox filter: ({minx:.1f},{miny:.1f})-({maxx:.1f},{maxy:.1f})")
+                            else:
+                                # Fallback to MbrIntersects (slower)
+                                bbox_wkt = f"POLYGON(({minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}))"
+                                bbox_prefilter = f"MbrIntersects({target_geom_expr}, GeomFromText('{bbox_wkt}', {target_srid})) = 1 AND "
+                                self.log_info(f"  → No R-tree found, using MbrIntersects fallback")
+                                self.log_info(f"  → BBox filter: ({minx:.1f},{miny:.1f})-({maxx:.1f},{maxy:.1f})")
+                        except Exception as rtree_err:
+                            self.log_debug(f"R-tree check failed: {rtree_err}")
+                            bbox_wkt = f"POLYGON(({minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}))"
+                            bbox_prefilter = f"MbrIntersects({target_geom_expr}, GeomFromText('{bbox_wkt}', {target_srid})) = 1 AND "
+                    else:
+                        # Non-GeoPackage Spatialite
+                        bbox_wkt = f"POLYGON(({minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}))"
+                        bbox_prefilter = f"MbrIntersects({target_geom_expr}, GeomFromText('{bbox_wkt}', {target_srid})) = 1 AND "
+                        self.log_info(f"  → BBox pre-filter: ({minx:.1f},{miny:.1f})-({maxx:.1f},{maxy:.1f})")
+            except Exception as bbox_err:
+                self.log_debug(f"Could not get source bbox for pre-filter: {bbox_err}")
+            
+            # Choose the best pre-filter (R-tree is preferred)
+            final_prefilter = rtree_prefilter if rtree_prefilter else bbox_prefilter
+            
+            # Build EXISTS query with optional bbox pre-filter
+            # The bbox filter uses target R-tree index for O(log n) initial filtering
             predicates_sql = ' OR '.join(predicate_conditions)
             select_query = f'''
                 SELECT t."{pk_col}" 
                 FROM "{target_table}" t
-                WHERE EXISTS (
+                WHERE {final_prefilter}EXISTS (
                     SELECT 1 FROM "{source_table}" s 
                     WHERE {predicates_sql}
                 )
             '''
             
-            self.log_info(f"  → Optimized EXISTS query with R-tree index")
+            self.log_info(f"  → Optimized EXISTS query with R-tree bbox pre-filter")
             self.log_debug(f"Query: {select_query[:300]}...")
             
-            # Execute query
+            # v2.6.10: For very large datasets, estimate candidate count first
+            # This provides progress feedback and helps set expectations
+            VERY_LARGE_DATASET = 100000
+            estimated_candidates = 0
+            if feature_count >= VERY_LARGE_DATASET and rtree_prefilter:
+                try:
+                    # Quick estimate using R-tree pre-filter only
+                    estimate_query = f'''
+                        SELECT COUNT(*) FROM "{target_table}" t
+                        WHERE {rtree_prefilter.rstrip(' AND ')}
+                    '''
+                    cursor.execute(estimate_query)
+                    estimated_candidates = cursor.fetchone()[0]
+                    self.log_info(f"  → Estimated R-tree candidates: {estimated_candidates:,} features (from {feature_count:,} total)")
+                    if estimated_candidates > 10000:
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"{layer.name()}: Processing ~{estimated_candidates:,} candidate features - this may take a moment",
+                            "FilterMate", Qgis.Info
+                        )
+                except Exception as est_err:
+                    self.log_debug(f"Could not estimate candidates: {est_err}")
+            
+            # v2.6.2: Check cancellation before long query
+            if self._is_task_canceled():
+                self.log_info("Filter cancelled before SQL execution")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"{layer.name()}: Filter cancelled before SQL execution",
+                    "FilterMate", Qgis.Warning
+                )
+                conn.close()
+                self._drop_source_table(source_path, source_table)
+                return False
+            
+            # v2.6.2: Execute query using interruptible wrapper
+            # This runs the query in a background thread and allows cancellation
+            # v2.6.10: Extend timeout for very large datasets with many candidates
+            effective_timeout = SPATIALITE_QUERY_TIMEOUT
+            if estimated_candidates > 50000:
+                effective_timeout = min(300, SPATIALITE_QUERY_TIMEOUT * 2)  # Up to 5 minutes for very large
+                self.log_info(f"  → Extended timeout to {effective_timeout}s for large dataset")
+            
+            self.log_info(f"  → Executing interruptible query (timeout: {effective_timeout}s)...")
+            
+            # v2.6.11: Log query start to QGIS MessageLog for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"{layer.name()}: Executing spatial query (timeout: {effective_timeout}s)...",
+                "FilterMate", Qgis.Info
+            )
+            
             try:
-                cursor.execute(select_query)
-                matching_fids = [row[0] for row in cursor.fetchall()]
+                interruptible_query = InterruptibleSQLiteQuery(conn, select_query)
+                results, error = interruptible_query.execute(
+                    timeout=effective_timeout,
+                    cancel_check=self._is_task_canceled
+                )
+                
+                if error:
+                    error_msg = str(error)
+                    if "cancelled" in error_msg.lower():
+                        self.log_info(f"Query cancelled by user")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"{layer.name()}: Query cancelled by user during execution",
+                            "FilterMate", Qgis.Warning
+                        )
+                        conn.close()
+                        self._drop_source_table(source_path, source_table)
+                        return False
+                    elif "timeout" in error_msg.lower():
+                        self.log_error(f"Query timeout after {effective_timeout}s - geometry too complex")
+                        self.log_error(f"  → Consider using smaller source geometry or PostgreSQL backend")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"Query timeout for {layer.name()} - geometry too complex",
+                            "FilterMate", Qgis.Warning
+                        )
+                        conn.close()
+                        self._drop_source_table(source_path, source_table)
+                        return False
+                    else:
+                        self.log_error(f"Optimized query failed: {error}")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"Optimized query failed for {layer.name()}: {str(error)[:100]}",
+                            "FilterMate", Qgis.Warning
+                        )
+                        conn.close()
+                        self._drop_source_table(source_path, source_table)
+                        return False
+                
+                matching_fids = [row[0] for row in results]
+                
+                # v2.6.11: Diagnostic for 0 results on large datasets
+                # Check source table geometry validity
+                if len(matching_fids) == 0 and feature_count >= 10000:
+                    try:
+                        # Check source geometry validity
+                        source_geom_col_check = 'geom_buffered' if has_buffer else 'geom'
+                        cursor.execute(f'''
+                            SELECT ST_IsValid({source_geom_col_check}) as valid,
+                                   ST_IsEmpty({source_geom_col_check}) as empty,
+                                   ST_GeometryType({source_geom_col_check}) as geom_type,
+                                   ST_NPoints({source_geom_col_check}) as npoints
+                            FROM "{source_table}"
+                            LIMIT 1
+                        ''')
+                        src_check = cursor.fetchone()
+                        if src_check:
+                            is_valid, is_empty, geom_type, npoints = src_check
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"🔍 {layer.name()} DIAG: source_geom valid={is_valid}, empty={is_empty}, type={geom_type}, npoints={npoints}",
+                                "FilterMate", Qgis.Warning
+                            )
+                            if is_empty or not is_valid:
+                                QgsMessageLog.logMessage(
+                                    f"⚠️ {layer.name()}: Source geometry is INVALID or EMPTY - this explains 0 results!",
+                                    "FilterMate", Qgis.Warning
+                                )
+                    except Exception as diag_err:
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"🔍 {layer.name()} DIAG ERROR: {diag_err}",
+                            "FilterMate", Qgis.Warning
+                        )
+                        
             except Exception as sql_error:
                 self.log_error(f"Optimized query failed: {sql_error}")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"Optimized query exception for {layer.name()}: {str(sql_error)[:100]}",
+                    "FilterMate", Qgis.Warning
+                )
                 import traceback
                 self.log_debug(traceback.format_exc())
                 conn.close()
@@ -2344,9 +3276,70 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             self.log_info(f"  → Found {len(matching_fids)} matching features")
             
-            # Build FID-based filter expression
+            # v2.6.11: Log query completion to QGIS MessageLog
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"{layer.name()}: Spatial query completed → {len(matching_fids)} matching features",
+                "FilterMate", Qgis.Info
+            )
+            
+            # v2.6.5: Build optimized FID-based filter expression
             if len(matching_fids) == 0:
-                fid_expression = "1 = 0"  # No matches
+                # v2.6.10: Suspicious 0 results on large dataset - might be geometry issue
+                # Check if we should fallback to OGR instead of applying empty filter
+                SUSPICIOUS_ZERO_THRESHOLD = 10000  # If target has >10k features, 0 results is suspicious
+                
+                if feature_count >= SUSPICIOUS_ZERO_THRESHOLD:
+                    self.log_warning(f"⚠️ SUSPICIOUS: 0 features matched for {layer.name()} with {feature_count:,} total features")
+                    self.log_warning(f"  → Large dataset with 0 results suggests geometry processing issue")
+                    self.log_warning(f"  → Signaling fallback to OGR backend for reliable filtering")
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        f"⚠️ {layer.name()}: Spatialite returned 0/{feature_count:,} features - falling back to OGR",
+                        "FilterMate", Qgis.Warning
+                    )
+                    # Return False to signal that Spatialite failed and caller should try OGR
+                    # Store a flag so the calling code knows this is a fallback request
+                    self._spatialite_zero_result_fallback = True
+                    return False
+                
+                # v2.6.9: FIX - Use FID-based impossible filter
+                # For OGR/GeoPackage, use unquoted 'fid' which is the internal row ID
+                # Quoted column names may not work correctly with some OGR configurations
+                fid_expression = 'fid = -1'  # No valid FID is -1
+                # v2.6.9: Warn about 0 features - might indicate buffer issue
+                self.log_warning(f"⚠️ 0 features matched for {layer.name()}")
+                self.log_info(f"  → Applying empty filter expression: {fid_expression}")
+                if buffer_value == 0:
+                    self.log_warning(f"  → Hint: Source has no buffer. Use buffer for proximity filtering.")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"⚠️ {layer.name()}: 0 features matched - applying empty filter (fid = -1)",
+                    "FilterMate", Qgis.Warning
+                )
+            elif len(matching_fids) > 50000:
+                # Very large result - check if range-based filter is viable
+                sorted_fids = sorted(matching_fids)
+                min_fid, max_fid = sorted_fids[0], sorted_fids[-1]
+                fid_range = max_fid - min_fid + 1
+                coverage = len(matching_fids) / fid_range if fid_range > 0 else 0
+                
+                if coverage >= 0.8:
+                    # High coverage - use range with exclusions
+                    all_in_range = set(range(min_fid, max_fid + 1))
+                    excluded_fids = all_in_range - set(sorted_fids)
+                    
+                    if len(excluded_fids) < 1000:
+                        if excluded_fids:
+                            excluded_str = ", ".join(str(f) for f in sorted(excluded_fids))
+                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid} AND "{pk_col}" NOT IN ({excluded_str}))'
+                        else:
+                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid})'
+                        self.log_info(f"  📊 Using RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
+                    else:
+                        fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                else:
+                    fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
             else:
                 fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
             
@@ -2376,13 +3369,28 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             if result:
                 self.log_info(f"✓ {layer.name()}: {len(matching_fids)} features via source table ({elapsed:.2f}s)")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"✓ Spatialite source table filter: {layer.name()} → {len(matching_fids)} features ({elapsed:.2f}s)",
+                    "FilterMate", Qgis.Info
+                )
             else:
                 self.log_error(f"✗ Source table filter failed for {layer.name()}")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"✗ Source table filter failed for {layer.name()} (setSubsetString returned False)",
+                    "FilterMate", Qgis.Warning
+                )
             
             return result
             
         except Exception as e:
             self.log_error(f"Exception in source table filter: {e}")
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"Exception in source table filter for {layer.name() if layer else 'unknown'}: {str(e)[:100]}",
+                "FilterMate", Qgis.Critical
+            )
             import traceback
             self.log_debug(traceback.format_exc())
             return False

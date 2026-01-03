@@ -237,6 +237,14 @@ O&apos;zgarishlarni qo&apos;llash uchun QGIS ni qayta ishga tushiring.</translat
         <source>Number of segments for buffer precision</source>
         <translation>Bufer aniqligi uchun segmentlar soni</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Markazlar</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Uzoq qatlamlar uchun to&apos;liq geometriyalar o&apos;rniga markazlardan foydalaning (binolar kabi murakkab ko&apos;pburchaklar uchun tezroq)</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

@@ -237,6 +237,14 @@ Please restart QGIS to apply the changes.</translation>
         <source>Number of segments for buffer precision</source>
         <translation>Število segmentov za natančnost medpomnilnika</translation>
     </message>
+    <message>
+        <source>Centroids</source>
+        <translation>Centroidi</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for distant layers (faster for complex polygons like buildings)</source>
+        <translation>Uporabi centroide namesto polnih geometrij za oddaljene sloje (hitrejše za kompleksne poligone, kot so zgradbe)</translation>
+    </message>
 </context>
 <context>
     <name>FilterMateDockWidgetBase</name>

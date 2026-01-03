@@ -230,6 +230,8 @@ class FilterEngineTask(QgsTask):
         self.param_buffer_value = None
         self.param_buffer_type = 0  # Default: Round (0), Flat (1), Square (2)
         self.param_buffer_segments = 5  # Default: 5 segments for buffer precision
+        self.param_use_centroids_source_layer = False  # Use centroids for source layer geometries
+        self.param_use_centroids_distant_layers = False  # Use centroids for distant layer geometries
         self.param_source_schema = None
         self.param_source_table = None
         self.param_source_layer_id = None
@@ -658,6 +660,31 @@ class FilterEngineTask(QgsTask):
             for provider, layers_list in self.layers.items():
                 for layer, props in layers_list:
                     logger.info(f"    - {layer.name()} ({provider})")
+
+    def _queue_subset_string(self, layer, expression):
+        """
+        Queue a subset string request for thread-safe application in finished().
+        
+        CRITICAL: setSubsetString must be called from the main Qt thread.
+        This method queues the request for processing in finished() which
+        runs on the main thread, avoiding access violation crashes.
+        
+        Args:
+            layer: QgsVectorLayer to apply filter to
+            expression: Filter expression string (or empty string to clear)
+            
+        Returns:
+            bool: True if queued successfully
+        """
+        if not hasattr(self, '_pending_subset_requests'):
+            self._pending_subset_requests = []
+        
+        if layer is not None:
+            self._pending_subset_requests.append((layer, expression))
+            logger.debug(f"Queued subset request for {layer.name()}: {len(expression) if expression else 0} chars")
+            return True
+        return False
+
     def _log_backend_info(self):
         """
         Log backend information and performance warnings for filtering tasks.
@@ -1802,10 +1829,14 @@ class FilterEngineTask(QgsTask):
 
     def _apply_filter_and_update_subset(self, expression):
         """
-        Apply filter expression to source layer and update subset strings.
+        Queue filter expression for application on main thread.
+        
+        CRITICAL: setSubsetString must be called from main thread to avoid
+        access violation crashes. This method now only queues the expression
+        for application in finished() which runs on the main thread.
         
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if expression was queued successfully
         """
         # Apply type casting for PostgreSQL to fix varchar/numeric comparison issues
         # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
@@ -1814,44 +1845,39 @@ class FilterEngineTask(QgsTask):
         if self.param_source_provider_type == PROVIDER_POSTGRES:
             expression = self._apply_postgresql_type_casting(expression, self.source_layer)
         
-        # CRITICAL: setSubsetString must be called from main thread
-        result = safe_set_subset_string(self.source_layer, expression)
+        # CRITICAL FIX v2.6.6: Do NOT call setSubsetString from worker thread!
+        # This causes "access violation" crashes on Windows because QGIS layer
+        # operations are not thread-safe.
+        # Instead, queue the expression for application in finished() which
+        # runs on the main Qt thread.
         
-        if result:
-            # CRITICAL FIX v2.5.11: Queue source layer for repaint in finished()
-            # The source layer must be repainted after filtering to update the canvas.
-            # We add it to _pending_subset_requests so that finished() calls triggerRepaint()
-            # Note: We use a special marker (None, layer) to indicate "just repaint, don't re-apply filter"
-            # OR we can add the layer with its expression for consistency
-            if hasattr(self, '_pending_subset_requests'):
-                # Add source layer to pending requests for repaint in finished()
-                # The expression is already applied, but we need the repaint
-                self._pending_subset_requests.append((self.source_layer, expression))
-                logger.debug(f"Queued source layer {self.source_layer.name()} for repaint in finished()")
-            
-            # Only build PostgreSQL SELECT for PostgreSQL providers
-            # OGR and Spatialite use subset strings directly
-            # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
-            # providerType() returns 'postgres' even when using OGR fallback
-            if self.param_source_provider_type == PROVIDER_POSTGRES:
-                # Build full SELECT expression for subset management (PostgreSQL only)
-                full_expression = (
-                    f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
-                    f'"{self.param_source_table}"."{self.param_source_geom}" '
-                    f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
-                    f'WHERE {expression}'
-                )
-                self.manage_layer_subset_strings(
-                    self.source_layer,
-                    full_expression,
-                    self.primary_key_name,
-                    self.param_source_geom,
-                    False
-                )
-            else:
-                pass
+        # Queue source layer for filter application in finished()
+        if hasattr(self, '_pending_subset_requests'):
+            self._pending_subset_requests.append((self.source_layer, expression))
+            logger.info(f"Queued source layer {self.source_layer.name()} for filter application in finished()")
         
-        return result
+        # Only build PostgreSQL SELECT for PostgreSQL providers
+        # OGR and Spatialite use subset strings directly
+        # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
+        # providerType() returns 'postgres' even when using OGR fallback
+        if self.param_source_provider_type == PROVIDER_POSTGRES:
+            # Build full SELECT expression for subset management (PostgreSQL only)
+            full_expression = (
+                f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '
+                f'"{self.param_source_table}"."{self.param_source_geom}" '
+                f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
+                f'WHERE {expression}'
+            )
+            self.manage_layer_subset_strings(
+                self.source_layer,
+                full_expression,
+                self.primary_key_name,
+                self.param_source_geom,
+                False
+            )
+        
+        # Return True to indicate expression was queued successfully
+        return True
 
     def execute_source_layer_filtering(self):
         """Manage the creation of the origin filtering expression"""
@@ -1885,26 +1911,68 @@ class FilterEngineTask(QgsTask):
                 op in task_expression for op in ['=', '>', '<', '!', 'IN', 'LIKE', 'AND', 'OR']
             )
         
-        # Check if geometric filtering is enabled
+        # Check if skip_source_filter is enabled (custom selection with non-filter expression)
+        skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
+        
+        # Check if geometric filtering is enabled (for logging purposes)
         has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
         geom_predicates_list = self.task_parameters["filtering"].get("geometric_predicates", [])
         has_geometric_filtering = has_geom_predicates and len(geom_predicates_list) > 0
         
         # ================================================================
-        # MODE FIELD-BASED: Custom Selection avec champ simple + prédicats géométriques
+        # MODE ALL-FEATURES: Custom Selection sans filtre valide
+        # ================================================================
+        # Quand skip_source_filter=True, utiliser TOUTES les features de la couche source
+        # sans modifier son subset (garder l'existant)
+        # ================================================================
+        if skip_source_filter:
+            logger.info("=" * 60)
+            logger.info("🔄 ALL-FEATURES MODE (skip_source_filter=True)")
+            logger.info("=" * 60)
+            logger.info("  Custom selection active with non-filter expression")
+            logger.info("  → Source layer will NOT be filtered (keeps existing subset)")
+            logger.info("  → All features from source layer will be used for geometric predicates")
+            
+            # Store that we're using all features
+            self.is_field_expression = (True, "__all_features__")
+            
+            # Keep existing subset - don't modify source layer filter
+            self.expression = self.param_source_old_subset if self.param_source_old_subset else ""
+            
+            # Log detailed information about source layer state
+            current_subset = self.source_layer.subsetString()
+            feature_count = self.source_layer.featureCount()
+            
+            if current_subset:
+                logger.info(f"  ✓ Source layer has active subset: '{current_subset[:80]}...'")
+                logger.info(f"  ✓ {feature_count} filtered features will be used for geometric intersection")
+            else:
+                logger.info(f"  ✓ Source layer has NO subset - all {feature_count} features will be used")
+            
+            # Mark as successful - source layer remains with current filter
+            result = True
+            logger.info("=" * 60)
+            return result
+        
+        # ================================================================
+        # MODE FIELD-BASED: Custom Selection avec champ simple
         # ================================================================
         # COMPORTEMENT ATTENDU:
         #   1. COUCHE SOURCE: Garder le subset existant (PAS de modification)
         #   2. COUCHES DISTANTES: Appliquer filtre géométrique en intersection
-        #                         avec les géométries de la couche source déjà filtrée
+        #                         avec TOUTES les géométries de la couche source (avec son filtre existant)
+        #
+        # Ce mode s'active dès que l'expression est un simple champ, peu importe
+        # si des prédicats géométriques explicites sont configurés. Cela permet
+        # aux filtres distants d'utiliser l'ensemble de la couche source.
         #
         # EXEMPLE:
         #   - Couche source avec subset: "homecount > 5" (affiche 100 features)
         #   - Custom selection active avec champ: "drop_ID"
-        #   - Prédicats géométriques: "intersects" vers couche distante
+        #   - Prédicats géométriques: "intersects" vers couche distante (ou filtrage implicite)
         #   → Résultat: Source garde "homecount > 5", distant filtré par intersection avec ces 100 features
         # ================================================================
-        if is_simple_field and has_geometric_filtering:
+        if is_simple_field:
             logger.info("=" * 60)
             logger.info("🔄 FIELD-BASED GEOMETRIC FILTER MODE")
             logger.info("=" * 60)
@@ -2028,6 +2096,23 @@ class FilterEngineTask(QgsTask):
             else:
                 self.param_source_new_subset = self.param_source_old_subset
 
+        # Extract use_centroids parameters
+        self.param_use_centroids_source_layer = self.task_parameters["filtering"].get("use_centroids_source_layer", False)
+        self.param_use_centroids_distant_layers = self.task_parameters["filtering"].get("use_centroids_distant_layers", False)
+        logger.info(f"  use_centroids_source_layer: {self.param_use_centroids_source_layer}")
+        logger.info(f"  use_centroids_distant_layers: {self.param_use_centroids_distant_layers}")
+        
+        # v2.7.0: Extract pre-approved optimizations from UI confirmation dialog
+        # These are set in filter_mate_app._check_and_confirm_optimizations()
+        self.approved_optimizations = self.task_parameters.get("task", {}).get("approved_optimizations", {})
+        self.auto_apply_optimizations = self.task_parameters.get("task", {}).get("auto_apply_optimizations", False)
+        if self.approved_optimizations:
+            logger.info(f"  ✓ User-approved optimizations loaded: {len(self.approved_optimizations)} layer(s)")
+            for layer_id, opts in self.approved_optimizations.items():
+                logger.info(f"    - {layer_id[:8]}...: {opts}")
+        elif self.auto_apply_optimizations:
+            logger.info(f"  ✓ Auto-apply optimizations enabled (no confirmation required)")
+        
         # Extract buffer parameters if configured
         has_buffer = self.task_parameters["filtering"]["has_buffer_value"]
         logger.info(f"  has_buffer_value: {has_buffer}")
@@ -2781,14 +2866,20 @@ class FilterEngineTask(QgsTask):
         
         # CRITICAL FIX: Include schema in geometry reference for PostgreSQL
         # Format: "schema"."table"."geom" to avoid "missing FROM-clause entry" errors
-        self.postgresql_source_geom = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
+        base_geom = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
                                                                                 source_schema=source_schema,
                                                                                 source_table=source_table,
                                                                                 source_geom=self.param_source_geom
                                                                                 )
-
+        
+        # CENTROID OPTIMIZATION: Wrap geometry in ST_Centroid if enabled for source layer
+        # This significantly speeds up queries for complex polygons (e.g., buildings)
+        # CENTROID + BUFFER OPTIMIZATION v2.5.13: Combine centroid and buffer when both are enabled
+        # Order: ST_Buffer(ST_Centroid(geom)) - buffer is applied to the centroid point
+        # This allows filtering distant layers using a buffered zone around source layer centroids
+        
         if self.param_buffer_expression is not None and self.param_buffer_expression != '':
-
+            # Buffer expression mode (dynamic buffer from field/expression)
 
             if self.param_buffer_expression.find('"') == 0 and self.param_buffer_expression.find(source_table) != 1:
                 self.param_buffer_expression = '"{source_table}".'.format(source_table=source_table) + self.param_buffer_expression
@@ -2813,11 +2904,13 @@ class FilterEngineTask(QgsTask):
                                                                                                         source_geom=self.param_source_geom,
                                                                                                         current_materialized_view_name=self.current_materialized_view_name
                                                                                                         )
+            # NOTE: Centroids are not supported with buffer expressions (materialized views)
+            # because the view already contains buffered geometries
+            if self.param_use_centroids_source_layer:
+                logger.warning("⚠️ PostgreSQL: Centroid option ignored when using buffer expression (materialized view)")
             
-        
-
-
         elif self.param_buffer_value is not None and self.param_buffer_value != 0:
+            # Static buffer value mode
 
             self.param_buffer = self.param_buffer_value
             
@@ -2838,14 +2931,20 @@ class FilterEngineTask(QgsTask):
             if endcap_style != 'round':
                 style_params += f" endcap={endcap_style}"
             
+            # CENTROID + BUFFER: Determine the geometry to buffer
+            # If centroid is enabled, buffer the centroid point instead of the full geometry
+            if self.param_use_centroids_source_layer:
+                geom_to_buffer = f'ST_Centroid("{source_schema}"."{source_table}"."{self.param_source_geom}")'
+                logger.info(f"✓ PostgreSQL: Using ST_Centroid + ST_Buffer for source layer")
+            else:
+                geom_to_buffer = '"{source_schema}"."{source_table}"."{source_geom}"'.format(
+                    source_schema=source_schema,
+                    source_table=source_table,
+                    source_geom=self.param_source_geom
+                )
+            
             # Build base ST_Buffer expression with style parameters
-            base_buffer_expr = "ST_Buffer(\"{source_schema}\".\"{source_table}\".\"{source_geom}\", {buffer_value}, '{style_params}')".format(
-                source_schema=source_schema,
-                source_table=source_table,
-                source_geom=self.param_source_geom,
-                buffer_value=self.param_buffer_value,
-                style_params=style_params
-            )
+            base_buffer_expr = f"ST_Buffer({geom_to_buffer}, {self.param_buffer_value}, '{style_params}')"
             
             # CRITICAL FIX v2.5.6: Handle negative buffers (erosion) properly
             # Negative buffers can produce empty geometries which must be handled
@@ -2860,8 +2959,17 @@ class FilterEngineTask(QgsTask):
                 self.postgresql_source_geom = base_buffer_expr
             
             buffer_type_desc = "expansion" if self.param_buffer_value > 0 else "erosion"
-            logger.info(f"✓ PostgreSQL source geom prepared with {self.param_buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={quad_segs})")
-            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m ({buffer_type_desc})")     
+            centroid_desc = " (on centroids)" if self.param_use_centroids_source_layer else ""
+            logger.info(f"✓ PostgreSQL source geom prepared with {self.param_buffer_value}m buffer ({buffer_type_desc}, endcap={endcap_style}, segments={quad_segs}){centroid_desc}")
+            logger.debug(f"Using simple buffer: ST_Buffer with {self.param_buffer_value}m ({buffer_type_desc}){centroid_desc}")
+        
+        else:
+            # No buffer - just apply centroid if enabled
+            if self.param_use_centroids_source_layer:
+                self.postgresql_source_geom = f"ST_Centroid({base_geom})"
+                logger.info(f"✓ PostgreSQL: Using ST_Centroid for source layer geometry simplification")
+            else:
+                self.postgresql_source_geom = base_geom     
 
         
 
@@ -3105,6 +3213,14 @@ class FilterEngineTask(QgsTask):
                 
                 logger.debug(f"Processing geometry: type={geom_copy.wkbType()}, multipart={geom_copy.isMultipart()}")
                 
+                # CENTROID OPTIMIZATION: Convert source layer geometry to centroid if enabled
+                # This significantly speeds up queries for complex polygons (e.g., buildings)
+                if self.param_use_centroids_source_layer:
+                    centroid = geom_copy.centroid()
+                    if centroid and not centroid.isEmpty():
+                        geom_copy = centroid
+                        logger.debug(f"Converted source layer geometry to centroid")
+                
                 if geom_copy.isMultipart():
                     geom_copy.convertToSingleType()
                     
@@ -3225,6 +3341,29 @@ class FilterEngineTask(QgsTask):
                 else:
                     logger.warning("No point parts found in GeometryCollection")
         
+        # v2.6.3: Force 2D geometry by dropping Z/M values for Spatialite compatibility
+        # Spatialite's GeomFromText() may have issues with very large WKT containing Z coordinates
+        # (e.g., "MultiLineString Z (...)" format from QGIS asWkt())
+        # This ensures consistent behavior and avoids "parse error" from GeomFromText
+        from qgis.core import QgsWkbTypes
+        if QgsWkbTypes.hasZ(collected_geometry.wkbType()) or QgsWkbTypes.hasM(collected_geometry.wkbType()):
+            original_type = get_geometry_type_name(collected_geometry)
+            # Create a new 2D geometry from WKB
+            # First, get the 2D variant of the WKB type
+            wkb_2d = QgsWkbTypes.flatType(collected_geometry.wkbType())
+            
+            # Use constGet() to access the underlying abstract geometry
+            abstract_geom = collected_geometry.constGet()
+            if abstract_geom:
+                # Clone and drop Z/M values
+                cloned = abstract_geom.clone()
+                cloned.dropZValue()
+                cloned.dropMValue()
+                collected_geometry = QgsGeometry(cloned)
+                logger.info(f"  ✓ Dropped Z/M values: {original_type} → {get_geometry_type_name(collected_geometry)}")
+            else:
+                logger.warning(f"  Could not access geometry internals to drop Z/M, keeping {original_type}")
+        
         wkt = collected_geometry.asWkt()
         
         # Log the final geometry type
@@ -3234,37 +3373,62 @@ class FilterEngineTask(QgsTask):
         
         # v2.5.11: Simplify very large geometries to prevent SQL expression issues
         # Large WKT can cause performance problems and display issues in PostgreSQL
+        # v2.6.3: Reduced limit for Spatialite compatibility - very large WKT causes SQLite parsing issues
         MAX_WKT_LENGTH = 100000  # 100KB max for WKT
+        SPATIALITE_WKT_CRITICAL = 500000  # 500KB - SQLite may have issues beyond this
+        SPATIALITE_WKT_EXTREME = 750000  # 750KB - extreme size requiring aggressive simplification
         SIMPLIFY_TOLERANCE = 1.0  # 1 meter simplification tolerance (for projected CRS)
         
         if len(wkt) > MAX_WKT_LENGTH:
             logger.warning(f"  ⚠️ WKT too long ({len(wkt)} chars > {MAX_WKT_LENGTH} max)")
             logger.info(f"  Attempting to simplify geometry...")
             
-            # Try progressive simplification until WKT is small enough
-            tolerance = SIMPLIFY_TOLERANCE
-            max_attempts = 5
+            # v2.6.3: Use more aggressive simplification for very large WKT
+            # SQLite has practical limits on expression complexity
+            # v2.6.10: Scale starting tolerance based on WKT size for faster convergence
+            if len(wkt) > SPATIALITE_WKT_EXTREME:
+                logger.warning(f"  ⚠️⚠️ WKT EXTREME size ({len(wkt)} chars > {SPATIALITE_WKT_EXTREME} extreme threshold)")
+                logger.warning(f"  Using VERY aggressive simplification (starting at 10m tolerance)")
+                max_attempts = 15  # More attempts for extreme geometries
+                tolerance = 10.0  # Start at 10m for extreme cases
+            elif len(wkt) > SPATIALITE_WKT_CRITICAL:
+                logger.warning(f"  ⚠️⚠️ WKT VERY large ({len(wkt)} chars > {SPATIALITE_WKT_CRITICAL} critical threshold)")
+                logger.warning(f"  Using aggressive simplification (starting at 5m tolerance)")
+                max_attempts = 12  # More attempts for very large geometries
+                tolerance = 5.0  # Start at 5m for critical cases
+            else:
+                max_attempts = 8
+                tolerance = SIMPLIFY_TOLERANCE
+            
+            # v2.6.10: Use larger multiplier for faster convergence on very large geometries
+            tolerance_multiplier = 2.5 if len(wkt) > SPATIALITE_WKT_CRITICAL else 2.0
+            original_wkt = wkt  # Keep original for logging
             
             for attempt in range(max_attempts):
                 simplified = collected_geometry.simplify(tolerance)
                 if simplified and not simplified.isEmpty():
                     simplified_wkt = simplified.asWkt()
+                    reduction_pct = (1 - len(simplified_wkt) / len(original_wkt)) * 100
+                    
                     if len(simplified_wkt) <= MAX_WKT_LENGTH:
-                        logger.info(f"  ✓ Simplified geometry (tolerance={tolerance}m): {len(wkt)} → {len(simplified_wkt)} chars")
+                        logger.info(f"  ✓ Simplified geometry (tolerance={tolerance:.1f}m, attempt {attempt+1}): {len(original_wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
                         wkt = simplified_wkt
                         collected_geometry = simplified
                         break
                     else:
                         # Increase tolerance and try again
-                        tolerance *= 2
-                        logger.debug(f"  Still too large ({len(simplified_wkt)} chars), trying tolerance={tolerance}m")
+                        tolerance *= tolerance_multiplier
+                        logger.debug(f"  Attempt {attempt+1}: Still too large ({len(simplified_wkt)} chars, {reduction_pct:.1f}% reduction), trying tolerance={tolerance:.1f}m")
                 else:
-                    logger.warning(f"  Simplification with tolerance={tolerance}m returned empty geometry")
+                    logger.warning(f"  Simplification with tolerance={tolerance:.1f}m returned empty geometry - stopping")
                     break
             
             if len(wkt) > MAX_WKT_LENGTH:
                 logger.warning(f"  ⚠️ Could not simplify enough - using original ({len(wkt)} chars)")
-                logger.warning(f"  This may cause performance issues with PostgreSQL queries")
+                logger.warning(f"  This may cause performance issues with PostgreSQL/Spatialite queries")
+                if len(wkt) > SPATIALITE_WKT_CRITICAL:
+                    logger.warning(f"  ⚠️ WKT exceeds Spatialite critical threshold - filtering may FAIL")
+                    logger.warning(f"  Consider using smaller source selection or PostgreSQL backend")
         
         # Escape single quotes for SQL
         wkt_escaped = wkt.replace("'", "''")
@@ -3273,6 +3437,15 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  WKT length: {len(self.spatialite_source_geom)} chars")
         logger.debug(f"prepare_spatialite_source_geom WKT preview: {self.spatialite_source_geom[:200]}...")
         logger.info(f"=== prepare_spatialite_source_geom END ===") 
+        
+        # v2.6.5: Store WKT in task_parameters for backend R-tree optimization
+        # This allows the Spatialite backend to use permanent source tables with R-tree indexes
+        # for large WKT geometries (>50KB), dramatically improving performance
+        if hasattr(self, 'task_parameters') and self.task_parameters:
+            if 'infos' not in self.task_parameters:
+                self.task_parameters['infos'] = {}
+            self.task_parameters['infos']['source_geom_wkt'] = wkt_escaped
+            logger.info(f"  ✓ WKT stored in task_parameters for backend optimization ({len(wkt_escaped)} chars)")
         
         # Store in cache for future use (includes layer_id and subset_string)
         self.geom_cache.put(
@@ -3568,6 +3741,71 @@ class FilterEngineTask(QgsTask):
         self._verify_and_create_spatial_index(memory_layer, layer_name)
         
         return memory_layer
+
+    def _convert_layer_to_centroids(self, layer):
+        """
+        Convert a layer's geometries to their centroids.
+        
+        This optimization significantly speeds up spatial queries for complex
+        polygons (e.g., buildings with many vertices) by using simple point
+        geometries instead.
+        
+        Args:
+            layer: QgsVectorLayer with polygon/line geometries
+            
+        Returns:
+            QgsVectorLayer: Memory layer with point geometries (centroids),
+                           or None on failure
+        """
+        if not layer or not layer.isValid():
+            logger.warning("_convert_layer_to_centroids: Invalid input layer")
+            return None
+        
+        # Create point memory layer
+        crs_authid = layer.crs().authid()
+        centroid_layer = QgsVectorLayer(f"Point?crs={crs_authid}", "centroids", "memory")
+        
+        if not centroid_layer.isValid():
+            logger.error("_convert_layer_to_centroids: Failed to create memory layer")
+            return None
+        
+        # Copy fields
+        if layer.fields().count() > 0:
+            centroid_layer.dataProvider().addAttributes(layer.fields())
+            centroid_layer.updateFields()
+        
+        # Convert geometries to centroids
+        features_to_add = []
+        skipped = 0
+        
+        for feature in layer.getFeatures():
+            if not feature.hasGeometry() or feature.geometry().isEmpty():
+                skipped += 1
+                continue
+            
+            geom = feature.geometry()
+            centroid = geom.centroid()
+            
+            if centroid and not centroid.isEmpty():
+                new_feat = QgsFeature(feature)
+                new_feat.setGeometry(centroid)
+                features_to_add.append(new_feat)
+            else:
+                skipped += 1
+        
+        if not features_to_add:
+            logger.error("_convert_layer_to_centroids: No valid centroids created")
+            return None
+        
+        centroid_layer.dataProvider().addFeatures(features_to_add)
+        centroid_layer.updateExtents()
+        
+        if skipped > 0:
+            logger.warning(f"  ⚠️ Skipped {skipped} features during centroid conversion")
+        
+        logger.debug(f"_convert_layer_to_centroids: Created {centroid_layer.featureCount()} centroid features")
+        
+        return centroid_layer
 
     def _fix_invalid_geometries(self, layer, output_key):
         """
@@ -4674,6 +4912,17 @@ class FilterEngineTask(QgsTask):
             self.ogr_source_geom = None
             return
         
+        # CENTROID OPTIMIZATION: Convert source layer geometries to centroids if enabled
+        # This significantly speeds up queries for complex polygons (e.g., buildings)
+        if self.param_use_centroids_source_layer:
+            logger.info("OGR: Applying centroid transformation for source layer geometry simplification")
+            centroid_layer = self._convert_layer_to_centroids(layer)
+            if centroid_layer and centroid_layer.isValid() and centroid_layer.featureCount() > 0:
+                layer = centroid_layer
+                logger.info(f"  ✓ Converted source layer to centroids: {layer.featureCount()} point features")
+            else:
+                logger.warning("  ⚠️ Source layer centroid conversion failed, using original geometries")
+        
         # Store result
         self.ogr_source_geom = layer
         logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
@@ -5456,10 +5705,50 @@ class FilterEngineTask(QgsTask):
         # Log buffer values being passed to backend
         passed_buffer_value = self.param_buffer_value if hasattr(self, 'param_buffer_value') else None
         passed_buffer_expression = self.param_buffer_expression if hasattr(self, 'param_buffer_expression') else None
+        passed_use_centroids_distant = self.param_use_centroids_distant_layers if hasattr(self, 'param_use_centroids_distant_layers') else False
+        
+        # v2.7.0: OPTIMIZATION - Check for pre-approved optimizations from UI
+        # Optimizations are now handled BEFORE task launch via user confirmation dialog
+        # This ensures user consent is always obtained before applying optimizations
+        if not passed_use_centroids_distant:
+            # Check if optimization was pre-approved for this layer
+            approved_optimizations = getattr(self, 'approved_optimizations', {})
+            layer_id = layer.id() if layer else None
+            
+            if layer_id and layer_id in approved_optimizations:
+                layer_opts = approved_optimizations[layer_id]
+                if layer_opts.get('use_centroid', False):
+                    passed_use_centroids_distant = True
+                    logger.info(f"🎯 USER-APPROVED OPTIMIZATION: Centroid mode for {layer.name()}")
+            
+            # Fallback: Auto-detection (only if auto_apply is enabled)
+            # This only triggers if user has disabled "ask before apply" in settings
+            if not passed_use_centroids_distant and getattr(self, 'auto_apply_optimizations', False):
+                try:
+                    from ..backends.factory import get_optimization_plan, AUTO_OPTIMIZER_AVAILABLE
+                    if AUTO_OPTIMIZER_AVAILABLE and layer:
+                        # Get optimization recommendations
+                        source_wkt_len = len(source_wkt) if source_wkt else 0
+                        optimization_plan = get_optimization_plan(
+                            target_layer=layer,
+                            source_layer=self.source_layer if hasattr(self, 'source_layer') else None,
+                            source_wkt_length=source_wkt_len,
+                            predicates=self.current_predicates,
+                            user_requested_centroids=None  # None = auto-detect
+                        )
+                        
+                        if optimization_plan and optimization_plan.final_use_centroids:
+                            passed_use_centroids_distant = True
+                            logger.info(f"🎯 AUTO-OPTIMIZATION: Centroid mode enabled for {layer.name()}")
+                            logger.info(f"   Reason: {optimization_plan.recommendations[0].reason if optimization_plan.recommendations else 'auto-detected'}")
+                            logger.info(f"   Expected speedup: ~{optimization_plan.estimated_total_speedup:.1f}x")
+                except Exception as e:
+                    logger.debug(f"Auto-optimization check failed: {e}")
         
         logger.info(f"📐 _build_backend_expression - Buffer being passed to backend:")
         logger.info(f"  - param_buffer_value: {passed_buffer_value}")
         logger.info(f"  - param_buffer_expression: {passed_buffer_expression}")
+        logger.info(f"  - use_centroids_distant_layers: {passed_use_centroids_distant}")
         if passed_buffer_value is not None and passed_buffer_value < 0:
             logger.info(f"  ⚠️ NEGATIVE BUFFER (erosion) will be passed: {passed_buffer_value}m")
         
@@ -5472,7 +5761,8 @@ class FilterEngineTask(QgsTask):
             source_filter=source_filter,
             source_wkt=source_wkt,
             source_srid=source_srid,
-            source_feature_count=source_feature_count
+            source_feature_count=source_feature_count,
+            use_centroids=passed_use_centroids_distant
         )
         
         if not expression:
@@ -5615,6 +5905,10 @@ class FilterEngineTask(QgsTask):
         # This allows backends to defer setSubsetString() calls to the main thread
         self.task_parameters['_subset_queue_callback'] = self.queue_subset_request
         
+        # v2.6.2: Pass parent task reference to backends for cancellation checks
+        # This allows backends to check isCanceled() during long operations
+        self.task_parameters['_parent_task'] = self
+        
         try:
             # STABILITY FIX v2.3.9: Validate layer before any operations
             # This prevents access violations on deleted/invalid layers
@@ -5673,7 +5967,7 @@ class FilterEngineTask(QgsTask):
             backend_name = backend.get_backend_name().lower()
             
             # v2.4.20: Log backend selection to QGIS Message Panel for debugging
-            from qgis.core import QgsMessageLog
+            from qgis.core import QgsMessageLog, Qgis
             QgsMessageLog.logMessage(
                 f"execute_geometric_filtering: {layer.name()} → backend={backend_name.upper()}",
                 "FilterMate", Qgis.Info
@@ -5743,9 +6037,9 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"🧹 CLEANING corrupted subset on {layer.name()} BEFORE filtering")
                 logger.warning(f"  → Corrupted subset found: '{current_subset[:100]}'...")
                 logger.warning(f"  → Clearing it to prevent SQL errors")
-                # Use thread-safe method to clear the subset (already imported from appUtils)
-                safe_set_subset_string(layer, "")
-                logger.info(f"  ✓ Layer {layer.name()} subset cleared - ready for fresh filter")
+                # THREAD SAFETY: Queue subset clear for application in finished()
+                self._queue_subset_string(layer, "")
+                logger.info(f"  ✓ Queued subset clear for {layer.name()} - ready for fresh filter")
             
             # Build filter expression using backend
             logger.info(f"  → Building backend expression with predicates: {self.current_predicates}")
@@ -5909,9 +6203,13 @@ class FilterEngineTask(QgsTask):
             # - statement_timeout on complex EXISTS queries with large source datasets
             # - Connection failures
             # - SQL syntax errors on edge cases
+            # v2.6.10: Also handles suspicious 0 results on large Spatialite datasets
             if not result and backend_name in ('spatialite', 'postgresql'):
                 forced_backends = self.task_parameters.get('forced_backends', {})
                 was_forced = layer.id() in forced_backends
+                
+                # v2.6.10: Check if this is a suspicious zero result fallback
+                zero_result_fallback = getattr(backend, '_spatialite_zero_result_fallback', False)
                 
                 # CRITICAL FIX v2.5.18: Always try OGR fallback for PostgreSQL failures too
                 # PostgreSQL backend may fail due to timeout (complex spatial queries),
@@ -5920,7 +6218,17 @@ class FilterEngineTask(QgsTask):
                 should_fallback = was_forced or (backend_name in ('spatialite', 'postgresql'))
                 
                 if should_fallback:
-                    if was_forced:
+                    if zero_result_fallback:
+                        # v2.6.10: Special handling for suspicious 0 results
+                        logger.warning(f"⚠️ SPATIALITE returned 0 features on large dataset {layer.name()}")
+                        logger.warning(f"  → This suggests geometry processing issue (ST_Simplify may have corrupted geometry)")
+                        logger.warning(f"  → Falling back to OGR for reliable feature-by-feature filtering")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"🔄 {layer.name()}: OGR fallback (Spatialite 0 results on {layer.featureCount():,} features)",
+                            "FilterMate", Qgis.Warning
+                        )
+                    elif was_forced:
                         logger.warning(f"⚠️ {backend_name.upper()} backend FAILED for forced layer {layer.name()}")
                         logger.warning(f"  → Layer may not support {backend_name.upper()} SQL functions")
                     elif backend_name == 'postgresql':
@@ -5932,23 +6240,51 @@ class FilterEngineTask(QgsTask):
                         logger.warning(f"  → Spatialite functions may not be available (GDAL without Spatialite)")
                     logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
                     
+                    # v2.6.11: Log OGR fallback attempt to QGIS MessageLog
+                    QgsMessageLog.logMessage(
+                        f"🔄 {layer.name()}: Attempting OGR fallback...",
+                        "FilterMate", Qgis.Info
+                    )
+                    
                     # Try OGR backend as fallback
                     try:
-                        ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters)
+                        # v2.6.12: Use force_ogr=True to bypass backend auto-selection
+                        # Without this, BackendFactory.get_backend() would test Spatialite again
+                        # and return Spatialite backend (which just timed out!) instead of OGR
+                        ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters, force_ogr=True)
                         
-                        # Prepare OGR source geometry if not already done
+                        # v2.6.11: Ensure OGR source geometry is prepared
+                        # This is critical for the fallback to work
                         if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
                             logger.info(f"  → Preparing OGR source geometry for fallback...")
+                            QgsMessageLog.logMessage(
+                                f"OGR fallback: preparing source geometry...",
+                                "FilterMate", Qgis.Info
+                            )
                             self.prepare_ogr_source_geom()
                         
-                        ogr_source_geom = self._prepare_source_geometry(PROVIDER_OGR)
+                        # v2.6.11: Use ogr_source_geom directly after preparation
+                        ogr_source_geom = getattr(self, 'ogr_source_geom', None)
+                        
+                        # If still None, try _prepare_source_geometry as fallback
+                        if ogr_source_geom is None:
+                            logger.warning(f"  → ogr_source_geom still None, trying _prepare_source_geometry...")
+                            ogr_source_geom = self._prepare_source_geometry(PROVIDER_OGR)
                         
                         # Enhanced diagnostic logging for OGR fallback
                         if ogr_source_geom:
                             if isinstance(ogr_source_geom, QgsVectorLayer):
                                 logger.info(f"  → OGR source geometry: {ogr_source_geom.name()} ({ogr_source_geom.featureCount()} features)")
+                                QgsMessageLog.logMessage(
+                                    f"OGR fallback: source geometry = {ogr_source_geom.name()} ({ogr_source_geom.featureCount()} features)",
+                                    "FilterMate", Qgis.Info
+                                )
                             else:
                                 logger.info(f"  → OGR source geometry type: {type(ogr_source_geom).__name__}")
+                                QgsMessageLog.logMessage(
+                                    f"OGR fallback: source geometry type = {type(ogr_source_geom).__name__}",
+                                    "FilterMate", Qgis.Info
+                                )
                             
                             # Build OGR expression
                             ogr_expression = self._build_backend_expression(ogr_backend, layer_props, ogr_source_geom)
@@ -5961,6 +6297,11 @@ class FilterEngineTask(QgsTask):
                                 
                                 if result:
                                     logger.info(f"✓ OGR fallback SUCCEEDED for {layer.name()}")
+                                    # v2.6.11: Log OGR success to QGIS MessageLog
+                                    QgsMessageLog.logMessage(
+                                        f"✓ OGR fallback SUCCEEDED for {layer.name()} → {layer.featureCount()} features",
+                                        "FilterMate", Qgis.Info
+                                    )
                                     # Update actual backend used
                                     self.task_parameters['actual_backends'][layer.id()] = 'ogr'
                                     # Return success since fallback worked
@@ -5968,12 +6309,24 @@ class FilterEngineTask(QgsTask):
                                 else:
                                     logger.error(f"✗ OGR fallback also FAILED for {layer.name()}")
                                     logger.error(f"  → Check Python console for detailed errors")
+                                    QgsMessageLog.logMessage(
+                                        f"⚠️ OGR fallback FAILED for {layer.name()} - check Python console",
+                                        "FilterMate", Qgis.Warning
+                                    )
                             else:
                                 logger.error(f"✗ Could not build OGR expression for fallback")
                                 logger.error(f"  → predicates: {self.current_predicates}")
+                                QgsMessageLog.logMessage(
+                                    f"⚠️ OGR fallback: could not build expression for {layer.name()}",
+                                    "FilterMate", Qgis.Warning
+                                )
                         else:
                             logger.error(f"✗ Could not prepare OGR source geometry for fallback")
                             logger.error(f"  → ogr_source_geom is None")
+                            QgsMessageLog.logMessage(
+                                f"⚠️ OGR fallback: source geometry is None for {layer.name()}",
+                                "FilterMate", Qgis.Warning
+                            )
                             if hasattr(self, 'ogr_source_geom'):
                                 logger.error(f"  → self.ogr_source_geom exists but is {self.ogr_source_geom}")
                             else:
@@ -5982,6 +6335,11 @@ class FilterEngineTask(QgsTask):
                         logger.error(f"✗ OGR fallback exception: {fallback_error}")
                         import traceback
                         logger.error(f"Fallback traceback: {traceback.format_exc()}")
+                        # v2.6.11: Log OGR fallback exception to QGIS MessageLog
+                        QgsMessageLog.logMessage(
+                            f"⚠️ OGR fallback exception for {layer.name()}: {str(fallback_error)[:100]}",
+                            "FilterMate", Qgis.Warning
+                        )
             
             if result:
                 # For backends that use setSubsetString, get the actual applied expression
@@ -5993,7 +6351,7 @@ class FilterEngineTask(QgsTask):
                 logger.info(f"  - Backend returned: SUCCESS")
                 
                 # Log to QGIS Message Panel for visibility
-                from qgis.core import QgsMessageLog
+                from qgis.core import QgsMessageLog, Qgis
                 QgsMessageLog.logMessage(
                     f"execute_geometric_filtering ✓ {layer.name()} → backend returned SUCCESS",
                     "FilterMate", Qgis.Info
@@ -6063,14 +6421,14 @@ class FilterEngineTask(QgsTask):
                 logger.error(f"  - Check backend logs for details")
                 
                 # Log to QGIS Message Panel for visibility
-                from qgis.core import QgsMessageLog
+                from qgis.core import QgsMessageLog, Qgis
                 QgsMessageLog.logMessage(
                     f"execute_geometric_filtering ✗ {layer.name()} → backend returned FAILURE",
                     "FilterMate", Qgis.Warning
                 )
             
             # DIAGNOSTIC: Log final return value
-            from qgis.core import QgsMessageLog
+            from qgis.core import QgsMessageLog, Qgis
             QgsMessageLog.logMessage(
                 f"execute_geometric_filtering → returning result={result} for {layer.name()}",
                 "FilterMate", Qgis.Info
@@ -6079,7 +6437,7 @@ class FilterEngineTask(QgsTask):
             
         except Exception as e:
             # DIAGNOSTIC: Log exception being caught
-            from qgis.core import QgsMessageLog
+            from qgis.core import QgsMessageLog, Qgis
             QgsMessageLog.logMessage(
                 f"execute_geometric_filtering EXCEPTION for {layer.name()}: {e}",
                 "FilterMate", Qgis.Critical
@@ -6267,6 +6625,7 @@ class FilterEngineTask(QgsTask):
         # Déterminer le mode de sélection actif
         features_list = self.task_parameters["task"]["features"]
         qgis_expression = self.task_parameters["task"]["expression"]
+        skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
         
         if len(features_list) > 0 and features_list[0] != "":
             if len(features_list) == 1:
@@ -6278,6 +6637,12 @@ class FilterEngineTask(QgsTask):
         elif qgis_expression and qgis_expression.strip():
             logger.info("✓ Selection Mode: CUSTOM EXPRESSION")
             logger.info(f"  → Expression: '{qgis_expression}'")
+        elif skip_source_filter:
+            # Custom selection mode avec expression non-filtre (ex: nom de champ seul)
+            # → Utiliser toutes les features de la couche source
+            logger.info("✓ Selection Mode: ALL FEATURES (custom selection with field-only expression)")
+            logger.info(f"  → No source filter will be applied")
+            logger.info(f"  → All features from source layer will be used for geometric predicates")
         else:
             logger.error("✗ No valid selection mode detected!")
             logger.error("  → features_list is empty AND expression is empty")
@@ -6420,21 +6785,24 @@ class FilterEngineTask(QgsTask):
         
         NOTE: This is different from undo - it removes filters entirely rather than
         restoring previous filter state. Use undo button for history navigation.
+        
+        THREAD SAFETY: All subset string operations are queued for application
+        in finished() which runs on the main Qt thread.
         """
         logger.info("FilterMate: Clearing all filters on source and selected layers")
         
-        # Clear filter on source layer
-        safe_set_subset_string(self.source_layer, '')
-        logger.info(f"FilterMate: Cleared filter on source layer {self.source_layer.name()}")
+        # Queue filter clear on source layer (will be applied in finished())
+        self._queue_subset_string(self.source_layer, '')
+        logger.info(f"FilterMate: Queued filter clear on source layer {self.source_layer.name()}")
         
-        # Clear filters on all selected associated layers
+        # Queue filter clear on all selected associated layers
         i = 1
         self.setProgress((i/self.layers_count)*100)
         
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                safe_set_subset_string(layer, '')
-                logger.info(f"FilterMate: Cleared filter on layer {layer.name()}")
+                self._queue_subset_string(layer, '')
+                logger.info(f"FilterMate: Queued filter clear on layer {layer.name()}")
                 i += 1
                 self.setProgress((i/self.layers_count)*100)
                 if self.isCanceled():
@@ -7751,12 +8119,11 @@ class FilterEngineTask(QgsTask):
         layer_subsetString = f'"{primary_key_name}" IN (SELECT "{primary_key_name}" FROM mv_{session_name})'
         logger.debug(f"Applying Spatialite subset string: {layer_subsetString}")
         
-        # CRITICAL FIX: Thread-safe subset string application
-        result = safe_set_subset_string(layer, layer_subsetString)
+        # THREAD SAFETY: Queue subset string for application in finished()
+        self._queue_subset_string(layer, layer_subsetString)
         
-        if not result:
-            logger.error("Failed to apply Spatialite subset string")
-            return False
+        # Note: We assume success since the actual application happens in finished()
+        # The history update proceeds with the assumption that the filter will be applied
         
         # Update history
         if cur and conn:
@@ -7798,9 +8165,10 @@ class FilterEngineTask(QgsTask):
         # Get datasource information
         db_path, table_name, layer_srid, is_native_spatialite = self._get_spatialite_datasource(layer)
         
-        # For non-Spatialite layers, use QGIS subset string directly
+        # For non-Spatialite layers, use QGIS subset string directly (queued for main thread)
         if not is_native_spatialite:
-            return safe_set_subset_string(layer, sql_subset_string)
+            self._queue_subset_string(layer, sql_subset_string)
+            return True
         
         # Build Spatialite query (simple or buffered)
         spatialite_query = self._build_spatialite_query(
@@ -8539,23 +8907,19 @@ class FilterEngineTask(QgsTask):
                 
                 logger.debug(f"Direct filter expression: {final_expression[:200]}...")
                 
-                # Apply filter directly
-                result = safe_set_subset_string(layer, final_expression)
+                # THREAD SAFETY: Queue filter for application in finished()
+                self._queue_subset_string(layer, final_expression)
                 
-                if result:
-                    elapsed = time.time() - start_time
-                    feature_count = layer.featureCount()
-                    logger.info(
-                        f"Direct PostgreSQL filter applied in {elapsed:.3f}s. "
-                        f"{feature_count} features match."
-                    )
-                    
-                    # Insert history
-                    self._insert_subset_history(cur, conn, layer, sql_subset_string, seq_order)
-                    return True
-                else:
-                    logger.error(f"Failed to apply direct filter to {layer.name()}")
-                    return False
+                # Log intent (actual application happens in finished())
+                elapsed = time.time() - start_time
+                logger.info(
+                    f"Direct PostgreSQL filter queued in {elapsed:.3f}s. "
+                    f"Will be applied on main thread."
+                )
+                
+                # Insert history
+                self._insert_subset_history(cur, conn, layer, sql_subset_string, seq_order)
+                return True
             else:
                 logger.warning(f"Could not extract WHERE clause from: {sql_subset_string[:100]}...")
                 # Fallback to materialized view approach
@@ -8696,15 +9060,15 @@ class FilterEngineTask(QgsTask):
         self._insert_subset_history(cur, conn, layer, sql_subset_string, seq_order)
         
         # Set subset string on layer using session-prefixed view name
+        # THREAD SAFETY: Queue for application in finished()
         layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
         logger.debug(f"Layer subset string: {layer_subset_string}")
-        safe_set_subset_string(layer, layer_subset_string)
+        self._queue_subset_string(layer, layer_subset_string)
         
         elapsed = time.time() - start_time
-        feature_count = layer.featureCount()
         logger.info(
-            f"Materialized view created and filter applied in {elapsed:.2f}s. "
-            f"{feature_count} features match."
+            f"Materialized view created in {elapsed:.2f}s. "
+            f"Filter queued for application on main thread."
         )
         
         return True
@@ -8753,8 +9117,8 @@ class FilterEngineTask(QgsTask):
         connexion = self._get_valid_postgresql_connection()
         self._execute_postgresql_commands(connexion, [sql_drop])
         
-        # Clear subset string
-        safe_set_subset_string(layer, '')
+        # THREAD SAFETY: Queue subset clear for application in finished()
+        self._queue_subset_string(layer, '')
         return True
 
 
@@ -8806,8 +9170,8 @@ class FilterEngineTask(QgsTask):
         except Exception as e:
             logger.error(f"Error dropping Spatialite temp table: {e}")
         
-        # Clear subset string
-        safe_set_subset_string(layer, '')
+        # THREAD SAFETY: Queue subset clear for application in finished()
+        self._queue_subset_string(layer, '')
         return True
 
 
@@ -8857,7 +9221,8 @@ class FilterEngineTask(QgsTask):
                     f"Unfilter: Previous subset string from history is empty for {layer.name()}. "
                     f"Clearing layer filter."
                 )
-                safe_set_subset_string(layer, '')
+                # THREAD SAFETY: Queue subset clear for application in finished()
+                self._queue_subset_string(layer, '')
                 return True
             
             if use_spatialite:
@@ -8867,7 +9232,8 @@ class FilterEngineTask(QgsTask):
                     name, custom=False, cur=None, conn=None, current_seq_order=0
                 )
                 if not success:
-                    safe_set_subset_string(layer, '')
+                    # THREAD SAFETY: Queue subset clear for application in finished()
+                    self._queue_subset_string(layer, '')
             
             elif use_postgresql:
                 schema = self.current_materialized_view_schema
@@ -8887,9 +9253,11 @@ class FilterEngineTask(QgsTask):
                 self._execute_postgresql_commands(connexion, [sql_drop, sql_create, sql_create_index, sql_cluster, sql_analyze])
                 
                 layer_subset_string = f'"{primary_key_name}" IN (SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'
-                safe_set_subset_string(layer, layer_subset_string)
+                # THREAD SAFETY: Queue subset for application in finished()
+                self._queue_subset_string(layer, layer_subset_string)
         else:
-            safe_set_subset_string(layer, '')
+            # THREAD SAFETY: Queue subset clear for application in finished()
+            self._queue_subset_string(layer, '')
         
         return True
 
@@ -9045,10 +9413,13 @@ class FilterEngineTask(QgsTask):
         FIX v2.5.21: Replaces the previous multi-refresh approach that caused
         overlapping refreshes to cancel each other, leaving the canvas white.
         
+        FIX v2.6.5: PERFORMANCE - Only refresh layers involved in filtering,
+        not ALL project layers. Skip updateExtents() for large layers.
+        
         This method:
         1. Stops any ongoing rendering to avoid conflicts
         2. Forces reload for layers with complex filters
-        3. Updates extents and triggers repaint for all filtered layers
+        3. Triggers repaint for filtered layers (skip expensive updateExtents for large layers)
         4. Performs a single final canvas refresh
         """
         try:
@@ -9062,7 +9433,10 @@ class FilterEngineTask(QgsTask):
             layers_reloaded = 0
             layers_repainted = 0
             
-            # Step 2: Process all vector layers
+            # v2.6.5: Limit expensive operations to prevent UI freeze
+            MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000  # Skip updateExtents for large layers
+            
+            # Step 2: Process only filtered vector layers (not ALL layers)
             for layer_id, layer in QgsProject.instance().mapLayers().items():
                 try:
                     if layer.type() != 0:  # Not a vector layer
@@ -9070,31 +9444,40 @@ class FilterEngineTask(QgsTask):
                     
                     subset = layer.subsetString() or ''
                     if not subset:
-                        continue  # Skip unfiltered layers
+                        continue  # Skip unfiltered layers - MAJOR OPTIMIZATION
                     
                     provider_type = layer.providerType()
                     
-                    # Force reload for layers with complex filters
-                    if self._is_complex_filter(subset, provider_type):
-                        try:
-                            # For complex filters, force provider to clear cache
-                            layer.dataProvider().reloadData()
-                            layers_reloaded += 1
-                        except Exception as reload_err:
-                            logger.debug(f"reloadData() failed for {layer.name()}: {reload_err}")
+                    # v2.6.6: FREEZE FIX - Only use reloadData() for PostgreSQL
+                    # For OGR/Spatialite, reloadData() can block for a long time
+                    # on large FID IN (...) filters, causing QGIS to freeze.
+                    # triggerRepaint() is sufficient for file-based providers.
+                    if provider_type == 'postgres':
+                        # PostgreSQL: Force reload for complex filters (MV-based)
+                        if self._is_complex_filter(subset, provider_type):
+                            try:
+                                layer.dataProvider().reloadData()
+                                layers_reloaded += 1
+                            except Exception as reload_err:
+                                logger.debug(f"reloadData() failed for {layer.name()}: {reload_err}")
+                                try:
+                                    layer.reload()
+                                except Exception:
+                                    pass
+                        else:
                             try:
                                 layer.reload()
                             except Exception:
                                 pass
-                    else:
-                        # Simple filter - just reload layer
-                        try:
-                            layer.reload()
-                        except Exception:
-                            pass
+                    # v2.6.6: For OGR/Spatialite, just triggerRepaint() - NO reloadData()
+                    # This prevents the freeze caused by re-evaluating large FID IN filters
                     
-                    # Update extents and trigger repaint
-                    layer.updateExtents()
+                    # v2.6.5: Skip updateExtents for large layers to prevent freeze
+                    feature_count = layer.featureCount()
+                    if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                        layer.updateExtents()
+                    # else: skip expensive updateExtents for very large layers
+                    
                     layer.triggerRepaint()
                     layers_repainted += 1
                     
@@ -9144,16 +9527,21 @@ class FilterEngineTask(QgsTask):
                 'other': 0
             }
             
+            # v2.6.6: Skip updateExtents for large layers to prevent freeze
+            MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000
+            
             for layer_id, layer in QgsProject.instance().mapLayers().items():
                 try:
                     if layer.type() == 0:  # Vector layer
                         provider_type = layer.providerType()
                         subset = layer.subsetString() or ''
+                        if not subset:
+                            continue  # Skip unfiltered layers
+                        
                         subset_upper = subset.upper()
                         
-                        # Detect complex filters by provider type
-                        has_complex_filter = False
-                        
+                        # v2.6.6: FREEZE FIX - Only use reloadData() for PostgreSQL
+                        # For OGR/Spatialite, reloadData() blocks on large FID IN filters
                         if provider_type == 'postgres':
                             # PostgreSQL: EXISTS, ST_*, __source
                             has_complex_filter = (
@@ -9167,54 +9555,29 @@ class FilterEngineTask(QgsTask):
                                 (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
                             )
                             
-                        elif provider_type == 'spatialite':
-                            # Spatialite: ST_*, Intersects, Contains, Within
-                            has_complex_filter = (
-                                'ST_BUFFER' in subset_upper or
-                                'ST_INTERSECTS' in subset_upper or
-                                'ST_CONTAINS' in subset_upper or
-                                'ST_WITHIN' in subset_upper or
-                                'INTERSECTS(' in subset_upper or
-                                'CONTAINS(' in subset_upper or
-                                'WITHIN(' in subset_upper or
-                                'GEOSFROMTEXT' in subset_upper or
-                                'GEOMFROMTEXT' in subset_upper or
-                                # Large IN clause
-                                (subset_upper.count(',') > 100 and ' IN (' in subset_upper)
-                            )
-                            
-                        elif provider_type == 'ogr':
-                            # OGR/GeoPackage: Large IN clauses from selectbylocation
-                            has_complex_filter = (
-                                # IN clause with many IDs (typical for spatial filter results)
-                                (subset_upper.count(',') > 50 and ' IN (' in subset_upper) or
-                                # Any filter longer than 1000 chars is likely complex
-                                len(subset) > 1000
-                            )
-                        
-                        # Apply appropriate reload strategy
-                        if has_complex_filter:
-                            try:
-                                # Force provider to clear cache and reload data
-                                layer.dataProvider().reloadData()
-                                logger.debug(f"  → Forced reloadData() for {layer.name()} ({provider_type}, complex filter)")
-                            except Exception as reload_err:
-                                logger.debug(f"  → reloadData() failed for {layer.name()}: {reload_err}")
-                                # Fallback to layer.reload()
+                            if has_complex_filter:
+                                try:
+                                    layer.dataProvider().reloadData()
+                                    logger.debug(f"  → Forced reloadData() for {layer.name()} (postgres, complex filter)")
+                                except Exception as reload_err:
+                                    logger.debug(f"  → reloadData() failed for {layer.name()}: {reload_err}")
+                                    try:
+                                        layer.reload()
+                                    except Exception:
+                                        pass
+                                layers_refreshed['postgres'] += 1
+                            else:
                                 try:
                                     layer.reload()
                                 except Exception:
                                     pass
-                            layers_refreshed[provider_type if provider_type in layers_refreshed else 'other'] += 1
-                        else:
-                            # Simple filter - just reload layer
-                            try:
-                                layer.reload()
-                            except Exception:
-                                pass
+                        # v2.6.6: For OGR/Spatialite, just triggerRepaint - NO reloadData()
+                        # This prevents freeze on large FID IN filters
                         
-                        # Update extents and trigger repaint for all vector layers
-                        layer.updateExtents()
+                        # v2.6.6: Skip updateExtents for large layers to prevent freeze
+                        feature_count = layer.featureCount()
+                        if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                            layer.updateExtents()
                         layer.triggerRepaint()
                         
                 except Exception as layer_err:
@@ -9370,6 +9733,14 @@ class FilterEngineTask(QgsTask):
                 "FilterMate", Qgis.Info
             )
             
+            # v2.6.5: PERFORMANCE - Skip updateExtents for large layers to prevent freeze
+            MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000
+            # v2.6.5: Maximum expression length before using deferred application
+            MAX_EXPRESSION_FOR_DIRECT_APPLY = 100000  # 100KB
+            
+            # v2.6.5: Collect large expressions for deferred/chunked application
+            large_expressions = []
+            
             for layer, expression in self._pending_subset_requests:
                 try:
                     if layer and is_valid_layer(layer):
@@ -9378,6 +9749,12 @@ class FilterEngineTask(QgsTask):
                         current_subset = layer.subsetString() or ''
                         expression_str = expression or ''
                         
+                        # v2.6.5: Check if expression is too large for direct application
+                        if expression_str and len(expression_str) > MAX_EXPRESSION_FOR_DIRECT_APPLY:
+                            logger.warning(f"  ⚠️ Large expression ({len(expression_str)} chars) for {layer.name()} - deferring")
+                            large_expressions.append((layer, expression_str))
+                            continue
+                        
                         if current_subset.strip() == expression_str.strip():
                             # Filter already applied - force reload for PostgreSQL layers
                             # FIX v2.5.16: Use layer.reload() for PostgreSQL to force data refresh
@@ -9385,12 +9762,14 @@ class FilterEngineTask(QgsTask):
                             # effective than just triggerRepaint()
                             if layer.providerType() == 'postgres':
                                 layer.reload()
-                            layer.updateExtents()
+                            # v2.6.5: Skip updateExtents for large layers
+                            feature_count = layer.featureCount()
+                            if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                                layer.updateExtents()
                             layer.triggerRepaint()
                             
                             logger.debug(f"  ✓ Filter already applied to {layer.name()}, triggered reload+repaint")
                             
-                            feature_count = layer.featureCount()
                             count_str = f"{feature_count} features" if feature_count >= 0 else "(count pending)"
                             
                             QgsMessageLog.logMessage(
@@ -9407,7 +9786,10 @@ class FilterEngineTask(QgsTask):
                                 # the provider cache may not refresh automatically
                                 if layer.providerType() == 'postgres':
                                     layer.reload()
-                                layer.updateExtents()
+                                # v2.6.5: Skip updateExtents for large layers
+                                feature_count = layer.featureCount()
+                                if feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
+                                    layer.updateExtents()
                                 layer.triggerRepaint()
                                 
                                 logger.debug(f"  ✓ Applied filter to {layer.name()}: {len(expression) if expression else 0} chars")
@@ -9461,6 +9843,37 @@ class FilterEngineTask(QgsTask):
                         f"finished() ✗ Exception: {layer.name() if layer else 'Unknown'} - {str(e)}",
                         "FilterMate", Qgis.Critical
                     )
+            
+            # v2.6.5: Apply large expressions with deferred processing to prevent freeze
+            if large_expressions:
+                logger.info(f"  📦 Applying {len(large_expressions)} large expressions with deferred processing")
+                from qgis.PyQt.QtCore import QTimer
+                
+                def apply_deferred_filters():
+                    """Apply large filter expressions with UI breathing room."""
+                    for lyr, expr in large_expressions:
+                        try:
+                            if lyr and is_valid_layer(lyr):
+                                success = safe_set_subset_string(lyr, expr)
+                                if success:
+                                    lyr.triggerRepaint()
+                                    QgsMessageLog.logMessage(
+                                        f"finished() ✓ Deferred: {lyr.name()} → {lyr.featureCount()} features",
+                                        "FilterMate", Qgis.Info
+                                    )
+                                else:
+                                    logger.error(f"Failed to apply deferred filter to {lyr.name()}")
+                        except Exception as e:
+                            logger.error(f"Error applying deferred filter: {e}")
+                    # Final canvas refresh
+                    try:
+                        iface.mapCanvas().refresh()
+                    except Exception:
+                        pass
+                
+                # Defer large expression application to allow UI to breathe
+                QTimer.singleShot(100, apply_deferred_filters)
+            
             # Clear the pending requests
             self._pending_subset_requests = []
             
