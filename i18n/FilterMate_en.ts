@@ -689,4 +689,111 @@ First attribute: {1}</translation>
         <translation>PostgreSQL recommended for better performance.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimizations</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimizations for:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>features</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Estimated speedup:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>faster</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Use centroids</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Simplify geometries</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox pre-filtering</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Attribute-first strategy</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Remember for this session</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Skip</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Apply</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimization Settings</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Enable optimizations</translation>
+    </message>
+    <message>
+        <source>Suggest performance optimizations before filtering</source>
+        <translation>Suggest performance optimizations before filtering</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Auto-use centroids for remote layers</translation>
+    </message>
+    <message>
+        <source>Use centroids to reduce network transfer (~90% faster)</source>
+        <translation>Use centroids to reduce network transfer (~90% faster)</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Auto-select best strategy</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Automatically choose optimal filtering strategy</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Auto-simplify geometries</translation>
+    </message>
+    <message>
+        <source>Warning: lossy operation, may change polygon shapes</source>
+        <translation>Warning: lossy operation, may change polygon shapes</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Ask before applying</translation>
+    </message>
+    <message>
+        <source>Show confirmation dialog before optimizations</source>
+        <translation>Show confirmation dialog before optimizations</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox pre-filter enabled for &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Optimization applied: &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+</context>
 </TS>

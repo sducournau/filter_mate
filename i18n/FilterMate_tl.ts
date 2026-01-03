@@ -686,7 +686,118 @@ First attribute: {1}</translation>
     </message>
     <message>
         <source>PostgreSQL recommended for better performance.</source>
-        <translation>PostgreSQL recommended for better performance.</translation>
+        <translation>Inirerekomenda ang PostgreSQL para sa mas magandang performance.</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Mga Optimization</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Mga optimization para sa:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>mga feature</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Tinatayang pagbilis:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>mas mabilis</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>Gamitin ang mga centroid imbes na buong geometry para sa malalaking dataset</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Gamitin ang centroid</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>Pasimplehin ang mga kumplikadong geometry upang mabawasan ang oras ng pagproseso</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Pasimplehin ang geometry</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>Mag-filter muna sa bounding box upang mabilis na alisin ang mga malalayong feature</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox pre-filtering</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>Suriin ang mga kondisyon ng attribute bago ang mga mahal na spatial operation</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Diskarteng attribute-muna</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>Ilapat para sa kasalukuyang session lamang</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Tandaan para sa session na ito</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>Laktawan nang hindi inilalapat</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Laktawan</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>Ilapat ang mga napiling optimization</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Ilapat</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Mga Setting ng Optimization</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Paganahin ang mga awtomatikong optimization</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Paganahin ang mga optimization</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>Awtomatikong ilapat ang mga rekomendasyon</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Magtanong bago ilapat</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>Ipakita ang dialog ng optimization</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>Huwag kailanman ilapat</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>Walang mga optimization</translation>
     </message>
 </context>
 </TS>

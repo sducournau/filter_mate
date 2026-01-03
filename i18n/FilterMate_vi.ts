@@ -689,4 +689,115 @@ Thuộc tính đầu tiên: {1}</translation>
         <translation>Khuyến nghị sử dụng PostgreSQL để có hiệu suất tốt hơn.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Tối ưu hóa cho:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>đối tượng</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Tăng tốc ước tính:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>nhanh hơn</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>Sử dụng tâm thay vì hình học đầy đủ cho tập dữ liệu lớn</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Dùng tâm</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>Đơn giản hóa hình học phức tạp để giảm thời gian xử lý</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Đơn giản hóa hình học</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>Lọc theo hộp bao trước để loại bỏ nhanh các đối tượng xa</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>Lọc trước BBox</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>Đánh giá điều kiện thuộc tính trước các phép toán không gian tốn kém</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Chiến lược thuộc tính trước</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>Chỉ áp dụng cho phiên hiện tại</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Ghi nhớ cho phiên này</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>Bỏ qua không áp dụng</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Bỏ qua</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>Áp dụng các tối ưu đã chọn</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Áp dụng</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Cài đặt tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Bật tối ưu hóa tự động</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Bật tối ưu hóa</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>Tự động áp dụng đề xuất</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Hỏi trước khi áp dụng</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>Hiện hộp thoại tối ưu</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>Không bao giờ áp dụng</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>Không tối ưu</translation>
+    </message>
+</context>
 </TS>

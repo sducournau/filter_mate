@@ -686,7 +686,118 @@ First attribute: {1}</translation>
     </message>
     <message>
         <source>PostgreSQL recommended for better performance.</source>
-        <translation>PostgreSQL recommended for better performance.</translation>
+        <translation>ለተሽላ አስተያየት PostgreSQL ይመከረል።</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - ማጣመም</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>ማጣመም ለ:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>ባህሪያት</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>የተግናበ ፍጥነት:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>ፍጠን</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>ለትልቅ የዳታ ስብስብ አከል ጂዦሜትሪ በመኀሊ አጠው ምብት ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>ምብት ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>የመስራት ጊዜውን ለመቀነስ ውስብስብ ጂዦሜትሪዊን ያቀሉ</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>ጂዦሜትሪ ያቀሉ</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>ረጬም ባህሪያትን በፍጥነት ለማስወገድ መጀመሪያ በመጫጪያ ሹጡ ልከይ</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox ቀድሞ-ለይ</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>ወደባበት የብዽትየት እርምጃዎች በቆል የባህሪ ሁኔታዎችን ይገመግሙ</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>የባህሪ-መጀመሪያ ስትራቲጂ</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>ለአሁኑ ምይት ብቻ ይተግብር</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>ለዚህ ምይት ያስታዉሱ</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>ሳይተግበር ይዘለሉ</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>ዘለሉ</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>የተመረጡ ማጣመም ይተግብሩ</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>ይተግብሩ</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>የማጣመም መቄቃሪያ</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>ራስለሳዊ ማጣመም አንቃ</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>ማጣመም አንቃ</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>ምክሮችን በራስገር ይተግብሩ</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>ከመተግበር በፆል ይጠይቁ</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>የማጣመም መኀፈር አሳይ</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>በፋፀ አይተግብር</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>ማጣመም የለም</translation>
     </message>
 </context>
 </TS>

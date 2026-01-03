@@ -689,4 +689,115 @@ Birinchi atribut: {1}</translation>
         <translation>Yaxshiroq ishlash uchun PostgreSQL tavsiya etiladi.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimallashtirish</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimallashtirish uchun:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>obyekt</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Taxminiy tezlashtirish:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>tezroq</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>Katta ma&apos;lumotlar to&apos;plami uchun to&apos;liq geometriyalar o&apos;rniga markazlardan foydalaning</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Markazlardan foydalanish</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>Ishlash vaqtini qisqartirish uchun murakkab geometriyalarni soddalashtiring</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Geometriyalarni soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>Uzoqdagi obyektlarni tezda yo&apos;q qilish uchun avval chegaralovchi quti bo&apos;yicha filtrlang</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox oldindan filtrlash</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>Qimmat fazoviy operatsiyalardan oldin atribut shartlarini baholang</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Avval atribut strategiyasi</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>Faqat joriy seans uchun qo&apos;llash</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Bu seans uchun eslab qolish</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>Qo&apos;llamay o&apos;tkazib yuborish</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>O&apos;tkazib yuborish</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>Tanlangan optimallashtirish qo&apos;llash</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Qo&apos;llash</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimallashtirish sozlamalari</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Avtomatik optimallashtirish yoqish</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Optimallashtirish yoqish</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>Tavsiyalarni avtomatik qo&apos;llash</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Qo&apos;llashdan oldin so&apos;rash</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>Optimallashtirish dialogini ko&apos;rsatish</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>Hech qachon qo&apos;llamang</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>Optimallashtirish yo&apos;q</translation>
+    </message>
+</context>
 </TS>

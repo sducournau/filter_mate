@@ -689,4 +689,115 @@ Atribut pertama: {1}</translation>
         <translation>PostgreSQL disarankan untuk performa yang lebih baik.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimasi</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimasi untuk:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>fitur</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Percepatan perkiraan:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>lebih cepat</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>Gunakan centroid bukan geometri penuh untuk dataset besar</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Gunakan centroid</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>Sederhanakan geometri kompleks untuk mengurangi waktu pemrosesan</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Sederhanakan geometri</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>Filter dengan bounding box dulu untuk eliminasi fitur jauh dengan cepat</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>Pra-filter BBox</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>Evaluasi kondisi atribut sebelum operasi spasial yang mahal</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Strategi atribut-dulu</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>Terapkan untuk sesi ini saja</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Ingat untuk sesi ini</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>Lewati tanpa menerapkan</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Lewati</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>Terapkan optimasi terpilih</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Terapkan</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Pengaturan Optimasi</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Aktifkan optimasi otomatis</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Aktifkan optimasi</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>Otomatis terapkan rekomendasi</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Tanya sebelum menerapkan</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>Tampilkan dialog optimasi</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>Jangan pernah terapkan</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>Tanpa optimasi</translation>
+    </message>
+</context>
 </TS>

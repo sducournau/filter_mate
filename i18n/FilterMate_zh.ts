@@ -689,4 +689,111 @@ First attribute: {1}</source>
         <translation>建议使用 PostgreSQL 以获得更好的性能。</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - 优化</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>优化：</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>个要素</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>预计加速：</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>更快</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>使用质心</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>简化几何</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox 预过滤</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>属性优先策略</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>记住本次会话</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>跳过</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>应用</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>优化设置</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>启用优化</translation>
+    </message>
+    <message>
+        <source>Suggest performance optimizations before filtering</source>
+        <translation>过滤前建议性能优化</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>自动为远程图层使用质心</translation>
+    </message>
+    <message>
+        <source>Use centroids to reduce network transfer (~90% faster)</source>
+        <translation>使用质心减少网络传输（约快90%）</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>自动选择最佳策略</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>自动选择最佳过滤策略</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>自动简化几何</translation>
+    </message>
+    <message>
+        <source>Warning: lossy operation, may change polygon shapes</source>
+        <translation>警告：有损操作，可能改变多边形形状</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>应用前询问</translation>
+    </message>
+    <message>
+        <source>Show confirmation dialog before optimizations</source>
+        <translation>优化前显示确认对话框</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>已为 &apos;{0}&apos; 启用质心（约{1}倍{2}）</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>已为 &apos;{0}&apos; 启用BBox预过滤</translation>
+    </message>
+    <message>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>已应用优化：&apos;{0}&apos;（约{1}倍{2}）</translation>
+    </message>
+</context>
 </TS>

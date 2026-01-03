@@ -689,4 +689,115 @@ First attribute: {1}</source>
         <translation>Daha iyi performans için PostgreSQL önerilir.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimizasyonlar</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimizasyonlar:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>özellik</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Tahmini hızlanma:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>daha hızlı</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>Büyük veri kümeleri için tam geometriler yerine merkezleri kullan</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Merkez kullan</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>İşlem süresini azaltmak için karmaşık geometrileri basitleştir</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Geometrileri basitleştir</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>Uzak özellikleri hızlıca elemek için önce sınırlayıcı kutuyla filtrele</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox ön filtreleme</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>Pahalı mekansal işlemlerden önce öznitelik koşullarını değerlendir</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Önce öznitelik stratejisi</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>Sadece mevcut oturum için uygula</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Bu oturum için hatırla</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>Uygulamadan atla</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Atla</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>Seçili optimizasyonları uygula</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Uygula</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimizasyon Ayarları</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Otomatik optimizasyonları etkinleştir</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Optimizasyonları etkinleştir</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>Önerileri otomatik uygula</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Uygulamadan önce sor</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>Optimizasyon iletişim kutusunu göster</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>Asla uygulama</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>Optimizasyon yok</translation>
+    </message>
+</context>
 </TS>

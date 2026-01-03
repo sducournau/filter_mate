@@ -689,4 +689,111 @@ Første attribut: {1}</translation>
         <translation>PostgreSQL anbefales for bedre ydeevne.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimeringer</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimeringer for:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>objekter</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Anslået hastighedsforøgelse:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>hurtigere</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Brug centroider</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Forenkle geometrier</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox forfiltrering</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Attribut-først strategi</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Husk for denne session</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Spring over</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Anvend</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimeringsindstillinger</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Aktiver optimeringer</translation>
+    </message>
+    <message>
+        <source>Suggest performance optimizations before filtering</source>
+        <translation>Foreslå ydeevneoptimeringer før filtrering</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Auto. brug centroider for fjernlag</translation>
+    </message>
+    <message>
+        <source>Use centroids to reduce network transfer (~90% faster)</source>
+        <translation>Brug centroider for at reducere netværksoverførsel (~90% hurtigere)</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Auto. vælg bedste strategi</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Vælg automatisk optimal filtreringsstrategi</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Auto. forenkle geometrier</translation>
+    </message>
+    <message>
+        <source>Warning: lossy operation, may change polygon shapes</source>
+        <translation>Advarsel: tabsgivende operation, kan ændre polygonformer</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Spørg før anvendelse</translation>
+    </message>
+    <message>
+        <source>Show confirmation dialog before optimizations</source>
+        <translation>Vis bekræftelsesdialog før optimeringer</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Centroider aktiveret for &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox forfilter aktiveret for &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Optimering anvendt: &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+</context>
 </TS>

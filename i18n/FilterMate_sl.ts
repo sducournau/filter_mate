@@ -686,7 +686,118 @@ First attribute: {1}</translation>
     </message>
     <message>
         <source>PostgreSQL recommended for better performance.</source>
-        <translation>PostgreSQL recommended for better performance.</translation>
+        <translation>PostgreSQL priporočen za boljšo zmogljivost.</translation>
+    </message>
+</context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimizacije</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimizacije za:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>objektov</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Ocenjena pospešitev:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>hitreje</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>Uporabi centroide namesto polnih geometrij za velike nabore podatkov</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Uporabi centroide</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>Poenostavi kompleksne geometrije za zmanjšanje časa obdelave</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Poenostavi geometrije</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>Najprej filtriraj po omejevalnem okvirju za hitro odstranitev oddaljenih objektov</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>Predhodno filtriranje BBox</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>Oceni atributne pogoje pred dragimi prostorskimi operacijami</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Strategija atribut-najprej</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>Uporabi samo za trenutno sejo</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Zapomni za to sejo</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>Preskoči brez uporabe</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Preskoči</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>Uporabi izbrane optimizacije</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Uporabi</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Nastavitve optimizacije</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>Omogoči samodejne optimizacije</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Omogoči optimizacije</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>Samodejno uporabi priporočila</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Vprašaj pred uporabo</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>Prikaži pogovorno okno optimizacije</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>Nikoli ne uporabi</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>Brez optimizacij</translation>
     </message>
 </context>
 </TS>

@@ -689,4 +689,111 @@ Erstes Attribut: {1}</translation>
         <translation>PostgreSQL wird für bessere Leistung empfohlen.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimierungen</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimierungen für:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>Features</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Geschätzter Geschwindigkeitsgewinn:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>schneller</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Zentroide verwenden</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Geometrien vereinfachen</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox-Vorfilterung</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Attribut-zuerst-Strategie</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Für diese Sitzung merken</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Überspringen</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Anwenden</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimierungseinstellungen</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Optimierungen aktivieren</translation>
+    </message>
+    <message>
+        <source>Suggest performance optimizations before filtering</source>
+        <translation>Leistungsoptimierungen vor dem Filtern vorschlagen</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Zentroide auto. für entfernte Layer verwenden</translation>
+    </message>
+    <message>
+        <source>Use centroids to reduce network transfer (~90% faster)</source>
+        <translation>Zentroide verwenden um Netzwerkübertragung zu reduzieren (~90% schneller)</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Beste Strategie auto. wählen</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Optimale Filterstrategie automatisch wählen</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Geometrien auto. vereinfachen</translation>
+    </message>
+    <message>
+        <source>Warning: lossy operation, may change polygon shapes</source>
+        <translation>Warnung: Verlustbehaftete Operation, kann Polygonformen ändern</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Vor dem Anwenden fragen</translation>
+    </message>
+    <message>
+        <source>Show confirmation dialog before optimizations</source>
+        <translation>Bestätigungsdialog vor Optimierungen anzeigen</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Zentroide aktiviert für &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox-Vorfilter aktiviert für &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Optimierung angewendet: &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+</context>
 </TS>

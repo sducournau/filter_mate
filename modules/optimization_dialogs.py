@@ -8,32 +8,33 @@ Provides user-facing dialogs and UI components for:
 - Configuring optimization settings
 
 v2.7.0: Initial implementation
+v2.4.0: Simplified UI - cleaner design, fewer options
 """
 
 from typing import Dict, List, Optional, Any
-from qgis.PyQt import QtWidgets, QtCore, QtGui
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import Qt, pyqtSignal, QCoreApplication
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QGroupBox, QScrollArea, QWidget, QFrame,
-    QDialogButtonBox, QMessageBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QSpinBox, QComboBox
+    QCheckBox, QWidget, QFrame, QDialogButtonBox
 )
-from qgis.PyQt.QtGui import QFont, QColor, QIcon
 
 import logging
 
 logger = logging.getLogger('FilterMate')
 
 
+def tr(text: str) -> str:
+    """Translate a string using QCoreApplication."""
+    return QCoreApplication.translate("OptimizationDialogs", text)
+
+
 class OptimizationRecommendationDialog(QDialog):
     """
-    Dialog showing optimization recommendations before applying filters.
+    Simplified dialog showing optimization recommendations.
     
     Allows user to:
     - See what optimizations are recommended
     - Accept/reject each optimization
-    - Apply all or selected optimizations
     - Remember choices for future operations
     """
     
@@ -66,145 +67,105 @@ class OptimizationRecommendationDialog(QDialog):
         self.location_type = location_type
         self.selected_optimizations = {}
         
-        self.setWindowTitle("FilterMate - Optimization Recommendations")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(350)
+        self.setWindowTitle(tr("FilterMate - Optimizations"))
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(200)
         self.setModal(True)
         
         self._setup_ui()
     
     def _setup_ui(self):
-        """Set up the dialog UI."""
+        """Set up the simplified dialog UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
         
-        # Header
-        header_frame = QFrame()
-        header_frame.setStyleSheet("""
-            QFrame {
-                background-color: #3498db;
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
-        header_layout = QVBoxLayout(header_frame)
-        
-        title_label = QLabel("🔧 Optimization Recommendations")
-        title_label.setStyleSheet("color: white; font-size: 14pt; font-weight: bold;")
-        header_layout.addWidget(title_label)
-        
-        # Layer info
-        location_emoji = {
-            'remote_service': '☁️ Remote Service',
-            'remote_database': '🌐 Remote Database',
-            'local_database': '🗄️ Local Database',
-            'local_file': '📁 Local File'
-        }
-        location_text = location_emoji.get(self.location_type, self.location_type)
-        
-        info_label = QLabel(
-            f"Layer: <b>{self.layer_name}</b><br>"
-            f"Features: <b>{self.feature_count:,}</b> | Type: <b>{location_text}</b>"
+        # Simple header with layer info
+        header_label = QLabel(
+            f"<b>🔧 {tr('Optimizations for:')}</b> {self.layer_name}<br>"
+            f"<small>{self.feature_count:,} {tr('features')}</small>"
         )
-        info_label.setStyleSheet("color: white; font-size: 10pt;")
-        header_layout.addWidget(info_label)
+        header_label.setStyleSheet("font-size: 11pt;")
+        layout.addWidget(header_label)
         
-        layout.addWidget(header_frame)
+        # Separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setStyleSheet("background-color: #ddd;")
+        layout.addWidget(separator)
         
-        # Recommendations section
-        recs_group = QGroupBox("Recommended Optimizations")
-        recs_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
-        recs_layout = QVBoxLayout(recs_group)
-        
-        self.checkboxes = {}
-        
-        for rec in self.recommendations:
-            opt_type = rec.get('optimization_type', 'unknown')
-            reason = rec.get('reason', '')
-            speedup = rec.get('estimated_speedup', 1.0)
-            auto_applicable = rec.get('auto_applicable', False)
-            requires_consent = rec.get('requires_user_consent', False)
-            
-            # Create checkbox for each recommendation
-            checkbox_text = self._get_optimization_display_text(opt_type, speedup)
-            checkbox = QCheckBox(checkbox_text)
-            checkbox.setChecked(auto_applicable and not requires_consent)
-            checkbox.setToolTip(reason)
-            
-            # Style based on type
-            if opt_type == 'use_centroid':
-                checkbox.setStyleSheet("QCheckBox { color: #27ae60; font-weight: bold; }")
-            elif requires_consent:
-                checkbox.setStyleSheet("QCheckBox { color: #e67e22; }")
-            
-            self.checkboxes[opt_type] = checkbox
-            recs_layout.addWidget(checkbox)
-            
-            # Add explanation label
-            explanation = QLabel(f"   ℹ️ {reason}")
-            explanation.setStyleSheet("color: #666666; font-size: 9pt; margin-left: 20px;")
-            explanation.setWordWrap(True)
-            recs_layout.addWidget(explanation)
-        
-        layout.addWidget(recs_group)
-        
-        # Estimated improvement
+        # Calculate total speedup
         total_speedup = 1.0
         for rec in self.recommendations:
             if rec.get('auto_applicable', False):
                 total_speedup *= rec.get('estimated_speedup', 1.0)
         
+        # Simple message with total speedup
         if total_speedup > 1.1:
-            speedup_label = QLabel(f"🚀 Estimated total speedup: <b>~{total_speedup:.1f}x faster</b>")
-            speedup_label.setStyleSheet("color: #27ae60; font-size: 11pt;")
-            speedup_label.setAlignment(Qt.AlignCenter)
+            speedup_text = tr("Estimated speedup:")
+            faster_text = tr("faster")
+            speedup_label = QLabel(
+                f"🚀 {speedup_text} <b>~{total_speedup:.1f}x {faster_text}</b>"
+            )
+            speedup_label.setStyleSheet(
+                "color: #27ae60; font-size: 10pt; margin: 5px 0;"
+            )
             layout.addWidget(speedup_label)
         
+        # Checkboxes for each optimization (simplified)
+        self.checkboxes = {}
+        
+        for rec in self.recommendations:
+            opt_type = rec.get('optimization_type', 'unknown')
+            speedup = rec.get('estimated_speedup', 1.0)
+            auto_applicable = rec.get('auto_applicable', False)
+            requires_consent = rec.get('requires_user_consent', False)
+            reason = rec.get('reason', '')
+            
+            # Create checkbox with simplified text
+            checkbox_text = self._get_optimization_display_text(opt_type, speedup)
+            checkbox = QCheckBox(checkbox_text)
+            checkbox.setChecked(auto_applicable and not requires_consent)
+            checkbox.setToolTip(reason)
+            
+            # Subtle styling for warnings
+            if requires_consent:
+                checkbox.setStyleSheet("QCheckBox { color: #e67e22; }")
+            
+            self.checkboxes[opt_type] = checkbox
+            layout.addWidget(checkbox)
+        
+        layout.addStretch()
+        
         # Remember choice checkbox
-        self.remember_checkbox = QCheckBox("Remember my choices for this session")
-        self.remember_checkbox.setToolTip(
-            "If checked, these optimization choices will be applied automatically\n"
-            "to similar layers without asking again during this session."
-        )
+        self.remember_checkbox = QCheckBox(tr("Remember for this session"))
+        self.remember_checkbox.setStyleSheet("color: #666; font-size: 9pt;")
         layout.addWidget(self.remember_checkbox)
         
-        # Buttons
+        # Buttons - simplified
         button_layout = QHBoxLayout()
         
-        skip_btn = QPushButton("Skip Optimizations")
-        skip_btn.setToolTip("Continue without applying any optimizations")
+        skip_btn = QPushButton(tr("Skip"))
         skip_btn.clicked.connect(self._on_skip)
         button_layout.addWidget(skip_btn)
         
         button_layout.addStretch()
         
-        apply_btn = QPushButton("Apply Selected")
+        apply_btn = QPushButton(tr("Apply"))
         apply_btn.setStyleSheet("""
             QPushButton {
                 background-color: #27ae60;
                 color: white;
                 font-weight: bold;
-                padding: 8px 20px;
-                border-radius: 5px;
+                padding: 6px 24px;
+                border-radius: 4px;
+                border: none;
             }
             QPushButton:hover {
                 background-color: #2ecc71;
             }
         """)
-        apply_btn.setToolTip("Apply selected optimizations and continue")
+        apply_btn.setDefault(True)
         apply_btn.clicked.connect(self._on_apply)
         button_layout.addWidget(apply_btn)
         
@@ -212,15 +173,14 @@ class OptimizationRecommendationDialog(QDialog):
     
     def _get_optimization_display_text(self, opt_type: str, speedup: float) -> str:
         """Get human-readable text for optimization type."""
-        # v2.7.3: Removed progressive_chunks - now applied by default
+        faster = tr("faster")
         opt_names = {
-            'use_centroid': f"🎯 Use Centroids (~{speedup:.1f}x faster)",
-            'simplify_geometry': f"📐 Simplify Geometries (~{speedup:.1f}x faster) ⚠️",
-            'bbox_prefilter': f"📦 BBox Pre-filtering (~{speedup:.1f}x faster)",
-            'attribute_first': f"🔤 Attribute-First Strategy (~{speedup:.1f}x faster)",
-            # 'progressive_chunks' removed - v2.7.3: now default behavior
+            'use_centroid': f"{tr('Use centroids')} ({speedup:.0f}x {faster})",
+            'simplify_geometry': f"{tr('Simplify geometries')} ({speedup:.0f}x {faster}) ⚠️",
+            'bbox_prefilter': f"{tr('BBox pre-filtering')} ({speedup:.0f}x {faster})",
+            'attribute_first': f"{tr('Attribute-first strategy')} ({speedup:.0f}x {faster})",
         }
-        return opt_names.get(opt_type, f"⚙️ {opt_type} (~{speedup:.1f}x faster)")
+        return opt_names.get(opt_type, f"{opt_type} ({speedup:.0f}x {faster})")
     
     def _on_skip(self):
         """Handle skip button - reject all optimizations."""
@@ -247,7 +207,7 @@ class OptimizationRecommendationDialog(QDialog):
 
 class OptimizationSettingsWidget(QWidget):
     """
-    Widget for configuring auto-optimization settings.
+    Simplified widget for configuring auto-optimization settings.
     Can be embedded in the configuration tab or shown as a dialog.
     """
     
@@ -259,94 +219,66 @@ class OptimizationSettingsWidget(QWidget):
         self._load_settings()
     
     def _setup_ui(self):
-        """Set up the settings UI."""
+        """Set up the simplified settings UI."""
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
         
         # Title
-        title = QLabel("🔧 Auto-Optimization Settings")
-        title.setStyleSheet("font-size: 12pt; font-weight: bold;")
+        title = QLabel(f"🔧 {tr('Optimization Settings')}")
+        title.setStyleSheet("font-size: 11pt; font-weight: bold;")
         layout.addWidget(title)
         
         # Master switch
-        self.enabled_checkbox = QCheckBox("Enable automatic optimization recommendations")
+        self.enabled_checkbox = QCheckBox(tr("Enable optimizations"))
         self.enabled_checkbox.setToolTip(
-            "When enabled, FilterMate will analyze layers and suggest\n"
-            "performance optimizations before filtering."
+            tr("Suggest performance optimizations before filtering")
         )
         self.enabled_checkbox.stateChanged.connect(self._on_enabled_changed)
         layout.addWidget(self.enabled_checkbox)
         
         # Settings group (disabled when master switch is off)
-        self.settings_group = QGroupBox("Optimization Options")
+        self.settings_group = QWidget()
         settings_layout = QVBoxLayout(self.settings_group)
+        settings_layout.setContentsMargins(20, 5, 0, 0)
+        settings_layout.setSpacing(6)
         
         # Centroid optimization
-        centroid_layout = QHBoxLayout()
-        self.centroid_checkbox = QCheckBox("Auto-enable centroids for distant layers")
-        self.centroid_checkbox.setToolTip(
-            "Automatically use ST_Centroid() for WFS, ArcGIS, and remote PostgreSQL layers.\n"
-            "This dramatically reduces network data transfer (~90% reduction)."
+        self.centroid_checkbox = QCheckBox(
+            tr("Auto-use centroids for remote layers")
         )
-        centroid_layout.addWidget(self.centroid_checkbox)
-        
-        centroid_layout.addWidget(QLabel("Threshold:"))
-        self.centroid_threshold = QSpinBox()
-        self.centroid_threshold.setRange(100, 1000000)
-        self.centroid_threshold.setSingleStep(1000)
-        self.centroid_threshold.setSuffix(" features")
-        self.centroid_threshold.setToolTip("Feature count above which centroid optimization is suggested")
-        centroid_layout.addWidget(self.centroid_threshold)
-        centroid_layout.addStretch()
-        
-        settings_layout.addLayout(centroid_layout)
+        self.centroid_checkbox.setToolTip(
+            tr("Use centroids to reduce network transfer (~90% faster)")
+        )
+        settings_layout.addWidget(self.centroid_checkbox)
         
         # Strategy selection
-        self.strategy_checkbox = QCheckBox("Auto-select optimal filtering strategy")
+        self.strategy_checkbox = QCheckBox(tr("Auto-select best strategy"))
         self.strategy_checkbox.setToolTip(
-            "Automatically choose between attribute-first, bbox-prefilter,\n"
-            "or progressive chunking based on dataset characteristics."
+            tr("Automatically choose optimal filtering strategy")
         )
         settings_layout.addWidget(self.strategy_checkbox)
         
         # Geometry simplification (with warning)
-        simplify_layout = QHBoxLayout()
-        self.simplify_checkbox = QCheckBox("Auto-simplify complex geometries")
+        self.simplify_checkbox = QCheckBox(
+            f"{tr('Auto-simplify geometries')} ⚠️"
+        )
         self.simplify_checkbox.setStyleSheet("color: #e67e22;")
         self.simplify_checkbox.setToolTip(
-            "⚠️ WARNING: This is a LOSSY operation!\n"
-            "Geometry simplification reduces vertex count but may change\n"
-            "the shape of polygons. Only enable if precision is not critical."
+            tr("Warning: lossy operation, may change polygon shapes")
         )
-        simplify_layout.addWidget(self.simplify_checkbox)
+        settings_layout.addWidget(self.simplify_checkbox)
         
-        warning_label = QLabel("⚠️ Lossy")
-        warning_label.setStyleSheet("color: #e67e22; font-weight: bold;")
-        simplify_layout.addWidget(warning_label)
-        simplify_layout.addStretch()
-        
-        settings_layout.addWidget(QWidget())  # Spacer
-        settings_layout.addLayout(simplify_layout)
-        
-        # Confirmation behavior
-        settings_layout.addWidget(QLabel(""))  # Spacer
-        self.ask_before_checkbox = QCheckBox("Always ask before applying optimizations")
+        # Ask before applying
+        self.ask_before_checkbox = QCheckBox(tr("Ask before applying"))
         self.ask_before_checkbox.setToolTip(
-            "When enabled, shows a confirmation dialog before applying\n"
-            "any automatic optimization. Recommended for first-time users."
+            tr("Show confirmation dialog before optimizations")
         )
         settings_layout.addWidget(self.ask_before_checkbox)
-        
-        self.show_hints_checkbox = QCheckBox("Show optimization hints in message bar")
-        self.show_hints_checkbox.setToolTip(
-            "Display helpful hints about available optimizations\n"
-            "in the QGIS message bar."
-        )
-        settings_layout.addWidget(self.show_hints_checkbox)
         
         layout.addWidget(self.settings_group)
         
         # Apply button (for dialog mode)
-        self.apply_btn = QPushButton("Apply Settings")
+        self.apply_btn = QPushButton(tr("Apply"))
         self.apply_btn.clicked.connect(self._on_apply)
         self.apply_btn.setVisible(False)  # Hidden by default, shown in dialog mode
         layout.addWidget(self.apply_btn)
@@ -365,13 +297,9 @@ class OptimizationSettingsWidget(QWidget):
             
             self.enabled_checkbox.setChecked(config.get('enabled', True))
             self.centroid_checkbox.setChecked(config.get('auto_centroid_for_distant', True))
-            self.centroid_threshold.setValue(config.get('centroid_threshold_distant', 5000))
             self.strategy_checkbox.setChecked(config.get('auto_strategy_selection', True))
             self.simplify_checkbox.setChecked(config.get('auto_simplify_geometry', False))
-            self.show_hints_checkbox.setChecked(config.get('show_optimization_hints', True))
-            
-            # Ask before is not in config by default, default to True
-            self.ask_before_checkbox.setChecked(True)
+            self.ask_before_checkbox.setChecked(config.get('ask_before_apply', True))
             
             self.settings_group.setEnabled(self.enabled_checkbox.isChecked())
             
@@ -380,10 +308,8 @@ class OptimizationSettingsWidget(QWidget):
             # Set defaults
             self.enabled_checkbox.setChecked(True)
             self.centroid_checkbox.setChecked(True)
-            self.centroid_threshold.setValue(5000)
             self.strategy_checkbox.setChecked(True)
             self.simplify_checkbox.setChecked(False)
-            self.show_hints_checkbox.setChecked(True)
             self.ask_before_checkbox.setChecked(True)
     
     def _on_apply(self):
@@ -396,10 +322,8 @@ class OptimizationSettingsWidget(QWidget):
         return {
             'enabled': self.enabled_checkbox.isChecked(),
             'auto_centroid_for_distant': self.centroid_checkbox.isChecked(),
-            'centroid_threshold_distant': self.centroid_threshold.value(),
             'auto_strategy_selection': self.strategy_checkbox.isChecked(),
             'auto_simplify_geometry': self.simplify_checkbox.isChecked(),
-            'show_optimization_hints': self.show_hints_checkbox.isChecked(),
             'ask_before_apply': self.ask_before_checkbox.isChecked(),
         }
     
@@ -409,17 +333,18 @@ class OptimizationSettingsWidget(QWidget):
 
 
 class OptimizationSettingsDialog(QDialog):
-    """Dialog wrapper for OptimizationSettingsWidget."""
+    """Simplified dialog wrapper for OptimizationSettingsWidget."""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("FilterMate - Optimization Settings")
-        self.setMinimumWidth(450)
+        self.setWindowTitle(tr("FilterMate - Optimizations"))
+        self.setMinimumWidth(350)
         
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
         
         self.settings_widget = OptimizationSettingsWidget(self)
-        self.settings_widget.set_dialog_mode(False)  # We'll use dialog buttons
+        self.settings_widget.set_dialog_mode(False)
         layout.addWidget(self.settings_widget)
         
         # Dialog buttons
@@ -484,16 +409,19 @@ def show_optimization_hint(layer_name: str, optimization_type: str, speedup: flo
     """
     from qgis.utils import iface
     
-    # v2.7.3: Removed progressive_chunks hint - now default behavior
+    faster = tr("faster")
     opt_descriptions = {
-        'use_centroid': f"Using centroids for '{layer_name}' could be ~{speedup:.1f}x faster",
-        'bbox_prefilter': f"BBox pre-filtering enabled for '{layer_name}'",
-        # 'progressive_chunks' removed - v2.7.3: now default behavior
+        'use_centroid': tr("Centroids enabled for '{0}' (~{1}x {2})").format(
+            layer_name, int(speedup), faster
+        ),
+        'bbox_prefilter': tr("BBox pre-filter enabled for '{0}'").format(layer_name),
     }
     
     message = opt_descriptions.get(
         optimization_type,
-        f"Optimization available for '{layer_name}' (~{speedup:.1f}x speedup)"
+        tr("Optimization applied: '{0}' (~{1}x {2})").format(
+            layer_name, int(speedup), faster
+        )
     )
     
-    iface.messageBar().pushInfo("FilterMate Optimization", message)
+    iface.messageBar().pushInfo("FilterMate", message)

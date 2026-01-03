@@ -689,4 +689,111 @@ Ensimmäinen ominaisuus: {1}</translation>
         <translation>PostgreSQL suositellaan parempaan suorituskykyyn.</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - Optimoinnit</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>Optimoinnit:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>kohdetta</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>Arvioitu nopeutus:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>nopeampi</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>Käytä keskipisteitä</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>Yksinkertaista geometrioita</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox esisuodatus</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>Attribuutti-ensin strategia</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>Muista tämän istunnon ajan</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Ohita</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Käytä</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>Optimointiasetukset</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>Ota optimoinnit käyttöön</translation>
+    </message>
+    <message>
+        <source>Suggest performance optimizations before filtering</source>
+        <translation>Ehdota suorituskykyoptimointeja ennen suodatusta</translation>
+    </message>
+    <message>
+        <source>Auto-use centroids for remote layers</source>
+        <translation>Käytä auto. keskipisteitä etätasoille</translation>
+    </message>
+    <message>
+        <source>Use centroids to reduce network transfer (~90% faster)</source>
+        <translation>Käytä keskipisteitä verkkosiirron vähentämiseksi (~90% nopeampi)</translation>
+    </message>
+    <message>
+        <source>Auto-select best strategy</source>
+        <translation>Valitse auto. paras strategia</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy</source>
+        <translation>Valitse automaattisesti optimaalinen suodatusstrategia</translation>
+    </message>
+    <message>
+        <source>Auto-simplify geometries</source>
+        <translation>Yksinkertaista auto. geometrioita</translation>
+    </message>
+    <message>
+        <source>Warning: lossy operation, may change polygon shapes</source>
+        <translation>Varoitus: häviöllinen toiminto, voi muuttaa monikulmioiden muotoja</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>Kysy ennen käyttöä</translation>
+    </message>
+    <message>
+        <source>Show confirmation dialog before optimizations</source>
+        <translation>Näytä vahvistusikkuna ennen optimointeja</translation>
+    </message>
+    <message>
+        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Keskipisteet käytössä kohteelle &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+    <message>
+        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
+        <translation>BBox esisuodatin käytössä kohteelle &apos;{0}&apos;</translation>
+    </message>
+    <message>
+        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
+        <translation>Optimointi käytetty: &apos;{0}&apos; (~{1}x {2})</translation>
+    </message>
+</context>
 </TS>

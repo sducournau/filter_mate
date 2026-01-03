@@ -689,4 +689,115 @@ First attribute: {1}</source>
         <translation>बेहतर प्रदर्शन के लिए PostgreSQL अनुशंसित है।</translation>
     </message>
 </context>
+<context>
+    <name>OptimizationDialogs</name>
+    <message>
+        <source>FilterMate - Optimizations</source>
+        <translation>FilterMate - अनुकूलन</translation>
+    </message>
+    <message>
+        <source>Optimizations for:</source>
+        <translation>अनुकूलन:</translation>
+    </message>
+    <message>
+        <source>features</source>
+        <translation>फ़ीचर</translation>
+    </message>
+    <message>
+        <source>Estimated speedup:</source>
+        <translation>अनुमानित गति वृद्धि:</translation>
+    </message>
+    <message>
+        <source>faster</source>
+        <translation>तेज़</translation>
+    </message>
+    <message>
+        <source>Use centroids instead of full geometries for large datasets</source>
+        <translation>बड़े डेटासेट के लिए पूर्ण ज्यामिति के बजाय सेंट्रॉइड का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Use centroids</source>
+        <translation>सेंट्रॉइड का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries to reduce processing time</source>
+        <translation>प्रोसेसिंग समय कम करने के लिए जटिल ज्यामिति को सरल करें</translation>
+    </message>
+    <message>
+        <source>Simplify geometries</source>
+        <translation>ज्यामिति सरल करें</translation>
+    </message>
+    <message>
+        <source>Filter by bounding box first to eliminate distant features quickly</source>
+        <translation>दूर के फ़ीचर को जल्दी हटाने के लिए पहले बाउंडिंग बॉक्स से फ़िल्टर करें</translation>
+    </message>
+    <message>
+        <source>BBox pre-filtering</source>
+        <translation>BBox पूर्व-फ़िल्टरिंग</translation>
+    </message>
+    <message>
+        <source>Evaluate attribute conditions before expensive spatial operations</source>
+        <translation>महंगे स्थानिक ऑपरेशन से पहले विशेषता शर्तों का मूल्यांकन करें</translation>
+    </message>
+    <message>
+        <source>Attribute-first strategy</source>
+        <translation>पहले-विशेषता रणनीति</translation>
+    </message>
+    <message>
+        <source>Apply for current session only</source>
+        <translation>केवल वर्तमान सत्र के लिए लागू करें</translation>
+    </message>
+    <message>
+        <source>Remember for this session</source>
+        <translation>इस सत्र के लिए याद रखें</translation>
+    </message>
+    <message>
+        <source>Skip without applying</source>
+        <translation>लागू किए बिना छोड़ें</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>छोड़ें</translation>
+    </message>
+    <message>
+        <source>Apply selected optimizations</source>
+        <translation>चयनित अनुकूलन लागू करें</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>लागू करें</translation>
+    </message>
+    <message>
+        <source>Optimization Settings</source>
+        <translation>अनुकूलन सेटिंग्स</translation>
+    </message>
+    <message>
+        <source>Enable automatic optimizations</source>
+        <translation>स्वचालित अनुकूलन सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Enable optimizations</source>
+        <translation>अनुकूलन सक्षम करें</translation>
+    </message>
+    <message>
+        <source>Auto-apply recommendations</source>
+        <translation>स्वचालित सिफ़ारिशें लागू करें</translation>
+    </message>
+    <message>
+        <source>Ask before applying</source>
+        <translation>लागू करने से पहले पूछें</translation>
+    </message>
+    <message>
+        <source>Show optimization dialog</source>
+        <translation>अनुकूलन संवाद दिखाएं</translation>
+    </message>
+    <message>
+        <source>Never apply</source>
+        <translation>कभी लागू न करें</translation>
+    </message>
+    <message>
+        <source>No optimizations</source>
+        <translation>कोई अनुकूलन नहीं</translation>
+    </message>
+</context>
 </TS>
