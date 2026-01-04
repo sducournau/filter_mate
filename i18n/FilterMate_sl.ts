@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS>
+<?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="sl_SI" sourcelanguage="sl_SI">
 <context>
     <name>FilterMate</name>
@@ -164,25 +163,25 @@ Do you want to continue?</translation>
         <translation>Nastavitev preverjanja geometrije</translation>
     </message>
     <message>
-        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -832,4 +831,249 @@ First attribute: {1}</translation>
         <translation>Zmanjšaj segmente medpomnilnika</translation>
     </message>
 </context>
+<context>
+    <name>BackendOptimizationWidget</name>
+    <message>
+        <source>Quick Setup</source>
+        <translation>Hitra nastavitev</translation>
+    </message>
+    <message>
+        <source>Choose a profile or customize settings below</source>
+        <translation>Izberite profil ali prilagodite nastavitve spodaj</translation>
+    </message>
+    <message>
+        <source>Smart Recommendations</source>
+        <translation>Pametna priporočila</translation>
+    </message>
+    <message>
+        <source>Balanced Profile</source>
+        <translation>Uravnotežen profil</translation>
+    </message>
+    <message>
+        <source>Maximum Performance</source>
+        <translation>Maksimalna zmogljivost</translation>
+    </message>
+    <message>
+        <source>Minimal Resources</source>
+        <translation>Minimalni viri</translation>
+    </message>
+    <message>
+        <source>PostgreSQL/PostGIS Optimizations</source>
+        <translation>Optimizacije PostgreSQL/PostGIS</translation>
+    </message>
+    <message>
+        <source>Materialized Views</source>
+        <translation>Materializirani pogledi</translation>
+    </message>
+    <message>
+        <source>Create temporary materialized views for complex filters</source>
+        <translation>Ustvari začasne materializirane poglede za kompleksne filtre</translation>
+    </message>
+    <message>
+        <source>Two-Phase Filtering</source>
+        <translation>Dvofazno filtriranje</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filtering before precise geometry tests</source>
+        <translation>Uporabi predfiltriranje z omejitvenim okvirjem pred natančnimi geometrijskimi testi</translation>
+    </message>
+    <message>
+        <source>Progressive Loading</source>
+        <translation>Progresivno nalaganje</translation>
+    </message>
+    <message>
+        <source>Load data in chunks for very large datasets</source>
+        <translation>Naloži podatke v kosih za zelo velike nabore podatkov</translation>
+    </message>
+    <message>
+        <source>Chunk Size</source>
+        <translation>Velikost kosa</translation>
+    </message>
+    <message>
+        <source>Server-Side Simplification</source>
+        <translation>Poenostavitev na strežniku</translation>
+    </message>
+    <message>
+        <source>Simplify geometries on server for display purposes</source>
+        <translation>Poenostavi geometrije na strežniku za namene prikaza</translation>
+    </message>
+    <message>
+        <source>Simplification Tolerance</source>
+        <translation>Toleranca poenostavitve</translation>
+    </message>
+    <message>
+        <source>Parallel Query Execution</source>
+        <translation>Vzporedno izvajanje poizvedb</translation>
+    </message>
+    <message>
+        <source>Execute independent queries in parallel</source>
+        <translation>Izvedi neodvisne poizvedbe vzporedno</translation>
+    </message>
+    <message>
+        <source>Expression Caching</source>
+        <translation>Predpomnjenje izrazov</translation>
+    </message>
+    <message>
+        <source>Cache compiled expressions for reuse</source>
+        <translation>Predpomni prevedene izraze za ponovno uporabo</translation>
+    </message>
+    <message>
+        <source>Spatialite/GeoPackage Optimizations</source>
+        <translation>Optimizacije Spatialite/GeoPackage</translation>
+    </message>
+    <message>
+        <source>R-tree Temp Tables</source>
+        <translation>Začasne tabele R-tree</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree indexes</source>
+        <translation>Ustvari začasne tabele z indeksi R-tree</translation>
+    </message>
+    <message>
+        <source>BBox Pre-filtering</source>
+        <translation>Predfiltriranje BBox</translation>
+    </message>
+    <message>
+        <source>Use bounding box filtering before precise tests</source>
+        <translation>Uporabi filtriranje z omejitvenim okvirjem pred natančnimi testi</translation>
+    </message>
+    <message>
+        <source>Memory-Mapped I/O</source>
+        <translation>Pomnilniško preslikani V/I</translation>
+    </message>
+    <message>
+        <source>Use memory-mapped I/O for file access</source>
+        <translation>Uporabi pomnilniško preslikan V/I za dostop do datotek</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Serijska obdelava</translation>
+    </message>
+    <message>
+        <source>Process multiple operations in batches</source>
+        <translation>Obdelaj več operacij v serijah</translation>
+    </message>
+    <message>
+        <source>Batch Size</source>
+        <translation>Velikost serije</translation>
+    </message>
+    <message>
+        <source>OGR/Memory Optimizations</source>
+        <translation>Optimizacije OGR/Pomnilnik</translation>
+    </message>
+    <message>
+        <source>Automatic Spatial Index</source>
+        <translation>Samodejni prostorski indeks</translation>
+    </message>
+    <message>
+        <source>Create temporary spatial indexes automatically</source>
+        <translation>Samodejno ustvari začasne prostorske indekse</translation>
+    </message>
+    <message>
+        <source>Progressive Chunking</source>
+        <translation>Progresivno razdeljevanje</translation>
+    </message>
+    <message>
+        <source>Process large files in progressive chunks</source>
+        <translation>Obdelaj velike datoteke v progresivnih kosih</translation>
+    </message>
+    <message>
+        <source>Memory Feature Caching</source>
+        <translation>Predpomnjenje značilnosti v pomnilniku</translation>
+    </message>
+    <message>
+        <source>Cache features in memory for faster access</source>
+        <translation>Predpomni značilnosti v pomnilniku za hitrejši dostop</translation>
+    </message>
+    <message>
+        <source>Cache Size (features)</source>
+        <translation>Velikost predpomnilnika (značilnosti)</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Poenostavitev geometrije</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries during processing</source>
+        <translation>Poenostavi kompleksne geometrije med obdelavo</translation>
+    </message>
+    <message>
+        <source>Global Optimizations</source>
+        <translation>Globalne optimizacije</translation>
+    </message>
+    <message>
+        <source>Auto-Optimization</source>
+        <translation>Samodejna optimizacija</translation>
+    </message>
+    <message>
+        <source>Automatically optimize based on data analysis</source>
+        <translation>Samodejno optimiziraj na podlagi analize podatkov</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid</source>
+        <translation>Samodejni centroid</translation>
+    </message>
+    <message>
+        <source>Automatically center view on filter results</source>
+        <translation>Samodejno centriraj pogled na rezultate filtra</translation>
+    </message>
+    <message>
+        <source>Parallel Layer Filtering</source>
+        <translation>Vzporedno filtriranje slojev</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously</source>
+        <translation>Filtriraj več slojev hkrati</translation>
+    </message>
+    <message>
+        <source>Smart Expression Parsing</source>
+        <translation>Pametno razčlenjevanje izrazov</translation>
+    </message>
+    <message>
+        <source>Optimize expression parsing for complex queries</source>
+        <translation>Optimiziraj razčlenjevanje izrazov za kompleksne poizvedbe</translation>
+    </message>
+    <message>
+        <source>Deferred Refresh</source>
+        <translation>Odložena osvežitev</translation>
+    </message>
+    <message>
+        <source>Delay map refresh until all filters are applied</source>
+        <translation>Odloži osvežitev zemljevida, dokler niso uporabljeni vsi filtri</translation>
+    </message>
+    <message>
+        <source>Verbose Logging</source>
+        <translation>Podrobno beleženje</translation>
+    </message>
+    <message>
+        <source>Enable detailed logging for debugging</source>
+        <translation>Omogoči podrobno beleženje za odpravljanje napak</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Uporabi</translation>
+    </message>
+    <message>
+        <source>Reset to Defaults</source>
+        <translation>Ponastavi na privzeto</translation>
+    </message>
+    <message>
+        <source>Settings applied successfully</source>
+        <translation>Nastavitve uspešno uporabljene</translation>
+    </message>
+    <message>
+        <source>Settings reset to defaults</source>
+        <translation>Nastavitve ponastavljene na privzeto</translation>
+    </message>
+    <message>
+        <source>Profile applied: {}</source>
+        <translation>Profil uporabljen: {}</translation>
+    </message>
+    <message>
+        <source>Error applying settings</source>
+        <translation>Napaka pri uporabi nastavitev</translation>
+    </message>
+<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
+This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
 </TS>

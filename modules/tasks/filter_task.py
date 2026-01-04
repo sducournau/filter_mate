@@ -729,6 +729,85 @@ class FilterEngineTask(QgsTask):
                 "Performance may be reduced. Consider using PostgreSQL/PostGIS for optimal performance."
             )
 
+    def _get_contextual_performance_warning(self, elapsed_time: float, severity: str = 'warning') -> str:
+        """
+        Generate contextual performance warning based on current backend.
+        
+        v2.8.6: Provides relevant advice based on current backend instead of
+        always suggesting PostgreSQL.
+        
+        Args:
+            elapsed_time: Query duration in seconds
+            severity: 'warning' or 'critical'
+            
+        Returns:
+            Contextual warning message string
+        """
+        is_postgresql = (POSTGRESQL_AVAILABLE and 
+                        self.param_source_provider_type == PROVIDER_POSTGRES)
+        is_spatialite = self.param_source_provider_type == PROVIDER_SPATIALITE
+        is_ogr = self.param_source_provider_type == PROVIDER_OGR
+        
+        # Base message with timing
+        base_msg = f"La requête de filtrage a pris {elapsed_time:.1f}s"
+        
+        if is_postgresql:
+            # Already using PostgreSQL - suggest complexity reduction
+            if severity == 'critical':
+                return (
+                    f"{base_msg} (backend: PostgreSQL). "
+                    f"Pour améliorer les performances, vous pouvez: "
+                    f"réduire le rayon du buffer, limiter le nombre de couches, "
+                    f"ou créer des index spatiaux sur les tables concernées."
+                )
+            else:
+                return (
+                    f"{base_msg} (backend: PostgreSQL). "
+                    f"Temps normal pour une requête complexe. "
+                    f"Vérifiez vos index spatiaux si les performances restent lentes."
+                )
+        elif is_spatialite:
+            # Using Spatialite - suggest PostgreSQL for large datasets
+            if severity == 'critical':
+                return (
+                    f"{base_msg} (backend: Spatialite). "
+                    f"Pour de meilleures performances, considérez: "
+                    f"PostgreSQL/PostGIS pour les grands jeux de données, "
+                    f"ou réduisez la complexité du filtre."
+                )
+            else:
+                return (
+                    f"{base_msg} (backend: Spatialite). "
+                    f"Performances acceptables. PostgreSQL/PostGIS serait plus rapide "
+                    f"pour les requêtes fréquentes sur ce jeu de données."
+                )
+        elif is_ogr:
+            # Using OGR fallback - suggest optimized backend
+            if severity == 'critical':
+                return (
+                    f"{base_msg} (backend: OGR/mémoire). "
+                    f"Pour de meilleures performances, utilisez PostgreSQL/PostGIS "
+                    f"ou Spatialite. Le backend actuel n'est pas optimisé pour les grandes données."
+                )
+            else:
+                return (
+                    f"{base_msg} (backend: OGR/mémoire). "
+                    f"Considérez PostgreSQL ou GeoPackage (Spatialite) pour de meilleures performances."
+                )
+        else:
+            # Unknown/default backend
+            if severity == 'critical':
+                return (
+                    f"{base_msg}. "
+                    f"Pour de meilleures performances, utilisez PostgreSQL/PostGIS "
+                    f"ou réduisez la complexité du filtre."
+                )
+            else:
+                return (
+                    f"{base_msg}. "
+                    f"Temps de traitement élevé. Vérifiez la taille des données et la complexité du filtre."
+                )
+
     def _execute_task_action(self):
         """
         Execute the appropriate action based on task_action parameter.
@@ -827,23 +906,19 @@ class FilterEngineTask(QgsTask):
             self.setProgress(100)
             
             # v2.5.11: Check for long query duration and add warning if needed
+            # v2.8.6: Contextual messages based on current backend
             run_elapsed = time.time() - run_start_time
             if run_elapsed >= VERY_LONG_QUERY_WARNING_THRESHOLD:
-                # Very long query (>30s): Critical warning
-                warning_msg = (
-                    f"La requête de filtrage a pris {run_elapsed:.1f}s. "
-                    f"Pour de meilleures performances, considérez d'utiliser PostgreSQL/PostGIS "
-                    f"ou de réduire la complexité du filtre (buffer plus petit, moins de couches)."
-                )
-                self.warning_messages.append(warning_msg)
+                # Very long query (>30s): Critical warning - contextual message
+                warning_msg = self._get_contextual_performance_warning(run_elapsed, 'critical')
+                if warning_msg:
+                    self.warning_messages.append(warning_msg)
                 logger.warning(f"⚠️ Very long query: {run_elapsed:.1f}s")
             elif run_elapsed >= LONG_QUERY_WARNING_THRESHOLD:
-                # Long query (>10s): Standard warning
-                warning_msg = (
-                    f"La requête de filtrage a pris {run_elapsed:.1f}s. "
-                    f"Pour les jeux de données volumineux, PostgreSQL offre de meilleures performances."
-                )
-                self.warning_messages.append(warning_msg)
+                # Long query (>10s): Standard warning - contextual message
+                warning_msg = self._get_contextual_performance_warning(run_elapsed, 'warning')
+                if warning_msg:
+                    self.warning_messages.append(warning_msg)
                 logger.warning(f"⚠️ Long query: {run_elapsed:.1f}s")
             
             logger.info(f"{self.task_action.capitalize()} task completed successfully in {run_elapsed:.2f}s")
@@ -9687,15 +9762,18 @@ class FilterEngineTask(QgsTask):
         Creates the schema if it doesn't exist. This is required before
         creating materialized views in the schema.
         
+        v2.8.8: Now returns the actual schema to use. If 'filtermate_temp' cannot be
+        created (permission issues), falls back to 'public' schema.
+        
         Args:
             connexion: psycopg2 connection
             schema_name: Name of the schema to create
             
         Returns:
-            bool: True if schema exists or was created successfully
+            str: Name of the schema to use (schema_name if created, 'public' as fallback)
             
         Raises:
-            Exception: If connection is invalid or schema creation fails
+            Exception: If connection is invalid
         """
         # Validate connection before use
         if connexion is None:
@@ -9731,7 +9809,7 @@ class FilterEngineTask(QgsTask):
                 result = cursor.fetchone()
                 if result:
                     logger.debug(f"Schema '{schema_name}' already exists")
-                    return True
+                    return schema_name
         except Exception as check_e:
             logger.debug(f"Could not check if schema exists: {check_e}")
             # Continue to try creating it
@@ -9742,7 +9820,7 @@ class FilterEngineTask(QgsTask):
                 cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}";')
                 connexion.commit()
             logger.debug(f"Ensured schema '{schema_name}' exists")
-            return True
+            return schema_name
         except Exception as e:
             logger.warning(f"Error creating schema '{schema_name}' (no auth): {e}")
             # Rollback failed transaction
@@ -9757,7 +9835,7 @@ class FilterEngineTask(QgsTask):
                     cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION CURRENT_USER;')
                     connexion.commit()
                 logger.debug(f"Created schema '{schema_name}' with CURRENT_USER authorization")
-                return True
+                return schema_name
             except Exception as e2:
                 logger.warning(f"Error creating schema with CURRENT_USER: {e2}")
                 try:
@@ -9771,17 +9849,18 @@ class FilterEngineTask(QgsTask):
                         cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION postgres;')
                         connexion.commit()
                     logger.debug(f"Created schema '{schema_name}' with postgres authorization")
-                    return True
+                    return schema_name
                 except Exception as e3:
                     try:
                         connexion.rollback()
                     except:
                         pass
-                    error_msg = f"Failed to create temp schema '{schema_name}': No auth error: {e}, CURRENT_USER error: {e2}, postgres auth error: {e3}"
-                    logger.error(error_msg)
-                    # Store the error for the calling code
-                    self._last_schema_error = error_msg
-                    return False
+                    
+                    # v2.8.8: Fallback to 'public' schema if temp schema cannot be created
+                    logger.warning(f"Cannot create schema '{schema_name}', falling back to 'public'. "
+                                   f"Errors: no auth: {e}, CURRENT_USER: {e2}, postgres: {e3}")
+                    self._last_schema_error = f"Using 'public' schema as fallback (could not create '{schema_name}')"
+                    return 'public'
 
 
     def _get_session_prefixed_name(self, base_name):
@@ -10302,17 +10381,17 @@ class FilterEngineTask(QgsTask):
         import time
         start_time = time.time()
         
-        schema = self.current_materialized_view_schema
-        
         # Generate session-unique view name for multi-client isolation
         session_name = self._get_session_prefixed_name(name)
         logger.debug(f"Using session-prefixed view name: {session_name} (session_id: {self.session_id})")
         
-        # Ensure temp schema exists before creating materialized views
+        # v2.8.8: Ensure temp schema exists before creating materialized views
+        # Returns actual schema to use (filtermate_temp or 'public' as fallback)
         connexion = self._get_valid_postgresql_connection()
-        if not self._ensure_temp_schema_exists(connexion, schema):
-            error_detail = getattr(self, '_last_schema_error', 'Unknown error')
-            raise Exception(f"Failed to ensure temp schema '{schema}' exists: {error_detail}")
+        schema = self._ensure_temp_schema_exists(connexion, self.current_materialized_view_schema)
+        
+        # Update current schema for consistency in this session
+        self.current_materialized_view_schema = schema
         
         # Ensure source table has statistics for query optimization
         self._ensure_source_table_stats(

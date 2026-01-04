@@ -3711,12 +3711,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._centroid_auto_enabled = global_settings.get('auto_centroid', {}).get('enabled', True)
                 self._optimization_ask_before = global_settings.get('ask_before_apply', True)
                 
+                # Apply PostgreSQL settings - including auto_cleanup
+                pg_settings = all_settings.get('postgresql', {})
+                mv_settings = pg_settings.get('materialized_views', {})
+                self._pg_auto_cleanup_enabled = mv_settings.get('auto_cleanup', True)
+                
                 # Store thresholds
                 if not hasattr(self, '_optimization_thresholds'):
                     self._optimization_thresholds = {}
                 self._optimization_thresholds['centroid_distant'] = global_settings.get(
                     'auto_centroid', {}
                 ).get('distant_threshold', 5000)
+                self._optimization_thresholds['mv_threshold'] = mv_settings.get('threshold', 10000)
                 
                 # Log what was configured
                 backends_configured = [k for k, v in all_settings.items() if v]
@@ -3724,7 +3730,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 show_success(
                     "FilterMate", 
-                    self.tr("Backend optimizations configured for: PostgreSQL, Spatialite, OGR")
+                    self.tr("Backend optimizations configured")
                 )
                 
         except ImportError as e:
@@ -8200,11 +8206,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def exploring_select_features(self):
         """
-        Select features from the active exploration groupbox.
+        Activate QGIS selection tool on canvas and select features from the active exploration groupbox.
         
-        When IS_SELECTING button is activated, this method retrieves features
-        from the current exploration mode (single/multiple/custom) and selects
-        them on the layer.
+        When IS_SELECTING button is activated, this method:
+        1. Activates the QGIS rectangle selection tool on the canvas
+        2. Retrieves features from the current exploration mode (single/multiple/custom) 
+           and selects them on the layer.
         """
         if self.widgets_initialized is True and self.current_layer is not None:
             
@@ -8217,6 +8224,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except (RuntimeError, TypeError):
                 self.current_layer = None
                 return
+            
+            # Activate QGIS selection tool on canvas
+            try:
+                self.iface.actionSelectRectangle().trigger()
+                logger.debug("exploring_select_features: Selection tool activated on canvas")
+            except Exception as e:
+                logger.warning(f"exploring_select_features: Failed to activate selection tool: {e}")
+            
+            # Switch active layer in LayerTreeView to current layer
+            try:
+                self.iface.setActiveLayer(self.current_layer)
+                logger.debug(f"exploring_select_features: Active layer set to {self.current_layer.name()}")
+            except Exception as e:
+                logger.warning(f"exploring_select_features: Failed to set active layer: {e}")
             
             # Get features from the active groupbox
             features, expression = self.get_current_features()
@@ -9661,6 +9682,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Only trigger if there's an expression to avoid clearing layer filter
                 if custom_expression:
                     self.exploring_custom_selection()
+            
+            # FIX v2.8.6: Initialize selection sync when is_selecting is already enabled on project load
+            # When opening a project with is_selecting=True, the widget is checked with blockSignals(True)
+            # in _synchronize_layer_widgets, so exploring_select_features() is never called.
+            # This means the bidirectional sync between canvas selection tool and widgets is not active.
+            # We need to explicitly call exploring_select_features() here to initialize the sync.
+            is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
+            if is_selecting:
+                logger.debug(f"_reconnect_layer_signals: is_selecting=True, initializing selection sync")
+                self.exploring_select_features()
 
 
     def current_layer_changed(self, layer):
@@ -11477,14 +11508,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def closeEvent(self, event):
         """Clean up resources before closing."""
         if self.widgets_initialized is True:
-            # CRITICAL: Clear QgsMapLayerComboBox to prevent access violations
+            # CRITICAL: Reset QgsMapLayerComboBox to prevent access violations
             # when layers are removed or project is closed
+            # NOTE: We only call setLayer(None) here, not clear() which can cause issues
+            # However, for closeEvent it's less critical since widget is being destroyed
             try:
                 if hasattr(self, 'comboBox_filtering_current_layer'):
                     self.comboBox_filtering_current_layer.setLayer(None)
-                    self.comboBox_filtering_current_layer.clear()
             except Exception as e:
-                logger.debug(f"FilterMate: Error clearing layer combo on close: {e}")
+                logger.debug(f"FilterMate: Error resetting layer combo on close: {e}")
             
             # Clean up exploring cache
             try:

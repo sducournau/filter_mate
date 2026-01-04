@@ -6,28 +6,31 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.8.7
+version=2.8.9
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.8.7 - Complex Expression Materialization Fix
+about=FilterMate v2.8.9 - Enhanced MV Management & Simplified UI
 
- NEW in v2.8.7:
+ NEW in v2.8.9:
+ - ✨ NEW: MV Status Widget with real-time materialized views count
+ - 🧹 NEW: Quick cleanup actions (Session/Orphaned/All MVs)
+ - 🎨 IMPROVED: Simplified optimization confirmation popup (faster workflow)
+ - ⚙️ NEW: Auto-cleanup toggle for PostgreSQL session views
+ - 🔄 Synced MV settings between advanced panel and dockwidget
+
+ Previous in v2.8.8:
+ - 🐛 FIX: Selection auto-sync now works immediately on project load when already enabled
+ - 🔄 FIX: Bidirectional sync between canvas selection tool and UI widgets initializes correctly
+
+ Previous in v2.8.7:
  - 🚀 NEW: Post-buffer simplification optimization (reduces vertex count after buffer ops)
  - 📦 NEW: Centralized psycopg2 imports via modules/psycopg2_availability.py
  - ♻️ REFACTOR: Deduplicated buffer methods moved to base_backend.py (~230 lines removed)
- - 🛠️ REFACTOR: Standardized message bar calls via feedback_utils
- - ⚙️ NEW: auto_simplify_after_buffer config option (default: true)
- - ⚙️ NEW: buffer_simplify_after_tolerance config (default: 0.5m)
 
  Previous in v2.8.4:
  - 🐛 FIX: Flash/Zoom now correctly shows only custom expression matches (robust validation)
  - 🔒 Cache validation before use: verifies cached expression matches current widget
- - 🛡️ Defensive check in exploring_identify_clicked, exploring_zoom_clicked, get_current_features
-
- Previous in v2.8.3:
- - ✨ NEW: Backend-Specific Optimization Settings UI Panel
- - 🐘 PostgreSQL: Materialized views, two-phase filtering, connection pooling, query caching
  - 📦 Spatialite: R-tree temp tables, interruptible queries, direct SQL for GeoPackage
  - 📁 OGR: Spatial indexing, small dataset optimization, progressive chunking
  - ⚡ Global: Auto-optimization, centroid for distant layers, parallel filtering

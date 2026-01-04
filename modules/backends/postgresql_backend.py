@@ -27,6 +27,7 @@ from qgis.core import QgsVectorLayer, QgsDataSourceUri
 from .base_backend import GeometricFilterBackend
 from ..logging_config import get_tasks_logger
 from ..psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
+from ..constants import DEFAULT_TEMP_SCHEMA
 from ..appUtils import (
     safe_set_subset_string, 
     get_datasource_connexion_from_layer, 
@@ -177,8 +178,56 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         """
         super().__init__(task_params)
         self.logger = logger
-        self.mv_schema = "public"  # Default schema for materialized views
+        self.mv_schema = DEFAULT_TEMP_SCHEMA  # v2.8.8: Use filtermate_temp schema for MVs
         self.mv_prefix = "filtermate_mv_"  # Prefix for MV names
+
+    def _ensure_mv_schema_exists(self, conn, schema_name: str) -> str:
+        """
+        Ensure the MV schema exists, with fallback to 'public' if creation fails.
+        
+        v2.8.8: All FilterMate materialized views are created in a dedicated temp schema.
+        If the schema cannot be created (permission issues), falls back to 'public'.
+        
+        Args:
+            conn: psycopg2 connection
+            schema_name: Desired schema name (e.g., 'filtermate_temp')
+            
+        Returns:
+            str: Name of the schema to use (schema_name if created/exists, 'public' as fallback)
+        """
+        if conn is None:
+            self.log_warning("Cannot ensure MV schema: connection is None, using 'public'")
+            return 'public'
+        
+        # Check if schema already exists
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT schema_name FROM information_schema.schemata 
+                    WHERE schema_name = %s
+                """, (schema_name,))
+                if cursor.fetchone():
+                    return schema_name
+        except Exception as e:
+            self.log_debug(f"Could not check if schema '{schema_name}' exists: {e}")
+        
+        # Try to create the schema
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}";')
+                conn.commit()
+            self.log_debug(f"Created schema '{schema_name}'")
+            return schema_name
+        except Exception as e:
+            self.log_warning(f"Cannot create schema '{schema_name}': {e}")
+            try:
+                conn.rollback()
+            except:
+                pass
+            
+            # Fallback to public schema
+            self.log_info(f"Using 'public' schema as fallback for MVs")
+            return 'public'
 
     def _has_expensive_spatial_expression(self, sql_string: str) -> bool:
         """
@@ -2673,20 +2722,12 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             mv_suffix = uuid.uuid4().hex[:8]
             mv_name = f"{self.mv_prefix}src_sel_{mv_suffix}"
             
-            # Use filter_mate_temp schema (same as other FilterMate MVs)
-            mv_schema = "filter_mate_temp"
+            # v2.8.8: Use filtermate_temp schema, with fallback to 'public' if creation fails
+            mv_schema = self._ensure_mv_schema_exists(conn, DEFAULT_TEMP_SCHEMA)
             full_mv_name = f'"{mv_schema}"."{mv_name}"'
             
             self.log_info(f"🗄️ v2.8.0: Creating source selection MV for {len(fids)} features")
             self.log_info(f"   MV: {full_mv_name}")
-            
-            # Ensure schema exists
-            try:
-                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{mv_schema}";')
-                conn.commit()
-            except Exception as schema_err:
-                self.log_debug(f"Schema creation skipped (may already exist): {schema_err}")
-                conn.rollback()
             
             # Build FIDs string for IN clause
             fids_str = ', '.join(str(fid) for fid in fids)

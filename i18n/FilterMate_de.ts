@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS>
+<?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="de_DE" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -212,25 +211,25 @@ Möchten Sie fortfahren?</translation>
         <translation>Fehler bei der Konfigurationsmigration: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -808,16 +807,16 @@ Erstes Attribut: {1}</translation>
         <translation>Bestätigungsdialog vor Optimierungen anzeigen</translation>
     </message>
     <message>
-        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
-        <translation>Zentroide aktiviert für &apos;{0}&apos; (~{1}x {2})</translation>
+        <source>Centroids enabled for '{0}' (~{1}x {2})</source>
+        <translation>Zentroide aktiviert für '{0}' (~{1}x {2})</translation>
     </message>
     <message>
-        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
-        <translation>BBox-Vorfilter aktiviert für &apos;{0}&apos;</translation>
+        <source>BBox pre-filter enabled for '{0}'</source>
+        <translation>BBox-Vorfilter aktiviert für '{0}'</translation>
     </message>
     <message>
-        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
-        <translation>Optimierung angewendet: &apos;{0}&apos; (~{1}x {2})</translation>
+        <source>Optimization applied: '{0}' (~{1}x {2})</source>
+        <translation>Optimierung angewendet: '{0}' (~{1}x {2})</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -828,4 +827,413 @@ Erstes Attribut: {1}</translation>
         <translation>Puffer-Segmente reduzieren</translation>
     </message>
 </context>
+<context>
+    <name>BackendOptimizationWidget</name>
+    <message>
+        <source>Quick Setup</source>
+        <translation>Schnelleinrichtung</translation>
+    </message>
+    <message>
+        <source>Choose a profile or customize settings below</source>
+        <translation>Wählen Sie ein Profil oder passen Sie die Einstellungen unten an</translation>
+    </message>
+    <message>
+        <source>Smart Recommendations</source>
+        <translation>Intelligente Empfehlungen</translation>
+    </message>
+    <message>
+        <source>Analyzing your project... Recommendations will appear here.</source>
+        <translation>Projekt wird analysiert... Empfehlungen erscheinen hier.</translation>
+    </message>
+    <message>
+        <source>Enable Materialized Views</source>
+        <translation>Materialisierte Views aktivieren</translation>
+    </message>
+    <message>
+        <source>You have {0} PostgreSQL layers with large datasets. Materialized views can speed up filtering by 3-10x.</source>
+        <translation>Sie haben {0} PostgreSQL-Layer mit großen Datensätzen. Materialisierte Views können das Filtern um 3-10x beschleunigen.</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Centroid for Remote Layers</source>
+        <translation>Auto-Zentroid für entfernte Layer aktivieren</translation>
+    </message>
+    <message>
+        <source>You have {0} remote layers. Using centroids reduces network transfer by ~90%.</source>
+        <translation>Sie haben {0} entfernte Layer. Die Verwendung von Zentroiden reduziert die Netzwerkübertragung um ~90%.</translation>
+    </message>
+    <message>
+        <source>Enable Direct SQL for GeoPackage</source>
+        <translation>Direktes SQL für GeoPackage aktivieren</translation>
+    </message>
+    <message>
+        <source>Direct SQL access can make GeoPackage filtering 2-5x faster.</source>
+        <translation>Direkter SQL-Zugriff kann die GeoPackage-Filterung 2-5x schneller machen.</translation>
+    </message>
+    <message>
+        <source>Create Spatial Indexes</source>
+        <translation>Räumliche Indizes erstellen</translation>
+    </message>
+    <message>
+        <source>Some shapefiles may lack spatial indexes. Creating indexes can improve performance 10-100x.</source>
+        <translation>Einige Shapefiles haben möglicherweise keine räumlichen Indizes. Das Erstellen von Indizes kann die Leistung um 10-100x verbessern.</translation>
+    </message>
+    <message>
+        <source>Use Balanced Profile</source>
+        <translation>Ausgewogenes Profil verwenden</translation>
+    </message>
+    <message>
+        <source>Start with balanced settings for optimal performance on most projects.</source>
+        <translation>Beginnen Sie mit ausgewogenen Einstellungen für optimale Leistung bei den meisten Projekten.</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Anwenden</translation>
+    </message>
+    <message>
+        <source>Estimated performance improvement</source>
+        <translation>Geschätzte Leistungsverbesserung</translation>
+    </message>
+    <message>
+        <source>PostgreSQL/PostGIS Optimizations</source>
+        <translation>PostgreSQL/PostGIS-Optimierungen</translation>
+    </message>
+    <message>
+        <source>Optimizations for PostgreSQL databases with PostGIS extension</source>
+        <translation>Optimierungen für PostgreSQL-Datenbanken mit PostGIS-Erweiterung</translation>
+    </message>
+    <message>
+        <source>Materialized Views</source>
+        <translation>Materialisierte Views</translation>
+    </message>
+    <message>
+        <source>Create indexed temporary views for complex spatial queries. Best for large datasets with complex expressions.</source>
+        <translation>Erstellen Sie indizierte temporäre Views für komplexe räumliche Abfragen. Optimal für große Datensätze mit komplexen Ausdrücken.</translation>
+    </message>
+    <message>
+        <source>Threshold (features):</source>
+        <translation>Schwellenwert (Features):</translation>
+    </message>
+    <message>
+        <source>Create materialized views for datasets larger than this</source>
+        <translation>Materialisierte Views für Datensätze erstellen, die größer als dieser Schwellenwert sind</translation>
+    </message>
+    <message>
+        <source>Two-Phase Filtering</source>
+        <translation>Zweiphasen-Filterung</translation>
+    </message>
+    <message>
+        <source>First filter by bounding box, then by exact geometry. Reduces precision calculations on irrelevant features.</source>
+        <translation>Erst nach Bounding-Box filtern, dann nach exakter Geometrie. Reduziert Präzisionsberechnungen bei irrelevanten Features.</translation>
+    </message>
+    <message>
+        <source>Progressive Loading</source>
+        <translation>Progressives Laden</translation>
+    </message>
+    <message>
+        <source>Stream results in chunks to reduce memory usage. Essential for very large result sets.</source>
+        <translation>Ergebnisse in Blöcken streamen, um den Speicherverbrauch zu reduzieren. Wesentlich für sehr große Ergebnismengen.</translation>
+    </message>
+    <message>
+        <source>Lazy cursor threshold:</source>
+        <translation>Lazy-Cursor-Schwellenwert:</translation>
+    </message>
+    <message>
+        <source>Query Expression Caching</source>
+        <translation>Abfrage-Ausdruck-Caching</translation>
+    </message>
+    <message>
+        <source>Cache built expressions to avoid rebuilding identical queries.</source>
+        <translation>Erstellte Ausdrücke zwischenspeichern, um das Neuerstellen identischer Abfragen zu vermeiden.</translation>
+    </message>
+    <message>
+        <source>Connection Pooling</source>
+        <translation>Verbindungs-Pooling</translation>
+    </message>
+    <message>
+        <source>Reuse database connections to avoid 50-100ms overhead per query.</source>
+        <translation>Datenbankverbindungen wiederverwenden, um 50-100ms Overhead pro Abfrage zu vermeiden.</translation>
+    </message>
+    <message>
+        <source>EXISTS Subquery for Large WKT</source>
+        <translation>EXISTS-Unterabfrage für große WKT</translation>
+    </message>
+    <message>
+        <source>Use EXISTS subquery instead of inline WKT for very large geometries.</source>
+        <translation>EXISTS-Unterabfrage anstelle von Inline-WKT für sehr große Geometrien verwenden.</translation>
+    </message>
+    <message>
+        <source>WKT length threshold (chars):</source>
+        <translation>WKT-Längenschwelle (Zeichen):</translation>
+    </message>
+    <message>
+        <source>Automatic GIST Index Usage</source>
+        <translation>Automatische GIST-Index-Nutzung</translation>
+    </message>
+    <message>
+        <source>Verify and use GIST spatial indexes for optimal query plans.</source>
+        <translation>GIST-Raumindizes überprüfen und für optimale Abfragepläne verwenden.</translation>
+    </message>
+    <message>
+        <source>Spatialite/GeoPackage Optimizations</source>
+        <translation>Spatialite/GeoPackage-Optimierungen</translation>
+    </message>
+    <message>
+        <source>Optimizations for Spatialite databases and GeoPackage files</source>
+        <translation>Optimierungen für Spatialite-Datenbanken und GeoPackage-Dateien</translation>
+    </message>
+    <message>
+        <source>R-tree Temp Tables</source>
+        <translation>R-tree Temporäre Tabellen</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree spatial indexes for complex queries. Best for complex expressions on local files.</source>
+        <translation>Temporäre Tabellen mit R-tree Raumindizes für komplexe Abfragen erstellen. Optimal für komplexe Ausdrücke auf lokalen Dateien.</translation>
+    </message>
+    <message>
+        <source>WKT size threshold (KB):</source>
+        <translation>WKT-Größenschwelle (KB):</translation>
+    </message>
+    <message>
+        <source>Use R-tree optimization for WKT larger than this</source>
+        <translation>R-tree-Optimierung für WKT größer als dieser Wert verwenden</translation>
+    </message>
+    <message>
+        <source>BBox Pre-filtering</source>
+        <translation>BBox-Vorfilterung</translation>
+    </message>
+    <message>
+        <source>Use bounding box filter before exact geometry test. Leverages spatial indexes effectively.</source>
+        <translation>Bounding-Box-Filter vor exaktem Geometrietest verwenden. Nutzt Raumindizes effektiv.</translation>
+    </message>
+    <message>
+        <source>Interruptible Queries</source>
+        <translation>Unterbrechbare Abfragen</translation>
+    </message>
+    <message>
+        <source>Execute SQLite queries in background thread with cancellation support. Prevents UI freezing.</source>
+        <translation>SQLite-Abfragen im Hintergrund-Thread mit Abbruchunterstützung ausführen. Verhindert UI-Einfrieren.</translation>
+    </message>
+    <message>
+        <source>Query timeout (seconds):</source>
+        <translation>Abfrage-Zeitlimit (Sekunden):</translation>
+    </message>
+    <message>
+        <source>Direct SQL for GeoPackage</source>
+        <translation>Direktes SQL für GeoPackage</translation>
+    </message>
+    <message>
+        <source>Bypass GDAL layer and execute SQL directly on GeoPackage. Faster for complex spatial queries.</source>
+        <translation>GDAL-Layer umgehen und SQL direkt auf GeoPackage ausführen. Schneller für komplexe räumliche Abfragen.</translation>
+    </message>
+    <message>
+        <source>WKT Geometry Caching</source>
+        <translation>WKT-Geometrie-Caching</translation>
+    </message>
+    <message>
+        <source>Cache converted WKT strings to avoid repeated geometry serialization.</source>
+        <translation>Konvertierte WKT-Strings zwischenspeichern, um wiederholte Geometrie-Serialisierung zu vermeiden.</translation>
+    </message>
+    <message>
+        <source>Auto-detect mod_spatialite</source>
+        <translation>mod_spatialite automatisch erkennen</translation>
+    </message>
+    <message>
+        <source>Automatically find and load the best mod_spatialite extension.</source>
+        <translation>Automatisch die beste mod_spatialite-Erweiterung finden und laden.</translation>
+    </message>
+    <message>
+        <source>OGR/Memory Optimizations</source>
+        <translation>OGR/Speicher-Optimierungen</translation>
+    </message>
+    <message>
+        <source>Optimizations for file-based formats (Shapefiles, GeoJSON) and memory layers</source>
+        <translation>Optimierungen für dateibasierte Formate (Shapefiles, GeoJSON) und Speicher-Layer</translation>
+    </message>
+    <message>
+        <source>Automatic Spatial Index</source>
+        <translation>Automatischer Raumindex</translation>
+    </message>
+    <message>
+        <source>Automatically create spatial index (.qix/.shx) for layers without one. Dramatically improves spatial query speed.</source>
+        <translation>Automatisch Raumindex (.qix/.shx) für Layer ohne Index erstellen. Verbessert die Geschwindigkeit räumlicher Abfragen erheblich.</translation>
+    </message>
+    <message>
+        <source>Small Dataset Memory Backend</source>
+        <translation>Speicher-Backend für kleine Datensätze</translation>
+    </message>
+    <message>
+        <source>For small PostgreSQL layers, copy to memory for faster filtering. Avoids network latency for small datasets.</source>
+        <translation>Für kleine PostgreSQL-Layer in den Speicher kopieren für schnellere Filterung. Vermeidet Netzwerklatenz bei kleinen Datensätzen.</translation>
+    </message>
+    <message>
+        <source>Small dataset threshold:</source>
+        <translation>Schwellenwert für kleine Datensätze:</translation>
+    </message>
+    <message>
+        <source>Cancellable Processing</source>
+        <translation>Abbrechbare Verarbeitung</translation>
+    </message>
+    <message>
+        <source>Allow cancellation of QGIS processing algorithms. Enables stopping long-running operations.</source>
+        <translation>Abbruch von QGIS-Verarbeitungsalgorithmen ermöglichen. Erlaubt das Stoppen lang laufender Operationen.</translation>
+    </message>
+    <message>
+        <source>Progressive Chunking</source>
+        <translation>Progressive Chunk-Verarbeitung</translation>
+    </message>
+    <message>
+        <source>Process features in chunks for very large datasets. Reduces peak memory usage.</source>
+        <translation>Features in Blöcken für sehr große Datensätze verarbeiten. Reduziert Spitzen-Speicherverbrauch.</translation>
+    </message>
+    <message>
+        <source>Chunk size (features):</source>
+        <translation>Blockgröße (Features):</translation>
+    </message>
+    <message>
+        <source>GEOS-safe Geometry Handling</source>
+        <translation>GEOS-sichere Geometrieverarbeitung</translation>
+    </message>
+    <message>
+        <source>Validate and repair geometries before processing. Prevents crashes on invalid geometries.</source>
+        <translation>Geometrien vor der Verarbeitung validieren und reparieren. Verhindert Abstürze bei ungültigen Geometrien.</translation>
+    </message>
+    <message>
+        <source>Thread-safe Operations</source>
+        <translation>Thread-sichere Operationen</translation>
+    </message>
+    <message>
+        <source>Force sequential execution for OGR layers to prevent crashes. Safer but slower.</source>
+        <translation>Sequentielle Ausführung für OGR-Layer erzwingen, um Abstürze zu verhindern. Sicherer, aber langsamer.</translation>
+    </message>
+    <message>
+        <source>Global Optimizations</source>
+        <translation>Globale Optimierungen</translation>
+    </message>
+    <message>
+        <source>Optimizations that apply to all backend types</source>
+        <translation>Optimierungen, die für alle Backend-Typen gelten</translation>
+    </message>
+    <message>
+        <source>Enable Auto-Optimization</source>
+        <translation>Auto-Optimierung aktivieren</translation>
+    </message>
+    <message>
+        <source>Automatically analyze layers and suggest optimizations before filtering.</source>
+        <translation>Layer automatisch analysieren und Optimierungen vor dem Filtern vorschlagen.</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid for Distant Layers</source>
+        <translation>Auto-Zentroid für entfernte Layer</translation>
+    </message>
+    <message>
+        <source>Automatically use ST_Centroid() for remote layers (WFS, ArcGIS). Reduces network data transfer by ~90%.</source>
+        <translation>ST_Centroid() automatisch für entfernte Layer (WFS, ArcGIS) verwenden. Reduziert Netzwerkdatenübertragung um ~90%.</translation>
+    </message>
+    <message>
+        <source>Distant layer threshold:</source>
+        <translation>Schwellenwert für entfernte Layer:</translation>
+    </message>
+    <message>
+        <source>Auto-Select Best Strategy</source>
+        <translation>Beste Strategie automatisch auswählen</translation>
+    </message>
+    <message>
+        <source>Automatically choose optimal filtering strategy based on layer analysis. (attribute-first, bbox-prefilter, progressive chunks)</source>
+        <translation>Optimale Filterstrategie basierend auf Layer-Analyse automatisch wählen. (Attribute-zuerst, BBox-Vorfilter, progressive Blöcke)</translation>
+    </message>
+    <message>
+        <source>Auto-Simplify Geometries ⚠️</source>
+        <translation>Geometrien automatisch vereinfachen ⚠️</translation>
+    </message>
+    <message>
+        <source>Automatically simplify complex geometries. WARNING: This is a LOSSY operation that may change polygon shapes.</source>
+        <translation>Komplexe Geometrien automatisch vereinfachen. WARNUNG: Dies ist eine verlustbehaftete Operation, die Polygonformen ändern kann.</translation>
+    </message>
+    <message>
+        <source>Simplify Before Buffer</source>
+        <translation>Vor Puffer vereinfachen</translation>
+    </message>
+    <message>
+        <source>Simplify geometries before applying buffer operations. Improves buffer performance without affecting final spatial results.</source>
+        <translation>Geometrien vor Pufferoperationen vereinfachen. Verbessert die Pufferleistung ohne Auswirkung auf die endgültigen räumlichen Ergebnisse.</translation>
+    </message>
+    <message>
+        <source>Simplify After Buffer</source>
+        <translation>Nach Puffer vereinfachen</translation>
+    </message>
+    <message>
+        <source>Simplify the resulting polygon after buffer operations. Reduces vertex count for complex polygons from negative/positive buffer sequences.</source>
+        <translation>Das resultierende Polygon nach Pufferoperationen vereinfachen. Reduziert die Anzahl der Stützpunkte für komplexe Polygone aus negativen/positiven Puffersequenzen.</translation>
+    </message>
+    <message>
+        <source>Parallel Layer Filtering</source>
+        <translation>Parallele Layer-Filterung</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously using multiple CPU cores.</source>
+        <translation>Mehrere Layer gleichzeitig mit mehreren CPU-Kernen filtern.</translation>
+    </message>
+    <message>
+        <source>Max workers (0=auto):</source>
+        <translation>Max. Worker (0=auto):</translation>
+    </message>
+    <message>
+        <source>Streaming Export</source>
+        <translation>Streaming-Export</translation>
+    </message>
+    <message>
+        <source>Use batch streaming for exporting large datasets. Prevents memory issues with very large exports.</source>
+        <translation>Batch-Streaming für den Export großer Datensätze verwenden. Verhindert Speicherprobleme bei sehr großen Exporten.</translation>
+    </message>
+    <message>
+        <source>Confirm Before Applying</source>
+        <translation>Vor dem Anwenden bestätigen</translation>
+    </message>
+    <message>
+        <source>Show confirmation dialog before applying automatic optimizations.</source>
+        <translation>Bestätigungsdialog vor dem Anwenden automatischer Optimierungen anzeigen.</translation>
+    </message>
+    <message>
+        <source>Show Optimization Hints</source>
+        <translation>Optimierungshinweise anzeigen</translation>
+    </message>
+    <message>
+        <source>Display optimization hints in message bar when recommendations are available.</source>
+        <translation>Optimierungshinweise in der Nachrichtenleiste anzeigen, wenn Empfehlungen verfügbar sind.</translation>
+    </message>
+    <message>
+        <source>Global</source>
+        <translation>Global</translation>
+    </message>
+    <message>
+        <source>FilterMate - Backend Optimizations</source>
+        <translation>FilterMate - Backend-Optimierungen</translation>
+    </message>
+    <message>
+        <source>💡 Tip: Select a profile for quick setup, or customize each backend below.</source>
+        <translation>💡 Tipp: Wählen Sie ein Profil für die Schnelleinrichtung oder passen Sie jedes Backend unten an.</translation>
+    </message>
+    <message>
+        <source>Reset to Defaults</source>
+        <translation>Auf Standardwerte zurücksetzen</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>Save Settings</source>
+        <translation>Einstellungen speichern</translation>
+    </message>
+    <message>
+        <source>Restore Defaults</source>
+        <translation>Standardwerte wiederherstellen</translation>
+    </message>
+    <message>
+        <source>Reset all settings to balanced defaults?</source>
+        <translation>Alle Einstellungen auf ausgewogene Standardwerte zurücksetzen?</translation>
+    </message>
+<message><source>MV Status: Checking...</source><translation>MV-Status: Prüfe...</translation></message><message><source>MV Status: Error</source><translation>MV-Status: Fehler</translation></message><message><source>MV Status: Clean</source><translation>MV-Status: Sauber</translation></message><message><source>MV Status:</source><translation>MV-Status:</translation></message><message><source>active</source><translation>aktiv</translation></message><message><source>No active materialized views</source><translation>Keine aktiven materialisierten Ansichten</translation></message><message><source>Session:</source><translation>Sitzung:</translation></message><message><source>Other sessions:</source><translation>Andere Sitzungen:</translation></message><message><source>🧹 Session</source><translation>🧹 Sitzung</translation></message><message><source>Cleanup MVs from this session</source><translation>MVs dieser Sitzung bereinigen</translation></message><message><source>🗑️ Orphaned</source><translation>🗑️ Verwaist</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation>Verwaiste MVs bereinigen (&gt;24h alt)</translation></message><message><source>⚠️ All</source><translation>⚠️ Alle</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation>ALLE MVs bereinigen (betrifft andere Sitzungen)</translation></message><message><source>Confirm Cleanup</source><translation>Bereinigung bestätigen</translation></message><message><source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source><translation>ALLE materialisierten Ansichten löschen?
+Dies betrifft andere FilterMate-Sitzungen!</translation></message><message><source>Refresh MV status</source><translation>MV-Status aktualisieren</translation></message><message><source>Threshold:</source><translation>Schwellenwert:</translation></message><message><source>features</source><translation>Features</translation></message><message><source>Auto-cleanup on exit</source><translation>Auto-Bereinigung beim Beenden</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation>Session-MVs automatisch löschen wenn Plugin entladen wird</translation></message><message><source>Create MVs for datasets larger than this</source><translation>MVs für Datensätze größer als dies erstellen</translation></message><message><source>faster possible</source><translation>schneller möglich</translation></message><message><source>Optimizations available</source><translation>Optimierungen verfügbar</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation>FilterMate - Optimierungen anwenden?</translation></message><message><source>Skip</source><translation>Überspringen</translation></message><message><source>✓ Apply</source><translation>✓ Anwenden</translation></message><message><source>Don't ask for this session</source><translation>Diese Sitzung nicht mehr fragen</translation></message><message><source>Centroids</source><translation>Zentroide</translation></message><message><source>Simplify</source><translation>Vereinfachen</translation></message><message><source>Pre-simplify</source><translation>Vorvereinfachen</translation></message><message><source>Fewer segments</source><translation>Weniger Segmente</translation></message><message><source>Flat buffer</source><translation>Flacher Puffer</translation></message><message><source>BBox filter</source><translation>BBox-Filter</translation></message><message><source>Attr-first</source><translation>Attribut zuerst</translation></message><message><source>PostgreSQL not available</source><translation>PostgreSQL nicht verfügbar</translation></message><message><source>No connection</source><translation>Keine Verbindung</translation></message><message><source>Auto-zoom when feature changes</source><translation>Auto-Zoom bei Feature-Änderung</translation></message><message><source>Backend optimization settings saved</source><translation>Backend-Optimierungseinstellungen gespeichert</translation></message><message><source>Backend optimizations configured</source><translation>Backend-Optimierungen konfiguriert</translation></message><message><source>Expression Evaluation</source><translation>Ausdrucksauswertung</translation></message><message><source>Identify selected feature</source><translation>Ausgewähltes Feature identifizieren</translation></message><message><source>Layer properties reset to defaults</source><translation>Layer-Eigenschaften auf Standard zurückgesetzt</translation></message><message><source>Link exploring widgets together</source><translation>Erkundungs-Widgets verknüpfen</translation></message><message><source>Optimization settings saved</source><translation>Optimierungseinstellungen gespeichert</translation></message><message><source>Reset all layer exploring properties</source><translation>Alle Layer-Erkundungseigenschaften zurücksetzen</translation></message><message><source>Toggle feature selection on map</source><translation>Feature-Auswahl auf Karte umschalten</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation>Zentroide statt voller Geometrien für entfernte Layer verwenden (schneller für komplexe Polygone)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation>Zentroide statt voller Geometrien für Quell-Layer verwenden (schneller für komplexe Polygone)</translation></message><message><source>Zoom to selected feature</source><translation>Auf ausgewähltes Feature zoomen</translation></message></context>
 </TS>

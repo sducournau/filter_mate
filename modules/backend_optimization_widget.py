@@ -563,9 +563,199 @@ class OptimizationToggle(QWidget):
         self.checkbox.setChecked(enabled)
 
 
+class MVStatusWidget(QWidget):
+    """
+    Widget showing current materialized views status and management actions.
+    Provides real-time info about active MVs and cleanup options.
+    """
+    
+    cleanupRequested = pyqtSignal(str)  # 'session', 'all', 'orphaned'
+    refreshRequested = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+        self._mv_count = 0
+        self._session_count = 0
+        self._other_count = 0
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 5, 0, 5)
+        layout.setSpacing(4)
+        
+        # Status frame with compact styling
+        self.status_frame = QFrame()
+        self.status_frame.setStyleSheet("""
+            QFrame {
+                background-color: #e8f5e9;
+                border: 1px solid #a5d6a7;
+                border-radius: 4px;
+                padding: 6px;
+            }
+        """)
+        status_layout = QVBoxLayout(self.status_frame)
+        status_layout.setContentsMargins(8, 6, 8, 6)
+        status_layout.setSpacing(4)
+        
+        # Status header with icon
+        header_layout = QHBoxLayout()
+        self.status_icon = QLabel("📊")
+        self.status_icon.setStyleSheet("font-size: 14pt;")
+        header_layout.addWidget(self.status_icon)
+        
+        self.status_label = QLabel(tr("MV Status: Checking..."))
+        self.status_label.setStyleSheet("font-weight: bold; font-size: 10pt;")
+        header_layout.addWidget(self.status_label)
+        header_layout.addStretch()
+        
+        # Refresh button (compact)
+        self.refresh_btn = QPushButton("🔄")
+        self.refresh_btn.setFixedSize(24, 24)
+        self.refresh_btn.setToolTip(tr("Refresh MV status"))
+        self.refresh_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+                font-size: 12pt;
+            }
+            QPushButton:hover { background-color: rgba(0,0,0,0.1); border-radius: 12px; }
+        """)
+        self.refresh_btn.clicked.connect(lambda: self.refreshRequested.emit())
+        header_layout.addWidget(self.refresh_btn)
+        
+        status_layout.addLayout(header_layout)
+        
+        # Details row
+        self.details_label = QLabel("")
+        self.details_label.setStyleSheet("color: #555; font-size: 9pt;")
+        self.details_label.setWordWrap(True)
+        status_layout.addWidget(self.details_label)
+        
+        layout.addWidget(self.status_frame)
+        
+        # Action buttons row (compact)
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(4)
+        
+        self.cleanup_session_btn = QPushButton(tr("🧹 Session"))
+        self.cleanup_session_btn.setToolTip(tr("Cleanup MVs from this session"))
+        self.cleanup_session_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 9pt;
+            }
+            QPushButton:hover { background-color: #42A5F5; }
+            QPushButton:disabled { background-color: #ccc; }
+        """)
+        self.cleanup_session_btn.clicked.connect(lambda: self.cleanupRequested.emit('session'))
+        btn_layout.addWidget(self.cleanup_session_btn)
+        
+        self.cleanup_orphaned_btn = QPushButton(tr("🗑️ Orphaned"))
+        self.cleanup_orphaned_btn.setToolTip(tr("Cleanup orphaned MVs (>24h old)"))
+        self.cleanup_orphaned_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 9pt;
+            }
+            QPushButton:hover { background-color: #FFB74D; }
+            QPushButton:disabled { background-color: #ccc; }
+        """)
+        self.cleanup_orphaned_btn.clicked.connect(lambda: self.cleanupRequested.emit('orphaned'))
+        btn_layout.addWidget(self.cleanup_orphaned_btn)
+        
+        self.cleanup_all_btn = QPushButton(tr("⚠️ All"))
+        self.cleanup_all_btn.setToolTip(tr("Cleanup ALL MVs (affects other sessions)"))
+        self.cleanup_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-size: 9pt;
+            }
+            QPushButton:hover { background-color: #e57373; }
+            QPushButton:disabled { background-color: #ccc; }
+        """)
+        self.cleanup_all_btn.clicked.connect(lambda: self.cleanupRequested.emit('all'))
+        btn_layout.addWidget(self.cleanup_all_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+    
+    def update_status(self, session_count: int = 0, other_count: int = 0, 
+                      schema_exists: bool = False, error: str = None):
+        """Update the MV status display."""
+        self._session_count = session_count
+        self._other_count = other_count
+        total = session_count + other_count
+        
+        if error:
+            self.status_icon.setText("⚠️")
+            self.status_label.setText(tr("MV Status: Error"))
+            self.details_label.setText(error[:80])
+            self.status_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #ffebee;
+                    border: 1px solid #ef9a9a;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+            """)
+            self.cleanup_session_btn.setEnabled(False)
+            self.cleanup_orphaned_btn.setEnabled(False)
+            self.cleanup_all_btn.setEnabled(False)
+        elif total == 0:
+            self.status_icon.setText("✅")
+            self.status_label.setText(tr("MV Status: Clean"))
+            self.details_label.setText(tr("No active materialized views"))
+            self.status_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #e8f5e9;
+                    border: 1px solid #a5d6a7;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+            """)
+            self.cleanup_session_btn.setEnabled(False)
+            self.cleanup_orphaned_btn.setEnabled(False)
+            self.cleanup_all_btn.setEnabled(schema_exists)
+        else:
+            self.status_icon.setText("📊")
+            self.status_label.setText(f"{tr('MV Status:')} {total} {tr('active')}")
+            details = f"{tr('Session:')} {session_count}"
+            if other_count > 0:
+                details += f" | {tr('Other sessions:')} {other_count}"
+            self.details_label.setText(details)
+            self.status_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #e3f2fd;
+                    border: 1px solid #90caf9;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+            """)
+            self.cleanup_session_btn.setEnabled(session_count > 0)
+            self.cleanup_orphaned_btn.setEnabled(True)
+            self.cleanup_all_btn.setEnabled(True)
+
+
 class PostgreSQLOptimizationPanel(QWidget):
     """
-    Optimization settings specific to PostgreSQL/PostGIS backend."""
+    Optimization settings specific to PostgreSQL/PostGIS backend.
+    
+    v2.8.6: Enhanced MV management with status widget and cleanup actions.
+    """
     
     settingsChanged = pyqtSignal(dict)
     
@@ -584,9 +774,15 @@ class PostgreSQLOptimizationPanel(QWidget):
         layout.addWidget(header)
         
         desc = QLabel(tr("Optimizations for PostgreSQL databases with PostGIS extension"))
-        desc.setStyleSheet("color: #666; font-size: 9pt; margin-bottom: 10px;")
+        desc.setStyleSheet("color: #666; font-size: 9pt; margin-bottom: 5px;")
         desc.setWordWrap(True)
         layout.addWidget(desc)
+        
+        # ===== MV STATUS SECTION =====
+        self.mv_status_widget = MVStatusWidget()
+        self.mv_status_widget.cleanupRequested.connect(self._on_cleanup_requested)
+        self.mv_status_widget.refreshRequested.connect(self._refresh_mv_status)
+        layout.addWidget(self.mv_status_widget)
         
         # Separator
         sep = QFrame()
@@ -594,34 +790,42 @@ class PostgreSQLOptimizationPanel(QWidget):
         sep.setStyleSheet("background-color: #336791;")
         layout.addWidget(sep)
         
+        # ===== OPTIMIZATION TOGGLES =====
+        
         # Materialized Views
         self.mv_toggle = OptimizationToggle(
             tr("Materialized Views"),
-            tr("Create indexed temporary views for complex spatial queries. "
-               "Best for large datasets with repeated queries."),
+            tr("Create indexed temporary views for complex spatial queries."),
             speedup="3-10x",
             default_enabled=True
         )
         layout.addWidget(self.mv_toggle)
         
-        # MV threshold setting
-        mv_threshold_layout = QHBoxLayout()
-        mv_threshold_layout.setContentsMargins(30, 0, 0, 0)
-        mv_threshold_layout.addWidget(QLabel(tr("Threshold (features):")))
+        # MV settings row
+        mv_settings_layout = QHBoxLayout()
+        mv_settings_layout.setContentsMargins(30, 0, 0, 0)
+        mv_settings_layout.addWidget(QLabel(tr("Threshold:")))
         self.mv_threshold_spin = QSpinBox()
         self.mv_threshold_spin.setRange(1000, 500000)
         self.mv_threshold_spin.setValue(10000)
         self.mv_threshold_spin.setSingleStep(1000)
-        self.mv_threshold_spin.setToolTip(tr("Create materialized views for datasets larger than this"))
-        mv_threshold_layout.addWidget(self.mv_threshold_spin)
-        mv_threshold_layout.addStretch()
-        layout.addLayout(mv_threshold_layout)
+        self.mv_threshold_spin.setToolTip(tr("Create MVs for datasets larger than this"))
+        self.mv_threshold_spin.setFixedWidth(80)
+        mv_settings_layout.addWidget(self.mv_threshold_spin)
+        mv_settings_layout.addWidget(QLabel(tr("features")))
+        mv_settings_layout.addStretch()
+        
+        # Auto-cleanup checkbox
+        self.auto_cleanup_cb = QCheckBox(tr("Auto-cleanup on exit"))
+        self.auto_cleanup_cb.setChecked(True)
+        self.auto_cleanup_cb.setToolTip(tr("Automatically drop session MVs when plugin unloads"))
+        mv_settings_layout.addWidget(self.auto_cleanup_cb)
+        layout.addLayout(mv_settings_layout)
         
         # Two-Phase Filtering
         self.two_phase_toggle = OptimizationToggle(
             tr("Two-Phase Filtering"),
-            tr("First filter by bounding box, then by exact geometry. "
-               "Dramatically faster for complex spatial predicates."),
+            tr("First filter by bounding box, then by exact geometry."),
             speedup="3-5x",
             default_enabled=True
         )
@@ -630,8 +834,7 @@ class PostgreSQLOptimizationPanel(QWidget):
         # Progressive/Lazy Loading
         self.progressive_toggle = OptimizationToggle(
             tr("Progressive Loading"),
-            tr("Stream results in chunks to reduce memory usage. "
-               "Essential for very large result sets (>100k features)."),
+            tr("Stream results in chunks to reduce memory usage."),
             speedup="50-80% memory",
             default_enabled=True
         )
@@ -645,6 +848,7 @@ class PostgreSQLOptimizationPanel(QWidget):
         self.lazy_cursor_spin.setRange(10000, 500000)
         self.lazy_cursor_spin.setValue(50000)
         self.lazy_cursor_spin.setSingleStep(5000)
+        self.lazy_cursor_spin.setFixedWidth(80)
         lazy_layout.addWidget(self.lazy_cursor_spin)
         lazy_layout.addStretch()
         layout.addLayout(lazy_layout)
@@ -652,7 +856,7 @@ class PostgreSQLOptimizationPanel(QWidget):
         # Query Caching
         self.query_cache_toggle = OptimizationToggle(
             tr("Query Expression Caching"),
-            tr("Cache built expressions to avoid rebuilding identical queries."),
+            tr("Cache expressions to avoid rebuilding identical queries."),
             speedup="2-3x",
             default_enabled=True
         )
@@ -661,8 +865,8 @@ class PostgreSQLOptimizationPanel(QWidget):
         # Connection Pooling
         self.conn_pool_toggle = OptimizationToggle(
             tr("Connection Pooling"),
-            tr("Reuse database connections to avoid 50-100ms overhead per query."),
-            speedup="50-100ms/query",
+            tr("Reuse connections to avoid 50-100ms overhead per query."),
+            speedup="50-100ms",
             default_enabled=True
         )
         layout.addWidget(self.conn_pool_toggle)
@@ -670,7 +874,7 @@ class PostgreSQLOptimizationPanel(QWidget):
         # EXISTS Subquery Mode
         self.exists_toggle = OptimizationToggle(
             tr("EXISTS Subquery for Large WKT"),
-            tr("Use EXISTS subquery instead of inline WKT for very large geometries."),
+            tr("Use EXISTS subquery for very large geometries."),
             speedup="Variable",
             default_enabled=True
         )
@@ -679,12 +883,14 @@ class PostgreSQLOptimizationPanel(QWidget):
         # EXISTS threshold
         exists_layout = QHBoxLayout()
         exists_layout.setContentsMargins(30, 0, 0, 0)
-        exists_layout.addWidget(QLabel(tr("WKT length threshold (chars):")))
+        exists_layout.addWidget(QLabel(tr("WKT threshold:")))
         self.exists_threshold_spin = QSpinBox()
         self.exists_threshold_spin.setRange(10000, 500000)
         self.exists_threshold_spin.setValue(100000)
         self.exists_threshold_spin.setSingleStep(10000)
+        self.exists_threshold_spin.setFixedWidth(80)
         exists_layout.addWidget(self.exists_threshold_spin)
+        exists_layout.addWidget(QLabel(tr("chars")))
         exists_layout.addStretch()
         layout.addLayout(exists_layout)
         
@@ -698,6 +904,209 @@ class PostgreSQLOptimizationPanel(QWidget):
         layout.addWidget(self.spatial_index_toggle)
         
         layout.addStretch()
+        
+        # Initial status refresh
+        self._refresh_mv_status()
+    
+    def _refresh_mv_status(self):
+        """Refresh the MV status from database."""
+        try:
+            from ..appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+            from qgis.core import QgsProject
+            
+            if not POSTGRESQL_AVAILABLE:
+                self.mv_status_widget.update_status(error=tr("PostgreSQL not available"))
+                return
+            
+            # Find a PostgreSQL layer to get connection
+            project = QgsProject.instance()
+            pg_layer = None
+            for layer_id, layer in project.mapLayers().items():
+                if hasattr(layer, 'providerType') and layer.providerType() == 'postgres':
+                    pg_layer = layer
+                    break
+            
+            if not pg_layer:
+                self.mv_status_widget.update_status(
+                    session_count=0, other_count=0, schema_exists=False
+                )
+                return
+            
+            conn, _ = get_datasource_connexion_from_layer(pg_layer)
+            if not conn:
+                self.mv_status_widget.update_status(error=tr("No connection"))
+                return
+            
+            try:
+                cursor = conn.cursor()
+                schema = 'filter_mate_temp'
+                
+                # Check if schema exists
+                cursor.execute("""
+                    SELECT COUNT(*) FROM information_schema.schemata 
+                    WHERE schema_name = %s
+                """, (schema,))
+                schema_exists = cursor.fetchone()[0] > 0
+                
+                if not schema_exists:
+                    self.mv_status_widget.update_status(
+                        session_count=0, other_count=0, schema_exists=False
+                    )
+                    cursor.close()
+                    conn.close()
+                    return
+                
+                # Get session ID (try from parent chain)
+                session_id = None
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'session_id'):
+                        session_id = parent.session_id
+                        break
+                    if hasattr(parent, '_app_ref') and hasattr(parent._app_ref, 'session_id'):
+                        session_id = parent._app_ref.session_id
+                        break
+                    parent = parent.parent() if hasattr(parent, 'parent') else None
+                
+                # Count MVs
+                cursor.execute("""
+                    SELECT matviewname FROM pg_matviews 
+                    WHERE schemaname = %s
+                """, (schema,))
+                views = cursor.fetchall()
+                
+                session_count = 0
+                other_count = 0
+                for (view_name,) in views:
+                    if session_id and view_name.startswith(f"mv_{session_id}_"):
+                        session_count += 1
+                    else:
+                        other_count += 1
+                
+                self.mv_status_widget.update_status(
+                    session_count=session_count,
+                    other_count=other_count,
+                    schema_exists=True
+                )
+                
+                cursor.close()
+                conn.close()
+                
+            except Exception as e:
+                self.mv_status_widget.update_status(error=str(e)[:50])
+                try:
+                    conn.close()
+                except:
+                    pass
+                    
+        except Exception as e:
+            self.mv_status_widget.update_status(error=str(e)[:50])
+    
+    def _on_cleanup_requested(self, cleanup_type: str):
+        """Handle cleanup request from MV status widget."""
+        try:
+            from ..appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+            from qgis.core import QgsProject
+            
+            if not POSTGRESQL_AVAILABLE:
+                return
+            
+            # Find PostgreSQL connection
+            project = QgsProject.instance()
+            pg_layer = None
+            for layer_id, layer in project.mapLayers().items():
+                if hasattr(layer, 'providerType') and layer.providerType() == 'postgres':
+                    pg_layer = layer
+                    break
+            
+            if not pg_layer:
+                return
+            
+            conn, _ = get_datasource_connexion_from_layer(pg_layer)
+            if not conn:
+                return
+            
+            schema = 'filter_mate_temp'
+            
+            # Get session ID
+            session_id = None
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'session_id'):
+                    session_id = parent.session_id
+                    break
+                if hasattr(parent, '_app_ref') and hasattr(parent._app_ref, 'session_id'):
+                    session_id = parent._app_ref.session_id
+                    break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+            
+            try:
+                cursor = conn.cursor()
+                count = 0
+                
+                if cleanup_type == 'session' and session_id:
+                    # Cleanup session MVs
+                    cursor.execute("""
+                        SELECT matviewname FROM pg_matviews 
+                        WHERE schemaname = %s AND matviewname LIKE %s
+                    """, (schema, f"mv_{session_id}_%"))
+                    views = cursor.fetchall()
+                    
+                    for (view_name,) in views:
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
+                        count += 1
+                    
+                elif cleanup_type == 'orphaned':
+                    # Cleanup orphaned MVs (>24h old based on naming convention)
+                    cursor.execute("""
+                        SELECT matviewname FROM pg_matviews 
+                        WHERE schemaname = %s AND matviewname LIKE 'mv_%'
+                    """, (schema,))
+                    views = cursor.fetchall()
+                    
+                    import time
+                    # We can't easily check age, so we drop all except current session
+                    for (view_name,) in views:
+                        if session_id and view_name.startswith(f"mv_{session_id}_"):
+                            continue  # Keep current session
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;')
+                        count += 1
+                    
+                elif cleanup_type == 'all':
+                    # Confirm before dropping all
+                    reply = QMessageBox.question(
+                        self,
+                        tr("Confirm Cleanup"),
+                        tr("Drop ALL materialized views?\nThis affects other FilterMate sessions!"),
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No
+                    )
+                    
+                    if reply == QMessageBox.Yes:
+                        cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
+                        count = -1  # Indicate schema dropped
+                
+                conn.commit()
+                cursor.close()
+                conn.close()
+                
+                # Refresh status
+                self._refresh_mv_status()
+                
+                if count > 0:
+                    logger.info(f"PostgreSQL cleanup ({cleanup_type}): {count} MV(s) dropped")
+                elif count == -1:
+                    logger.info(f"PostgreSQL cleanup: schema '{schema}' dropped")
+                    
+            except Exception as e:
+                logger.error(f"MV cleanup error: {e}")
+                try:
+                    conn.close()
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"MV cleanup failed: {e}")
     
     def _load_settings(self):
         """Load settings from configuration."""
@@ -735,7 +1144,8 @@ class PostgreSQLOptimizationPanel(QWidget):
         return {
             'materialized_views': {
                 'enabled': self.mv_toggle.is_enabled(),
-                'threshold': self.mv_threshold_spin.value()
+                'threshold': self.mv_threshold_spin.value(),
+                'auto_cleanup': self.auto_cleanup_cb.isChecked()
             },
             'two_phase_filtering': self.two_phase_toggle.is_enabled(),
             'progressive_loading': {
@@ -1478,15 +1888,18 @@ class BackendOptimizationDialog(QDialog):
     """
     Dialog wrapper for BackendOptimizationWidget.
     Allows users to configure all backend optimizations in a modal dialog.
-    Includes profile selection and smart recommendations.
+    Includes profile selection, smart recommendations, and MV management.
+    
+    v2.8.6: Enhanced with MV status widget and cleanup actions.
     """
     
     def __init__(self, parent=None, project_info: Dict = None):
         super().__init__(parent)
         self.project_info = project_info
+        self._parent_ref = parent  # Store reference to access session_id
         self.setWindowTitle(tr("FilterMate - Backend Optimizations"))
-        self.setMinimumWidth(600)
-        self.setMinimumHeight(700)
+        self.setMinimumWidth(580)
+        self.setMinimumHeight(650)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -1495,6 +1908,9 @@ class BackendOptimizationDialog(QDialog):
         self.optimization_widget = BackendOptimizationWidget(self)
         layout.addWidget(self.optimization_widget)
         
+        # Pass session_id to PostgreSQL panel for MV status
+        self._pass_session_info()
+        
         # Analyze project for recommendations
         if project_info:
             self.optimization_widget.analyze_project(project_info)
@@ -1502,15 +1918,16 @@ class BackendOptimizationDialog(QDialog):
             # Try to analyze current project
             self._analyze_current_project()
         
-        # Info label
-        info_layout = QHBoxLayout()
+        # Sync auto_cleanup setting from parent dockwidget
+        self._sync_auto_cleanup_setting()
+        
+        # Compact info label
         info = QLabel(
-            tr("💡 Tip: Select a profile for quick setup, or customize each backend below.")
+            tr("💡 Select a profile for quick setup, or customize settings per backend.")
         )
         info.setStyleSheet("color: #2980b9; font-size: 9pt;")
         info.setWordWrap(True)
-        info_layout.addWidget(info)
-        layout.addLayout(info_layout)
+        layout.addWidget(info)
         
         # Dialog buttons
         button_layout = QHBoxLayout()
@@ -1597,6 +2014,40 @@ class BackendOptimizationDialog(QDialog):
             
         except Exception as e:
             logger.debug(f"Could not analyze current project: {e}")
+    
+    def _pass_session_info(self):
+        """Pass session info to PostgreSQL panel for MV status."""
+        try:
+            # Try to get session_id from parent hierarchy
+            session_id = None
+            parent = self._parent_ref
+            while parent:
+                if hasattr(parent, 'session_id'):
+                    session_id = parent.session_id
+                    break
+                if hasattr(parent, '_app_ref') and hasattr(parent._app_ref, 'session_id'):
+                    session_id = parent._app_ref.session_id
+                    break
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+            
+            if session_id:
+                # Store session_id on the panel for MV status
+                self.optimization_widget.postgresql_panel.session_id = session_id
+                # Trigger refresh
+                self.optimization_widget.postgresql_panel._refresh_mv_status()
+        except Exception as e:
+            logger.debug(f"Could not pass session info: {e}")
+    
+    def _sync_auto_cleanup_setting(self):
+        """Sync auto_cleanup checkbox with dockwidget setting."""
+        try:
+            parent = self._parent_ref
+            if parent and hasattr(parent, '_pg_auto_cleanup_enabled'):
+                auto_cleanup = parent._pg_auto_cleanup_enabled
+                pg_panel = self.optimization_widget.postgresql_panel
+                pg_panel.auto_cleanup_cb.setChecked(auto_cleanup)
+        except Exception as e:
+            logger.debug(f"Could not sync auto_cleanup setting: {e}")
     
     def _restore_defaults(self):
         """Restore all settings to balanced defaults."""

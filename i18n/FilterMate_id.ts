@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS>
+<?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="id_ID" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -212,25 +211,25 @@ Apakah Anda ingin melanjutkan?</translation>
         <translation>Kesalahan selama migrasi konfigurasi: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -832,4 +831,249 @@ Atribut pertama: {1}</translation>
         <translation>Kurangi segmen buffer</translation>
     </message>
 </context>
+<context>
+    <name>BackendOptimizationWidget</name>
+    <message>
+        <source>Quick Setup</source>
+        <translation>Pengaturan Cepat</translation>
+    </message>
+    <message>
+        <source>Choose a profile or customize settings below</source>
+        <translation>Pilih profil atau sesuaikan pengaturan di bawah</translation>
+    </message>
+    <message>
+        <source>Smart Recommendations</source>
+        <translation>Rekomendasi Cerdas</translation>
+    </message>
+    <message>
+        <source>Balanced Profile</source>
+        <translation>Profil Seimbang</translation>
+    </message>
+    <message>
+        <source>Maximum Performance</source>
+        <translation>Performa Maksimal</translation>
+    </message>
+    <message>
+        <source>Minimal Resources</source>
+        <translation>Sumber Daya Minimal</translation>
+    </message>
+    <message>
+        <source>PostgreSQL/PostGIS Optimizations</source>
+        <translation>Optimasi PostgreSQL/PostGIS</translation>
+    </message>
+    <message>
+        <source>Materialized Views</source>
+        <translation>View Termaterialisasi</translation>
+    </message>
+    <message>
+        <source>Create temporary materialized views for complex filters</source>
+        <translation>Buat view termaterialisasi sementara untuk filter kompleks</translation>
+    </message>
+    <message>
+        <source>Two-Phase Filtering</source>
+        <translation>Penyaringan Dua Fase</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filtering before precise geometry tests</source>
+        <translation>Gunakan pra-penyaringan kotak pembatas sebelum pengujian geometri presisi</translation>
+    </message>
+    <message>
+        <source>Progressive Loading</source>
+        <translation>Pemuatan Progresif</translation>
+    </message>
+    <message>
+        <source>Load data in chunks for very large datasets</source>
+        <translation>Muat data dalam potongan untuk dataset yang sangat besar</translation>
+    </message>
+    <message>
+        <source>Chunk Size</source>
+        <translation>Ukuran Potongan</translation>
+    </message>
+    <message>
+        <source>Server-Side Simplification</source>
+        <translation>Penyederhanaan Sisi Server</translation>
+    </message>
+    <message>
+        <source>Simplify geometries on server for display purposes</source>
+        <translation>Sederhanakan geometri di server untuk tujuan tampilan</translation>
+    </message>
+    <message>
+        <source>Simplification Tolerance</source>
+        <translation>Toleransi Penyederhanaan</translation>
+    </message>
+    <message>
+        <source>Parallel Query Execution</source>
+        <translation>Eksekusi Kueri Paralel</translation>
+    </message>
+    <message>
+        <source>Execute independent queries in parallel</source>
+        <translation>Jalankan kueri independen secara paralel</translation>
+    </message>
+    <message>
+        <source>Expression Caching</source>
+        <translation>Caching Ekspresi</translation>
+    </message>
+    <message>
+        <source>Cache compiled expressions for reuse</source>
+        <translation>Cache ekspresi terkompilasi untuk digunakan kembali</translation>
+    </message>
+    <message>
+        <source>Spatialite/GeoPackage Optimizations</source>
+        <translation>Optimasi Spatialite/GeoPackage</translation>
+    </message>
+    <message>
+        <source>R-tree Temp Tables</source>
+        <translation>Tabel Sementara R-tree</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree indexes</source>
+        <translation>Buat tabel sementara dengan indeks R-tree</translation>
+    </message>
+    <message>
+        <source>BBox Pre-filtering</source>
+        <translation>Pra-penyaringan BBox</translation>
+    </message>
+    <message>
+        <source>Use bounding box filtering before precise tests</source>
+        <translation>Gunakan penyaringan kotak pembatas sebelum pengujian presisi</translation>
+    </message>
+    <message>
+        <source>Memory-Mapped I/O</source>
+        <translation>I/O Peta Memori</translation>
+    </message>
+    <message>
+        <source>Use memory-mapped I/O for file access</source>
+        <translation>Gunakan I/O peta memori untuk akses file</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Pemrosesan Batch</translation>
+    </message>
+    <message>
+        <source>Process multiple operations in batches</source>
+        <translation>Proses beberapa operasi dalam batch</translation>
+    </message>
+    <message>
+        <source>Batch Size</source>
+        <translation>Ukuran Batch</translation>
+    </message>
+    <message>
+        <source>OGR/Memory Optimizations</source>
+        <translation>Optimasi OGR/Memori</translation>
+    </message>
+    <message>
+        <source>Automatic Spatial Index</source>
+        <translation>Indeks Spasial Otomatis</translation>
+    </message>
+    <message>
+        <source>Create temporary spatial indexes automatically</source>
+        <translation>Buat indeks spasial sementara secara otomatis</translation>
+    </message>
+    <message>
+        <source>Progressive Chunking</source>
+        <translation>Pemotongan Progresif</translation>
+    </message>
+    <message>
+        <source>Process large files in progressive chunks</source>
+        <translation>Proses file besar dalam potongan progresif</translation>
+    </message>
+    <message>
+        <source>Memory Feature Caching</source>
+        <translation>Caching Fitur Memori</translation>
+    </message>
+    <message>
+        <source>Cache features in memory for faster access</source>
+        <translation>Cache fitur dalam memori untuk akses lebih cepat</translation>
+    </message>
+    <message>
+        <source>Cache Size (features)</source>
+        <translation>Ukuran Cache (fitur)</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Penyederhanaan Geometri</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries during processing</source>
+        <translation>Sederhanakan geometri kompleks selama pemrosesan</translation>
+    </message>
+    <message>
+        <source>Global Optimizations</source>
+        <translation>Optimasi Global</translation>
+    </message>
+    <message>
+        <source>Auto-Optimization</source>
+        <translation>Optimasi Otomatis</translation>
+    </message>
+    <message>
+        <source>Automatically optimize based on data analysis</source>
+        <translation>Optimalkan secara otomatis berdasarkan analisis data</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid</source>
+        <translation>Sentroid Otomatis</translation>
+    </message>
+    <message>
+        <source>Automatically center view on filter results</source>
+        <translation>Pusatkan tampilan secara otomatis pada hasil filter</translation>
+    </message>
+    <message>
+        <source>Parallel Layer Filtering</source>
+        <translation>Penyaringan Lapisan Paralel</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously</source>
+        <translation>Saring beberapa lapisan secara bersamaan</translation>
+    </message>
+    <message>
+        <source>Smart Expression Parsing</source>
+        <translation>Parsing Ekspresi Cerdas</translation>
+    </message>
+    <message>
+        <source>Optimize expression parsing for complex queries</source>
+        <translation>Optimalkan parsing ekspresi untuk kueri kompleks</translation>
+    </message>
+    <message>
+        <source>Deferred Refresh</source>
+        <translation>Penyegaran Tertunda</translation>
+    </message>
+    <message>
+        <source>Delay map refresh until all filters are applied</source>
+        <translation>Tunda penyegaran peta sampai semua filter diterapkan</translation>
+    </message>
+    <message>
+        <source>Verbose Logging</source>
+        <translation>Pencatatan Detail</translation>
+    </message>
+    <message>
+        <source>Enable detailed logging for debugging</source>
+        <translation>Aktifkan pencatatan detail untuk debugging</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Terapkan</translation>
+    </message>
+    <message>
+        <source>Reset to Defaults</source>
+        <translation>Kembalikan ke Default</translation>
+    </message>
+    <message>
+        <source>Settings applied successfully</source>
+        <translation>Pengaturan berhasil diterapkan</translation>
+    </message>
+    <message>
+        <source>Settings reset to defaults</source>
+        <translation>Pengaturan dikembalikan ke default</translation>
+    </message>
+    <message>
+        <source>Profile applied: {}</source>
+        <translation>Profil diterapkan: {}</translation>
+    </message>
+    <message>
+        <source>Error applying settings</source>
+        <translation>Kesalahan saat menerapkan pengaturan</translation>
+    </message>
+<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
+This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
 </TS>

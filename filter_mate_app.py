@@ -16,7 +16,7 @@ from qgis.core import (
     QgsVectorFileWriter,
     QgsVectorLayer
 )
-from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
+from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget, QgsMapLayerProxyModel
 from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr
@@ -758,13 +758,15 @@ class FilterMateApp:
             self.dockwidget._plugin_busy = False
             self.dockwidget._updating_layers = False
             
-            # Clear combobox safely
+            # Reset combobox to no selection (do NOT call clear() - it breaks the proxy model sync)
             try:
                 if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
                     self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    self.dockwidget.comboBox_filtering_current_layer.clear()
+                    # CRITICAL: Do NOT call clear() on QgsMapLayerComboBox!
+                    # It uses QgsMapLayerProxyModel which auto-syncs with project layers.
+                    # Calling clear() breaks this synchronization and the combobox stays empty.
             except Exception as e:
-                logger.debug(f"Error clearing layer combobox during reload: {e}")
+                logger.debug(f"Error resetting layer combobox during reload: {e}")
             
             # Update indicator to show reloading state
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
@@ -1372,14 +1374,14 @@ class FilterMateApp:
         
         # CRITICAL: Check if dockwidget exists before accessing its methods
         if self.dockwidget is not None:
-            # CRITICAL: Clear layer combo box to prevent access violations
+            # CRITICAL: Reset layer combo box to prevent access violations
+            # NOTE: Do NOT call clear() - it breaks the proxy model synchronization
             try:
                 if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
                     self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    self.dockwidget.comboBox_filtering_current_layer.clear()
-                    logger.debug("FilterMate: Layer combo cleared during remove_all_layers")
+                    logger.debug("FilterMate: Layer combo reset during remove_all_layers")
             except Exception as e:
-                logger.debug(f"FilterMate: Error clearing layer combo during remove_all_layers: {e}")
+                logger.debug(f"FilterMate: Error resetting layer combo during remove_all_layers: {e}")
             
             # STABILITY FIX: Disconnect LAYER_TREE_VIEW signal to prevent callbacks to invalid layers
             try:
@@ -1446,15 +1448,15 @@ class FilterMateApp:
         # Use timestamp-tracked flag setter
         self._set_initializing_flag(True)
         
-        # CRITICAL: Clear layer combo box before project change to prevent access violations
+        # CRITICAL: Reset layer combo box before project change to prevent access violations
+        # NOTE: Do NOT call clear() - it breaks the proxy model synchronization
         if self.dockwidget is not None:
             try:
                 if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
                     self.dockwidget.comboBox_filtering_current_layer.setLayer(None)
-                    self.dockwidget.comboBox_filtering_current_layer.clear()
-                    logger.debug(f"FilterMate: Layer combo cleared before {task_name}")
+                    logger.debug(f"FilterMate: Layer combo reset before {task_name}")
             except Exception as e:
-                logger.debug(f"FilterMate: Error clearing layer combo before {task_name}: {e}")
+                logger.debug(f"FilterMate: Error resetting layer combo before {task_name}: {e}")
         
         # STABILITY FIX: Set dockwidget busy flag to prevent concurrent layer changes
         if self.dockwidget is not None:
@@ -4939,6 +4941,17 @@ class FilterMateApp:
         # Enable UI widgets
         if hasattr(self.dockwidget, 'set_widgets_enabled_state'):
             self.dockwidget.set_widgets_enabled_state(True)
+        
+        # FIX v2.8.10: Force QgsMapLayerComboBox to re-sync with project layers
+        # The combobox uses QgsMapLayerProxyModel which should auto-sync, but sometimes
+        # needs a nudge after major state changes. We re-apply the filter to trigger refresh.
+        try:
+            if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
+                # Re-apply filter to force model refresh
+                self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+                logger.debug("Force refreshed QgsMapLayerComboBox filters after reload")
+        except Exception as e:
+            logger.debug(f"Error refreshing layer combobox after reload: {e}")
         
         # If there's an active layer, trigger current_layer_changed
         if self.iface.activeLayer() is not None:

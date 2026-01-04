@@ -32,10 +32,12 @@ class OptimizationRecommendationDialog(QDialog):
     """
     Simplified dialog showing optimization recommendations.
     
+    v2.8.6: Streamlined UI - cleaner design with fewer clicks needed.
+    
     Allows user to:
-    - See what optimizations are recommended
-    - Accept/reject each optimization
-    - Remember choices for future operations
+    - See total estimated speedup at a glance
+    - Quick accept all or skip
+    - Optional per-optimization control via expandable section
     """
     
     # Signal emitted when user confirms with selected optimizations
@@ -67,123 +69,150 @@ class OptimizationRecommendationDialog(QDialog):
         self.location_type = location_type
         self.selected_optimizations = {}
         
-        self.setWindowTitle(tr("FilterMate - Optimizations"))
-        self.setMinimumWidth(400)
-        self.setMinimumHeight(200)
+        self.setWindowTitle(tr("FilterMate - Apply Optimizations?"))
+        self.setMinimumWidth(360)
+        self.setMaximumWidth(450)
         self.setModal(True)
         
         self._setup_ui()
     
     def _setup_ui(self):
-        """Set up the simplified dialog UI."""
+        """Set up the streamlined dialog UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 16, 16, 16)
-        
-        # Simple header with layer info
-        header_label = QLabel(
-            f"<b>🔧 {tr('Optimizations for:')}</b> {self.layer_name}<br>"
-            f"<small>{self.feature_count:,} {tr('features')}</small>"
-        )
-        header_label.setStyleSheet("font-size: 11pt;")
-        layout.addWidget(header_label)
-        
-        # Separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setStyleSheet("background-color: #ddd;")
-        layout.addWidget(separator)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 12, 16, 12)
         
         # Calculate total speedup
         total_speedup = 1.0
+        auto_applicable_count = 0
         for rec in self.recommendations:
             if rec.get('auto_applicable', False):
                 total_speedup *= rec.get('estimated_speedup', 1.0)
+                auto_applicable_count += 1
         
-        # Simple message with total speedup
-        if total_speedup > 1.1:
-            speedup_text = tr("Estimated speedup:")
-            faster_text = tr("faster")
-            speedup_label = QLabel(
-                f"🚀 {speedup_text} <b>~{total_speedup:.1f}x {faster_text}</b>"
-            )
-            speedup_label.setStyleSheet(
-                "color: #27ae60; font-size: 10pt; margin: 5px 0;"
-            )
-            layout.addWidget(speedup_label)
+        # Compact header with speedup
+        if total_speedup > 1.5:
+            header_text = f"🚀 <b>~{total_speedup:.0f}x</b> {tr('faster possible')}"
+            header_style = "font-size: 14pt; color: #27ae60;"
+        elif total_speedup > 1.1:
+            header_text = f"⚡ <b>~{total_speedup:.1f}x</b> {tr('faster possible')}"
+            header_style = "font-size: 13pt; color: #f39c12;"
+        else:
+            header_text = f"⚙️ {tr('Optimizations available')}"
+            header_style = "font-size: 12pt; color: #3498db;"
         
-        # Checkboxes for each optimization (simplified)
+        header = QLabel(header_text)
+        header.setStyleSheet(header_style)
+        layout.addWidget(header)
+        
+        # Layer info (subtle)
+        layer_info = QLabel(f"<small>{self.layer_name} • {self.feature_count:,} features</small>")
+        layer_info.setStyleSheet("color: #888;")
+        layout.addWidget(layer_info)
+        
+        # Simple summary of what will be applied
+        summary_items = []
+        for rec in self.recommendations[:3]:  # Show max 3 in summary
+            opt_type = rec.get('optimization_type', '')
+            speedup = rec.get('estimated_speedup', 1.0)
+            icon = self._get_optimization_icon(opt_type)
+            summary_items.append(f"{icon} {self._get_short_name(opt_type)} (~{speedup:.0f}x)")
+        
+        if summary_items:
+            summary_text = " • ".join(summary_items)
+            if len(self.recommendations) > 3:
+                summary_text += f" +{len(self.recommendations) - 3}"
+            summary = QLabel(f"<small>{summary_text}</small>")
+            summary.setStyleSheet("color: #555; margin: 4px 0;")
+            summary.setWordWrap(True)
+            layout.addWidget(summary)
+        
+        # Store checkboxes but don't show by default (expandable details)
         self.checkboxes = {}
-        
         for rec in self.recommendations:
             opt_type = rec.get('optimization_type', 'unknown')
-            speedup = rec.get('estimated_speedup', 1.0)
             auto_applicable = rec.get('auto_applicable', False)
             requires_consent = rec.get('requires_user_consent', False)
-            reason = rec.get('reason', '')
             
-            # Create checkbox with simplified text
-            checkbox_text = self._get_optimization_display_text(opt_type, speedup)
-            checkbox = QCheckBox(checkbox_text)
+            checkbox = QCheckBox()
             checkbox.setChecked(auto_applicable and not requires_consent)
-            checkbox.setToolTip(reason)
-            
-            # Subtle styling for warnings
-            if requires_consent:
-                checkbox.setStyleSheet("QCheckBox { color: #e67e22; }")
-            
+            checkbox.setVisible(False)  # Hidden by default
             self.checkboxes[opt_type] = checkbox
-            layout.addWidget(checkbox)
         
-        layout.addStretch()
+        # Spacer
+        layout.addSpacing(5)
         
-        # Remember choice checkbox
-        self.remember_checkbox = QCheckBox(tr("Remember for this session"))
-        self.remember_checkbox.setStyleSheet("color: #666; font-size: 9pt;")
-        layout.addWidget(self.remember_checkbox)
+        # Main action buttons (simplified)
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
         
-        # Buttons - simplified
-        button_layout = QHBoxLayout()
-        
+        # Skip button (subtle)
         skip_btn = QPushButton(tr("Skip"))
+        skip_btn.setStyleSheet("""
+            QPushButton {
+                color: #666;
+                background: transparent;
+                border: 1px solid #ccc;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background: #f5f5f5; }
+        """)
         skip_btn.clicked.connect(self._on_skip)
-        button_layout.addWidget(skip_btn)
+        btn_layout.addWidget(skip_btn)
         
-        button_layout.addStretch()
+        btn_layout.addStretch()
         
-        apply_btn = QPushButton(tr("Apply"))
+        # Apply button (prominent)
+        apply_btn = QPushButton(tr("✓ Apply"))
         apply_btn.setStyleSheet("""
             QPushButton {
                 background-color: #27ae60;
                 color: white;
                 font-weight: bold;
-                padding: 6px 24px;
+                padding: 8px 28px;
                 border-radius: 4px;
                 border: none;
+                font-size: 11pt;
             }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
+            QPushButton:hover { background-color: #2ecc71; }
         """)
         apply_btn.setDefault(True)
         apply_btn.clicked.connect(self._on_apply)
-        button_layout.addWidget(apply_btn)
+        btn_layout.addWidget(apply_btn)
         
-        layout.addLayout(button_layout)
+        layout.addLayout(btn_layout)
+        
+        # "Don't ask again" option (subtle, at bottom)
+        self.remember_checkbox = QCheckBox(tr("Don't ask for this session"))
+        self.remember_checkbox.setStyleSheet("color: #888; font-size: 9pt; margin-top: 5px;")
+        layout.addWidget(self.remember_checkbox)
     
-    def _get_optimization_display_text(self, opt_type: str, speedup: float) -> str:
-        """Get human-readable text for optimization type."""
-        faster = tr("faster")
-        opt_names = {
-            'use_centroid_distant': f"{tr('Use centroids for distant layers')} ({speedup:.0f}x {faster})",
-            'simplify_geometry': f"{tr('Simplify geometries')} ({speedup:.0f}x {faster}) ⚠️",
-            'simplify_before_buffer': f"{tr('Simplify before buffer')} ({speedup:.0f}x {faster})",
-            'reduce_buffer_segments': f"{tr('Reduce buffer segments')} ({speedup:.0f}x {faster})",
-            'enable_buffer_type': f"{tr('Enable buffer type')} (Flat, 1 seg) ({speedup:.0f}x {faster})",
-            'bbox_prefilter': f"{tr('BBox pre-filtering')} ({speedup:.0f}x {faster})",
-            'attribute_first': f"{tr('Attribute-first strategy')} ({speedup:.0f}x {faster})",
+    def _get_optimization_icon(self, opt_type: str) -> str:
+        """Get icon for optimization type."""
+        icons = {
+            'use_centroid_distant': '📍',
+            'simplify_geometry': '✂️',
+            'simplify_before_buffer': '📐',
+            'reduce_buffer_segments': '🔄',
+            'enable_buffer_type': '⭕',
+            'bbox_prefilter': '📦',
+            'attribute_first': '🔤',
         }
-        return opt_names.get(opt_type, f"{opt_type} ({speedup:.0f}x {faster})")
+        return icons.get(opt_type, '⚡')
+    
+    def _get_short_name(self, opt_type: str) -> str:
+        """Get short display name for optimization type."""
+        names = {
+            'use_centroid_distant': tr('Centroids'),
+            'simplify_geometry': tr('Simplify'),
+            'simplify_before_buffer': tr('Pre-simplify'),
+            'reduce_buffer_segments': tr('Fewer segments'),
+            'enable_buffer_type': tr('Flat buffer'),
+            'bbox_prefilter': tr('BBox filter'),
+            'attribute_first': tr('Attr-first'),
+        }
+        return names.get(opt_type, opt_type.replace('_', ' ').title()[:15])
     
     def _on_skip(self):
         """Handle skip button - reject all optimizations."""
@@ -191,7 +220,7 @@ class OptimizationRecommendationDialog(QDialog):
         self.reject()
     
     def _on_apply(self):
-        """Handle apply button - collect selected optimizations."""
+        """Handle apply button - accept all checked optimizations."""
         self.selected_optimizations = {
             opt_type: checkbox.isChecked()
             for opt_type, checkbox in self.checkboxes.items()
@@ -204,7 +233,7 @@ class OptimizationRecommendationDialog(QDialog):
         return self.selected_optimizations
     
     def should_remember(self) -> bool:
-        """Check if user wants to remember choices."""
+        """Check if user wants to remember choices for session."""
         return self.remember_checkbox.isChecked()
 
 

@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE TS>
+<?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="da_DK" sourcelanguage="en_US">
 <context>
     <name>FilterMate</name>
@@ -212,25 +211,25 @@ Vil du fortsætte?</translation>
         <translation>Fejl under konfigurationsmigrering: {}</translation>
     </message>
     <message>
-        <source>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <source>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
 • Yes: Disable filtering (recommended for FilterMate)
 • No: Keep current setting</source>
-        <translation>The QGIS setting &apos;Invalid features filtering&apos; is currently set to &apos;{mode}&apos;.
+        <translation>The QGIS setting 'Invalid features filtering' is currently set to '{mode}'.
 
-FilterMate recommends disabling this setting (value &apos;Off&apos;) for the following reasons:
+FilterMate recommends disabling this setting (value 'Off') for the following reasons:
 
 • Features with invalid geometries could be silently excluded from exports and filters
 • FilterMate handles geometry validation internally with automatic repair options
-• Some legitimate data may have geometries considered as &apos;invalid&apos; according to strict OGC rules
+• Some legitimate data may have geometries considered as 'invalid' according to strict OGC rules
 
 Do you want to disable this setting now?
 
@@ -585,7 +584,7 @@ Genstart QGIS for at anvende ændringerne.</translation>
     <name>FilterMateDockWidget</name>
     <message>
         <source>Reload the plugin to apply layout changes (action bar position)</source>
-        <translation>Genindlæs plugin&apos;et for at anvende layoutændringer (handlingsbjælkeposition)</translation>
+        <translation>Genindlæs plugin'et for at anvende layoutændringer (handlingsbjælkeposition)</translation>
     </message>
     <message>
         <source>Reload Plugin</source>
@@ -808,16 +807,16 @@ Første attribut: {1}</translation>
         <translation>Vis bekræftelsesdialog før optimeringer</translation>
     </message>
     <message>
-        <source>Centroids enabled for &apos;{0}&apos; (~{1}x {2})</source>
-        <translation>Centroider aktiveret for &apos;{0}&apos; (~{1}x {2})</translation>
+        <source>Centroids enabled for '{0}' (~{1}x {2})</source>
+        <translation>Centroider aktiveret for '{0}' (~{1}x {2})</translation>
     </message>
     <message>
-        <source>BBox pre-filter enabled for &apos;{0}&apos;</source>
-        <translation>BBox forfilter aktiveret for &apos;{0}&apos;</translation>
+        <source>BBox pre-filter enabled for '{0}'</source>
+        <translation>BBox forfilter aktiveret for '{0}'</translation>
     </message>
     <message>
-        <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
-        <translation>Optimering anvendt: &apos;{0}&apos; (~{1}x {2})</translation>
+        <source>Optimization applied: '{0}' (~{1}x {2})</source>
+        <translation>Optimering anvendt: '{0}' (~{1}x {2})</translation>
     </message>
     <message>
         <source>Simplify before buffer</source>
@@ -828,4 +827,249 @@ Første attribut: {1}</translation>
         <translation>Reducer buffer-segmenter</translation>
     </message>
 </context>
+<context>
+    <name>BackendOptimizationWidget</name>
+    <message>
+        <source>Quick Setup</source>
+        <translation>Hurtig opsætning</translation>
+    </message>
+    <message>
+        <source>Choose a profile or customize settings below</source>
+        <translation>Vælg en profil eller tilpas indstillinger nedenfor</translation>
+    </message>
+    <message>
+        <source>Smart Recommendations</source>
+        <translation>Smarte anbefalinger</translation>
+    </message>
+    <message>
+        <source>Balanced Profile</source>
+        <translation>Afbalanceret profil</translation>
+    </message>
+    <message>
+        <source>Maximum Performance</source>
+        <translation>Maksimal ydeevne</translation>
+    </message>
+    <message>
+        <source>Minimal Resources</source>
+        <translation>Minimale ressourcer</translation>
+    </message>
+    <message>
+        <source>PostgreSQL/PostGIS Optimizations</source>
+        <translation>PostgreSQL/PostGIS-optimeringer</translation>
+    </message>
+    <message>
+        <source>Materialized Views</source>
+        <translation>Materialiserede visninger</translation>
+    </message>
+    <message>
+        <source>Create temporary materialized views for complex filters</source>
+        <translation>Opret midlertidige materialiserede visninger for komplekse filtre</translation>
+    </message>
+    <message>
+        <source>Two-Phase Filtering</source>
+        <translation>To-faset filtrering</translation>
+    </message>
+    <message>
+        <source>Use bounding box pre-filtering before precise geometry tests</source>
+        <translation>Brug bounding box-forfiltrering før præcise geometritests</translation>
+    </message>
+    <message>
+        <source>Progressive Loading</source>
+        <translation>Progressiv indlæsning</translation>
+    </message>
+    <message>
+        <source>Load data in chunks for very large datasets</source>
+        <translation>Indlæs data i bidder for meget store datasæt</translation>
+    </message>
+    <message>
+        <source>Chunk Size</source>
+        <translation>Bidstørrelse</translation>
+    </message>
+    <message>
+        <source>Server-Side Simplification</source>
+        <translation>Server-side forenkling</translation>
+    </message>
+    <message>
+        <source>Simplify geometries on server for display purposes</source>
+        <translation>Forenkl geometrier på serveren til visningsformål</translation>
+    </message>
+    <message>
+        <source>Simplification Tolerance</source>
+        <translation>Forenklings-tolerance</translation>
+    </message>
+    <message>
+        <source>Parallel Query Execution</source>
+        <translation>Parallel forespørgselsudførelse</translation>
+    </message>
+    <message>
+        <source>Execute independent queries in parallel</source>
+        <translation>Udfør uafhængige forespørgsler parallelt</translation>
+    </message>
+    <message>
+        <source>Expression Caching</source>
+        <translation>Udtryks-caching</translation>
+    </message>
+    <message>
+        <source>Cache compiled expressions for reuse</source>
+        <translation>Cache kompilerede udtryk til genbrug</translation>
+    </message>
+    <message>
+        <source>Spatialite/GeoPackage Optimizations</source>
+        <translation>Spatialite/GeoPackage-optimeringer</translation>
+    </message>
+    <message>
+        <source>R-tree Temp Tables</source>
+        <translation>R-tree midlertidige tabeller</translation>
+    </message>
+    <message>
+        <source>Create temporary tables with R-tree indexes</source>
+        <translation>Opret midlertidige tabeller med R-tree-indekser</translation>
+    </message>
+    <message>
+        <source>BBox Pre-filtering</source>
+        <translation>BBox-forfiltrering</translation>
+    </message>
+    <message>
+        <source>Use bounding box filtering before precise tests</source>
+        <translation>Brug bounding box-filtrering før præcise tests</translation>
+    </message>
+    <message>
+        <source>Memory-Mapped I/O</source>
+        <translation>Hukommelsesmappet I/O</translation>
+    </message>
+    <message>
+        <source>Use memory-mapped I/O for file access</source>
+        <translation>Brug hukommelsesmappet I/O til filadgang</translation>
+    </message>
+    <message>
+        <source>Batch Processing</source>
+        <translation>Batch-behandling</translation>
+    </message>
+    <message>
+        <source>Process multiple operations in batches</source>
+        <translation>Behandl flere operationer i batches</translation>
+    </message>
+    <message>
+        <source>Batch Size</source>
+        <translation>Batch-størrelse</translation>
+    </message>
+    <message>
+        <source>OGR/Memory Optimizations</source>
+        <translation>OGR/Hukommelsesoptimeringer</translation>
+    </message>
+    <message>
+        <source>Automatic Spatial Index</source>
+        <translation>Automatisk rumligt indeks</translation>
+    </message>
+    <message>
+        <source>Create temporary spatial indexes automatically</source>
+        <translation>Opret automatisk midlertidige rumlige indekser</translation>
+    </message>
+    <message>
+        <source>Progressive Chunking</source>
+        <translation>Progressiv opdeling</translation>
+    </message>
+    <message>
+        <source>Process large files in progressive chunks</source>
+        <translation>Behandl store filer i progressive bidder</translation>
+    </message>
+    <message>
+        <source>Memory Feature Caching</source>
+        <translation>Hukommelses-feature-caching</translation>
+    </message>
+    <message>
+        <source>Cache features in memory for faster access</source>
+        <translation>Cache features i hukommelsen for hurtigere adgang</translation>
+    </message>
+    <message>
+        <source>Cache Size (features)</source>
+        <translation>Cache-størrelse (features)</translation>
+    </message>
+    <message>
+        <source>Geometry Simplification</source>
+        <translation>Geometriforenkling</translation>
+    </message>
+    <message>
+        <source>Simplify complex geometries during processing</source>
+        <translation>Forenkl komplekse geometrier under behandling</translation>
+    </message>
+    <message>
+        <source>Global Optimizations</source>
+        <translation>Globale optimeringer</translation>
+    </message>
+    <message>
+        <source>Auto-Optimization</source>
+        <translation>Auto-optimering</translation>
+    </message>
+    <message>
+        <source>Automatically optimize based on data analysis</source>
+        <translation>Optimer automatisk baseret på dataanalyse</translation>
+    </message>
+    <message>
+        <source>Auto-Centroid</source>
+        <translation>Auto-centroid</translation>
+    </message>
+    <message>
+        <source>Automatically center view on filter results</source>
+        <translation>Centrer automatisk visningen på filterresultater</translation>
+    </message>
+    <message>
+        <source>Parallel Layer Filtering</source>
+        <translation>Parallel lagfiltrering</translation>
+    </message>
+    <message>
+        <source>Filter multiple layers simultaneously</source>
+        <translation>Filtrer flere lag samtidigt</translation>
+    </message>
+    <message>
+        <source>Smart Expression Parsing</source>
+        <translation>Smart udtryksanalyse</translation>
+    </message>
+    <message>
+        <source>Optimize expression parsing for complex queries</source>
+        <translation>Optimer udtryksanalyse for komplekse forespørgsler</translation>
+    </message>
+    <message>
+        <source>Deferred Refresh</source>
+        <translation>Udskudt opdatering</translation>
+    </message>
+    <message>
+        <source>Delay map refresh until all filters are applied</source>
+        <translation>Udskyd kortopdatering indtil alle filtre er anvendt</translation>
+    </message>
+    <message>
+        <source>Verbose Logging</source>
+        <translation>Detaljeret logning</translation>
+    </message>
+    <message>
+        <source>Enable detailed logging for debugging</source>
+        <translation>Aktiver detaljeret logning til fejlfinding</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>Anvend</translation>
+    </message>
+    <message>
+        <source>Reset to Defaults</source>
+        <translation>Nulstil til standarder</translation>
+    </message>
+    <message>
+        <source>Settings applied successfully</source>
+        <translation>Indstillinger anvendt med succes</translation>
+    </message>
+    <message>
+        <source>Settings reset to defaults</source>
+        <translation>Indstillinger nulstillet til standarder</translation>
+    </message>
+    <message>
+        <source>Profile applied: {}</source>
+        <translation>Profil anvendt: {}</translation>
+    </message>
+    <message>
+        <source>Error applying settings</source>
+        <translation>Fejl ved anvendelse af indstillinger</translation>
+    </message>
+<message><source>MV Status: Checking...</source><translation type="unfinished">MV Status: Checking...</translation></message><message><source>MV Status: Error</source><translation type="unfinished">MV Status: Error</translation></message><message><source>MV Status: Clean</source><translation type="unfinished">MV Status: Clean</translation></message><message><source>MV Status:</source><translation type="unfinished">MV Status:</translation></message><message><source>active</source><translation type="unfinished">active</translation></message><message><source>No active materialized views</source><translation type="unfinished">No active materialized views</translation></message><message><source>Session:</source><translation type="unfinished">Session:</translation></message><message><source>Other sessions:</source><translation type="unfinished">Other sessions:</translation></message><message><source>🧹 Session</source><translation type="unfinished">🧹 Session</translation></message><message><source>Cleanup MVs from this session</source><translation type="unfinished">Cleanup MVs from this session</translation></message><message><source>🗑️ Orphaned</source><translation type="unfinished">🗑️ Orphaned</translation></message><message><source>Cleanup orphaned MVs (&gt;24h old)</source><translation type="unfinished">Cleanup orphaned MVs (&gt;24h old)</translation></message><message><source>⚠️ All</source><translation type="unfinished">⚠️ All</translation></message><message><source>Cleanup ALL MVs (affects other sessions)</source><translation type="unfinished">Cleanup ALL MVs (affects other sessions)</translation></message><message><source>Confirm Cleanup</source><translation type="unfinished">Confirm Cleanup</translation></message><message><source>Drop ALL materialized views?
+This affects other FilterMate sessions!</source><translation type="unfinished">Drop ALL materialized views?
+This affects other FilterMate sessions!</translation></message><message><source>Refresh MV status</source><translation type="unfinished">Refresh MV status</translation></message><message><source>Threshold:</source><translation type="unfinished">Threshold:</translation></message><message><source>features</source><translation type="unfinished">features</translation></message><message><source>Auto-cleanup on exit</source><translation type="unfinished">Auto-cleanup on exit</translation></message><message><source>Automatically drop session MVs when plugin unloads</source><translation type="unfinished">Automatically drop session MVs when plugin unloads</translation></message><message><source>Create MVs for datasets larger than this</source><translation type="unfinished">Create MVs for datasets larger than this</translation></message><message><source>faster possible</source><translation type="unfinished">faster possible</translation></message><message><source>Optimizations available</source><translation type="unfinished">Optimizations available</translation></message><message><source>FilterMate - Apply Optimizations?</source><translation type="unfinished">FilterMate - Apply Optimizations?</translation></message><message><source>Skip</source><translation type="unfinished">Skip</translation></message><message><source>✓ Apply</source><translation type="unfinished">✓ Apply</translation></message><message><source>Don't ask for this session</source><translation type="unfinished">Don't ask for this session</translation></message><message><source>Centroids</source><translation type="unfinished">Centroids</translation></message><message><source>Simplify</source><translation type="unfinished">Simplify</translation></message><message><source>Pre-simplify</source><translation type="unfinished">Pre-simplify</translation></message><message><source>Fewer segments</source><translation type="unfinished">Fewer segments</translation></message><message><source>Flat buffer</source><translation type="unfinished">Flat buffer</translation></message><message><source>BBox filter</source><translation type="unfinished">BBox filter</translation></message><message><source>Attr-first</source><translation type="unfinished">Attr-first</translation></message><message><source>PostgreSQL not available</source><translation type="unfinished">PostgreSQL not available</translation></message><message><source>No connection</source><translation type="unfinished">No connection</translation></message><message><source>Auto-zoom when feature changes</source><translation type="unfinished">Auto-zoom when feature changes</translation></message><message><source>Backend optimization settings saved</source><translation type="unfinished">Backend optimization settings saved</translation></message><message><source>Backend optimizations configured</source><translation type="unfinished">Backend optimizations configured</translation></message><message><source>Expression Evaluation</source><translation type="unfinished">Expression Evaluation</translation></message><message><source>Identify selected feature</source><translation type="unfinished">Identify selected feature</translation></message><message><source>Layer properties reset to defaults</source><translation type="unfinished">Layer properties reset to defaults</translation></message><message><source>Link exploring widgets together</source><translation type="unfinished">Link exploring widgets together</translation></message><message><source>Optimization settings saved</source><translation type="unfinished">Optimization settings saved</translation></message><message><source>Reset all layer exploring properties</source><translation type="unfinished">Reset all layer exploring properties</translation></message><message><source>Toggle feature selection on map</source><translation type="unfinished">Toggle feature selection on map</translation></message><message><source>Use centroids instead of full geometries for distant layers (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for distant layers (faster for complex polygons)</translation></message><message><source>Use centroids instead of full geometries for source layer (faster for complex polygons)</source><translation type="unfinished">Use centroids instead of full geometries for source layer (faster for complex polygons)</translation></message><message><source>Zoom to selected feature</source><translation type="unfinished">Zoom to selected feature</translation></message></context>
 </TS>

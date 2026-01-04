@@ -58,8 +58,12 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from ..logging_config import get_tasks_logger
+from ..constants import DEFAULT_TEMP_SCHEMA
 
 logger = get_tasks_logger()
+
+# v2.8.8: Use dedicated FilterMate temp schema for all MVs
+FILTERMATE_MV_SCHEMA = DEFAULT_TEMP_SCHEMA  # 'filtermate_temp'
 
 
 class OptimizationType(Enum):
@@ -663,6 +667,9 @@ class CombinedQueryOptimizer:
         fid_list_str = ', '.join(str(fid) for fid in fid_list)
         source_mv_info = None
         
+        # v2.8.8: Use FilterMate temp schema for all MVs instead of source schema
+        mv_schema = FILTERMATE_MV_SCHEMA
+        
         # v2.9.0: If FID count exceeds threshold, create a source MV with pre-computed buffer
         if fid_count > self.SOURCE_FID_MV_THRESHOLD:
             # Generate unique source MV name
@@ -670,7 +677,8 @@ class CombinedQueryOptimizer:
             src_mv_name = f"filtermate_src_{fid_hash}"
             
             # Build CREATE MATERIALIZED VIEW SQL for source selection
-            create_sql = f'''CREATE MATERIALIZED VIEW IF NOT EXISTS "{source_schema}"."{src_mv_name}" AS
+            # v2.8.8: Use filtermate temp schema instead of source schema
+            create_sql = f'''CREATE MATERIALIZED VIEW IF NOT EXISTS "{mv_schema}"."{src_mv_name}" AS
     SELECT "{fid_column}", 
            "{source_geom_col}" AS geom,
            ST_Buffer("{source_geom_col}", {buffer_distance}, '{buffer_style}') AS geom_buffered
@@ -679,7 +687,7 @@ class CombinedQueryOptimizer:
     WITH DATA;'''
             
             source_mv_info = SourceMVInfo(
-                schema=source_schema,
+                schema=mv_schema,  # v2.8.8: Use temp schema
                 view_name=src_mv_name,
                 source_table=source_table,
                 source_schema=source_schema,
@@ -697,11 +705,11 @@ class CombinedQueryOptimizer:
     FROM {mv_info.qualified_name} AS mv
     WHERE EXISTS (
         SELECT 1 
-        FROM "{source_schema}"."{src_mv_name}" AS __src
+        FROM "{mv_schema}"."{src_mv_name}" AS __src
         WHERE {spatial_predicate}(mv."geom", __src.geom_buffered)
     )
 )'''
-            logger.info(f"🔧 v2.9.0: Will create source MV '{src_mv_name}' for {fid_count} FIDs with pre-computed buffer")
+            logger.info(f"🔧 v2.9.0: Will create source MV '{mv_schema}.{src_mv_name}' for {fid_count} FIDs with pre-computed buffer")
         else:
             # Standard inline subquery for small FID lists
             optimized = f'''"{primary_key}" IN (

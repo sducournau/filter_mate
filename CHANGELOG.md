@@ -2,6 +2,66 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.8.9] - 2026-01-04 - Enhanced MV Management & Simplified UI
+
+### ✨ Enhanced: PostgreSQL Materialized Views Management
+
+Improved the advanced optimization panel with comprehensive MV (Materialized Views) management:
+
+**New Features:**
+
+- **MV Status Widget**: Real-time display of active materialized views count
+  - Shows session views vs. other sessions views
+  - Color-coded status (Clean ✅, Active 📊, Error ⚠️)
+  - One-click refresh button
+- **Quick Cleanup Actions**:
+  - 🧹 Session: Cleanup MVs from current session only
+  - 🗑️ Orphaned: Cleanup MVs from inactive sessions
+  - ⚠️ All: Cleanup all MVs (with confirmation)
+- **Auto-cleanup Toggle**: Per-session control of automatic MV cleanup on exit
+
+### 🎨 Simplified: Optimization Confirmation Popup
+
+Streamlined the optimization recommendation dialog for faster workflow:
+
+- **Compact Header**: Shows estimated speedup prominently (e.g., "🚀 ~5x faster possible")
+- **One-click Actions**: Apply or Skip with minimal clicks
+- **Inline Summary**: Shows optimization icons without requiring expansion
+- **"Don't ask for session"**: Option to skip confirmations for current session
+
+### 🔧 Improvements
+
+- PostgreSQL panel now syncs auto_cleanup setting with dockwidget
+- MV threshold now stored in optimization thresholds for backend use
+- Reduced dialog height for better screen usage
+- Better session_id propagation for MV status tracking
+
+---
+
+## [2.8.8] - 2026-01-04 - Selection Sync Initialization Fix
+
+### 🐛 Fix: Selection Auto-Sync Not Working on Project Load
+
+Fixed bug where the bidirectional synchronization between canvas selection tool and UI widgets was not active when opening a project with a source layer that had "Auto Selection" (`is_selecting`) already enabled.
+
+**Problem:**
+
+When opening a project with single selection mode and auto-selection enabled, users had to:
+
+1. Switch groupboxes (e.g., from single to multiple selection and back)
+2. Disable and re-enable "Auto Selection" button
+   ...for the synchronization to work between the QGIS canvas selection tool and the FilterMate UI.
+
+**Root Cause:**
+
+When restoring widget states in `_synchronize_layer_widgets()`, the `is_selecting` button was checked with `blockSignals(True)` to prevent triggering actions during state restoration. However, this meant `exploring_select_features()` was never called, and the bidirectional sync between canvas and widgets was not initialized.
+
+**Solution:**
+
+Added explicit initialization of selection sync in `_reconnect_layer_signals()`: if `is_selecting` is True after state restoration, `exploring_select_features()` is now called to properly initialize the selection synchronization.
+
+---
+
 ## [2.8.7] - 2026-01-04 - Complex Expression Materialization Fix
 
 ### 🐛 Fix: Slow Canvas Rendering with Complex Spatial Expressions
