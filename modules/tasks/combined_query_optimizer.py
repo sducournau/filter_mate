@@ -71,6 +71,7 @@ class OptimizationType(Enum):
     EXPRESSION_SIMPLIFY = auto()       # Simplify expression structure
     CACHE_HIT = auto()                 # Result from cache
     RANGE_OPTIMIZE = auto()            # Convert IN list to range (Spatialite/OGR)
+    SOURCE_MV_OPTIMIZE = auto()        # Create source MV with pre-computed buffer (PostgreSQL)
 
 
 @dataclass
@@ -125,6 +126,25 @@ class SpatialPredicateInfo:
 
 
 @dataclass
+class SourceMVInfo:
+    """Information about source MV with pre-computed buffer to create."""
+    schema: str
+    view_name: str  # e.g., filtermate_src_abc123
+    source_table: str
+    source_schema: str
+    source_geom_col: str
+    fid_column: str
+    fid_list: List[int]
+    buffer_distance: str
+    buffer_style: str
+    create_sql: str  # Full CREATE MATERIALIZED VIEW statement
+    
+    @property
+    def qualified_name(self) -> str:
+        return f'"{self.schema}"."{self.view_name}"'
+
+
+@dataclass
 class OptimizationResult:
     """Result of query optimization."""
     success: bool
@@ -134,6 +154,7 @@ class OptimizationResult:
     performance_hint: str = ""
     mv_info: Optional[MaterializedViewInfo] = None
     fid_info: Optional[FidListInfo] = None
+    source_mv_info: Optional[SourceMVInfo] = None  # v2.9.0: Source MV to create
     
     # Statistics
     estimated_speedup: float = 1.0  # Multiplier (e.g., 10.0 = 10x faster)
@@ -146,9 +167,27 @@ class CombinedQueryOptimizer:
     
     Detects patterns from successive filter operations and rewrites
     queries to use more efficient execution strategies.
+    
+    v2.9.0: Enhanced multi-step optimization
+    - Detects MV + EXISTS with inline FID lists and rewrites for efficiency
+    - Creates source selection MVs for large FID lists (> SOURCE_FID_MV_THRESHOLD)
+    - Pre-computes ST_Buffer in subquery to avoid per-row recalculation
     """
     
-    # Regex patterns for detecting materialized view references
+    # ============== Configuration Thresholds ==============
+    
+    # Threshold for converting inline FID list to source selection MV
+    # When EXISTS contains more than this many FIDs, create a temp MV instead
+    SOURCE_FID_MV_THRESHOLD = 50
+    
+    # Threshold for converting FID list to range expression
+    # Only applies when FIDs are mostly consecutive (>50% coverage)
+    FID_RANGE_THRESHOLD = 20
+    
+    # Maximum FIDs to keep inline (for small lists, inline is faster)
+    MAX_INLINE_FIDS = 30
+    
+    # ============== Regex patterns for detecting materialized view references ==============
     # Matches: "fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx")
     MV_IN_PATTERN = re.compile(
         r'"?(\w+)"?\s+IN\s*\(\s*SELECT\s+"?(\w+)"?\s+FROM\s+"?(\w+)"?\s*\.\s*"?(\w+)"?\s*\)',
@@ -174,6 +213,19 @@ class CombinedQueryOptimizer:
     # Matches: EXISTS (SELECT 1 FROM ... WHERE ST_Intersects(...) AND (__source."fid" IN (...)))
     EXISTS_WITH_FID_PATTERN = re.compile(
         r'EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+"?(\w+)"?\s*\.\s*"?(\w+)"?\s+AS\s+(\w+)\s+WHERE\s+(ST_\w+)\s*\([^)]+\)\s*AND\s*\(\s*\3\s*\.\s*"?(\w+)"?\s+IN\s*\(\s*([\d\s,]+)\s*\)\s*\)\s*\)',
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    # v2.9.0: Enhanced pattern for EXISTS with large FID lists and ST_Buffer
+    # Matches the full EXISTS clause including buffer parameters
+    # Example: EXISTS (SELECT 1 FROM "public"."table" AS __source 
+    #          WHERE ST_Intersects("target"."geom", ST_Buffer(__source."geom", 50.0, 'quad_segs=5')) 
+    #          AND (__source."fid" IN (1, 2, 3, ...)))
+    EXISTS_BUFFER_FID_PATTERN = re.compile(
+        r'EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+"([^"]+)"\s*\.\s*"([^"]+)"\s+AS\s+(\w+)\s+'
+        r'WHERE\s+(ST_\w+)\s*\(\s*"([^"]+)"\s*\.\s*"([^"]+)"\s*,\s*'
+        r'ST_Buffer\s*\(\s*\3\s*\.\s*"([^"]+)"\s*,\s*([^,)]+)\s*(?:,\s*[\'"]([^"\']+)[\'"])?\s*\)\s*\)\s*'
+        r'AND\s*\(\s*\3\s*\.\s*"(\w+)"\s+IN\s*\(\s*([\d\s,]+)\s*\)\s*\)\s*\)',
         re.IGNORECASE | re.DOTALL
     )
     
@@ -299,13 +351,21 @@ class CombinedQueryOptimizer:
             target_table, target_schema, primary_key
         )
         
-        # 2. Try Spatialite/OGR FID list optimization
+        # 2. v2.9.0: Try MV + EXISTS with large FID list optimization
+        # This handles the case: (IN mv_step1) AND (EXISTS ... AND (fid IN (long list)))
+        if not result.success:
+            result = self._try_mv_exists_fid_optimization(
+                old_subset, new_expression, combine_operator,
+                target_table, target_schema, primary_key
+            )
+        
+        # 3. Try Spatialite/OGR FID list optimization
         if not result.success:
             result = self._try_fid_list_optimization(
                 old_subset, new_expression, combine_operator, primary_key
             )
         
-        # 3. Try simpler optimizations
+        # 4. Try simpler optimizations
         if not result.success:
             # Try simpler optimizations
             result = self._try_expression_simplification(
@@ -387,6 +447,327 @@ class CombinedQueryOptimizer:
         # Fallback: Simpler optimization - just ensure MV is referenced efficiently
         return self._optimize_mv_reference(mv_info, new_expression, combine_operator, original)
     
+    def _try_mv_exists_fid_optimization(
+        self,
+        old_subset: str,
+        new_expression: str,
+        combine_operator: str,
+        target_table: Optional[str],
+        target_schema: Optional[str],
+        primary_key: Optional[str]
+    ) -> OptimizationResult:
+        """
+        v2.9.0: Optimize MV + EXISTS with large FID list pattern.
+        
+        This handles the specific case where:
+        - old_subset contains a MV reference: "fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx")
+        - new_expression contains an EXISTS with a large inline FID list
+        
+        Original (slow):
+            ("fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx"))
+            AND
+            (EXISTS (SELECT 1 FROM "public"."source" AS __source 
+                     WHERE ST_Intersects("target"."geom", ST_Buffer(__source."geom", 50))
+                     AND (__source."fid" IN (1, 2, 3, ... 300+ FIDs))))
+        
+        Optimized (fast):
+            "fid" IN (
+                SELECT mv.pk FROM "public"."filtermate_mv_xxx" AS mv
+                WHERE EXISTS (
+                    SELECT 1 FROM (
+                        SELECT "geom", ST_Buffer("geom", 50, 'quad_segs=5') AS geom_buffered
+                        FROM "public"."source" 
+                        WHERE "fid" IN (1, 2, 3, ...)
+                    ) AS src
+                    WHERE ST_Intersects(mv.geom, src.geom_buffered)
+                )
+            )
+        
+        Benefits:
+        - ST_Buffer computed only once per source feature (not per comparison)
+        - Spatial comparison limited to MV features (already filtered)
+        - PostgreSQL can use spatial indexes on both sides
+        - For very large FID lists (>50), can create temp MV instead
+        """
+        original = f"({old_subset}) {combine_operator} ({new_expression})"
+        
+        # Only optimize AND combinations
+        if combine_operator.upper() != 'AND':
+            return OptimizationResult(
+                success=False,
+                optimized_expression=original,
+                optimization_type=OptimizationType.NONE,
+                original_expression=original
+            )
+        
+        # Detect MV in old_subset
+        mv_info = self._detect_materialized_view(old_subset)
+        if not mv_info:
+            return OptimizationResult(
+                success=False,
+                optimized_expression=original,
+                optimization_type=OptimizationType.NONE,
+                original_expression=original
+            )
+        
+        # Try to match the enhanced EXISTS pattern with buffer and FID list
+        match = self.EXISTS_BUFFER_FID_PATTERN.search(new_expression)
+        
+        if match:
+            # Extract components from match
+            source_schema = match.group(1)
+            source_table = match.group(2)
+            source_alias = match.group(3)
+            spatial_predicate = match.group(4)
+            target_table_ref = match.group(5)
+            target_geom_col = match.group(6)
+            source_geom_col = match.group(7)
+            buffer_distance = match.group(8).strip()
+            buffer_style = match.group(9) if match.group(9) else 'quad_segs=5'
+            fid_column = match.group(10)
+            fid_list_str = match.group(11)
+            
+            # Parse FID list
+            try:
+                fid_list = [int(fid.strip()) for fid in fid_list_str.split(',') if fid.strip()]
+            except ValueError:
+                logger.warning(f"Could not parse FID list, skipping optimization")
+                return OptimizationResult(
+                    success=False,
+                    optimized_expression=original,
+                    optimization_type=OptimizationType.NONE,
+                    original_expression=original
+                )
+            
+            fid_count = len(fid_list)
+            logger.info(f"🔍 v2.9.0: Detected MV + EXISTS + {fid_count} FIDs pattern")
+            
+            # Build optimized subquery (may create source MV if threshold exceeded)
+            optimized, source_mv_info = self._build_mv_buffered_subquery(
+                mv_info=mv_info,
+                source_schema=source_schema,
+                source_table=source_table,
+                source_geom_col=source_geom_col,
+                target_geom_col=target_geom_col,
+                spatial_predicate=spatial_predicate,
+                buffer_distance=buffer_distance,
+                buffer_style=buffer_style,
+                fid_column=fid_column,
+                fid_list=fid_list,
+                primary_key=primary_key or 'fid'
+            )
+            
+            # Determine optimization type and hint based on whether source MV will be created
+            if source_mv_info:
+                opt_type = OptimizationType.SOURCE_MV_OPTIMIZE
+                hint = f"Source MV with pre-computed buffer ({fid_count} FIDs → {source_mv_info.view_name})"
+                speedup = 20.0  # Highest speedup with indexed source MV
+            elif fid_count <= self.MAX_INLINE_FIDS:
+                opt_type = OptimizationType.MV_REUSE
+                hint = f"Restructured query with pre-computed buffer ({fid_count} FIDs inline)"
+                speedup = 5.0
+            else:
+                opt_type = OptimizationType.MV_REUSE
+                hint = f"Restructured query with pre-computed buffer ({fid_count} FIDs, buffer pre-computed)"
+                speedup = 10.0
+            
+            if optimized:
+                # Clean up whitespace
+                optimized = ' '.join(optimized.split())
+                
+                return OptimizationResult(
+                    success=True,
+                    optimized_expression=optimized,
+                    optimization_type=opt_type,
+                    original_expression=original,
+                    performance_hint=hint,
+                    mv_info=mv_info,
+                    source_mv_info=source_mv_info,
+                    estimated_speedup=speedup,
+                    complexity_reduction=0.7 if source_mv_info else 0.6
+                )
+        
+        # Pattern not matched - try simpler FID list extraction
+        fid_match = re.search(
+            r'__source\s*\.\s*"?(\w+)"?\s+IN\s*\(\s*([\d\s,]+)\s*\)',
+            new_expression,
+            re.IGNORECASE
+        )
+        
+        if fid_match:
+            fid_column = fid_match.group(1)
+            fid_list_str = fid_match.group(2)
+            try:
+                fid_list = [int(fid.strip()) for fid in fid_list_str.split(',') if fid.strip()]
+                fid_count = len(fid_list)
+                
+                if fid_count > self.FID_RANGE_THRESHOLD:
+                    # Try to convert to range if FIDs are mostly consecutive
+                    range_result = self._try_convert_fid_to_range(fid_list, fid_column)
+                    if range_result:
+                        # Replace inline FID list with range expression
+                        optimized = new_expression.replace(
+                            fid_match.group(0),
+                            f'{range_result}'
+                        )
+                        optimized = f"({old_subset}) AND ({optimized})"
+                        optimized = ' '.join(optimized.split())
+                        
+                        return OptimizationResult(
+                            success=True,
+                            optimized_expression=optimized,
+                            optimization_type=OptimizationType.RANGE_OPTIMIZE,
+                            original_expression=original,
+                            performance_hint=f"Converted {fid_count} FIDs to range expression",
+                            mv_info=mv_info,
+                            estimated_speedup=2.0,
+                            complexity_reduction=0.3
+                        )
+            except ValueError:
+                pass
+        
+        return OptimizationResult(
+            success=False,
+            optimized_expression=original,
+            optimization_type=OptimizationType.NONE,
+            original_expression=original
+        )
+    
+    def _build_mv_buffered_subquery(
+        self,
+        mv_info: MaterializedViewInfo,
+        source_schema: str,
+        source_table: str,
+        source_geom_col: str,
+        target_geom_col: str,
+        spatial_predicate: str,
+        buffer_distance: str,
+        buffer_style: str,
+        fid_column: str,
+        fid_list: List[int],
+        primary_key: str
+    ) -> Tuple[str, Optional[SourceMVInfo]]:
+        """
+        Build optimized subquery that pre-computes buffer.
+        
+        This structure ensures:
+        1. ST_Buffer is computed only once per source feature
+        2. Spatial comparison is limited to MV features
+        3. PostgreSQL can use spatial indexes efficiently
+        
+        Returns:
+            Tuple of (optimized_expression, source_mv_info)
+            source_mv_info is None if FID count < SOURCE_FID_MV_THRESHOLD
+        """
+        fid_count = len(fid_list)
+        fid_list_str = ', '.join(str(fid) for fid in fid_list)
+        source_mv_info = None
+        
+        # v2.9.0: If FID count exceeds threshold, create a source MV with pre-computed buffer
+        if fid_count > self.SOURCE_FID_MV_THRESHOLD:
+            # Generate unique source MV name
+            fid_hash = hashlib.md5(','.join(str(f) for f in sorted(fid_list)).encode()).hexdigest()[:8]
+            src_mv_name = f"filtermate_src_{fid_hash}"
+            
+            # Build CREATE MATERIALIZED VIEW SQL for source selection
+            create_sql = f'''CREATE MATERIALIZED VIEW IF NOT EXISTS "{source_schema}"."{src_mv_name}" AS
+    SELECT "{fid_column}", 
+           "{source_geom_col}" AS geom,
+           ST_Buffer("{source_geom_col}", {buffer_distance}, '{buffer_style}') AS geom_buffered
+    FROM "{source_schema}"."{source_table}"
+    WHERE "{fid_column}" IN ({fid_list_str})
+    WITH DATA;'''
+            
+            source_mv_info = SourceMVInfo(
+                schema=source_schema,
+                view_name=src_mv_name,
+                source_table=source_table,
+                source_schema=source_schema,
+                source_geom_col=source_geom_col,
+                fid_column=fid_column,
+                fid_list=fid_list,
+                buffer_distance=buffer_distance,
+                buffer_style=buffer_style,
+                create_sql=create_sql
+            )
+            
+            # Build simplified query using the source MV
+            optimized = f'''"{primary_key}" IN (
+    SELECT mv."pk" 
+    FROM {mv_info.qualified_name} AS mv
+    WHERE EXISTS (
+        SELECT 1 
+        FROM "{source_schema}"."{src_mv_name}" AS __src
+        WHERE {spatial_predicate}(mv."geom", __src.geom_buffered)
+    )
+)'''
+            logger.info(f"🔧 v2.9.0: Will create source MV '{src_mv_name}' for {fid_count} FIDs with pre-computed buffer")
+        else:
+            # Standard inline subquery for small FID lists
+            optimized = f'''"{primary_key}" IN (
+    SELECT mv."pk" 
+    FROM {mv_info.qualified_name} AS mv
+    WHERE EXISTS (
+        SELECT 1 
+        FROM (
+            SELECT "{source_geom_col}", 
+                   ST_Buffer("{source_geom_col}", {buffer_distance}, '{buffer_style}') AS geom_buffered
+            FROM "{source_schema}"."{source_table}"
+            WHERE "{fid_column}" IN ({fid_list_str})
+        ) AS __src
+        WHERE {spatial_predicate}(mv."geom", __src.geom_buffered)
+    )
+)'''
+        
+        return optimized, source_mv_info
+    
+    def _try_convert_fid_to_range(
+        self, 
+        fid_list: List[int], 
+        fid_column: str
+    ) -> Optional[str]:
+        """
+        Try to convert FID list to range expression if mostly consecutive.
+        
+        Returns optimized expression like:
+            (__source."fid" >= 100 AND __source."fid" <= 500)
+        Or with exclusions:
+            (__source."fid" >= 100 AND __source."fid" <= 500 AND __source."fid" NOT IN (105, 110))
+        
+        Returns None if range optimization is not beneficial.
+        """
+        if len(fid_list) < self.FID_RANGE_THRESHOLD:
+            return None
+        
+        fids = sorted(fid_list)
+        min_fid = fids[0]
+        max_fid = fids[-1]
+        
+        # Calculate coverage
+        range_size = max_fid - min_fid + 1
+        coverage = len(fids) / range_size
+        
+        # Only optimize if >50% coverage
+        if coverage < 0.5:
+            return None
+        
+        # Find gaps
+        full_range = set(range(min_fid, max_fid + 1))
+        actual_fids = set(fids)
+        gaps = sorted(full_range - actual_fids)
+        
+        if len(gaps) == 0:
+            # Perfect range
+            return f'(__source."{fid_column}" >= {min_fid} AND __source."{fid_column}" <= {max_fid})'
+        elif len(gaps) < len(fids) / 4:
+            # Few gaps - use range with exclusions
+            gaps_str = ', '.join(str(g) for g in gaps)
+            return (f'(__source."{fid_column}" >= {min_fid} AND __source."{fid_column}" <= {max_fid} '
+                    f'AND __source."{fid_column}" NOT IN ({gaps_str}))')
+        else:
+            # Too many gaps
+            return None
+
     def _detect_materialized_view(self, expression: str) -> Optional[MaterializedViewInfo]:
         """
         Detect materialized view reference in expression.

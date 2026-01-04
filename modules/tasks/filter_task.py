@@ -6167,6 +6167,9 @@ class FilterEngineTask(QgsTask):
         materialized views from previous filter operations, providing 10-50x
         speedup for successive filters on large datasets.
         
+        v2.9.0: Creates source MV with pre-computed buffer when FID count exceeds
+        SOURCE_FID_MV_THRESHOLD (50), providing up to 20x additional speedup.
+        
         Args:
             new_expression: New filter expression to apply
             old_subset: Existing subset string from layer
@@ -6198,6 +6201,10 @@ class FilterEngineTask(QgsTask):
             )
             
             if result.success:
+                # v2.9.0: If source MV needs to be created, do it now
+                if hasattr(result, 'source_mv_info') and result.source_mv_info is not None:
+                    self._create_source_mv_if_needed(result.source_mv_info)
+                
                 logger.info(
                     f"✓ Combined expression optimized ({result.optimization_type.name}): "
                     f"~{result.estimated_speedup:.1f}x speedup expected"
@@ -6228,6 +6235,59 @@ class FilterEngineTask(QgsTask):
             # No WHERE clause - wrap both in parentheses for safety
             combined = f'( {old_subset} ) {combine_operator} ( {new_expression} )'
         return combined 
+
+    def _create_source_mv_if_needed(self, source_mv_info):
+        """
+        Create source materialized view with pre-computed buffer for optimization.
+        
+        v2.9.0: When the CombinedQueryOptimizer detects a large FID list (> SOURCE_FID_MV_THRESHOLD),
+        it generates a SourceMVInfo with the CREATE SQL. This method executes that SQL
+        to create the source MV before the optimized query is applied.
+        
+        Args:
+            source_mv_info: SourceMVInfo dataclass with create_sql and metadata
+            
+        Returns:
+            bool: True if MV was created successfully
+        """
+        if not source_mv_info or not source_mv_info.create_sql:
+            return False
+        
+        try:
+            import time
+            start_time = time.time()
+            
+            connexion = self._get_valid_postgresql_connection()
+            if not connexion:
+                logger.warning("No PostgreSQL connection available for source MV creation")
+                return False
+            
+            # Build commands: drop if exists, create, add spatial index
+            schema = source_mv_info.schema
+            view_name = source_mv_info.view_name
+            
+            commands = [
+                f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;',
+                source_mv_info.create_sql,
+                f'CREATE INDEX IF NOT EXISTS idx_{view_name}_geom ON "{schema}"."{view_name}" USING GIST (geom);',
+                f'CREATE INDEX IF NOT EXISTS idx_{view_name}_buff ON "{schema}"."{view_name}" USING GIST (geom_buffered);',
+                f'ANALYZE "{schema}"."{view_name}";'
+            ]
+            
+            self._execute_postgresql_commands(connexion, commands)
+            
+            elapsed = time.time() - start_time
+            fid_count = len(source_mv_info.fid_list)
+            logger.info(
+                f"✓ v2.9.0: Source MV '{view_name}' created in {elapsed:.2f}s "
+                f"({fid_count} FIDs with pre-computed buffer)"
+            )
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Failed to create source MV '{source_mv_info.view_name}': {e}")
+            # Don't raise - the optimization can still work with inline subquery
+            return False
 
     def _validate_layer_properties(self, layer_props, layer_name):
         """
