@@ -13,22 +13,12 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# QGIS PostgreSQL backend always available via native provider
-# psycopg2 is only needed for advanced features (materialized views, etc.)
-POSTGRESQL_AVAILABLE = True  # QGIS native PostgreSQL support always available
-
-# Import conditionnel de psycopg2 pour fonctionnalités avancées PostgreSQL
-try:
-    import psycopg2
-    PSYCOPG2_AVAILABLE = True
-except ImportError:
-    PSYCOPG2_AVAILABLE = False
-    psycopg2 = None
-    logger.info(
-        "psycopg2 not found - PostgreSQL layers will use QGIS native API (setSubsetString). "
-        "Advanced features (materialized views, spatial indexes) disabled. "
-        "For better performance with large datasets (>10k features), consider installing psycopg2."
-    )
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from .psycopg2_availability import (
+    psycopg2,
+    PSYCOPG2_AVAILABLE,
+    POSTGRESQL_AVAILABLE
+)
 
 from qgis.core import (
     QgsApplication,

@@ -776,36 +776,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_debug(f"Traceback: {traceback.format_exc()}")
                 return False
     
-    def _get_simplify_tolerance(self) -> float:
-        """
-        Get the geometry simplification tolerance from task_params.
-        
-        When simplify_tolerance > 0, geometries are simplified using
-        native:simplifygeometries before applying buffer. This reduces
-        vertex count and improves performance for complex geometries.
-        
-        QGIS native:simplifygeometries algorithm:
-        - Uses Douglas-Peucker algorithm by default
-        - Tolerance in same units as geometry (meters for projected CRS)
-        - Value of 0 means no simplification
-        
-        Returns:
-            Simplification tolerance (0 = disabled)
-        """
-        if not self.task_params:
-            return 0.0
-        
-        filtering_params = self.task_params.get("filtering", {})
-        
-        # Check if simplification is enabled
-        if not filtering_params.get("has_simplify_tolerance", False):
-            return 0.0
-        
-        tolerance = filtering_params.get("simplify_tolerance", 0.0)
-        if tolerance and tolerance > 0:
-            self.log_debug(f"Using geometry simplification tolerance: {tolerance}")
-        return float(tolerance) if tolerance else 0.0
-    
+    # Note: _get_buffer_endcap_style(), _get_buffer_segments(), _get_simplify_tolerance()
+    # are inherited from GeometricFilterBackend (v2.8.6 refactoring)
+
     def _apply_simplify(self, source_layer, simplify_tolerance):
         """Apply geometry simplification to source layer.
         

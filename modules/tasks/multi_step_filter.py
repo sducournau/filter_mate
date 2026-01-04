@@ -51,14 +51,16 @@ from ..logging_config import get_tasks_logger
 
 logger = get_tasks_logger()
 
-# Check PostgreSQL availability
-try:
-    import psycopg2
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from ..psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE
+
+# For backward compatibility
+POSTGRESQL_AVAILABLE = PSYCOPG2_AVAILABLE
+
+# Import psycopg2.sql if available
+if PSYCOPG2_AVAILABLE:
     from psycopg2 import sql as psycopg2_sql
-    POSTGRESQL_AVAILABLE = True
-except ImportError:
-    POSTGRESQL_AVAILABLE = False
-    psycopg2 = None
+else:
     psycopg2_sql = None
 
 

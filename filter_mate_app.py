@@ -56,7 +56,8 @@ from .modules.appUtils import (
 from .modules.type_utils import can_cast, return_typed_value
 from .modules.feedback_utils import (
     show_backend_info, show_progress_message, show_success_with_backend,
-    show_performance_warning, show_error_with_context
+    show_performance_warning, show_error_with_context,
+    show_info, show_warning, show_error, show_success  # v2.8.6: Centralized message bar
 )
 from .modules.filter_history import HistoryManager
 from .modules.filter_favorites import FavoritesManager
@@ -240,8 +241,7 @@ class FilterMateApp:
             if len(all_postgres) > 3:
                 layer_names += f" (+{len(all_postgres) - 3} autres)"
             
-            iface.messageBar().pushWarning(
-                "FilterMate",
+            show_warning(
                 f"Couches PostgreSQL détectées ({layer_names}) mais psycopg2 n'est pas installé. "
                 "Le plugin ne peut pas utiliser ces couches. "
                 "Installez psycopg2 pour activer le support PostgreSQL."
@@ -829,14 +829,12 @@ class FilterMateApp:
             QTimer.singleShot(refresh_delay, safe_ui_refresh)
             
             # Show success message
-            iface.messageBar().pushInfo(
-                "FilterMate",
+            show_info(
                 f"Rechargement de {len(current_layers)} couche(s) en cours..."
             )
         else:
             logger.info("FilterMate: No layers to reload")
-            iface.messageBar().pushInfo(
-                "FilterMate",
+            show_info(
                 "Aucune couche vectorielle à recharger."
             )
             
@@ -905,9 +903,7 @@ class FilterMateApp:
             # or with unbalanced parentheses that were incorrectly persisted
             cleared_layers = cleanup_corrupted_layer_filters(self.PROJECT)
             if cleared_layers:
-                from qgis.utils import iface
-                iface.messageBar().pushWarning(
-                    "FilterMate",
+                show_warning(
                     self.tr(f"Cleared corrupted filters from {len(cleared_layers)} layer(s). Please re-apply your filters.")
                 )
 
@@ -1177,8 +1173,7 @@ class FilterMateApp:
             else:
                 # No layers in project - inform user that plugin is waiting for layers
                 logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
-                iface.messageBar().pushInfo(
-                    "FilterMate",
+                show_info(
                     "Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin."
                 )
         else:
@@ -1354,7 +1349,7 @@ class FilterMateApp:
         if not os.path.exists(self.db_file_path):
             error_msg = f"Database file does not exist: {self.db_file_path}"
             logger.error(error_msg)
-            iface.messageBar().pushCritical("FilterMate", error_msg)
+            show_error(error_msg)
             return None
             
         try:
@@ -1363,7 +1358,7 @@ class FilterMateApp:
         except Exception as error:
             error_msg = f"Failed to connect to database {self.db_file_path}: {error}"
             logger.error(error_msg)
-            iface.messageBar().pushCritical("FilterMate", error_msg)
+            show_error(error_msg)
             return None
     
     def _handle_remove_all_layers(self):
@@ -1418,8 +1413,7 @@ class FilterMateApp:
         self.layer_management_engine_task_completed({}, 'remove_all_layers')
         
         # Inform user that plugin is waiting for layers
-        iface.messageBar().pushInfo(
-            "FilterMate",
+        show_info(
             "Toutes les couches ont été supprimées. Ajoutez des couches vectorielles pour réactiver le plugin."
         )
     
@@ -1753,7 +1747,7 @@ class FilterMateApp:
                     # EMERGENCY FALLBACK: Force sync if dockwidget.widgets_initialized is True
                     if hasattr(self.dockwidget, 'widgets_initialized') and self.dockwidget.widgets_initialized:
                         logger.warning("⚠️ EMERGENCY: Forcing _widgets_ready = True based on dockwidget.widgets_initialized")
-                        iface.messageBar().pushWarning("FilterMate", "Emergency fallback: forcing widgets ready flag")
+                        show_warning("Emergency fallback: forcing widgets ready flag")
                         self._widgets_ready = True
                         # Retry immediately - use weakref for safety
                         weak_self = weakref.ref(self)
@@ -3658,18 +3652,15 @@ class FilterMateApp:
         # Only show feature count if configured to do so
         if should_show_message('filter_count'):
             if task_name == 'filter':
-                iface.messageBar().pushInfo(
-                    "FilterMate",
+                show_info(
                     f"{feature_count:,} features visible in main layer"
                 )
             elif task_name == 'unfilter':
-                iface.messageBar().pushInfo(
-                    "FilterMate",
+                show_info(
                     f"All filters cleared - {feature_count:,} features visible in main layer"
                 )
             elif task_name == 'reset':
-                iface.messageBar().pushInfo(
-                    "FilterMate",
+                show_info(
                     f"{feature_count:,} features visible in main layer"
                 )
 
@@ -4194,7 +4185,7 @@ class FilterMateApp:
             except OSError as error:
                 error_msg = f"Could not create database directory {db_dir}: {error}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg)
+                show_error(error_msg)
                 return False
         return True
     
@@ -4240,7 +4231,7 @@ class FilterMateApp:
         except Exception as error:
             error_msg = f"Failed to create database file {self.db_file_path}: {error}"
             logger.error(error_msg)
-            iface.messageBar().pushCritical("FilterMate", error_msg)
+            show_error(error_msg)
             return False
     
     def _initialize_schema(self, cursor, project_settings):
@@ -4430,12 +4421,12 @@ class FilterMateApp:
                 if conn is None:
                     error_msg = "Cannot initialize FilterMate database: connection failed"
                     logger.error(error_msg)
-                    iface.messageBar().pushCritical("FilterMate", error_msg)
+                    show_error(error_msg)
                     return
             except Exception as e:
                 error_msg = f"Critical error connecting to database: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg)
+                show_error(error_msg)
                 return
 
             try:
@@ -4462,7 +4453,7 @@ class FilterMateApp:
             except Exception as e:
                 error_msg = f"Error during database initialization: {str(e)}"
                 logger.error(error_msg)
-                iface.messageBar().pushCritical("FilterMate", error_msg)
+                show_error(error_msg)
                 return
             finally:
                 if conn:

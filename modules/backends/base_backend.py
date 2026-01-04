@@ -133,3 +133,105 @@ class GeometricFilterBackend(ABC):
         """Helper method for logging debug messages"""
         if self.logger:
             self.logger.debug(f"[{self.get_backend_name()}] {message}")
+
+    # =========================================================================
+    # Shared Buffer/Geometry Methods (v2.8.6 - extracted from backends)
+    # =========================================================================
+    
+    def _get_buffer_endcap_style(self) -> str:
+        """
+        Get the buffer endcap style from task_params.
+        
+        Supports PostGIS/Spatialite ST_Buffer 'endcap' parameter:
+        - 'round' (default)
+        - 'flat' 
+        - 'square'
+        
+        Returns:
+            Endcap style string for SQL buffer functions
+        """
+        if not self.task_params:
+            return 'round'
+        
+        filtering_params = self.task_params.get("filtering", {})
+        if not filtering_params.get("has_buffer_type", False):
+            return 'round'
+        
+        buffer_type_str = filtering_params.get("buffer_type", "Round")
+        
+        # Map FilterMate buffer types to SQL endcap styles
+        buffer_type_mapping = {
+            "Round": "round",
+            "Flat": "flat", 
+            "Square": "square"
+        }
+        
+        endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
+        self.log_debug(f"Using buffer endcap style: {endcap_style}")
+        return endcap_style
+    
+    def _get_buffer_segments(self) -> int:
+        """
+        Get the buffer segments (quad_segs) from task_params.
+        
+        Controls precision for curved buffer edges:
+        - Higher value = smoother curves (more segments per quarter circle)
+        - Lower value = faster but rougher curves
+        - Default: 5 (if not using buffer_type options)
+        
+        Returns:
+            Number of segments per quarter circle
+        """
+        if not self.task_params:
+            return 5
+        
+        filtering_params = self.task_params.get("filtering", {})
+        if not filtering_params.get("has_buffer_type", False):
+            return 5
+        
+        segments = filtering_params.get("buffer_segments", 5)
+        self.log_debug(f"Using buffer segments (quad_segs): {segments}")
+        return int(segments)
+    
+    def _get_simplify_tolerance(self) -> float:
+        """
+        Get the geometry simplification tolerance from task_params.
+        
+        When simplify_tolerance > 0, geometries are simplified using
+        SimplifyPreserveTopology before applying buffer. This reduces
+        vertex count and improves performance for complex geometries.
+        
+        Notes:
+        - Preserves topology (no self-intersections)
+        - Tolerance in same units as geometry (meters for projected CRS)
+        - Value of 0 means no simplification
+        
+        Returns:
+            Simplification tolerance (0 = disabled)
+        """
+        if not self.task_params:
+            return 0.0
+        
+        filtering_params = self.task_params.get("filtering", {})
+        
+        # Check if simplification is enabled
+        if not filtering_params.get("has_simplify_tolerance", False):
+            return 0.0
+        
+        tolerance = filtering_params.get("simplify_tolerance", 0.0)
+        if tolerance and tolerance > 0:
+            self.log_debug(f"Using geometry simplification tolerance: {tolerance}")
+        return float(tolerance) if tolerance else 0.0
+    
+    def _is_task_canceled(self) -> bool:
+        """
+        Check if the parent task was canceled.
+        
+        Returns:
+            True if task was canceled, False otherwise
+        """
+        if hasattr(self, 'task_params') and self.task_params:
+            task = self.task_params.get('_parent_task')
+            if task and hasattr(task, 'isCanceled'):
+                return task.isCanceled()
+        return False

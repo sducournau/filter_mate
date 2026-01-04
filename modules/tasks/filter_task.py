@@ -68,14 +68,8 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Import PostgreSQL availability flags from centralized appUtils
-# POSTGRESQL_AVAILABLE = True (always, QGIS native support)
-# PSYCOPG2_AVAILABLE = depends on psycopg2 import (for advanced features)
-from ..appUtils import POSTGRESQL_AVAILABLE, PSYCOPG2_AVAILABLE
-try:
-    import psycopg2
-except ImportError:
-    psycopg2 = None
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from ..psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
 
 # Import constants
 from ..constants import (

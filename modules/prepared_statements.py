@@ -29,13 +29,11 @@ from .logging_config import get_tasks_logger
 
 logger = get_tasks_logger()
 
-try:
-    import psycopg2
-    import psycopg2.extras
-    POSTGRESQL_AVAILABLE = True
-except ImportError:
-    POSTGRESQL_AVAILABLE = False
-    psycopg2 = None
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from .psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE
+
+# For backward compatibility
+POSTGRESQL_AVAILABLE = PSYCOPG2_AVAILABLE
 
 
 class PreparedStatementManager:

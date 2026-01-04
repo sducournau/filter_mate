@@ -57,20 +57,14 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Check psycopg2 availability for connection pooling
-# POSTGRESQL_AVAILABLE is always True (QGIS native support)
-# PSYCOPG2_AVAILABLE is needed for advanced features like pooling
-try:
-    import psycopg2
-    from psycopg2 import pool as psycopg2_pool
-    PSYCOPG2_AVAILABLE = True
-except ImportError:
-    PSYCOPG2_AVAILABLE = False
-    psycopg2 = None
-    psycopg2_pool = None
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from .psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
 
-# For backward compatibility, also export POSTGRESQL_AVAILABLE
-POSTGRESQL_AVAILABLE = PSYCOPG2_AVAILABLE  # Pool requires psycopg2
+# Import psycopg2.pool if available (needed for connection pooling)
+if PSYCOPG2_AVAILABLE:
+    from psycopg2 import pool as psycopg2_pool
+else:
+    psycopg2_pool = None
 
 
 @dataclass

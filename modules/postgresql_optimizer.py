@@ -50,15 +50,17 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Check PostgreSQL availability
-try:
-    import psycopg2
+# Centralized psycopg2 availability (v2.8.6 refactoring)
+from .psycopg2_availability import psycopg2, PSYCOPG2_AVAILABLE
+
+# For backward compatibility
+POSTGRESQL_AVAILABLE = PSYCOPG2_AVAILABLE
+
+# Import psycopg2 extras if available
+if PSYCOPG2_AVAILABLE:
     from psycopg2 import sql as psycopg2_sql
     from psycopg2.extras import RealDictCursor, execute_batch, execute_values
-    POSTGRESQL_AVAILABLE = True
-except ImportError:
-    POSTGRESQL_AVAILABLE = False
-    psycopg2 = None
+else:
     psycopg2_sql = None
     RealDictCursor = None
     execute_batch = None

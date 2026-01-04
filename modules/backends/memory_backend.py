@@ -403,27 +403,9 @@ class MemoryGeometricFilter(GeometricFilterBackend):
         
         return False
     
-    def _get_simplify_tolerance(self) -> float:
-        """
-        Get the geometry simplification tolerance from task_params.
-        
-        When simplify_tolerance > 0, geometries are simplified using
-        native:simplifygeometries before applying buffer.
-        
-        Returns:
-            Simplification tolerance (0 = disabled)
-        """
-        if not self.task_params:
-            return 0.0
-        
-        filtering_params = self.task_params.get("filtering", {})
-        
-        if not filtering_params.get("has_simplify_tolerance", False):
-            return 0.0
-        
-        tolerance = filtering_params.get("simplify_tolerance", 0.0)
-        return float(tolerance) if tolerance else 0.0
-    
+    # Note: _get_buffer_endcap_style(), _get_buffer_segments(), _get_simplify_tolerance()
+    # are inherited from GeometricFilterBackend (v2.8.6 refactoring)
+
     def _apply_buffer_to_layer(
         self, 
         source_layer: QgsVectorLayer, 

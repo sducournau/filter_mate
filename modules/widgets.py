@@ -61,6 +61,7 @@ from .appUtils import safe_set_subset_string, is_layer_source_available
 from .feedback_utils import show_warning, show_error
 from .object_safety import (
     is_valid_layer, is_gpkg_file_accessible, refresh_ogr_layer,
+    is_sip_deleted,  # v2.8.6: Use centralized sip.isdeleted check
     GdalErrorHandler  # v2.3.11: Suppress transient GDAL warnings
 )
 
@@ -1547,7 +1548,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             existing_task = self.tasks[action][self.layer.id()]
             # Check if the C++ object still exists before accessing its methods
             # to avoid RuntimeError: wrapped C/C++ object has been deleted
-            if isinstance(existing_task, QgsTask) and not sip.isdeleted(existing_task):
+            if isinstance(existing_task, QgsTask) and not is_sip_deleted(existing_task):
                 if existing_task.status() in [QgsTask.Running, QgsTask.Queued]:
                     logger.debug(f"Cancelling existing {action} task for layer {self.layer.id()}")
                     existing_task.cancel()
