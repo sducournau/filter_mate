@@ -27,6 +27,15 @@
 
 ## 📋 Recent Changes
 
+### v2.8.6 - Code Quality & Post-Buffer Optimization (January 2026)
+
+- 🚀 **NEW: Post-buffer simplification** - Automatic vertex reduction after buffer operations
+- ♻️ **REFACTOR: Centralized psycopg2** - New `psycopg2_availability.py` module for clean imports
+- ♻️ **REFACTOR: Deduplicated buffer methods** - ~230 lines removed, moved to `base_backend.py`
+- 🛠️ **REFACTOR: Standardized message bars** - Centralized via `feedback_utils`
+- ⚙️ **NEW CONFIG: `auto_simplify_after_buffer`** - Enable/disable post-buffer simplification
+- ⚙️ **NEW CONFIG: `buffer_simplify_after_tolerance`** - Tolerance in meters (default: 0.5)
+
 ### v2.8.0 - Enhanced Auto-Optimization System (January 2026)
 
 - 🚀 **NEW: Performance Metrics Collection** - Track and analyze optimization effectiveness

@@ -2,11 +2,48 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [2.8.6] - 2026-01-04 - Version Bump
+## [2.8.6] - 2026-01-04 - Code Quality & Post-Buffer Optimization
 
-### 📦 Release
+### 🚀 New Feature: Post-Buffer Simplification Optimization
 
-Version bump release.
+Added automatic geometry simplification after buffer operations to reduce vertex count and improve performance with complex polygons.
+
+**New Configuration Options:**
+- `auto_simplify_after_buffer`: Enable/disable post-buffer simplification (default: true)
+- `buffer_simplify_after_tolerance`: Simplification tolerance in meters (default: 0.5)
+
+### ♻️ Refactor: Centralized psycopg2 Imports
+
+- Created `modules/psycopg2_availability.py` for centralized psycopg2 import handling
+- Updated 8 modules to use centralized imports
+- Added `get_psycopg2_version()` and `check_psycopg2_for_feature()` utilities
+
+### ♻️ Refactor: Deduplicated Buffer Methods
+
+- Moved shared buffer methods to `base_backend.py`:
+  - `_get_buffer_endcap_style()`
+  - `_get_buffer_segments()`
+  - `_get_simplify_tolerance()`
+  - `_is_task_canceled()`
+- Removed duplicated code from postgresql/spatialite/ogr/memory backends
+- **~230 lines of duplicated code removed**
+
+### 🛠️ Refactor: Message Bar Standardization
+
+- Replaced 12 direct `iface.messageBar()` calls with centralized `feedback_utils` functions
+- Consolidated `is_sip_deleted` usage in widgets.py
+
+### 📝 Files Changed
+
+- `modules/psycopg2_availability.py` (new)
+- `modules/backends/base_backend.py` (+102 lines)
+- `modules/backends/postgresql_backend.py` (-85 lines)
+- `modules/backends/spatialite_backend.py` (-82 lines)
+- `modules/backends/ogr_backend.py` (-29 lines)
+- `modules/backends/memory_backend.py` (-20 lines)
+- `modules/tasks/filter_task.py` (+159 lines for simplification)
+- `filter_mate_app.py` (message bar standardization)
+- 8 additional modules updated for psycopg2 centralization
 
 ---
 
@@ -14,7 +51,7 @@ Version bump release.
 
 ### 📦 Release
 
-Version bump release.
+Version bump release (preparation for v2.8.6 refactoring).
 
 ---
 
