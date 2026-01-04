@@ -11,12 +11,13 @@ from qgis.core import (
     QgsDataSourceUri,
     QgsExpression,
     QgsExpressionContextUtils,
+    QgsMapLayerProxyModel,
     QgsProject,
     QgsTask,
     QgsVectorFileWriter,
     QgsVectorLayer
 )
-from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget, QgsMapLayerProxyModel
+from qgis.gui import QgsCheckableComboBox, QgsFeatureListComboBox, QgsFieldExpressionWidget
 from qgis.utils import iface
 from qgis import processing
 from osgeo import ogr

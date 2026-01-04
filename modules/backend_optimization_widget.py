@@ -911,7 +911,7 @@ class PostgreSQLOptimizationPanel(QWidget):
     def _refresh_mv_status(self):
         """Refresh the MV status from database."""
         try:
-            from ..appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+            from .appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
             from qgis.core import QgsProject
             
             if not POSTGRESQL_AVAILABLE:
@@ -1005,7 +1005,7 @@ class PostgreSQLOptimizationPanel(QWidget):
     def _on_cleanup_requested(self, cleanup_type: str):
         """Handle cleanup request from MV status widget."""
         try:
-            from ..appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
+            from .appUtils import POSTGRESQL_AVAILABLE, get_datasource_connexion_from_layer
             from qgis.core import QgsProject
             
             if not POSTGRESQL_AVAILABLE:

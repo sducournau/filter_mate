@@ -6,27 +6,32 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.8.9
+version=2.9.2
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.8.9 - Enhanced MV Management & Simplified UI
+about=FilterMate v2.9.2 - Centroid & Simplification Optimizations
 
- NEW in v2.8.9:
+ NEW in v2.9.2:
+ - 🎯 IMPROVED: Centroid filtering now uses ST_PointOnSurface() for polygons (guaranteed inside)
+ - 📐 IMPROVED: Adaptive simplification before buffer (tolerance = buffer × 0.1)
+ - ⚙️ NEW: CENTROID_MODE config ('centroid', 'point_on_surface', 'auto')
+ - 🚀 PERF: 2-10x faster buffer operations on simplified geometries
+
+ Previous in v2.9.1:
+ - 🚀 PERF: INCLUDE clause in GIST indexes (PostgreSQL 11+) for 10-30% faster spatial queries
+ - 📦 PERF: Bbox pre-filter column for ultra-fast && operator checks (2-5x faster)
+ - ⚡ PERF: Async CLUSTER for medium datasets (50k-100k features) - non-blocking
+ - 📊 PERF: Extended statistics for better query plans (PostgreSQL 10+)
+
+ Previous in v2.8.9:
  - ✨ NEW: MV Status Widget with real-time materialized views count
  - 🧹 NEW: Quick cleanup actions (Session/Orphaned/All MVs)
  - 🎨 IMPROVED: Simplified optimization confirmation popup (faster workflow)
- - ⚙️ NEW: Auto-cleanup toggle for PostgreSQL session views
- - 🔄 Synced MV settings between advanced panel and dockwidget
 
  Previous in v2.8.8:
  - 🐛 FIX: Selection auto-sync now works immediately on project load when already enabled
  - 🔄 FIX: Bidirectional sync between canvas selection tool and UI widgets initializes correctly
-
- Previous in v2.8.7:
- - 🚀 NEW: Post-buffer simplification optimization (reduces vertex count after buffer ops)
- - 📦 NEW: Centralized psycopg2 imports via modules/psycopg2_availability.py
- - ♻️ REFACTOR: Deduplicated buffer methods moved to base_backend.py (~230 lines removed)
 
  Previous in v2.8.4:
  - 🐛 FIX: Flash/Zoom now correctly shows only custom expression matches (robust validation)

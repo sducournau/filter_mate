@@ -201,10 +201,15 @@ class GeometricFilterBackend(ABC):
         SimplifyPreserveTopology before applying buffer. This reduces
         vertex count and improves performance for complex geometries.
         
+        v2.9.2: Added adaptive tolerance calculation based on buffer distance.
+        When no explicit tolerance is set but auto-simplification is enabled,
+        calculates optimal tolerance as a fraction of buffer distance.
+        
         Notes:
         - Preserves topology (no self-intersections)
         - Tolerance in same units as geometry (meters for projected CRS)
         - Value of 0 means no simplification
+        - Adaptive tolerance = buffer_value * 0.1 (clamped to [0.5, 10.0] meters)
         
         Returns:
             Simplification tolerance (0 = disabled)
@@ -214,14 +219,52 @@ class GeometricFilterBackend(ABC):
         
         filtering_params = self.task_params.get("filtering", {})
         
-        # Check if simplification is enabled
-        if not filtering_params.get("has_simplify_tolerance", False):
-            return 0.0
+        # Check for explicit simplify tolerance from UI
+        if filtering_params.get("has_simplify_tolerance", False):
+            tolerance = filtering_params.get("simplify_tolerance", 0.0)
+            if tolerance and tolerance > 0:
+                self.log_debug(f"Using explicit simplification tolerance: {tolerance}")
+                return float(tolerance)
         
-        tolerance = filtering_params.get("simplify_tolerance", 0.0)
-        if tolerance and tolerance > 0:
-            self.log_debug(f"Using geometry simplification tolerance: {tolerance}")
-        return float(tolerance) if tolerance else 0.0
+        # v2.9.2: Adaptive tolerance based on buffer value
+        # Only apply if auto_simplify_before_buffer is enabled in config
+        has_buffer = filtering_params.get("has_buffer_value", False)
+        buffer_value = filtering_params.get("buffer_value", 0.0)
+        
+        if has_buffer and buffer_value != 0:
+            # Check if auto-simplification is enabled in config
+            try:
+                from ...config.config import ENV_VARS
+                config_data = ENV_VARS.get('CONFIG_DATA', {})
+                auto_opt = config_data.get('APP', {}).get('OPTIONS', {}).get('AUTO_OPTIMIZATION', {})
+                
+                # Extract value from nested dict if present
+                def get_val(entry, default):
+                    if isinstance(entry, dict):
+                        return entry.get('value', default)
+                    return entry if entry is not None else default
+                
+                auto_simplify_enabled = get_val(auto_opt.get('auto_simplify_before_buffer', {}), True)
+                tolerance_factor = get_val(auto_opt.get('buffer_simplify_before_tolerance', {}), 0.1)
+                
+                if auto_simplify_enabled:
+                    # Calculate adaptive tolerance based on buffer distance
+                    abs_buffer = abs(buffer_value)
+                    adaptive_tolerance = abs_buffer * tolerance_factor
+                    
+                    # Clamp to reasonable range [0.5, 10.0] meters
+                    MIN_TOLERANCE = 0.5
+                    MAX_TOLERANCE = 10.0
+                    adaptive_tolerance = max(MIN_TOLERANCE, min(adaptive_tolerance, MAX_TOLERANCE))
+                    
+                    self.log_debug(f"Using adaptive simplification tolerance: {adaptive_tolerance:.2f}m "
+                                   f"(buffer={buffer_value}m, factor={tolerance_factor})")
+                    return adaptive_tolerance
+                    
+            except (ImportError, AttributeError, KeyError) as e:
+                self.log_debug(f"Could not load auto-simplify config: {e}")
+        
+        return 0.0
     
     def _is_task_canceled(self) -> bool:
         """

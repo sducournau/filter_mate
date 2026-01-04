@@ -193,11 +193,18 @@ def _get_thresholds() -> Tuple[int, int]:
 CENTROID_AUTO_THRESHOLD_DISTANT = 5000      # Auto-enable for distant layers > 5k features
 CENTROID_AUTO_THRESHOLD_LOCAL = 50000       # Auto-enable for local layers > 50k features
 
+# v2.9.2: Centroid mode selection
+# 'centroid' = ST_Centroid() - fast but may be outside concave polygons
+# 'point_on_surface' = ST_PointOnSurface() - guaranteed inside polygon (recommended)
+# 'auto' = Use PointOnSurface for polygons, Centroid for lines
+CENTROID_MODE_DEFAULT = 'point_on_surface'
+
 # Geometry simplification thresholds
 SIMPLIFY_AUTO_THRESHOLD = 100000            # Auto-simplify for layers > 100k features
 SIMPLIFY_TOLERANCE_FACTOR = 0.001           # Tolerance as fraction of extent diagonal
 
-# Buffer simplification thresholds
+# v2.9.2: Enhanced buffer simplification thresholds
+# Lower thresholds = more aggressive simplification (better performance)
 BUFFER_SIMPLIFY_VERTEX_THRESHOLD = 50       # Simplify before buffer if avg vertices > this
 BUFFER_SIMPLIFY_FEATURE_THRESHOLD = 1000    # Simplify before buffer if feature count > this
 BUFFER_SIMPLIFY_DEFAULT_TOLERANCE = 1.0     # Default tolerance in meters for buffer simplification
@@ -812,6 +819,17 @@ class AutoOptimizer:
         if not should_recommend:
             return None
         
+        # v2.9.2: Determine best centroid mode based on geometry type
+        # For polygons, use point_on_surface (guaranteed inside)
+        # For lines, use centroid (faster)
+        centroid_mode = CENTROID_MODE_DEFAULT
+        if target.geometry_type == GEOMETRY_TYPE_POLYGON:
+            centroid_mode = 'point_on_surface'
+            reason_parts.append("using ST_PointOnSurface (guaranteed inside polygon)")
+        elif target.geometry_type == GEOMETRY_TYPE_LINE:
+            centroid_mode = 'centroid'
+            reason_parts.append("using ST_Centroid (optimal for lines)")
+        
         return OptimizationRecommendation(
             optimization_type=OptimizationType.USE_CENTROID_DISTANT,
             priority=1,
@@ -819,7 +837,10 @@ class AutoOptimizer:
             reason=f"Centroid recommended: {'; '.join(reason_parts)}",
             auto_applicable=True,
             requires_user_consent=False,
-            parameters={"auto_detected": True}
+            parameters={
+                "auto_detected": True,
+                "centroid_mode": centroid_mode  # v2.9.2: Include recommended mode
+            }
         )
     
     def evaluate_distant_layers_centroid(

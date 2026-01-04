@@ -82,24 +82,9 @@ class OptimizationRecommendationDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 12, 16, 12)
         
-        # Calculate total speedup
-        total_speedup = 1.0
-        auto_applicable_count = 0
-        for rec in self.recommendations:
-            if rec.get('auto_applicable', False):
-                total_speedup *= rec.get('estimated_speedup', 1.0)
-                auto_applicable_count += 1
-        
-        # Compact header with speedup
-        if total_speedup > 1.5:
-            header_text = f"🚀 <b>~{total_speedup:.0f}x</b> {tr('faster possible')}"
-            header_style = "font-size: 14pt; color: #27ae60;"
-        elif total_speedup > 1.1:
-            header_text = f"⚡ <b>~{total_speedup:.1f}x</b> {tr('faster possible')}"
-            header_style = "font-size: 13pt; color: #f39c12;"
-        else:
-            header_text = f"⚙️ {tr('Optimizations available')}"
-            header_style = "font-size: 12pt; color: #3498db;"
+        # Header
+        header_text = f"⚡ {tr('Optimizations available')}"
+        header_style = "font-size: 13pt; color: #3498db; font-weight: bold;"
         
         header = QLabel(header_text)
         header.setStyleSheet(header_style)
@@ -110,34 +95,49 @@ class OptimizationRecommendationDialog(QDialog):
         layer_info.setStyleSheet("color: #888;")
         layout.addWidget(layer_info)
         
-        # Simple summary of what will be applied
-        summary_items = []
-        for rec in self.recommendations[:3]:  # Show max 3 in summary
-            opt_type = rec.get('optimization_type', '')
-            speedup = rec.get('estimated_speedup', 1.0)
-            icon = self._get_optimization_icon(opt_type)
-            summary_items.append(f"{icon} {self._get_short_name(opt_type)} (~{speedup:.0f}x)")
-        
-        if summary_items:
-            summary_text = " • ".join(summary_items)
-            if len(self.recommendations) > 3:
-                summary_text += f" +{len(self.recommendations) - 3}"
-            summary = QLabel(f"<small>{summary_text}</small>")
-            summary.setStyleSheet("color: #555; margin: 4px 0;")
-            summary.setWordWrap(True)
-            layout.addWidget(summary)
-        
-        # Store checkboxes but don't show by default (expandable details)
+        # Checkboxes for each optimization - user can select/deselect
         self.checkboxes = {}
+        
+        optimizations_frame = QFrame()
+        optimizations_frame.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+        optimizations_layout = QVBoxLayout(optimizations_frame)
+        optimizations_layout.setSpacing(4)
+        optimizations_layout.setContentsMargins(8, 6, 8, 6)
+        
         for rec in self.recommendations:
             opt_type = rec.get('optimization_type', 'unknown')
             auto_applicable = rec.get('auto_applicable', False)
             requires_consent = rec.get('requires_user_consent', False)
             
-            checkbox = QCheckBox()
+            icon = self._get_optimization_icon(opt_type)
+            short_name = self._get_short_name(opt_type)
+            
+            # Create checkbox with optimization name (no speedup - gains vary with data complexity)
+            checkbox_text = f"{icon} {short_name}"
+            checkbox = QCheckBox(checkbox_text)
             checkbox.setChecked(auto_applicable and not requires_consent)
-            checkbox.setVisible(False)  # Hidden by default
+            checkbox.setStyleSheet("""
+                QCheckBox {
+                    font-size: 10pt;
+                    padding: 3px;
+                }
+                QCheckBox:hover {
+                    background-color: #e8f4fc;
+                    border-radius: 3px;
+                }
+            """)
+            
+            optimizations_layout.addWidget(checkbox)
             self.checkboxes[opt_type] = checkbox
+        
+        layout.addWidget(optimizations_frame)
         
         # Spacer
         layout.addSpacing(5)

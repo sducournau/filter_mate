@@ -196,6 +196,30 @@ MV_MAX_AGE_SECONDS = 3600               # Max age before auto-cleanup (1 hour)
 MV_CLEANUP_INTERVAL = 600               # Check for old MVs every 10 minutes
 MV_PREFIX = 'filtermate_mv_'            # Prefix for MV names
 
+# v2.9.1: Advanced MV Optimization settings
+MV_ENABLE_INDEX_INCLUDE = True          # Use INCLUDE in GIST index (PostgreSQL 11+)
+MV_ENABLE_EXTENDED_STATS = True         # Create extended statistics
+MV_ENABLE_ASYNC_CLUSTER = True          # Async CLUSTER for medium datasets
+MV_ASYNC_CLUSTER_THRESHOLD = 50000      # Features threshold for async CLUSTER
+MV_ENABLE_BBOX_COLUMN = True            # Add bbox column for fast pre-filtering
+MV_INDEX_FILLFACTOR = 90                # Index fill factor (90=read-heavy, 70=updates)
+
+# v2.9.2: Centroid optimization mode
+# 'centroid' = ST_Centroid() - fast but may be outside concave polygons
+# 'point_on_surface' = ST_PointOnSurface() - guaranteed inside polygon (recommended)
+# 'auto' = Use PointOnSurface for polygons, Centroid for lines
+CENTROID_MODE_DEFAULT = 'point_on_surface'
+CENTROID_MODE_OPTIONS = ('centroid', 'point_on_surface', 'auto')
+
+# v2.9.2: Simplification optimization constants
+SIMPLIFY_BEFORE_BUFFER_ENABLED = True   # Enable simplify before buffer in SQL
+SIMPLIFY_TOLERANCE_FACTOR = 0.1         # Tolerance = buffer_distance * factor
+SIMPLIFY_MIN_TOLERANCE = 0.5            # Minimum tolerance in meters
+SIMPLIFY_MAX_TOLERANCE = 10.0           # Maximum tolerance in meters
+SIMPLIFY_VERTEX_THRESHOLD = 100         # Only simplify if avg vertices > threshold
+SIMPLIFY_FEATURE_THRESHOLD = 500        # Only simplify if features > threshold
+SIMPLIFY_PRESERVE_TOPOLOGY = True       # Use ST_SimplifyPreserveTopology
+
 # Spatialite WKT Cache settings
 WKT_CACHE_MAX_SIZE = 10                 # Max number of WKT geometries to cache
 WKT_CACHE_MAX_LENGTH = 500000           # Max WKT length to cache (500KB)

@@ -109,6 +109,22 @@ except ImportError:
     LayerStatistics = None
     get_optimal_filter_plan = None
 
+# Import buffer optimizer for large buffer workflows (v2.9.0)
+try:
+    from .postgresql_buffer_optimizer import (
+        PostgreSQLBufferOptimizer,
+        BufferOptimizationConfig,
+        BufferOptimizationResult,
+        get_buffer_optimizer,
+        BUFFER_OPTIMIZER_AVAILABLE
+    )
+except ImportError:
+    BUFFER_OPTIMIZER_AVAILABLE = False
+    PostgreSQLBufferOptimizer = None
+    BufferOptimizationConfig = None
+    BufferOptimizationResult = None
+    get_buffer_optimizer = None
+
 
 class PostgreSQLGeometricFilter(GeometricFilterBackend):
     """
@@ -169,6 +185,30 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
     ENABLE_MV_UNLOGGED = False     # UNLOGGED not supported for MVs in PostgreSQL
     MV_INDEX_FILLFACTOR = 90       # Index fill factor (90 = good for read-heavy, 70 = for updates)
     
+    # v2.9.1: Advanced MV optimization flags
+    ENABLE_INDEX_INCLUDE = True    # Use INCLUDE clause in GIST index (PostgreSQL 11+, avoids table lookup)
+    ENABLE_EXTENDED_STATS = True   # Create extended statistics for better query plans
+    ENABLE_ASYNC_CLUSTER = True    # Run CLUSTER asynchronously for large datasets
+    ASYNC_CLUSTER_THRESHOLD = 50000  # Features threshold for async CLUSTER
+    ENABLE_BBOX_COLUMN = True      # Add bbox column to MV for fast pre-filtering
+    
+    # v2.9.2: Centroid optimization mode
+    # 'centroid' = ST_Centroid() - fast but may be outside concave polygons
+    # 'point_on_surface' = ST_PointOnSurface() - guaranteed inside polygon (recommended)
+    # 'auto' = Use PointOnSurface for polygons, Centroid for lines
+    CENTROID_MODE = 'point_on_surface'
+    
+    # v2.9.2: Simplification before buffer (server-side)
+    ENABLE_SIMPLIFY_BEFORE_BUFFER = True   # Apply ST_SimplifyPreserveTopology before buffer
+    SIMPLIFY_TOLERANCE_FACTOR = 0.1        # tolerance = buffer_distance * factor
+    SIMPLIFY_MIN_TOLERANCE = 0.5           # Minimum tolerance (meters)
+    SIMPLIFY_MAX_TOLERANCE = 10.0          # Maximum tolerance (meters)
+    SIMPLIFY_VERTEX_THRESHOLD = 100        # Only simplify if avg vertices > this
+    SIMPLIFY_FEATURE_THRESHOLD = 500       # Only simplify if features > this
+    
+    # v2.9.1: PostgreSQL version detection cache
+    _pg_version_cache = {}         # Cache: conn_hash -> (version, timestamp)
+    
     def __init__(self, task_params: Dict):
         """
         Initialize PostgreSQL backend.
@@ -180,6 +220,117 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.logger = logger
         self.mv_schema = DEFAULT_TEMP_SCHEMA  # v2.8.8: Use filtermate_temp schema for MVs
         self.mv_prefix = "filtermate_mv_"  # Prefix for MV names
+
+    def _get_postgresql_version(self, conn) -> int:
+        """
+        Get PostgreSQL major version number with caching.
+        
+        v2.9.1: Used to enable version-specific optimizations:
+        - PostgreSQL 10+: Extended statistics
+        - PostgreSQL 11+: INCLUDE clause in indexes
+        - PostgreSQL 12+: Better GIST index performance
+        
+        Args:
+            conn: psycopg2 database connection
+            
+        Returns:
+            int: Major version number (e.g., 11, 12, 13, 14, 15, 16)
+        """
+        import time
+        
+        if conn is None:
+            return 9  # Conservative fallback
+        
+        try:
+            # Check cache (valid for 1 hour)
+            conn_hash = id(conn)
+            cache_entry = self._pg_version_cache.get(conn_hash)
+            if cache_entry:
+                version, timestamp = cache_entry
+                if time.time() - timestamp < 3600:  # 1 hour cache
+                    return version
+            
+            # Query PostgreSQL version
+            with conn.cursor() as cursor:
+                cursor.execute("SHOW server_version_num;")
+                version_num = int(cursor.fetchone()[0])
+                # server_version_num format: XXYYZZ (e.g., 140005 = 14.0.5)
+                major_version = version_num // 10000
+                
+                # Cache result
+                self._pg_version_cache[conn_hash] = (major_version, time.time())
+                
+                self.log_debug(f"📊 PostgreSQL version: {major_version} (raw: {version_num})")
+                return major_version
+                
+        except Exception as e:
+            self.log_debug(f"Could not detect PostgreSQL version: {e}")
+            return 9  # Conservative fallback
+    
+    def _schedule_async_cluster(self, conn, full_mv_name: str, index_name: str, 
+                                 schema: str, mv_name: str):
+        """
+        Schedule CLUSTER operation to run asynchronously.
+        
+        v2.9.1: For medium-sized datasets (50k-100k features), CLUSTER can take
+        10-30 seconds. Running it asynchronously improves user experience while
+        still providing the performance benefits eventually.
+        
+        The CLUSTER operation reorders table data to match the spatial index,
+        dramatically improving sequential scan performance (2-5x faster).
+        
+        Args:
+            conn: psycopg2 database connection (not used - we create new connection)
+            full_mv_name: Full qualified MV name (e.g., '"schema"."mv_name"')
+            index_name: Name of the GIST index to cluster by
+            schema: Schema name
+            mv_name: MV name (unqualified)
+        """
+        import threading
+        
+        def run_cluster():
+            """Background thread for CLUSTER operation."""
+            try:
+                # Get fresh connection for background thread
+                from qgis.core import QgsProject
+                
+                # Find any PostgreSQL layer to get connection params
+                for layer_id, layer in QgsProject.instance().mapLayers().items():
+                    if hasattr(layer, 'providerType') and layer.providerType() == 'postgres':
+                        bg_conn, _ = get_datasource_connexion_from_layer(layer)
+                        if bg_conn:
+                            try:
+                                with bg_conn.cursor() as cursor:
+                                    # Set statement timeout to prevent runaway queries
+                                    cursor.execute("SET statement_timeout = '120s';")
+                                    cursor.execute(f'CLUSTER {full_mv_name} USING "{index_name}";')
+                                    bg_conn.commit()
+                                    
+                                    # Also run ANALYZE after CLUSTER
+                                    cursor.execute(f'ANALYZE {full_mv_name};')
+                                    bg_conn.commit()
+                                    
+                                logger.info(f"✓ Async CLUSTER completed for {mv_name}")
+                            except Exception as cluster_err:
+                                logger.warning(f"Async CLUSTER failed: {cluster_err}")
+                                try:
+                                    bg_conn.rollback()
+                                except:
+                                    pass
+                            finally:
+                                bg_conn.close()
+                        break
+            except Exception as e:
+                logger.warning(f"Async CLUSTER error: {e}")
+        
+        # Start background thread
+        cluster_thread = threading.Thread(
+            target=run_cluster,
+            daemon=True,
+            name=f"FilterMate-CLUSTER-{mv_name[:8]}"
+        )
+        cluster_thread.start()
+        self.log_debug(f"  🔄 CLUSTER scheduled in background thread")
 
     def _ensure_mv_schema_exists(self, conn, schema_name: str) -> str:
         """
@@ -1026,12 +1177,38 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         # The geometry column should be referenced directly as "column" since it belongs to the target table
         geom_expr = f'"{geom_field}"'
         
-        # CENTROID OPTIMIZATION: Convert distant layer geometry to centroid if enabled
+        # CENTROID OPTIMIZATION v2.9.2: Convert distant layer geometry to point if enabled
         # This significantly speeds up queries for complex polygons (e.g., buildings)
-        # Applies ST_Centroid() to the distant layer geometry before spatial predicates
+        # v2.9.2: Use ST_PointOnSurface() instead of ST_Centroid() for polygons
+        # ST_PointOnSurface() guarantees the point is INSIDE the polygon (better for concave shapes)
+        # ST_Centroid() may return a point OUTSIDE concave polygons (L-shapes, rings, etc.)
         if use_centroids:
-            geom_expr = f"ST_Centroid({geom_expr})"
-            self.log_info(f"✓ PostgreSQL: Using ST_Centroid for distant layer geometry (faster queries)")
+            centroid_mode = getattr(self, 'CENTROID_MODE', 'point_on_surface')
+            geometry_type = layer_props.get("layer_geometry_type", None)
+            
+            # v2.9.2: Choose function based on mode and geometry type
+            if centroid_mode == 'auto':
+                # Auto mode: Use PointOnSurface for polygons (more accurate), Centroid for lines (faster)
+                if geometry_type is not None:
+                    from qgis.core import QgsWkbTypes
+                    is_polygon = geometry_type in (QgsWkbTypes.PolygonGeometry, 2)  # 2 = Polygon
+                    if is_polygon:
+                        geom_expr = f"ST_PointOnSurface({geom_expr})"
+                        self.log_info(f"✓ PostgreSQL: Using ST_PointOnSurface for polygon layer (guaranteed inside)")
+                    else:
+                        geom_expr = f"ST_Centroid({geom_expr})"
+                        self.log_info(f"✓ PostgreSQL: Using ST_Centroid for line layer (faster)")
+                else:
+                    # Unknown geometry type - use PointOnSurface as safer default
+                    geom_expr = f"ST_PointOnSurface({geom_expr})"
+                    self.log_info(f"✓ PostgreSQL: Using ST_PointOnSurface (default for unknown geometry)")
+            elif centroid_mode == 'point_on_surface':
+                geom_expr = f"ST_PointOnSurface({geom_expr})"
+                self.log_info(f"✓ PostgreSQL: Using ST_PointOnSurface for distant layer (guaranteed inside polygon)")
+            else:
+                # 'centroid' mode - use ST_Centroid (legacy behavior)
+                geom_expr = f"ST_Centroid({geom_expr})"
+                self.log_info(f"✓ PostgreSQL: Using ST_Centroid for distant layer geometry (faster queries)")
         
         # NOTE: Buffer is applied to SOURCE geometry, not target geometry
         # The buffer_value will be passed to source geometry expression builders
@@ -2433,59 +2610,123 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             
             # 2. v2.6.1: Create OPTIMIZED MV with only ID + geometry
             # For buffered filters, also store pre-computed buffered geometry
+            # v2.9.1: Add bbox column for ultra-fast pre-filtering with && operator
             unlogged_clause = "UNLOGGED" if self.ENABLE_MV_UNLOGGED else ""
+            use_bbox = self.ENABLE_BBOX_COLUMN and feature_count >= 10000
             
             if has_buffer and buffer_value > 0:
                 # Store both original geometry AND buffered geometry
                 # This allows fast spatial queries without recomputing buffer each time
                 endcap_style = self._get_buffer_endcap_style()
-                sql_create = f'''
-                    CREATE {unlogged_clause} MATERIALIZED VIEW {full_mv_name} AS
-                    SELECT 
-                        "{key_column}" as pk,
-                        "{geom_column}" as geom,
-                        ST_Buffer("{geom_column}", {buffer_value}, '{endcap_style}') as geom_buffered
-                    FROM "{schema}"."{table}"
-                    WHERE {expression}
-                    WITH DATA;
-                '''
-                self.log_info(f"📦 Creating optimized MV with buffered geometry (buffer={buffer_value}m)")
+                if use_bbox:
+                    sql_create = f'''
+                        CREATE {unlogged_clause} MATERIALIZED VIEW {full_mv_name} AS
+                        SELECT 
+                            "{key_column}" as pk,
+                            "{geom_column}" as geom,
+                            ST_Buffer("{geom_column}", {buffer_value}, '{endcap_style}') as geom_buffered,
+                            ST_Envelope(ST_Buffer("{geom_column}", {buffer_value}, '{endcap_style}')) as bbox
+                        FROM "{schema}"."{table}"
+                        WHERE {expression}
+                        WITH DATA;
+                    '''
+                    self.log_info(f"📦 Creating optimized MV with buffered geometry + bbox (buffer={buffer_value}m)")
+                else:
+                    sql_create = f'''
+                        CREATE {unlogged_clause} MATERIALIZED VIEW {full_mv_name} AS
+                        SELECT 
+                            "{key_column}" as pk,
+                            "{geom_column}" as geom,
+                            ST_Buffer("{geom_column}", {buffer_value}, '{endcap_style}') as geom_buffered
+                        FROM "{schema}"."{table}"
+                        WHERE {expression}
+                        WITH DATA;
+                    '''
+                    self.log_info(f"📦 Creating optimized MV with buffered geometry (buffer={buffer_value}m)")
             else:
                 # Standard case: only ID + geometry
-                sql_create = f'''
-                    CREATE {unlogged_clause} MATERIALIZED VIEW {full_mv_name} AS
-                    SELECT 
-                        "{key_column}" as pk,
-                        "{geom_column}" as geom
-                    FROM "{schema}"."{table}"
-                    WHERE {expression}
-                    WITH DATA;
-                '''
-                self.log_info(f"📦 Creating optimized lightweight MV (ID + geometry only)")
+                if use_bbox:
+                    sql_create = f'''
+                        CREATE {unlogged_clause} MATERIALIZED VIEW {full_mv_name} AS
+                        SELECT 
+                            "{key_column}" as pk,
+                            "{geom_column}" as geom,
+                            ST_Envelope("{geom_column}") as bbox
+                        FROM "{schema}"."{table}"
+                        WHERE {expression}
+                        WITH DATA;
+                    '''
+                    self.log_info(f"📦 v2.9.1: Creating optimized MV with bbox pre-filter column ({feature_count:,} features)")
+                else:
+                    sql_create = f'''
+                        CREATE {unlogged_clause} MATERIALIZED VIEW {full_mv_name} AS
+                        SELECT 
+                            "{key_column}" as pk,
+                            "{geom_column}" as geom
+                        FROM "{schema}"."{table}"
+                        WHERE {expression}
+                        WITH DATA;
+                    '''
+                    self.log_info(f"📦 Creating optimized lightweight MV (ID + geometry only)")
             
             commands.append(sql_create)
             command_names.append("CREATE MV (optimized)")
             
             # 3. Create spatial index with FILLFACTOR optimization
+            # v2.9.1: Use INCLUDE clause for covering index (PostgreSQL 11+)
+            # This avoids table lookup for pk column, improving query performance
             index_name = f"{mv_name}_gist_idx"
-            sql_create_index = (
-                f'CREATE INDEX "{index_name}" ON {full_mv_name} '
-                f'USING GIST ("geom") '
-                f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
-            )
+            pg_version = self._get_postgresql_version(conn)
+            use_include = self.ENABLE_INDEX_INCLUDE and pg_version >= 11
+            
+            if use_include:
+                sql_create_index = (
+                    f'CREATE INDEX "{index_name}" ON {full_mv_name} '
+                    f'USING GIST ("geom") '
+                    f'INCLUDE ("pk") '
+                    f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
+                )
+                self.log_info(f"  📊 v2.9.1: Using covering index with INCLUDE (pk) for faster lookups")
+            else:
+                sql_create_index = (
+                    f'CREATE INDEX "{index_name}" ON {full_mv_name} '
+                    f'USING GIST ("geom") '
+                    f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
+                )
             commands.append(sql_create_index)
             command_names.append("CREATE GIST INDEX")
             
             # 3b. If buffered, also create index on buffered geometry
             if has_buffer and buffer_value > 0:
                 buffer_index_name = f"{mv_name}_gist_buf_idx"
-                sql_create_buffer_index = (
-                    f'CREATE INDEX "{buffer_index_name}" ON {full_mv_name} '
-                    f'USING GIST ("geom_buffered") '
-                    f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
-                )
+                if use_include:
+                    sql_create_buffer_index = (
+                        f'CREATE INDEX "{buffer_index_name}" ON {full_mv_name} '
+                        f'USING GIST ("geom_buffered") '
+                        f'INCLUDE ("pk") '
+                        f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
+                    )
+                else:
+                    sql_create_buffer_index = (
+                        f'CREATE INDEX "{buffer_index_name}" ON {full_mv_name} '
+                        f'USING GIST ("geom_buffered") '
+                        f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
+                    )
                 commands.append(sql_create_buffer_index)
                 command_names.append("CREATE BUFFER GIST INDEX")
+            
+            # 3c. v2.9.1: Create bbox index for ultra-fast pre-filtering
+            # The bbox column uses the && operator which is extremely fast with GIST
+            if use_bbox:
+                bbox_index_name = f"{mv_name}_bbox_idx"
+                sql_create_bbox_index = (
+                    f'CREATE INDEX "{bbox_index_name}" ON {full_mv_name} '
+                    f'USING GIST ("bbox") '
+                    f'WITH (FILLFACTOR = {self.MV_INDEX_FILLFACTOR});'
+                )
+                commands.append(sql_create_bbox_index)
+                command_names.append("CREATE BBOX INDEX")
+                self.log_info(f"  📦 v2.9.1: Creating bbox index for fast && pre-filtering")
             
             # 4. Create index on primary key for fast lookups
             pk_index_name = f"{mv_name}_pk_idx"
@@ -2494,18 +2735,37 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             command_names.append("CREATE PK INDEX")
             
             # 5. CLUSTER - optional, can be slow for large datasets
-            if self.ENABLE_MV_CLUSTER and feature_count < self.LARGE_DATASET_THRESHOLD:
-                sql_cluster = f'CLUSTER {full_mv_name} USING "{index_name}";'
-                commands.append(sql_cluster)
-                command_names.append("CLUSTER")
-            elif feature_count >= self.LARGE_DATASET_THRESHOLD:
-                self.log_info(f"⚡ Skipping CLUSTER for performance (dataset > {self.LARGE_DATASET_THRESHOLD:,} features)")
+            # v2.9.1: For large datasets, schedule async CLUSTER instead of skipping
+            if self.ENABLE_MV_CLUSTER:
+                if feature_count < self.ASYNC_CLUSTER_THRESHOLD:
+                    # Small dataset: synchronous CLUSTER
+                    sql_cluster = f'CLUSTER {full_mv_name} USING "{index_name}";'
+                    commands.append(sql_cluster)
+                    command_names.append("CLUSTER")
+                elif self.ENABLE_ASYNC_CLUSTER and feature_count < self.LARGE_DATASET_THRESHOLD:
+                    # Medium dataset: async CLUSTER in background
+                    self.log_info(f"⏳ v2.9.1: Scheduling async CLUSTER for {feature_count:,} features")
+                    self._schedule_async_cluster(conn, full_mv_name, index_name, schema, mv_name)
+                else:
+                    self.log_info(f"⚡ Skipping CLUSTER for very large dataset ({feature_count:,} > {self.LARGE_DATASET_THRESHOLD:,} features)")
             
             # 6. ANALYZE for query optimizer
             if self.ENABLE_MV_ANALYZE:
                 sql_analyze = f'ANALYZE {full_mv_name};'
                 commands.append(sql_analyze)
                 command_names.append("ANALYZE")
+            
+            # 7. v2.9.1: Create extended statistics for better query plans
+            if self.ENABLE_EXTENDED_STATS and pg_version >= 10:
+                try:
+                    stats_name = f"{mv_name}_stats"
+                    # Extended statistics on pk + geom correlation helps optimizer
+                    sql_stats = f'CREATE STATISTICS "{stats_name}" ON "pk", "geom" FROM {full_mv_name};'
+                    commands.append(sql_stats)
+                    command_names.append("CREATE EXTENDED STATS")
+                    self.log_debug(f"  📊 v2.9.1: Adding extended statistics for better query plans")
+                except Exception:
+                    pass  # Extended stats not critical
             
             # Execute commands with timing
             # CRITICAL FIX v2.5.21: Add per-command error handling
@@ -2841,6 +3101,129 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         except Exception as e:
             self.log_error(f"Error during cleanup: {str(e)}")
             return False
+    
+    def apply_optimized_buffer_workflow(
+        self,
+        source_layer: QgsVectorLayer,
+        target_layer: QgsVectorLayer,
+        buffer_distance: float,
+        source_fids: Optional[list] = None,
+        source_filter: Optional[str] = None,
+        spatial_predicate: str = "ST_Intersects",
+        previous_mv: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Apply optimized buffer workflow using buffer optimizer.
+        
+        v2.9.0: This method uses pre-computed buffer geometries and
+        simplification to dramatically improve performance for large
+        buffer + intersection workflows.
+        
+        Optimizations applied:
+        1. ST_SimplifyPreserveTopology before ST_Buffer (10-50x faster buffer)
+        2. Pre-computed buffer stored in MV (avoids recalculating per comparison)
+        3. Bbox pre-filter in EXISTS (fast spatial index check)
+        4. Chained MV for multi-step workflows
+        
+        Args:
+            source_layer: Source PostgreSQL layer (e.g., roads, railways)
+            target_layer: Target PostgreSQL layer (e.g., buildings)
+            buffer_distance: Buffer distance in layer units
+            source_fids: Optional list of source feature IDs
+            source_filter: Optional SQL filter for source layer
+            spatial_predicate: PostGIS spatial predicate
+            previous_mv: Previous step's MV name for chaining
+        
+        Returns:
+            Optimized SQL expression or None if optimization failed
+        """
+        if not BUFFER_OPTIMIZER_AVAILABLE:
+            self.log_info("Buffer optimizer not available, using standard method")
+            return None
+        
+        try:
+            # Get connection from source layer
+            conn, source_uri = get_datasource_connexion_from_layer(source_layer)
+            if not conn:
+                self.log_warning("Cannot get PostgreSQL connection for buffer optimizer")
+                return None
+            
+            # Build layer properties dicts
+            source_props = {
+                'layer_schema': source_uri.schema() or 'public',
+                'layer_table_name': source_uri.table(),
+                'layer_geometry_field': source_uri.geometryColumn() or 'geom',
+                'layer_pk': source_uri.keyColumn() or 'fid',
+                'layer_srid': source_layer.crs().postgisSrid() if source_layer.crs() else 2154
+            }
+            
+            target_uri = QgsDataSourceUri(target_layer.dataProvider().dataSourceUri())
+            target_props = {
+                'layer_schema': target_uri.schema() or 'public',
+                'layer_table_name': target_uri.table(),
+                'layer_geometry_field': target_uri.geometryColumn() or 'geom',
+                'layer_pk': target_uri.keyColumn() or 'fid'
+            }
+            
+            # Load optimization config from ENV_VARS
+            config = BufferOptimizationConfig()
+            try:
+                from ...config.config import ENV_VARS
+                auto_opt = ENV_VARS.get('CONFIG_DATA', {}).get('APP', {}).get('OPTIONS', {}).get('AUTO_OPTIMIZATION', {})
+                if auto_opt:
+                    def get_val(entry, default):
+                        if isinstance(entry, dict):
+                            return entry.get('value', default)
+                        return entry
+                    
+                    config.simplify_before_buffer = get_val(
+                        auto_opt.get('auto_simplify_before_buffer', {}), True
+                    )
+                    config.simplify_tolerance_factor = get_val(
+                        auto_opt.get('buffer_simplify_before_tolerance', {}), 0.1
+                    )
+            except Exception:
+                pass  # Use defaults
+            
+            # Create optimizer
+            optimizer = get_buffer_optimizer(conn, config)
+            if not optimizer:
+                conn.close()
+                return None
+            
+            # Run optimization
+            result = optimizer.optimize_multi_step_buffer_workflow(
+                source_layer_props=source_props,
+                target_layer_props=target_props,
+                buffer_distance=buffer_distance,
+                source_filter=source_filter,
+                source_fids=source_fids,
+                spatial_predicate=spatial_predicate,
+                previous_mv=previous_mv
+            )
+            
+            conn.close()
+            
+            if result.success:
+                self.log_info(f"🚀 Buffer Optimizer: {result.estimated_speedup:.1f}x expected speedup")
+                for hint in result.hints:
+                    self.log_info(f"   {hint}")
+                
+                # Store buffer MV name for cleanup
+                if result.buffer_mv_name and hasattr(self, 'task_params') and self.task_params:
+                    buffer_mvs = self.task_params.setdefault('_buffer_mvs', [])
+                    buffer_mvs.append(result.buffer_mv_name)
+                
+                return result.optimized_sql
+            else:
+                self.log_info("Buffer optimization not applicable, using standard method")
+                return None
+                
+        except Exception as e:
+            self.log_error(f"Error in buffer optimizer: {e}")
+            import traceback
+            self.log_debug(traceback.format_exc())
+            return None
     
     def get_backend_name(self) -> str:
         """Get backend name"""

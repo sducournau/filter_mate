@@ -239,6 +239,7 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     v2.4.12: Added thread-safe cache access with lock
     v2.4.14: Added direct SQL mode for GeoPackage when setSubsetString doesn't support Spatialite
     v2.4.20: Priority direct SQL mode for GeoPackage - more reliable than native setSubsetString
+    v2.9.2: Added CENTROID_MODE for better point-in-polygon handling
     """
     
     # Class-level caches for Spatialite support testing
@@ -255,6 +256,12 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     # Thread lock for cache access (thread-safety for large GeoPackage with 50+ layers)
     import threading
     _cache_lock = threading.RLock()
+    
+    # v2.9.2: Centroid optimization mode
+    # 'centroid' = ST_Centroid() - fast but may be outside concave polygons
+    # 'point_on_surface' = ST_PointOnSurface() - guaranteed inside polygon (recommended)
+    # 'auto' = Use PointOnSurface for polygons, Centroid for lines
+    CENTROID_MODE = 'point_on_surface'
     
     @classmethod
     def clear_support_cache(cls):
@@ -1610,12 +1617,37 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             geom_expr = f'GeomFromGPB({geom_expr})'
             self.log_info(f"GeoPackage detected: using GeomFromGPB() for geometry conversion")
         
-        # CENTROID OPTIMIZATION: Convert distant layer geometry to centroid if enabled
+        # CENTROID OPTIMIZATION v2.9.2: Convert distant layer geometry to point if enabled
         # This significantly speeds up queries for complex polygons (e.g., buildings)
-        # Applies ST_Centroid() to the distant layer geometry before spatial predicates
+        # v2.9.2: Use ST_PointOnSurface() instead of ST_Centroid() for polygons
+        # ST_PointOnSurface() guarantees the point is INSIDE the polygon (better for concave shapes)
+        # ST_Centroid() may return a point OUTSIDE concave polygons (L-shapes, rings, etc.)
+        # Note: Spatialite supports both functions since version 4.0
         if use_centroids:
-            geom_expr = f"ST_Centroid({geom_expr})"
-            self.log_info(f"✓ Spatialite: Using ST_Centroid for distant layer geometry (faster queries)")
+            # Get centroid mode from class attribute or config
+            centroid_mode = getattr(self, 'CENTROID_MODE', 'point_on_surface')
+            geometry_type = layer_props.get("layer_geometry_type", None)
+            
+            if centroid_mode == 'auto':
+                # Auto mode: Use PointOnSurface for polygons, Centroid for lines
+                if geometry_type is not None:
+                    from qgis.core import QgsWkbTypes
+                    is_polygon = geometry_type in (QgsWkbTypes.PolygonGeometry, 2)
+                    if is_polygon:
+                        geom_expr = f"ST_PointOnSurface({geom_expr})"
+                        self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for polygon layer (guaranteed inside)")
+                    else:
+                        geom_expr = f"ST_Centroid({geom_expr})"
+                        self.log_info(f"✓ Spatialite: Using ST_Centroid for line layer (faster)")
+                else:
+                    geom_expr = f"ST_PointOnSurface({geom_expr})"
+                    self.log_info(f"✓ Spatialite: Using ST_PointOnSurface (default)")
+            elif centroid_mode == 'point_on_surface':
+                geom_expr = f"ST_PointOnSurface({geom_expr})"
+                self.log_info(f"✓ Spatialite: Using ST_PointOnSurface for distant layer (guaranteed inside)")
+            else:
+                geom_expr = f"ST_Centroid({geom_expr})"
+                self.log_info(f"✓ Spatialite: Using ST_Centroid for distant layer geometry (faster queries)")
         
         self.log_info(f"Geometry column detected: '{geom_field}' for layer {layer_props.get('layer_name', 'unknown')}")
         

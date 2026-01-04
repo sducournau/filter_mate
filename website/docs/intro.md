@@ -5,19 +5,60 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.8.7** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v2.9.2** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.8.7 - Complex Expression Materialization Fix
+## 🎉 What's New in v2.9.2 - Centroid & Simplification Optimizations
 
-This release fixes a critical performance issue with complex multi-step filters.
+This release brings major improvements to centroid-based filtering and geometry simplification for buffer operations.
 
-### 🐛 Fix: Slow Canvas Rendering
+### 🎯 Enhanced: Centroid Optimization with ST_PointOnSurface
+
+| Feature              | Before (v2.8.x)           | After (v2.9.2)                   |
+| -------------------- | ------------------------- | -------------------------------- |
+| **Function**         | `ST_Centroid()`           | `ST_PointOnSurface()`            |
+| **Concave polygons** | Point may be **outside**  | Point **guaranteed inside**      |
+| **L-shapes, rings**  | Incorrect spatial results | Accurate results                 |
+| **Configuration**    | Fixed                     | Configurable via `CENTROID_MODE` |
+
+**CENTROID_MODE Options:**
+
+- `point_on_surface` (default) - Accurate for all polygon shapes
+- `centroid` - Faster for simple convex shapes (legacy)
+- `auto` - PointOnSurface for polygons, Centroid for lines
+
+### 📐 Enhanced: Adaptive Simplification Before Buffer
+
+| Metric                  | Improvement                    |
+| ----------------------- | ------------------------------ |
+| **Vertex reduction**    | 50-90% fewer vertices          |
+| **ST_Buffer speed**     | 2-10x faster                   |
+| **Auto-tolerance**      | buffer × 0.1 (clamped 0.5-10m) |
+| **No UI action needed** | Automatic when config enabled  |
+
+## 🎉 What's New in v2.9.1 - PostgreSQL MV Performance
+
+### 🚀 Advanced Materialized View Optimizations
+
+| Optimization            | Improvement                       | PostgreSQL |
+| ----------------------- | --------------------------------- | ---------- |
+| INCLUDE in GIST indexes | 10-30% faster spatial queries     | 11+        |
+| Bbox pre-filter column  | 2-5x faster && checks             | All        |
+| Async CLUSTER           | Non-blocking for 50-100k features | All        |
+| Extended statistics     | Better query plans                | 10+        |
+
+## 🎉 What's in v2.8.9 - Enhanced MV Management
+
+- ✨ **MV Status Widget** - Real-time count of materialized views
+- 🧹 **Quick cleanup actions** - Session/Orphaned/All MVs
+- 🎨 **Simplified optimization popup** - Faster workflow
+
+## 🎉 What's in v2.8.7 - Complex Expression Materialization Fix
 
 - Complex spatial expressions (EXISTS + ST_Buffer) now always materialized
 - 10-100x faster canvas rendering with complex multi-step filters
 - Eliminates "features appearing slowly" issue after geometric filtering
 
-## 🎉 What's in v2.8.6 - Code Quality & Post-Buffer Optimization
+## 🎉 What's in v2.8.0 - Enhanced Auto-Optimization System
 
 This major release introduces an **Enhanced Auto-Optimization System** that significantly improves filtering performance through intelligent optimization strategies.
 
