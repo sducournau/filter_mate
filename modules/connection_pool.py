@@ -308,8 +308,8 @@ class PostgreSQLConnectionPool:
     
     # Statement timeout in seconds for PostgreSQL queries
     # Prevents queries from blocking indefinitely (e.g., complex ST_Intersects on large datasets)
-    # Default: 120 seconds (2 minutes) - long enough for complex queries, short enough to avoid UI freeze
-    DEFAULT_STATEMENT_TIMEOUT = 120
+    # Default: 300 seconds (5 minutes) - long enough for complex queries on large tables like batiment
+    DEFAULT_STATEMENT_TIMEOUT = 300
     
     def _create_connection(self):
         """

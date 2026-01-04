@@ -1199,24 +1199,13 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     qualified_geom_expr = f'"{table}"."{geom_field}"'
                     self.log_info(f"  ✓ v2.7.16: Qualified geom for EXISTS: {qualified_geom_expr}")
                     
-                    # v2.7.16: Log to QGIS Message Panel for diagnostic visibility
-                    from qgis.core import QgsMessageLog, Qgis
-                    QgsMessageLog.logMessage(
-                        f"v2.7.16: Using qualified geometry in EXISTS: {qualified_geom_expr}",
-                        "FilterMate", Qgis.Info
-                    )
-                    
                     spatial_predicate = f"{predicate_func}({qualified_geom_expr}, {source_geom_in_subquery})"
                     where_clauses = [spatial_predicate]
                     self.log_debug(f"  ✓ Spatial predicate: {spatial_predicate[:100]}...")
                     
-                    # v2.7.12 DIAGNOSTIC: Log source_filter processing in EXISTS path via QgsMessageLog
+                    # v2.7.12 DIAGNOSTIC: Log source_filter processing in EXISTS path
                     source_filter_status = 'None' if source_filter is None else f'len={len(source_filter)}'
                     self.log_info(f"  🔍 EXISTS path: source_filter={source_filter_status}")
-                    QgsMessageLog.logMessage(
-                        f"v2.7.12 EXISTS DEBUG: source_filter={source_filter_status}, table={source_table_name}",
-                        "FilterMate", Qgis.Info
-                    )
                     
                     if source_filter:
                         # CRITICAL FIX v2.5.11: Include source layer's spatial filter in EXISTS
@@ -1341,25 +1330,11 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 where_clauses.append(f"({adapted_filter})")
                                 self.log_info(f"  - Adapted: '{adapted_filter[:100]}'...")
                                 self.log_info(f"  ✓ EXISTS will filter source to match QGIS view")
-                                # v2.7.13: Log to QGIS panel for visibility
-                                from qgis.core import QgsMessageLog, Qgis
-                                QgsMessageLog.logMessage(
-                                    f"v2.7.13 EXISTS: source_filter INCLUDED → {adapted_filter[:60]}...",
-                                    "FilterMate", Qgis.Info
-                                )
                     
                     # v2.7.12 DIAGNOSTIC: Log WHERE clauses BEFORE joining
                     self.log_info(f"  🔍 WHERE CLAUSES COUNT: {len(where_clauses)}")
                     for i, clause in enumerate(where_clauses):
                         self.log_info(f"     [{i}] {clause[:80]}...")
-                    
-                    # v2.7.13 DIAGNOSTIC: Log WHERE clause count to QGIS Message Panel for visibility
-                    from qgis.core import QgsMessageLog, Qgis
-                    has_source_filter_in_where = any('__source' in c and 'fid' in c.lower() for c in where_clauses)
-                    QgsMessageLog.logMessage(
-                        f"v2.7.13 EXISTS WHERE: clauses={len(where_clauses)}, has_source_filter={has_source_filter_in_where}",
-                        "FilterMate", Qgis.Info
-                    )
                     
                     where_clause = ' AND '.join(where_clauses)
                     
@@ -2755,13 +2730,6 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             conn.close()
             
             self.log_info(f"   ✓ MV created and indexed in {elapsed:.2f}s")
-            
-            # Log to QGIS Message Panel for visibility
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"v2.8.0: Created source selection MV ({len(fids)} features) in {elapsed:.2f}s",
-                "FilterMate", Qgis.Info
-            )
             
             return full_mv_name
             

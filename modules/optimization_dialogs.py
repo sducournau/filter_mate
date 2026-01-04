@@ -177,6 +177,8 @@ class OptimizationRecommendationDialog(QDialog):
         opt_names = {
             'use_centroid': f"{tr('Use centroids')} ({speedup:.0f}x {faster})",
             'simplify_geometry': f"{tr('Simplify geometries')} ({speedup:.0f}x {faster}) ⚠️",
+            'simplify_before_buffer': f"{tr('Simplify before buffer')} ({speedup:.0f}x {faster})",
+            'reduce_buffer_segments': f"{tr('Reduce buffer segments')} ({speedup:.0f}x {faster})",
             'bbox_prefilter': f"{tr('BBox pre-filtering')} ({speedup:.0f}x {faster})",
             'attribute_first': f"{tr('Attribute-first strategy')} ({speedup:.0f}x {faster})",
         }

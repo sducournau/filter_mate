@@ -807,5 +807,13 @@ Første attributt: {1}</translation>
         <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
         <translation>Optimalisering brukt: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Forenkle før buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Reduser buffer-segmenter</translation>
+    </message>
 </context>
 </TS>

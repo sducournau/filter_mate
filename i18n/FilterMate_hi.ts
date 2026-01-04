@@ -811,5 +811,13 @@ First attribute: {1}</source>
         <source>No optimizations</source>
         <translation>कोई अनुकूलन नहीं</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>बफर से पहले सरल करें</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>बफर खंड कम करें</translation>
+    </message>
 </context>
 </TS>

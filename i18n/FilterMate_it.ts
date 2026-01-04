@@ -807,5 +807,13 @@ Primo attributo: {1}</translation>
         <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
         <translation>Ottimizzazione applicata: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Semplifica prima del buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Riduci segmenti del buffer</translation>
+    </message>
 </context>
 </TS>

@@ -574,7 +574,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             # Insert new widget into layout (at position 0, before the order by button)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection is not None:
-                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
+                layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)  # stretch=1 to fill space
                 layout.update()
 
                 # Update widgets registry
@@ -1776,9 +1776,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         analyze_action.setData('__OPT_ANALYZE_LAYER__')
         analyze_action.setToolTip("Show optimization recommendations for the current layer")
         
-        # Open settings dialog
-        settings_action = opt_submenu.addAction("⚙️ Advanced settings...")
+        opt_submenu.addSeparator()
+        
+        # Open simple settings dialog
+        settings_action = opt_submenu.addAction("⚙️ Quick settings...")
         settings_action.setData('__OPT_SETTINGS_DIALOG__')
+        settings_action.setToolTip("Quick optimization settings")
+        
+        # Open advanced backend settings dialog (NEW)
+        backend_settings_action = opt_submenu.addAction("🔧 Backend optimizations...")
+        backend_settings_action.setData('__OPT_BACKEND_SETTINGS_DIALOG__')
+        backend_settings_action.setToolTip("Configure detailed optimizations for PostgreSQL, Spatialite, and OGR backends")
         
         # Add PostgreSQL maintenance section if PostgreSQL is available
         if POSTGRESQL_AVAILABLE:
@@ -1866,6 +1874,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             if selected_backend == '__OPT_SETTINGS_DIALOG__':
                 self._show_optimization_settings_dialog()
+                return
+            
+            if selected_backend == '__OPT_BACKEND_SETTINGS_DIALOG__':
+                self._show_backend_optimization_dialog()
                 return
             
             self._set_forced_backend(current_layer.id(), selected_backend)
@@ -3559,6 +3571,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     self._layer_centroid_overrides[current_layer.id()] = True
                     applied.append("Use Centroids")
                 
+                if selected.get('simplify_before_buffer', False):
+                    # Store simplify-before-buffer preference for this layer
+                    if not hasattr(self, '_layer_simplify_buffer_overrides'):
+                        self._layer_simplify_buffer_overrides = {}
+                    self._layer_simplify_buffer_overrides[current_layer.id()] = True
+                    applied.append("Simplify before buffer")
+                
+                if selected.get('reduce_buffer_segments', False):
+                    # Store reduced buffer segments preference for this layer
+                    if not hasattr(self, '_layer_reduced_segments_overrides'):
+                        self._layer_reduced_segments_overrides = {}
+                    self._layer_reduced_segments_overrides[current_layer.id()] = True
+                    # Also apply reduced segments to the UI
+                    self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
+                    applied.append("Reduce buffer segments (3)")
+                
                 if applied:
                     show_success("FilterMate", 
                         f"Applied to '{current_layer.name()}':\n" + "\n".join(f"• {a}" for a in applied)
@@ -3574,39 +3602,146 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.error(f"Error in layer analysis: {e}")
     
     def _show_optimization_settings_dialog(self):
-        """Show the advanced optimization settings dialog."""
+        """Show the advanced optimization settings dialog with backend-specific options."""
         try:
-            from .modules.optimization_dialogs import OptimizationSettingsDialog
+            # Try to use the new comprehensive backend optimization dialog
+            from .modules.backend_optimization_widget import BackendOptimizationDialog
             
-            dialog = OptimizationSettingsDialog(self)
+            dialog = BackendOptimizationDialog(self)
             result = dialog.exec_()
             
             if result:
-                settings = dialog.get_settings()
+                all_settings = dialog.get_settings()
                 
-                # Apply settings
-                self._optimization_enabled = settings.get('enabled', True)
-                self._centroid_auto_enabled = settings.get('auto_centroid_for_distant', True)
-                self._optimization_ask_before = settings.get('ask_before_apply', True)
+                # Apply global settings
+                global_settings = all_settings.get('global', {})
+                self._optimization_enabled = global_settings.get('auto_optimization_enabled', True)
+                self._centroid_auto_enabled = global_settings.get('auto_centroid', {}).get('enabled', True)
+                self._optimization_ask_before = global_settings.get('ask_before_apply', True)
                 
-                # Store thresholds - v2.7.6: Use configurable defaults
+                # Store thresholds
                 if not hasattr(self, '_optimization_thresholds'):
                     self._optimization_thresholds = {}
-                thresholds = get_optimization_thresholds(ENV_VARS)
-                self._optimization_thresholds['centroid_distant'] = settings.get(
-                    'centroid_threshold_distant', 
-                    thresholds['centroid_optimization_threshold']
-                )
+                self._optimization_thresholds['centroid_distant'] = global_settings.get(
+                    'auto_centroid', {}
+                ).get('distant_threshold', 5000)
                 
-                logger.info(f"Applied optimization settings: {settings}")
-                show_success("FilterMate", "Optimization settings saved")
+                # Store backend-specific settings for later use
+                self._backend_optimization_settings = all_settings
                 
-        except ImportError as e:
-            show_warning("FilterMate", f"Settings dialog not available: {e}")
-            logger.warning(f"Could not import optimization dialog: {e}")
+                logger.info(f"Applied backend optimization settings: {list(all_settings.keys())}")
+                show_success("FilterMate", self.tr("Backend optimization settings saved"))
+                
+        except ImportError:
+            # Fallback to simple optimization dialog
+            try:
+                from .modules.optimization_dialogs import OptimizationSettingsDialog
+                
+                dialog = OptimizationSettingsDialog(self)
+                result = dialog.exec_()
+                
+                if result:
+                    settings = dialog.get_settings()
+                    
+                    # Apply settings
+                    self._optimization_enabled = settings.get('enabled', True)
+                    self._centroid_auto_enabled = settings.get('auto_centroid_for_distant', True)
+                    self._optimization_ask_before = settings.get('ask_before_apply', True)
+                    
+                    # Store thresholds - v2.7.6: Use configurable defaults
+                    if not hasattr(self, '_optimization_thresholds'):
+                        self._optimization_thresholds = {}
+                    thresholds = get_optimization_thresholds(ENV_VARS)
+                    self._optimization_thresholds['centroid_distant'] = settings.get(
+                        'centroid_threshold_distant', 
+                        thresholds['centroid_optimization_threshold']
+                    )
+                    
+                    logger.info(f"Applied optimization settings: {settings}")
+                    show_success("FilterMate", self.tr("Optimization settings saved"))
+                    
+            except ImportError as e:
+                show_warning("FilterMate", f"Settings dialog not available: {e}")
+                logger.warning(f"Could not import optimization dialog: {e}")
         except Exception as e:
             show_warning("FilterMate", f"Error showing settings: {str(e)[:50]}")
             logger.error(f"Error in optimization settings dialog: {e}")
+    
+    def _show_backend_optimization_dialog(self):
+        """
+        Show the comprehensive backend optimization dialog.
+        
+        This dialog provides detailed settings for each backend type:
+        - PostgreSQL: Materialized views, two-phase filtering, connection pooling
+        - Spatialite: R-tree temp tables, interruptible queries, direct SQL
+        - OGR: Spatial indexing, small dataset optimization, progressive chunking
+        - Global: Auto-optimization, centroid, parallel filtering, streaming export
+        """
+        try:
+            from .modules.backend_optimization_widget import BackendOptimizationDialog
+            
+            dialog = BackendOptimizationDialog(self)
+            result = dialog.exec_()
+            
+            if result:
+                all_settings = dialog.get_settings()
+                
+                # Store all settings for later use by backends
+                self._backend_optimization_settings = all_settings
+                
+                # Apply global settings immediately
+                global_settings = all_settings.get('global', {})
+                self._optimization_enabled = global_settings.get('auto_optimization_enabled', True)
+                self._centroid_auto_enabled = global_settings.get('auto_centroid', {}).get('enabled', True)
+                self._optimization_ask_before = global_settings.get('ask_before_apply', True)
+                
+                # Store thresholds
+                if not hasattr(self, '_optimization_thresholds'):
+                    self._optimization_thresholds = {}
+                self._optimization_thresholds['centroid_distant'] = global_settings.get(
+                    'auto_centroid', {}
+                ).get('distant_threshold', 5000)
+                
+                # Log what was configured
+                backends_configured = [k for k, v in all_settings.items() if v]
+                logger.info(f"Backend optimization settings applied for: {backends_configured}")
+                
+                show_success(
+                    "FilterMate", 
+                    self.tr("Backend optimizations configured for: PostgreSQL, Spatialite, OGR")
+                )
+                
+        except ImportError as e:
+            show_warning("FilterMate", f"Backend optimization dialog not available: {e}")
+            logger.warning(f"Could not import backend optimization dialog: {e}")
+        except Exception as e:
+            show_warning("FilterMate", f"Error showing backend settings: {str(e)[:50]}")
+            logger.error(f"Error in backend optimization dialog: {e}")
+    
+    def get_backend_optimization_setting(self, backend: str, setting_path: str, default=None):
+        """
+        Get a specific backend optimization setting.
+        
+        Args:
+            backend: Backend name ('postgresql', 'spatialite', 'ogr', 'global')
+            setting_path: Dot-separated path to setting (e.g., 'materialized_views.enabled')
+            default: Default value if setting not found
+            
+        Returns:
+            The setting value or default
+        """
+        settings = getattr(self, '_backend_optimization_settings', {})
+        backend_settings = settings.get(backend, {})
+        
+        # Navigate the path
+        parts = setting_path.split('.')
+        current = backend_settings
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return default
+        return current
     
     def _is_centroid_already_enabled(self, layer) -> bool:
         """
@@ -4392,7 +4527,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Insert the checkableComboBox into the horizontal layout for multiple selection
         # The layout contains the order by button, we insert the combobox before it
         layout = self.horizontalLayout_exploring_multiple_feature_picker
-        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection)
+        layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1)  # stretch=1 to fill space
 
         # Configure QgsFieldExpressionWidget to allow all field types (except geometry)
         # QgsFieldProxyModel.AllTypes includes all field types
@@ -4401,6 +4536,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.mFieldExpressionWidget_exploring_single_selection.setFilters(field_filters)
         self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
         self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
+        
+        # Configure QgsFieldComboBox for multiple selection sort field
+        self.mFieldComboBox_exploring_multiple_selection.setFilters(field_filters)
         
         # NOTE: setLayer() calls are deferred to manage_interactions() via _deferred_manage_interactions()
         # to prevent blocking during project load. The old synchronous calls here caused freezes.
@@ -4869,6 +5007,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", lambda: self.exploring_source_params_changed(groupbox_override="multiple_selection"))]},
                                     # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
                                     "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", None)]},
+                                    "MULTIPLE_SELECTION_FIELD":{"TYPE":"QgsFieldComboBox", "WIDGET":self.mFieldComboBox_exploring_multiple_selection, "SIGNALS":[("fieldChanged", self._on_multiple_selection_field_changed)]},
                                     
                                     # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
                                     "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", None)]}
@@ -6790,9 +6929,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
             self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setEnabled(True)
             
             try:
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setLayer(self.current_layer)
             except (AttributeError, KeyError, RuntimeError) as e:
                 logger.error(f"Error setting multiple selection expression widget: {type(e).__name__}: {e}")
 
@@ -6973,18 +7114,33 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # OPTIMIZATION: Try to get cached feature IDs directly for fast flash
             if hasattr(self, '_exploring_cache') and groupbox_type:
-                feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
-                if feature_ids:
-                    logger.debug(f"exploring_identify_clicked: Using cached feature_ids ({len(feature_ids)} features)")
-                    self.iface.mapCanvas().flashFeatureIds(
-                        self.current_layer, 
-                        feature_ids, 
-                        startColor=QColor(235, 49, 42, 255), 
-                        endColor=QColor(237, 97, 62, 25), 
-                        flashes=6, 
-                        duration=400
-                    )
-                    return
+                # FIX v2.3.9: For custom_selection, verify cached expression matches widget
+                # before using cached feature IDs. This prevents flashing wrong features
+                # when expression changed but cache wasn't invalidated.
+                use_cached_ids = True
+                if groupbox_type == "custom_selection":
+                    cached = self._exploring_cache.get(layer_id, groupbox_type)
+                    if cached:
+                        current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                        cached_expr = cached.get('expression', '')
+                        if current_widget_expr != cached_expr:
+                            logger.debug(f"exploring_identify_clicked: CACHE STALE - invalidating")
+                            self._exploring_cache.invalidate(layer_id, groupbox_type)
+                            use_cached_ids = False
+                
+                if use_cached_ids:
+                    feature_ids = self._exploring_cache.get_feature_ids(layer_id, groupbox_type)
+                    if feature_ids:
+                        logger.debug(f"exploring_identify_clicked: Using cached feature_ids ({len(feature_ids)} features)")
+                        self.iface.mapCanvas().flashFeatureIds(
+                            self.current_layer, 
+                            feature_ids, 
+                            startColor=QColor(235, 49, 42, 255), 
+                            endColor=QColor(237, 97, 62, 25), 
+                            flashes=6, 
+                            duration=400
+                        )
+                        return
             
             # Fallback: get features from widgets (will also populate cache)
             features, expression = self.get_current_features()
@@ -7037,8 +7193,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if use_cache and hasattr(self, '_exploring_cache') and groupbox_type:
                 cached = self._exploring_cache.get(layer_id, groupbox_type)
                 if cached:
-                    logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
-                    return cached['features'], cached['expression'] or ''
+                    # FIX v2.3.9: For custom_selection, verify the cached expression matches
+                    # the current widget expression before using the cache.
+                    # This prevents stale cache hits when the expression widget changes
+                    # but cache invalidation wasn't triggered (e.g., signal blocked).
+                    if groupbox_type == "custom_selection":
+                        current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                        cached_expr = cached.get('expression', '')
+                        if current_widget_expr != cached_expr:
+                            logger.debug(f"get_current_features: CACHE STALE for custom_selection - "
+                                        f"widget='{current_widget_expr[:30]}...' != cached='{cached_expr[:30] if cached_expr else ''}...'")
+                            # Invalidate stale cache entry
+                            self._exploring_cache.invalidate(layer_id, groupbox_type)
+                        else:
+                            logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
+                            return cached['features'], cached['expression'] or ''
+                    else:
+                        logger.debug(f"get_current_features: CACHE HIT for {layer_id[:8]}.../{groupbox_type}")
+                        return cached['features'], cached['expression'] or ''
 
             features = []    
             expression = ''
@@ -7149,25 +7321,40 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # OPTIMIZATION: Try to use cached bounding box for instant zoom
             if not features or len(features) == 0:
                 if hasattr(self, '_exploring_cache') and groupbox_type:
-                    cached_bbox = self._exploring_cache.get_bbox(layer_id, groupbox_type)
-                    if cached_bbox and not cached_bbox.isEmpty():
-                        logger.debug(f"exploring_zoom_clicked: Using cached bbox for instant zoom")
-                        # Apply padding to bbox (10% or minimum 5 units)
-                        width_padding = max(cached_bbox.width() * 0.1, 5)
-                        height_padding = max(cached_bbox.height() * 0.1, 5)
-                        padded_bbox = QgsRectangle(cached_bbox)
-                        padded_bbox.grow(max(width_padding, height_padding))
-                        
-                        # Transform to canvas CRS if needed
-                        layer_crs = self.current_layer.crs()
-                        canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
-                        if layer_crs != canvas_crs:
-                            transform = QgsCoordinateTransform(layer_crs, canvas_crs, QgsProject.instance())
-                            padded_bbox = transform.transformBoundingBox(padded_bbox)
-                        
-                        self.iface.mapCanvas().zoomToFeatureExtent(padded_bbox)
-                        self.iface.mapCanvas().refresh()
-                        return
+                    # FIX v2.3.9: For custom_selection, verify cached expression matches widget
+                    # before using cached bbox. This prevents zooming to wrong extent
+                    # when expression changed but cache wasn't invalidated.
+                    use_cached_bbox = True
+                    if groupbox_type == "custom_selection":
+                        cached = self._exploring_cache.get(layer_id, groupbox_type)
+                        if cached:
+                            current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                            cached_expr = cached.get('expression', '')
+                            if current_widget_expr != cached_expr:
+                                logger.debug(f"exploring_zoom_clicked: CACHE STALE - invalidating")
+                                self._exploring_cache.invalidate(layer_id, groupbox_type)
+                                use_cached_bbox = False
+                    
+                    if use_cached_bbox:
+                        cached_bbox = self._exploring_cache.get_bbox(layer_id, groupbox_type)
+                        if cached_bbox and not cached_bbox.isEmpty():
+                            logger.debug(f"exploring_zoom_clicked: Using cached bbox for instant zoom")
+                            # Apply padding to bbox (10% or minimum 5 units)
+                            width_padding = max(cached_bbox.width() * 0.1, 5)
+                            height_padding = max(cached_bbox.height() * 0.1, 5)
+                            padded_bbox = QgsRectangle(cached_bbox)
+                            padded_bbox.grow(max(width_padding, height_padding))
+                            
+                            # Transform to canvas CRS if needed
+                            layer_crs = self.current_layer.crs()
+                            canvas_crs = self.iface.mapCanvas().mapSettings().destinationCrs()
+                            if layer_crs != canvas_crs:
+                                transform = QgsCoordinateTransform(layer_crs, canvas_crs, QgsProject.instance())
+                                padded_bbox = transform.transformBoundingBox(padded_bbox)
+                            
+                            self.iface.mapCanvas().zoomToFeatureExtent(padded_bbox)
+                            self.iface.mapCanvas().refresh()
+                            return
                 
                 # Fallback: get features from widgets (will also populate cache)
                 features, expression = self.get_current_features()
@@ -7903,6 +8090,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         # self.exploring_link_widgets(expression)  # DISABLED for performance
                         # Invalidate cache for this layer since expression changed
                         self.invalidate_expression_cache(self.current_layer.id())
+                        # FIX v2.3.9: Also invalidate exploring cache for custom_selection
+                        # When expression changes, the cached features are stale and must be
+                        # re-evaluated on next identify/zoom/flash action
+                        if hasattr(self, '_exploring_cache'):
+                            self._exploring_cache.invalidate(self.current_layer.id(), "custom_selection")
+                            logger.debug(f"custom_selection: Invalidated exploring cache for {self.current_layer.id()[:8]}...")
                         # PERFORMANCE FIX (v2.5.x): Do NOT call get_current_features() here
                         # Custom expressions can be very complex and evaluating them synchronously
                         # freezes QGIS. Features will be fetched on-demand when user clicks
@@ -8017,6 +8210,29 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer.removeSelection()
                 self.current_layer.select([feature.id() for feature in features])
 
+    def _on_multiple_selection_field_changed(self, field_name):
+        """
+        Handle field change in the multiple selection QgsFieldComboBox.
+        
+        This method updates the sort field for the multiple selection feature list
+        when the user selects a different field in the QgsFieldComboBox.
+        
+        Args:
+            field_name (str): The name of the selected field
+        """
+        if not self.widgets_initialized or self.current_layer is None:
+            return
+        
+        logger.debug(f"Multiple selection field changed: {field_name}")
+        
+        # Update the sort field in the checkable combobox widget
+        if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection'):
+            widget = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
+            if widget is not None:
+                # Get current sort order (ASC/DESC) and update with new field
+                current_order, _ = widget.getSortOrder()
+                widget.setSortOrder(current_order, field_name)
+                logger.debug(f"Updated multiple selection sort field to: {field_name} (order: {current_order})")
 
     
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
@@ -9150,6 +9366,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FIELD"], 'disconnect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
             # Auto-initialize empty expressions with best available field
@@ -9219,6 +9436,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_expr)
             
+            # Multiple selection field combobox - for sorting field selection
+            if "MULTIPLE_SELECTION_FIELD" in self.widgets.get("EXPLORING", {}):
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setLayer(layer)
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setEnabled(layer is not None)
+            
             if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(custom_expr)
@@ -9229,6 +9451,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FIELD"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             
             # DEBUG: Log widget state after reload
@@ -9310,6 +9533,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if self.current_layer is not None:
                     self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
                     self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setEnabled(True)
                     
             elif groupbox_name == "custom_selection":
                 single_gb.setChecked(False)
@@ -9868,6 +10092,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect')
+            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FIELD"], 'connect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect')
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):

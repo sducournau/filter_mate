@@ -187,6 +187,11 @@ BUFFER_SIMPLIFY_VERTEX_THRESHOLD = 50       # Simplify before buffer if avg vert
 BUFFER_SIMPLIFY_FEATURE_THRESHOLD = 1000    # Simplify before buffer if feature count > this
 BUFFER_SIMPLIFY_DEFAULT_TOLERANCE = 1.0     # Default tolerance in meters for buffer simplification
 
+# Buffer segments optimization thresholds
+BUFFER_SEGMENTS_OPTIMIZATION_THRESHOLD = 10000  # Reduce segments if feature count > this
+BUFFER_SEGMENTS_REDUCED_VALUE = 3               # Reduced number of segments for performance
+BUFFER_SEGMENTS_DEFAULT = 5                     # Default number of segments
+
 # Large WKT thresholds (chars)
 LARGE_WKT_THRESHOLD = 100000                # Use R-tree optimization above this
 VERY_LARGE_WKT_THRESHOLD = 500000           # Force aggressive optimization
@@ -202,6 +207,7 @@ class OptimizationType(Enum):
     USE_CENTROID = "use_centroid"
     SIMPLIFY_GEOMETRY = "simplify_geometry"
     SIMPLIFY_BEFORE_BUFFER = "simplify_before_buffer"  # Simplify geometry before buffer
+    REDUCE_BUFFER_SEGMENTS = "reduce_buffer_segments"  # Reduce buffer arc segments for performance
     BBOX_PREFILTER = "bbox_prefilter"
     ATTRIBUTE_FIRST = "attribute_first"
     PROGRESSIVE_CHUNKS = "progressive_chunks"
@@ -492,6 +498,7 @@ class AutoOptimizer:
         self.enable_auto_simplify = enable_auto_simplify if enable_auto_simplify is not None else config.get('auto_simplify_geometry', False)
         self.enable_auto_strategy = enable_auto_strategy if enable_auto_strategy is not None else config.get('auto_strategy_selection', True)
         self.enable_auto_simplify_buffer = enable_auto_simplify_buffer if enable_auto_simplify_buffer is not None else config.get('auto_simplify_before_buffer', True)
+        self.enable_reduce_buffer_segments = config.get('auto_reduce_buffer_segments', True)
         
         # Load thresholds from config
         self.centroid_threshold_distant = config.get('centroid_threshold_distant', CENTROID_AUTO_THRESHOLD_DISTANT)
@@ -499,6 +506,8 @@ class AutoOptimizer:
         self.buffer_simplify_vertex_threshold = config.get('buffer_simplify_vertex_threshold', BUFFER_SIMPLIFY_VERTEX_THRESHOLD)
         self.buffer_simplify_feature_threshold = config.get('buffer_simplify_feature_threshold', BUFFER_SIMPLIFY_FEATURE_THRESHOLD)
         self.buffer_simplify_default_tolerance = config.get('buffer_simplify_default_tolerance', BUFFER_SIMPLIFY_DEFAULT_TOLERANCE)
+        self.buffer_segments_threshold = config.get('buffer_segments_optimization_threshold', BUFFER_SEGMENTS_OPTIMIZATION_THRESHOLD)
+        self.buffer_segments_reduced = config.get('buffer_segments_reduced_value', BUFFER_SEGMENTS_REDUCED_VALUE)
         self.show_hints = config.get('show_optimization_hints', True)
     
     def create_optimization_plan(
@@ -565,6 +574,13 @@ class AutoOptimizer:
         )
         if buffer_simplify_rec:
             recommendations.append(buffer_simplify_rec)
+        
+        # 2c. REDUCE BUFFER SEGMENTS OPTIMIZATION
+        buffer_segments_rec = self._evaluate_reduce_buffer_segments_optimization(
+            target_analysis, has_buffer
+        )
+        if buffer_segments_rec:
+            recommendations.append(buffer_segments_rec)
         
         # 3. STRATEGY OPTIMIZATION
         strategy_rec = self._evaluate_strategy_optimization(
@@ -888,6 +904,56 @@ class AutoOptimizer:
                 "tolerance": adaptive_tolerance,
                 "target": layer_to_simplify,
                 "buffer_value": buffer_value
+            }
+        )
+    
+    def _evaluate_reduce_buffer_segments_optimization(
+        self,
+        target: LayerAnalysis,
+        has_buffer: bool
+    ) -> Optional[OptimizationRecommendation]:
+        """
+        Evaluate if reducing buffer segments should be recommended.
+        
+        Reducing buffer arc segments improves performance for large datasets
+        by creating simpler buffer geometries with fewer vertices.
+        
+        Args:
+            target: Target layer analysis
+            has_buffer: Whether buffer is being applied
+            
+        Returns:
+            OptimizationRecommendation if segment reduction is recommended
+        """
+        if not self.enable_reduce_buffer_segments:
+            return None
+        
+        if not has_buffer:
+            return None
+        
+        # Check if feature count exceeds threshold for segment reduction
+        if target.feature_count < self.buffer_segments_threshold:
+            return None
+        
+        # Calculate speedup based on feature count
+        # More features = more benefit from reduced segments
+        if target.feature_count > 100000:
+            estimated_speedup = 1.8
+        elif target.feature_count > 50000:
+            estimated_speedup = 1.5
+        else:
+            estimated_speedup = 1.3
+        
+        return OptimizationRecommendation(
+            optimization_type=OptimizationType.REDUCE_BUFFER_SEGMENTS,
+            priority=2,  # Medium priority
+            estimated_speedup=estimated_speedup,
+            reason=f"Reduce buffer segments ({target.feature_count:,} features - use {self.buffer_segments_reduced} segments instead of 5)",
+            auto_applicable=True,
+            requires_user_consent=False,
+            parameters={
+                "segments": self.buffer_segments_reduced,
+                "original_segments": BUFFER_SEGMENTS_DEFAULT
             }
         )
     

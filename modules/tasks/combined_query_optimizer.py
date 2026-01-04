@@ -109,6 +109,9 @@ class ExistsClauseInfo:
     source_geometry: str
     buffer_expression: Optional[str] = None
     full_match: str = ""
+    source_fid_list: Optional[List[int]] = None  # FID filter inside EXISTS
+    buffer_distance: Optional[float] = None  # Extracted buffer distance
+    buffer_style: Optional[str] = None  # Buffer style params (e.g., 'quad_segs=1')
 
 
 @dataclass
@@ -163,7 +166,14 @@ class CombinedQueryOptimizer:
     # More flexible pattern to match various spatial predicate formats
     # Matches: EXISTS (SELECT 1 FROM "schema"."table" AS alias WHERE ST_Predicate("target"."geom", ...))
     EXISTS_SPATIAL_PATTERN = re.compile(
-        r'EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+"?(\w+)"?\s*\.\s*"?(\w+)"?\s+AS\s+(\w+)\s+WHERE\s+(ST_\w+)\s*\(\s*"?(\w+)"?\s*\.\s*"?(\w+)"?\s*,\s*(.+?)\s*\)\s*\)',
+        r'EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+"?(\w+)"?\s*\.\s*"?(\w+)"?\s+AS\s+(\w+)\s+WHERE\s+(ST_\w+)\s*\(\s*"?(\w+)"?\s*\.\s*"?(\w+)"?\s*,\s*(.+?)\s*\)\s*(?:AND\s+(.+?))?\s*\)',
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    # Pattern for EXISTS with FID filter inside (more specific for optimization)
+    # Matches: EXISTS (SELECT 1 FROM ... WHERE ST_Intersects(...) AND (__source."fid" IN (...)))
+    EXISTS_WITH_FID_PATTERN = re.compile(
+        r'EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+"?(\w+)"?\s*\.\s*"?(\w+)"?\s+AS\s+(\w+)\s+WHERE\s+(ST_\w+)\s*\([^)]+\)\s*AND\s*\(\s*\3\s*\.\s*"?(\w+)"?\s+IN\s*\(\s*([\d\s,]+)\s*\)\s*\)\s*\)',
         re.IGNORECASE | re.DOTALL
     )
     
@@ -417,7 +427,12 @@ class CombinedQueryOptimizer:
         
         Looks for patterns like:
             EXISTS (SELECT 1 FROM "schema"."table" AS alias 
-                    WHERE ST_Intersects("target"."geom", ST_Buffer(alias."geom", 50)))
+                    WHERE ST_Intersects("target"."geom", ST_Buffer(alias."geom", 50))
+                    AND (alias."fid" IN (1, 2, 3)))
+        
+        Enhanced to extract:
+        - Buffer distance and style parameters
+        - Source FID filter list (for pre-filtering optimization)
         """
         match = self.EXISTS_SPATIAL_PATTERN.search(expression)
         if not match:
@@ -429,12 +444,34 @@ class CombinedQueryOptimizer:
         spatial_predicate = match.group(4)
         target_geometry = f"{match.group(5)}.{match.group(6)}"
         source_geometry_expr = match.group(7)
+        additional_conditions = match.group(8) if len(match.groups()) >= 8 else None
         
-        # Check for buffer in source geometry
-        buffer_match = self.BUFFER_PATTERN.search(source_geometry_expr)
+        # Check for buffer in source geometry - extract distance and style
         buffer_expr = None
+        buffer_distance = None
+        buffer_style = None
+        buffer_match = self.BUFFER_PATTERN.search(source_geometry_expr)
         if buffer_match:
             buffer_expr = source_geometry_expr
+            try:
+                buffer_distance = float(buffer_match.group(3).strip())
+            except (ValueError, TypeError):
+                pass
+            buffer_style = buffer_match.group(4) if len(buffer_match.groups()) >= 4 else None
+        
+        # Check for FID filter in additional conditions or full expression
+        source_fid_list = None
+        fid_pattern = re.compile(
+            rf'{re.escape(source_alias)}\s*\.\s*"?(\w+)"?\s+IN\s*\(\s*([\d\s,]+)\s*\)',
+            re.IGNORECASE
+        )
+        fid_match = fid_pattern.search(expression)
+        if fid_match:
+            try:
+                fid_string = fid_match.group(2)
+                source_fid_list = [int(fid.strip()) for fid in fid_string.split(',') if fid.strip()]
+            except ValueError:
+                pass
         
         return ExistsClauseInfo(
             source_table=source_table,
@@ -444,7 +481,10 @@ class CombinedQueryOptimizer:
             target_geometry=target_geometry,
             source_geometry=source_geometry_expr,
             buffer_expression=buffer_expr,
-            full_match=match.group(0)
+            full_match=match.group(0),
+            source_fid_list=source_fid_list,
+            buffer_distance=buffer_distance,
+            buffer_style=buffer_style
         )
     
     def _rewrite_mv_exists_query(
@@ -463,27 +503,30 @@ class CombinedQueryOptimizer:
         1. Only evaluate EXISTS for features that are IN the MV
         2. This dramatically reduces the number of spatial comparisons
         
+        Enhanced optimizations (v2.9.0):
+        3. Pre-compute ST_Buffer in a subquery to avoid recalculation
+        4. Apply source FID filter BEFORE spatial predicate
+        5. Use the MV's spatial index directly
+        
         Original (slow):
             WHERE (pk IN (SELECT pk FROM mv)) AND (EXISTS (SELECT 1 FROM source WHERE ST_Intersects(...)))
         
-        Optimized approach - JOIN MV with target table in the EXISTS:
-            WHERE EXISTS (
-                SELECT 1 FROM mv
-                INNER JOIN source ON ST_Intersects(mv.geometry, source.geometry_with_buffer)
-                WHERE mv.pk = target.pk
-            )
-        
-        Or use a semi-join pattern:
+        Optimized with buffer pre-computation:
             WHERE pk IN (
                 SELECT mv.pk FROM mv 
                 WHERE EXISTS (
-                    SELECT 1 FROM source 
-                    WHERE ST_Intersects(mv.geometry, source.geometry_with_buffer)
+                    SELECT 1 FROM (
+                        SELECT geom, ST_Buffer(geom, distance, style) AS geom_buffered
+                        FROM source WHERE fid IN (filtered_fids)
+                    ) AS __source
+                    WHERE ST_Intersects(mv.geometry, __source.geom_buffered)
                 )
             )
         
-        The second approach is often faster because PostgreSQL can use the MV's
-        spatial index directly, and the result set is typically much smaller.
+        This approach:
+        - Computes ST_Buffer only once per source feature (not per comparison)
+        - Filters source features BEFORE expensive spatial operations
+        - Uses MV's spatial index for the final intersection check
         """
         if not primary_key:
             primary_key = mv_info.primary_key
@@ -491,13 +534,119 @@ class CombinedQueryOptimizer:
         # Extract geometry column from target geometry reference
         geom_column = self._extract_geometry_column(exists_info.target_geometry)
         
-        # OPTIMIZATION STRATEGY: Use a semi-join with the MV
-        # This ensures PostgreSQL only evaluates spatial predicates for features
-        # that passed the first filter (which are already in the MV)
+        # Determine if we can apply advanced buffer optimization
+        has_buffer = exists_info.buffer_expression is not None
+        has_source_filter = exists_info.source_fid_list is not None and len(exists_info.source_fid_list) > 0
         
-        # The MV typically has the same geometry column as the original table
-        # We need to reference the geometry from the MV, not the original table
+        if has_buffer and has_source_filter:
+            # OPTIMAL CASE: Buffer + FID filter - use subquery with pre-computed buffer
+            optimized = self._build_optimized_buffer_query(
+                mv_info, exists_info, geom_column, primary_key
+            )
+        elif has_source_filter:
+            # Source filter without buffer - just reorder conditions
+            optimized = self._build_filtered_source_query(
+                mv_info, exists_info, geom_column, primary_key
+            )
+        else:
+            # Standard optimization - use MV as source
+            optimized = self._build_mv_source_query(
+                mv_info, exists_info, geom_column, primary_key
+            )
         
+        # Clean up whitespace for logging
+        optimized_clean = ' '.join(optimized.split())
+        
+        logger.debug(f"Optimized query (MV-based EXISTS): {optimized_clean[:200]}...")
+        
+        return optimized_clean
+    
+    def _build_optimized_buffer_query(
+        self,
+        mv_info: MaterializedViewInfo,
+        exists_info: ExistsClauseInfo,
+        geom_column: str,
+        primary_key: str
+    ) -> str:
+        """
+        Build query with pre-computed buffer in subquery.
+        
+        This optimization avoids computing ST_Buffer for each MV feature × source feature comparison.
+        Instead, buffer is computed once per source feature.
+        
+        Estimated speedup: 5-20x depending on source and MV sizes.
+        """
+        # Extract geometry column from buffer expression
+        buffer_match = self.BUFFER_PATTERN.search(exists_info.buffer_expression or "")
+        source_geom_col = buffer_match.group(2) if buffer_match else "geometrie"
+        
+        # Build buffer expression for subquery
+        buffer_distance = exists_info.buffer_distance or 50.0
+        buffer_style = f", '{exists_info.buffer_style}'" if exists_info.buffer_style else ""
+        
+        # Build FID filter clause
+        fid_list_str = ', '.join(str(fid) for fid in (exists_info.source_fid_list or []))
+        
+        optimized = f'''"{primary_key}" IN (
+    SELECT mv."{primary_key}" 
+    FROM {mv_info.qualified_name} AS mv
+    WHERE EXISTS (
+        SELECT 1 
+        FROM (
+            SELECT "{source_geom_col}", 
+                   ST_Buffer("{source_geom_col}", {buffer_distance}{buffer_style}) AS geom_buffered
+            FROM "{exists_info.source_schema}"."{exists_info.source_table}"
+            WHERE "fid" IN ({fid_list_str})
+        ) AS {exists_info.source_alias}
+        WHERE {exists_info.spatial_predicate}(
+            mv."{geom_column}",
+            {exists_info.source_alias}.geom_buffered
+        )
+    )
+)'''
+        return optimized.strip()
+    
+    def _build_filtered_source_query(
+        self,
+        mv_info: MaterializedViewInfo,
+        exists_info: ExistsClauseInfo,
+        geom_column: str,
+        primary_key: str
+    ) -> str:
+        """
+        Build query with source FID filter applied first.
+        
+        Ensures the FID filter is evaluated BEFORE the spatial predicate.
+        """
+        fid_list_str = ', '.join(str(fid) for fid in (exists_info.source_fid_list or []))
+        
+        optimized = f'''"{primary_key}" IN (
+    SELECT mv."{primary_key}" 
+    FROM {mv_info.qualified_name} AS mv
+    WHERE EXISTS (
+        SELECT 1 
+        FROM "{exists_info.source_schema}"."{exists_info.source_table}" AS {exists_info.source_alias}
+        WHERE {exists_info.source_alias}."fid" IN ({fid_list_str})
+        AND {exists_info.spatial_predicate}(
+            mv."{geom_column}",
+            {exists_info.source_geometry}
+        )
+    )
+)'''
+        return optimized.strip()
+    
+    def _build_mv_source_query(
+        self,
+        mv_info: MaterializedViewInfo,
+        exists_info: ExistsClauseInfo,
+        geom_column: str,
+        primary_key: str
+    ) -> str:
+        """
+        Build standard MV-as-source query.
+        
+        Uses the MV directly in the EXISTS subquery.
+        """
         optimized = f'''"{primary_key}" IN (
     SELECT mv."{primary_key}" 
     FROM {mv_info.qualified_name} AS mv
@@ -509,14 +658,8 @@ class CombinedQueryOptimizer:
             {exists_info.source_geometry}
         )
     )
-)'''.strip()
-        
-        # Clean up whitespace for logging
-        optimized_clean = ' '.join(optimized.split())
-        
-        logger.debug(f"Optimized query (MV-based EXISTS): {optimized_clean[:200]}...")
-        
-        return optimized_clean
+)'''
+        return optimized.strip()
     
     # ============== Spatialite/OGR Optimization Methods ==============
     

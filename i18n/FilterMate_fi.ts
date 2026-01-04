@@ -807,5 +807,13 @@ Ensimmäinen ominaisuus: {1}</translation>
         <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
         <translation>Optimointi käytetty: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Yksinkertaista ennen puskuria</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Vähennä puskurisegmenttejä</translation>
+    </message>
 </context>
 </TS>

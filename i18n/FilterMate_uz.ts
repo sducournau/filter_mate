@@ -811,5 +811,13 @@ Birinchi atribut: {1}</translation>
         <source>No optimizations</source>
         <translation>Optimallashtirish yo&apos;q</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Buferdan oldin soddalashtirish</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Bufer segmentlarini kamaytirish</translation>
+    </message>
 </context>
 </TS>

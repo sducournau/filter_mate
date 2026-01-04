@@ -2,6 +2,175 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.8.5] - 2026-01-04 - Version Bump
+
+### 📦 Release
+
+Version bump release.
+
+---
+
+## [2.8.4] - 2026-01-04 - Custom Expression Cache Validation Fix
+
+### 🐛 Bug Fix: Flash/Zoom Shows All Features Instead of Custom Selection (Robust Fix)
+
+This patch provides a more robust fix for the issue where Flash/Zoom operations would highlight ALL features instead of only those matching the custom expression.
+
+### 🔧 Problem
+
+Despite the fix in v2.8.2 that invalidates `_exploring_cache` when the expression changes, users were still experiencing the issue where all routes flash instead of only the custom selection matches.
+
+**Root Cause Analysis**: The cache invalidation in `exploring_source_params_changed()` relies on the signal being emitted when the expression widget changes. However, in some scenarios:
+
+1. The signal might be blocked during widget updates
+2. The cache might contain stale data from a previous expression that wasn't properly invalidated
+3. Direct cache access in `exploring_identify_clicked()`, `exploring_zoom_clicked()`, and `get_current_features()` doesn't verify that the cached expression matches the current widget expression
+
+### ✅ Solution
+
+Added **expression validation before cache usage** in three critical locations:
+
+1. **`exploring_identify_clicked()`**: Before using `get_feature_ids()` from cache for flash, verify that cached expression matches current widget expression
+2. **`exploring_zoom_clicked()`**: Before using `get_bbox()` from cache for zoom, verify that cached expression matches current widget expression
+3. **`get_current_features()`**: Before returning cached features for `custom_selection`, verify that cached expression matches current widget expression
+
+If the cached expression doesn't match the current widget expression, the cache is invalidated and fresh features are fetched.
+
+### 📁 Files Changed
+
+- `filter_mate_dockwidget.py`:
+  - `exploring_identify_clicked()`: Added cache validation for custom_selection groupbox
+  - `exploring_zoom_clicked()`: Added cache validation for custom_selection groupbox
+  - `get_current_features()`: Added cache validation for custom_selection groupbox
+
+### 🔍 Technical Details
+
+The fix adds a defensive check pattern:
+
+```python
+if groupbox_type == "custom_selection":
+    current_widget_expr = self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
+    cached_expr = cached.get('expression', '')
+    if current_widget_expr != cached_expr:
+        # Cache is stale - invalidate and recompute
+        self._exploring_cache.invalidate(layer_id, groupbox_type)
+```
+
+This ensures that even if cache invalidation was missed during expression change, the stale cache won't be used.
+
+---
+
+## [2.8.3] - 2026-01-04 - Backend Optimization UI
+
+### ✨ New Feature: Backend-Specific Optimization Settings
+
+Added a comprehensive UI panel for configuring optimizations for each backend type. Users can now easily enable/disable and tune specific optimizations per backend directly from the interface.
+
+### 🎯 Features
+
+**New Backend Optimization Dialog** accessible via:
+
+- Right-click on backend indicator → Optimization Settings → 🔧 Backend optimizations...
+
+### ⚡ Quick Setup Profiles
+
+Choose a profile for instant configuration:
+
+| Profile                 | Icon | Description                                                   |
+| ----------------------- | ---- | ------------------------------------------------------------- |
+| **Maximum Performance** | 🚀   | All optimizations enabled. Best for large datasets.           |
+| **Balanced**            | ⚖️   | Good balance between speed and resources. Recommended.        |
+| **Memory Saver**        | 💾   | Reduces memory usage. For limited RAM or huge datasets.       |
+| **Safe Mode**           | 🛡️   | Conservative settings. For debugging or unstable connections. |
+
+### 💡 Smart Recommendations
+
+The dialog automatically analyzes your project and suggests optimizations:
+
+- 🐘 **PostgreSQL layers detected** → Enable Materialized Views
+- 🌐 **Remote layers detected** → Enable Auto-Centroid (90% less network transfer)
+- 📦 **GeoPackage layers detected** → Enable Direct SQL (2-5x faster)
+- 📁 **Shapefiles detected** → Create Spatial Indexes (10-100x faster)
+
+**PostgreSQL/PostGIS Optimizations:**
+
+- ✅ Materialized Views (with threshold setting)
+- ✅ Two-Phase Filtering (bbox pre-filter + exact geometry)
+- ✅ Progressive Loading (lazy cursor for large results)
+- ✅ Query Expression Caching
+- ✅ Connection Pooling
+- ✅ EXISTS Subquery for Large WKT (with threshold)
+- ✅ Automatic GIST Index Usage
+
+**Spatialite/GeoPackage Optimizations:**
+
+- ✅ R-tree Temp Tables (with WKT threshold)
+- ✅ BBox Pre-filtering
+- ✅ Interruptible Queries (with timeout setting)
+- ✅ Direct SQL for GeoPackage
+- ✅ WKT Geometry Caching
+- ✅ Auto-detect mod_spatialite
+
+**OGR/Memory Optimizations:**
+
+- ✅ Automatic Spatial Index creation
+- ✅ Small Dataset Memory Backend (with threshold)
+- ✅ Cancellable Processing
+- ✅ Progressive Chunking (with chunk size)
+- ✅ GEOS-safe Geometry Handling
+- ✅ Thread-safe Operations
+
+**Global Optimizations:**
+
+- ✅ Enable Auto-Optimization master switch
+- ✅ Auto-Centroid for Distant Layers (with threshold)
+- ✅ Auto-Select Best Strategy
+- ✅ Auto-Simplify Geometries (with warning ⚠️)
+- ✅ Simplify Before Buffer
+- ✅ Parallel Layer Filtering (with max workers)
+- ✅ Streaming Export
+- ✅ Confirm Before Applying
+- ✅ Show Optimization Hints
+
+### 📁 Files Added/Changed
+
+- **NEW**: `modules/backend_optimization_widget.py` - Complete widget with tabbed interface, profiles, and recommendations
+- `filter_mate_dockwidget.py` - Added menu entry and handler for backend optimization dialog
+- `config/config.default.json` - Already contains all configuration options
+
+### 💡 Usage
+
+1. Click on the backend indicator (e.g., 🐘, 📦, 📁)
+2. Navigate to **🔧 Optimization Settings** submenu
+3. Click **🔧 Backend optimizations...**
+4. Choose a **Quick Setup** profile OR customize individual settings
+5. Review **Smart Recommendations** for your project
+6. Click **Save Settings** to apply
+
+---
+
+## [2.8.2] - 2026-01-04 - Custom Expression Cache Fix
+
+### 🐛 Bug Fix: Flash/Identify Shows All Features Instead of Custom Selection
+
+This patch fixes a bug where clicking "Identify" in Exploring mode with a custom expression would flash ALL features instead of only those matching the custom expression.
+
+### 🔧 Problem
+
+When using custom expression selection (e.g., `"importance" IN (1, 2, 3)`), clicking the Identify button would incorrectly flash all layer features instead of only the filtered ones.
+
+**Root Cause**: When the custom expression was changed via the expression widget, only `_expression_cache` was invalidated, but `_exploring_cache` retained stale feature IDs from a previous expression. The flash operation used these cached IDs instead of evaluating the current expression.
+
+### ✅ Solution
+
+Added invalidation of `_exploring_cache` for the `custom_selection` groupbox when the custom expression changes in `exploring_source_params_changed()`.
+
+### 📁 Files Changed
+
+- `filter_mate_dockwidget.py`: Added `_exploring_cache.invalidate()` call when custom expression changes
+
+---
+
 ## [2.8.1] - 2026-01-03 - Orphaned Materialized View Recovery
 
 ### 🐛 Bug Fix: "Relation does not exist" Error

@@ -811,5 +811,13 @@ Atribut pertama: {1}</translation>
         <source>No optimizations</source>
         <translation>Tanpa optimasi</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Sederhanakan sebelum buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Kurangi segmen buffer</translation>
+    </message>
 </context>
 </TS>

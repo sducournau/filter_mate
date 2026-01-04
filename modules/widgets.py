@@ -982,8 +982,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
     filteringCheckedItemList = pyqtSignal()
     
     def __init__(self, config_data, parent=None):
-        self.parent = parent
-        QDialog.__init__(self)
+        QWidget.__init__(self, parent)
 
 
         self.config_data = config_data
@@ -1004,7 +1003,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.setMaximumWidth(16777215)
         self.setMinimumHeight(total_min_height)
         # Remove setMaximumHeight to allow expansion
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setCursor(Qt.PointingHandCursor)
 
         font = QFont("Segoe UI", 8)

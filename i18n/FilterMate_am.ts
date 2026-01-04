@@ -811,5 +811,13 @@ First attribute: {1}</translation>
         <source>No optimizations</source>
         <translation>ማጣመም የለም</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>ከብፍር በፍት አቀልል</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>የብፍር ክፍሎችን ቀንስ</translation>
+    </message>
 </context>
 </TS>

@@ -811,5 +811,13 @@ First attribute: {1}</source>
         <source>No optimizations</source>
         <translation>Optimizasyon yok</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Tampondan önce basitleştir</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Tampon segmentlerini azalt</translation>
+    </message>
 </context>
 </TS>

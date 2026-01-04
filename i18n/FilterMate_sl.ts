@@ -811,5 +811,13 @@ First attribute: {1}</translation>
         <source>No optimizations</source>
         <translation>Brez optimizacij</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Poenostavi pred medpomnilnikom</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Zmanjšaj segmente medpomnilnika</translation>
+    </message>
 </context>
 </TS>

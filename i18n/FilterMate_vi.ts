@@ -811,5 +811,13 @@ Thuộc tính đầu tiên: {1}</translation>
         <source>No optimizations</source>
         <translation>Không tối ưu</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Đơn giản hóa trước vùng đệm</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Giảm số phân đoạn vùng đệm</translation>
+    </message>
 </context>
 </TS>

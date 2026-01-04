@@ -807,5 +807,13 @@ Pierwszy atrybut: {1}</translation>
         <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
         <translation>Optymalizacja zastosowana: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Uprość przed buforem</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Zmniejsz segmenty bufora</translation>
+    </message>
 </context>
 </TS>

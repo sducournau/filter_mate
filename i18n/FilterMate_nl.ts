@@ -807,5 +807,13 @@ Eerste attribuut: {1}</translation>
         <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
         <translation>Optimalisatie toegepast: &apos;{0}&apos; (~{1}x {2})</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Vereenvoudigen vóór buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Buffer-segmenten verminderen</translation>
+    </message>
 </context>
 </TS>

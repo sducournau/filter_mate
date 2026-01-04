@@ -4,31 +4,34 @@ You are working on **FilterMate**, a QGIS plugin written in Python that provides
 
 ## 📋 Project Context
 
-| Field | Value |
-|-------|-------|
-| **Type** | QGIS Plugin (Python 3.7+) |
-| **Version** | 2.3.8 (December 2025) |
-| **Status** | Production - Stable |
-| **Framework** | QGIS API, PyQt5 |
-| **Architecture** | Multi-backend (PostgreSQL, Spatialite, OGR) |
-| **Quality Score** | 9.0/10 |
+| Field             | Value                                       |
+| ----------------- | ------------------------------------------- |
+| **Type**          | QGIS Plugin (Python 3.7+)                   |
+| **Version**       | 2.8.5 (January 2026)                        |
+| **Status**        | Production - Stable                         |
+| **Framework**     | QGIS API, PyQt5                             |
+| **Architecture**  | Multi-backend (PostgreSQL, Spatialite, OGR) |
+| **Quality Score** | 9.0/10                                      |
 
 ## 🔗 Documentation System
 
 FilterMate uses **Serena + BMAD** for comprehensive development support:
 
 ### Quick Reference
-| Need | Location |
-|------|----------|
-| **Coding patterns** | This file + `.serena/memories/code_style_conventions.md` |
-| **Architecture** | `.bmad-core/architecture.md` + `.serena/memories/architecture_overview.md` |
-| **Requirements** | `.bmad-core/prd.md` |
-| **User stories** | `.bmad-core/epics.md` |
-| **Roadmap** | `.bmad-core/roadmap.md` |
-| **Quality standards** | `.bmad-core/quality.md` |
+
+| Need                  | Location                                                                   |
+| --------------------- | -------------------------------------------------------------------------- |
+| **Coding patterns**   | This file + `.serena/memories/code_style_conventions.md`                   |
+| **Architecture**      | `.bmad-core/architecture.md` + `.serena/memories/architecture_overview.md` |
+| **Requirements**      | `.bmad-core/prd.md`                                                        |
+| **User stories**      | `.bmad-core/epics.md`                                                      |
+| **Roadmap**           | `.bmad-core/roadmap.md`                                                    |
+| **Quality standards** | `.bmad-core/quality.md`                                                    |
 
 ### Serena Tools (MCP)
+
 Use Serena symbolic tools for efficient code navigation:
+
 ```python
 # Overview first (NOT read_file!)
 get_symbols_overview("modules/appTasks.py")
@@ -59,6 +62,7 @@ modules/
 ## Code Style Guidelines
 
 ### Python Standards
+
 - Follow PEP 8 conventions
 - Use 4 spaces for indentation
 - Maximum line length: 120 characters
@@ -66,17 +70,20 @@ modules/
 - Type hints encouraged but not required (QGIS compatibility)
 
 ### Naming Conventions
+
 - Classes: `PascalCase` (e.g., `FilterMateApp`, `FilterTask`)
 - Functions/Methods: `snake_case` (e.g., `manage_task`, `get_datasource_connexion_from_layer`)
 - Constants: `UPPER_SNAKE_CASE` (e.g., `POSTGRESQL_AVAILABLE`)
 - Private methods: prefix with `_` (e.g., `_internal_method`)
 
 ### Import Order
+
 1. Standard library imports
 2. Third-party imports (QGIS, PyQt5)
 3. Local application imports
 
 Example:
+
 ```python
 import os
 import sys
@@ -92,6 +99,7 @@ from .modules.appUtils import get_datasource_connexion_from_layer
 ## Critical Patterns
 
 ### 1. PostgreSQL Availability Check
+
 **ALWAYS** check `POSTGRESQL_AVAILABLE` before using PostgreSQL-specific code:
 
 ```python
@@ -106,6 +114,7 @@ else:
 ```
 
 ### 2. Provider Type Detection
+
 Use this pattern consistently:
 
 ```python
@@ -120,6 +129,7 @@ else:
 ```
 
 ### 3. Spatialite Connections
+
 Use this pattern for Spatialite database operations:
 
 ```python
@@ -139,6 +149,7 @@ conn.close()
 ```
 
 ### 4. QGIS Task Pattern
+
 For asynchronous operations, inherit from `QgsTask`:
 
 ```python
@@ -147,7 +158,7 @@ class MyTask(QgsTask):
         super().__init__(description, QgsTask.CanCancel)
         self.task_parameters = task_parameters
         self.result_data = None
-    
+
     def run(self):
         # Main task logic
         try:
@@ -156,7 +167,7 @@ class MyTask(QgsTask):
         except Exception as e:
             self.exception = e
             return False
-    
+
     def finished(self, result):
         if result:
             # Success handling
@@ -169,12 +180,14 @@ class MyTask(QgsTask):
 ## Key Files and Their Purposes
 
 ### Core Files
+
 - **filter_mate.py**: Plugin entry point, QGIS integration
 - **filter_mate_app.py**: Main application orchestrator (~1038 lines)
 - **modules/appTasks.py**: Async filtering tasks (~2080 lines)
 - **modules/appUtils.py**: Database connections and utilities
 
 ### When Editing These Files
+
 - **appUtils.py**: Keep functions simple, focused on DB connections
 - **appTasks.py**: Maintain provider-specific branches (PostgreSQL/Spatialite/OGR)
 - **filter_mate_app.py**: Coordinate between UI and tasks, manage state
@@ -182,6 +195,7 @@ class MyTask(QgsTask):
 ## Common Functions Reference
 
 ### Database Operations
+
 ```python
 # Get PostgreSQL connection (returns None if unavailable)
 connexion, source_uri = get_datasource_connexion_from_layer(layer)
@@ -191,6 +205,7 @@ conn = spatialite_connect(db_file_path)
 ```
 
 ### Layer Operations
+
 ```python
 # Apply filter
 layer.setSubsetString(expression)
@@ -202,6 +217,7 @@ crs = layer.crs()
 ```
 
 ### Expression Conversion
+
 ```python
 # Convert QGIS expression to PostGIS SQL
 postgis_expr = self.qgis_expression_to_postgis(qgis_expr)
@@ -234,17 +250,18 @@ When adding Spatialite alternatives to PostgreSQL functions:
 ### Required New Functions (Phase 2)
 
 #### 1. create_temp_spatialite_table
+
 ```python
 def create_temp_spatialite_table(self, db_path, table_name, sql_query, geom_field='geometry'):
     """
     Create temporary table in Spatialite as alternative to PostgreSQL materialized views.
-    
+
     Args:
         db_path: Path to Spatialite database
         table_name: Name for temporary table
         sql_query: SELECT query to populate table
         geom_field: Geometry column name
-    
+
     Returns:
         bool: Success status
     """
@@ -253,16 +270,17 @@ def create_temp_spatialite_table(self, db_path, table_name, sql_query, geom_fiel
 ```
 
 #### 2. qgis_expression_to_spatialite
+
 ```python
 def qgis_expression_to_spatialite(self, expression):
     """
     Convert QGIS expression to Spatialite SQL.
-    
+
     Note: Spatialite spatial functions are ~90% compatible with PostGIS.
-    
+
     Args:
         expression: QGIS expression string
-    
+
     Returns:
         str: Spatialite SQL expression
     """
@@ -273,6 +291,7 @@ def qgis_expression_to_spatialite(self, expression):
 ## Error Handling
 
 ### User-Facing Errors
+
 Use QGIS message bar for user feedback. **CRITICAL: These methods only accept 2 arguments (title, message). Do NOT add duration parameter.**
 
 ```python
@@ -286,7 +305,7 @@ iface.messageBar().pushInfo("FilterMate", "Using Spatialite backend")
 
 # Warning - NO duration parameter
 iface.messageBar().pushWarning(
-    "FilterMate", 
+    "FilterMate",
     "Large dataset detected. Consider using PostgreSQL for better performance."
 )
 
@@ -295,6 +314,7 @@ iface.messageBar().pushCritical("FilterMate", f"Error: {str(error)}")
 ```
 
 ### Development Errors
+
 Use print statements for debugging (visible in QGIS Python console):
 
 ```python
@@ -304,11 +324,13 @@ print(f"FilterMate Debug: {variable_name} = {value}")
 ## Performance Considerations
 
 ### Large Datasets
+
 - PostgreSQL: Best for > 100k features
 - Spatialite: Good for < 100k features
 - QGIS Memory: Avoid for > 10k features
 
 ### When to Warn Users
+
 ```python
 if layer.featureCount() > 50000 and not POSTGRESQL_AVAILABLE:
     iface.messageBar().pushWarning(
@@ -321,6 +343,7 @@ if layer.featureCount() > 50000 and not POSTGRESQL_AVAILABLE:
 ## Testing Guidelines
 
 ### Unit Tests
+
 Place in root directory: `test_*.py`
 
 ```python
@@ -331,13 +354,14 @@ class TestMyFeature(unittest.TestCase):
     def setUp(self):
         # Mock QGIS dependencies
         pass
-    
+
     def test_something(self):
         # Test implementation
         self.assertTrue(result)
 ```
 
 ### Manual Testing Checklist
+
 1. Test without psycopg2 installed
 2. Test with Shapefile/GeoPackage
 3. Test with PostgreSQL (if available)
@@ -347,21 +371,22 @@ class TestMyFeature(unittest.TestCase):
 ## Documentation
 
 ### Docstring Format
+
 ```python
 def my_function(param1, param2):
     """
     Brief description of function.
-    
+
     Longer description if needed. Explain the purpose,
     any important details, or caveats.
-    
+
     Args:
         param1 (type): Description
         param2 (type): Description
-    
+
     Returns:
         type: Description of return value
-    
+
     Raises:
         ExceptionType: When this happens
     """
@@ -369,6 +394,7 @@ def my_function(param1, param2):
 ```
 
 ### Comments
+
 - Explain **why**, not **what**
 - Use TODO comments for future work: `# TODO Phase 2: Implement Spatialite version`
 - Use FIXME for known issues: `# FIXME: Handle edge case XYZ`
@@ -406,6 +432,7 @@ perf: Optimize spatial index creation
 ## Resource Management
 
 ### Database Connections
+
 ```python
 # Always close connections
 try:
@@ -419,6 +446,7 @@ finally:
 ```
 
 ### QGIS Layers
+
 ```python
 # Temporary layers should be added to project or will be garbage collected
 temp_layer = QgsVectorLayer("Point?crs=epsg:4326", "temp", "memory")
@@ -428,12 +456,14 @@ QgsProject.instance().addMapLayer(temp_layer)
 ## Useful QGIS API Patterns
 
 ### Get Current Project
+
 ```python
 project = QgsProject.instance()
 layers = project.mapLayers().values()
 ```
 
 ### Vector Layer Features
+
 ```python
 # Iterate features
 for feature in layer.getFeatures():
@@ -448,6 +478,7 @@ layer.setSubsetString("population > 10000")
 ```
 
 ### Coordinate Transform
+
 ```python
 from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform
 
@@ -461,6 +492,7 @@ transformed_geom = geom.transform(transform)
 ## Phase-Specific Notes
 
 ### ✅ All Core Phases Complete (v2.3.8)
+
 - Phase 1: PostgreSQL optional (POSTGRESQL_AVAILABLE flag)
 - Phase 2: Spatialite backend (temp tables, R-tree)
 - Phase 3: OGR backend (universal fallback)
@@ -470,10 +502,12 @@ transformed_geom = geom.transform(transform)
 - Phase 7: Advanced features (undo/redo, favorites)
 
 ### 🔄 Current Phase: Testing & Documentation
+
 - Target: 80% test coverage (currently ~70%)
 - Focus: Stability, documentation, user guide
 
 ### 📋 Future Phases (see .bmad-core/roadmap.md)
+
 - Phase 9: Performance optimization (caching)
 - Phase 10: Extensibility (plugin API)
 - Phase 11: Enterprise features
@@ -481,16 +515,19 @@ transformed_geom = geom.transform(transform)
 ## Quick Reference
 
 ### Import PostgreSQL Support Flag
+
 ```python
 from modules.appUtils import POSTGRESQL_AVAILABLE
 ```
 
 ### Check If Layer Is PostgreSQL
+
 ```python
 is_postgres = layer.providerType() == 'postgres'
 ```
 
 ### Safe PostgreSQL Operation
+
 ```python
 if POSTGRESQL_AVAILABLE and layer.providerType() == 'postgres':
     # Safe to use psycopg2
@@ -506,10 +543,12 @@ if POSTGRESQL_AVAILABLE and layer.providerType() == 'postgres':
 When working on Windows, Serena MCP server must be started before using symbolic tools. The configuration ensures automatic startup:
 
 **Prerequisites:**
+
 - Serena installed via: `uv tool install serena`
 - MCP configuration in `%APPDATA%/Code/User/globalStorage/github.copilot.chat.mcp/config.json`
 
 **Configuration:**
+
 ```json
 {
   "mcpServers": {
@@ -525,17 +564,20 @@ When working on Windows, Serena MCP server must be started before using symbolic
 ```
 
 **Automatic Activation:**
+
 - Serena activates automatically when Copilot Chat is opened in VS Code
 - Project path is set via `SERENA_PROJECT` environment variable
 - No manual activation needed - tools are immediately available
 
 **Verify Activation:**
+
 ```python
 # First command in new chat should confirm Serena is active
 get_current_config()  # Shows active project and available tools
 ```
 
 **Troubleshooting:**
+
 - If tools unavailable: Check MCP server logs in VS Code Output panel
 - Verify `uvx serena` works from PowerShell/CMD
 - Ensure path uses forward slashes or escaped backslashes in JSON

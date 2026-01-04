@@ -807,5 +807,13 @@ First attribute: {1}</source>
         <source>Optimization applied: &apos;{0}&apos; (~{1}x {2})</source>
         <translation>已应用优化：&apos;{0}&apos;（约{1}倍{2}）</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>缓冲前简化</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>减少缓冲区段数</translation>
+    </message>
 </context>
 </TS>

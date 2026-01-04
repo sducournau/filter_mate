@@ -811,5 +811,13 @@ First attribute: {1}</translation>
         <source>No optimizations</source>
         <translation>Walang mga optimization</translation>
     </message>
+    <message>
+        <source>Simplify before buffer</source>
+        <translation>Pasimplehin bago ang buffer</translation>
+    </message>
+    <message>
+        <source>Reduce buffer segments</source>
+        <translation>Bawasan ang mga segment ng buffer</translation>
+    </message>
 </context>
 </TS>

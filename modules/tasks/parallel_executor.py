@@ -383,13 +383,6 @@ class ParallelFilterExecutor:
             # Call the actual filter function
             success = filter_func(provider_type, layer, layer_props)
             
-            # DIAGNOSTIC: Log what filter_func returned
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"_filter_single_layer: {layer_name} → filter_func returned: {success} (type={type(success).__name__})",
-                "FilterMate", Qgis.Info
-            )
-            
             # Get feature count after filtering
             feature_count = 0
             if hasattr(layer, 'featureCount'):

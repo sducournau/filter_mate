@@ -319,14 +319,8 @@ class FilterEngineTask(QgsTask):
         """
         if layer and expression is not None:
             self._pending_subset_requests.append((layer, expression))
-            logger.info(f"📥 Queued subset request for {layer.name()}: {len(expression)} chars")
-            # v2.7.9: Log to QGIS panel for visibility
-            from qgis.core import QgsMessageLog, Qgis
             expr_preview = (expression[:60] + '...') if len(expression) > 60 else expression
-            QgsMessageLog.logMessage(
-                f"queue_subset_request: {layer.name()} → {expr_preview}",
-                "FilterMate", Qgis.Info
-            )
+            logger.debug(f"📥 Queued subset request for {layer.name()}: {expr_preview}")
         else:
             logger.warning(f"⚠️ queue_subset_request called with invalid params: layer={layer}, expression={expression is not None}")
         return True  # Return True to indicate success (actual application is deferred)
@@ -2249,10 +2243,8 @@ class FilterEngineTask(QgsTask):
             source_feature_count = len(task_features)
             logger.info(f"Using task_features count for WKT decision: {source_feature_count} selected features")
             # DIAGNOSTIC: Also log to QGIS Message Panel
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"v2.7.3 FIX: Using {source_feature_count} SELECTED features for WKT decision (not {self.source_layer.featureCount()} total)",
-                "FilterMate", Qgis.Info
+            logger.debug(
+                f"v2.7.3 FIX: Using {source_feature_count} SELECTED features for WKT decision (not {self.source_layer.featureCount()} total)"
             )
         else:
             source_feature_count = self.source_layer.featureCount()
@@ -2274,10 +2266,8 @@ class FilterEngineTask(QgsTask):
         )
         
         # DIAGNOSTIC: Log WKT decision
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
-            f"v2.7.15: postgresql_needs_wkt={postgresql_needs_wkt} (count={source_feature_count}, source_is_pg={source_is_postgresql})",
-            "FilterMate", Qgis.Info
+        logger.debug(
+            f"v2.7.15: postgresql_needs_wkt={postgresql_needs_wkt} (count={source_feature_count}, source_is_pg={source_is_postgresql})"
         )
         if postgresql_needs_wkt:
             logger.info(f"PostgreSQL simplified mode: {source_feature_count} features ≤ 50, source is NOT PostgreSQL")
@@ -2359,12 +2349,7 @@ class FilterEngineTask(QgsTask):
         # Also needed for PostgreSQL simplified mode (few source features)
         # CRITICAL FIX: Also prepare for OGR layers that will use Spatialite backend (GeoPackage/SQLite)
         if 'spatialite' in provider_list or postgresql_needs_wkt or ogr_needs_spatialite_geom:
-            # DIAGNOSTIC v2.7.3: Log to QGIS Message Panel
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"v2.7.3: Preparing Spatialite/WKT geometry (postgresql_wkt={postgresql_needs_wkt})",
-                "FilterMate", Qgis.Info
-            )
+            logger.debug(f"v2.7.3: Preparing Spatialite/WKT geometry (postgresql_wkt={postgresql_needs_wkt})")
             logger.info("Preparing Spatialite source geometry...")
             logger.info(f"  → Reason: spatialite={'spatialite' in provider_list}, "
                        f"postgresql_wkt={postgresql_needs_wkt}, ogr_spatialite={ogr_needs_spatialite_geom}")
@@ -2377,11 +2362,7 @@ class FilterEngineTask(QgsTask):
                     spatialite_success = True
                     wkt_preview = self.spatialite_source_geom[:150] if len(self.spatialite_source_geom) > 150 else self.spatialite_source_geom
                     logger.info(f"✓ Spatialite source geometry prepared: {len(self.spatialite_source_geom)} chars")
-                    # DIAGNOSTIC v2.7.3
-                    QgsMessageLog.logMessage(
-                        f"v2.7.3: WKT prepared OK ({len(self.spatialite_source_geom)} chars)",
-                        "FilterMate", Qgis.Info
-                    )
+                    logger.debug(f"v2.7.3: WKT prepared OK ({len(self.spatialite_source_geom)} chars)")
                     logger.info(f"  → WKT preview: {wkt_preview}...")
                 else:
                     logger.warning("Spatialite geometry preparation returned None")
@@ -2608,17 +2589,10 @@ class FilterEngineTask(QgsTask):
         failed_filters = 0
         failed_layer_names = []  # Track names of failed layers for error message
         
-        # DIAGNOSTIC: Log results before processing
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
-            f"_filter_all_layers_parallel: all_layers count={len(all_layers)}, results count={len(results)}",
-            "FilterMate", Qgis.Info
-        )
+        # DIAGNOSTIC: Log results for debugging
+        logger.debug(f"_filter_all_layers_parallel: all_layers count={len(all_layers)}, results count={len(results)}")
         for idx, res in enumerate(results):
-            QgsMessageLog.logMessage(
-                f"  Result[{idx}]: {res.layer_name} → success={res.success}, error={res.error_message}",
-                "FilterMate", Qgis.Info
-            )
+            logger.debug(f"  Result[{idx}]: {res.layer_name} → success={res.success}, error={res.error_message}")
         
         for i, (layer_tuple, result) in enumerate(zip(all_layers, results), 1):
             layer, layer_props = layer_tuple
@@ -2696,12 +2670,8 @@ class FilterEngineTask(QgsTask):
                 
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
                 
-                # DIAGNOSTIC: Log result to QGIS Message Panel
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"_filter_all_layers_sequential: {layer_name} → result={result}",
-                    "FilterMate", Qgis.Info
-                )
+                # DIAGNOSTIC: Log result for debugging
+                logger.debug(f"_filter_all_layers_sequential: {layer_name} → result={result}")
                 
                 if result:
                     successful_filters += 1
@@ -3681,12 +3651,7 @@ class FilterEngineTask(QgsTask):
                         request = QgsFeatureRequest().setFilterFids(feature_fids)
                         features = list(self.source_layer.getFeatures(request))
                         if len(features) > 0:
-                            logger.info(f"  ✓ Recovered {len(features)} features using FIDs")
-                            from qgis.core import QgsMessageLog, Qgis
-                            QgsMessageLog.logMessage(
-                                f"v2.7.15: Recovered {len(features)} features using FIDs (thread-safety fix)",
-                                "FilterMate", Qgis.Info
-                            )
+                            logger.debug(f"  ✓ v2.7.15: Recovered {len(features)} features using FIDs (thread-safety fix)")
                         else:
                             logger.warning(f"  ⚠️ FID recovery returned 0 features")
                     except Exception as e:
@@ -4050,14 +4015,7 @@ class FilterEngineTask(QgsTask):
         
         if len(wkt) > MAX_WKT_LENGTH:
             logger.warning(f"  ⚠️ WKT too long ({len(wkt)} chars > {MAX_WKT_LENGTH} max)")
-            logger.info(f"  Using adaptive simplification algorithm...")
-            
-            # v2.7.13: Log to QGIS panel for visibility
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"v2.7.13 WKT: Simplifying {len(wkt):,} chars → target {MAX_WKT_LENGTH:,}",
-                "FilterMate", Qgis.Info
-            )
+            logger.debug(f"  v2.7.13 WKT: Simplifying {len(wkt):,} chars → target {MAX_WKT_LENGTH:,}")
             
             # Use new adaptive simplification that estimates optimal tolerance
             simplified = self._simplify_geometry_adaptive(
@@ -4071,11 +4029,7 @@ class FilterEngineTask(QgsTask):
                 simplified_wkt = self._geometry_to_wkt(simplified, crs_authid)
                 reduction_pct = (1 - len(simplified_wkt) / len(wkt)) * 100
                 
-                # v2.7.13: Log result to QGIS panel
-                QgsMessageLog.logMessage(
-                    f"v2.7.14 WKT: Simplified to {len(simplified_wkt):,} chars ({reduction_pct:.1f}% reduction)",
-                    "FilterMate", Qgis.Info
-                )
+                logger.debug(f"v2.7.14 WKT: Simplified to {len(simplified_wkt):,} chars ({reduction_pct:.1f}% reduction)")
                 
                 if len(simplified_wkt) <= MAX_WKT_LENGTH:
                     logger.info(f"  ✓ Adaptive simplification succeeded: {len(wkt)} → {len(simplified_wkt)} chars ({reduction_pct:.1f}% reduction)")
@@ -5344,11 +5298,7 @@ class FilterEngineTask(QgsTask):
                     recovered_features = list(layer.getFeatures(request))
                     if len(recovered_features) > 0:
                         valid_task_features_early = recovered_features
-                        logger.info(f"  ✓ Recovered {len(recovered_features)} features using FIDs")
-                        QgsMessageLog.logMessage(
-                            f"v2.7.15 OGR: Recovered {len(recovered_features)} features using FIDs",
-                            "FilterMate", Qgis.Info
-                        )
+                        logger.debug(f"  ✓ v2.7.15 OGR: Recovered {len(recovered_features)} features using FIDs")
                 except Exception as e:
                     logger.error(f"  ❌ FID recovery failed: {e}")
         
@@ -5363,14 +5313,12 @@ class FilterEngineTask(QgsTask):
         if has_subset:
             logger.info(f"  Current subset: '{layer.subsetString()[:100]}'")
         
-        # DIAGNOSTIC: Log to QGIS Message Panel for visibility
-        from qgis.core import QgsMessageLog, Qgis
-        QgsMessageLog.logMessage(
+        # DIAGNOSTIC: Log for debugging
+        logger.debug(
             f"prepare_ogr_source_geom: layer={layer.name() if layer else 'None'}, "
             f"features={layer.featureCount() if layer else 0}, "
             f"has_subset={has_subset}, has_selection={has_selection}, "
-            f"task_features={len(valid_task_features_early)}",
-            "FilterMate", Qgis.Info
+            f"task_features={len(valid_task_features_early)}"
         )
         
         # CRITICAL: If task_features are provided, they should take precedence!
@@ -5379,10 +5327,9 @@ class FilterEngineTask(QgsTask):
             logger.info(f"=== prepare_ogr_source_geom (TASK PARAMS MODE - PRIORITY) ===")
             logger.info(f"  PRIORITY: Using {len(valid_task_features_early)} features from task_parameters")
             
-            # DIAGNOSTIC: Log to QGIS Message Panel
-            QgsMessageLog.logMessage(
-                f"OGR TASK PARAMS MODE (PRIORITY): {len(valid_task_features_early)} features from task_parameters",
-                "FilterMate", Qgis.Info
+            # DIAGNOSTIC: Log for debugging
+            logger.debug(
+                f"OGR TASK PARAMS MODE (PRIORITY): {len(valid_task_features_early)} features from task_parameters"
             )
             
             # DIAGNOSTIC v2.4.17: Log geometry details of task features before creating memory layer
@@ -5489,12 +5436,7 @@ class FilterEngineTask(QgsTask):
                             )
                             if layer:
                                 logger.info(f"  ✓ Memory layer created with {layer.featureCount()} features")
-                                
-                                # DIAGNOSTIC: Log to QGIS Message Panel
-                                QgsMessageLog.logMessage(
-                                    f"OGR EXPRESSION FALLBACK: Using {layer.featureCount()} features (filtered from expression)",
-                                    "FilterMate", Qgis.Info
-                                )
+                                logger.debug(f"OGR EXPRESSION FALLBACK: Using {layer.featureCount()} features (filtered from expression)")
                             else:
                                 logger.error(f"  ✗ Failed to create memory layer, using original layer")
                                 layer = self.source_layer
@@ -6395,12 +6337,7 @@ class FilterEngineTask(QgsTask):
             if use_task_features:
                 # PRIORITY: Generate filter from task_features (user's selected features)
                 # This ensures the second filter uses the 9 selected features, not the 161 from previous filter
-                logger.info(f"🎯 PostgreSQL EXISTS: Using task_features ({len(task_features)} features) over source_subset")
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"v2.8.1: Using {len(task_features)} task_features (selection priority)",
-                    "FilterMate", Qgis.Info
-                )
+                logger.debug(f"🎯 PostgreSQL EXISTS: Using {len(task_features)} task_features (selection priority)")
                 
                 # Get the primary key field name (usually 'fid', 'id', or 'gid')
                 pk_field = None
@@ -6501,14 +6438,8 @@ class FilterEngineTask(QgsTask):
                                     self._source_selection_mvs = []
                                 self._source_selection_mvs.append(mv_ref)
                                 
-                                logger.info(f"   ✓ MV created: {mv_ref}")
-                                logger.info(f"   → Using optimized filter: {source_filter[:80]}...")
-                                
-                                from qgis.core import QgsMessageLog, Qgis
-                                QgsMessageLog.logMessage(
-                                    f"v2.8.0: Using source selection MV ({len(fids)} features) for EXISTS optimization",
-                                    "FilterMate", Qgis.Info
-                                )
+                                logger.debug(f"   ✓ MV created: {mv_ref}")
+                                logger.debug(f"   → v2.8.0: Using source selection MV ({len(fids)} features) for EXISTS optimization")
                             else:
                                 # MV creation failed, fall back to inline IN clause
                                 logger.warning(f"   ⚠️ MV creation failed, using inline IN clause (may be slow)")
@@ -6531,14 +6462,8 @@ class FilterEngineTask(QgsTask):
                                 # Fallback: unqualified (may still be ambiguous)
                                 source_filter = f'"{pk_field}" IN ({fids_str})'
                         
-                        logger.info(f"🎯 PostgreSQL EXISTS: Generated selection filter from {len(fids)} features")
-                        logger.info(f"   Filter: {source_filter[:100]}...")
-                        
-                        from qgis.core import QgsMessageLog, Qgis
-                        QgsMessageLog.logMessage(
-                            f"v2.7.9: Generated qualified source filter: {source_filter[:60]}...",
-                            "FilterMate", Qgis.Info
-                        )
+                        logger.debug(f"🎯 PostgreSQL EXISTS: Generated selection filter from {len(fids)} features")
+                        logger.debug(f"   v2.7.9: Generated qualified source filter: {source_filter[:80]}...")
                     else:
                         logger.warning(f"⚠️ PostgreSQL EXISTS: Could not extract feature IDs from task_features")
                 else:
@@ -6549,6 +6474,117 @@ class FilterEngineTask(QgsTask):
                 source_filter = source_subset
                 logger.info(f"🎯 PostgreSQL EXISTS: Using full source filter ({len(source_filter)} chars)")
                 logger.debug(f"   Source filter preview: '{source_filter[:100]}...'")
+            elif skip_source_subset and source_subset and self.source_layer:
+                # CRITICAL FIX v2.8.3: Handle cascading geometric filters
+                # When source_subset contains EXISTS/MV patterns from a previous filter,
+                # we can't use it directly. But the source layer IS filtered - we just need
+                # to generate a new filter from the currently visible features.
+                #
+                # Example scenario:
+                # 1. First filter: commune -> routes (sets EXISTS filter on routes)
+                # 2. Second filter: routes with buffer -> other layers
+                #    - source_subset = "EXISTS (...)" from step 1 -> skip_source_subset = True
+                #    - task_features = empty (user didn't manually select routes)
+                #    - Without this fix: source_filter = None -> all routes used!
+                #    - With this fix: generate filter from currently visible routes (411 in this case)
+                logger.info(f"🔄 PostgreSQL EXISTS: Generating filter from currently visible source features")
+                logger.info(f"   → Source layer has filtered subset but it contains unadaptable patterns")
+                logger.info(f"   → Fetching visible feature IDs to create new source_filter")
+                
+                try:
+                    # Get primary key field
+                    pk_field = None
+                    try:
+                        pk_attrs = self.source_layer.primaryKeyAttributes()
+                        if pk_attrs:
+                            fields = self.source_layer.fields()
+                            pk_field = fields[pk_attrs[0]].name()
+                    except Exception:
+                        pass
+                    
+                    if not pk_field:
+                        for common_pk in ['fid', 'id', 'gid', 'ogc_fid']:
+                            if self.source_layer.fields().indexOf(common_pk) >= 0:
+                                pk_field = common_pk
+                                break
+                    
+                    if pk_field:
+                        # Fetch all visible features (respects the active subset)
+                        visible_fids = []
+                        for feature in self.source_layer.getFeatures():
+                            try:
+                                fid_val = feature.attribute(pk_field)
+                                if fid_val is not None:
+                                    visible_fids.append(fid_val)
+                            except Exception:
+                                pass
+                        
+                        if visible_fids:
+                            # Get source table name
+                            source_table_name = getattr(self, 'param_source_table', None)
+                            if not source_table_name:
+                                try:
+                                    from qgis.core import QgsDataSourceUri
+                                    uri = QgsDataSourceUri(self.source_layer.source())
+                                    source_table_name = uri.table()
+                                except Exception:
+                                    source_table_name = self.source_layer.name()
+                            
+                            # Check if we should use MV for large selections
+                            thresholds = self._get_optimization_thresholds()
+                            source_mv_fid_threshold = thresholds.get('source_mv_fid_threshold', 500)
+                            
+                            if len(visible_fids) > source_mv_fid_threshold:
+                                # Large selection: create MV for performance
+                                logger.info(f"   → {len(visible_fids)} visible features > threshold ({source_mv_fid_threshold})")
+                                logger.info(f"   → Creating temporary MV for optimized EXISTS query")
+                                
+                                source_geom_field = getattr(self, 'param_source_geom', None)
+                                if not source_geom_field:
+                                    try:
+                                        uri = QgsDataSourceUri(self.source_layer.source())
+                                        source_geom_field = uri.geometryColumn() or 'geom'
+                                    except Exception:
+                                        source_geom_field = 'geom'
+                                
+                                from ..backends.postgresql_backend import PostgreSQLGeometricFilter
+                                pg_backend = PostgreSQLGeometricFilter(self.task_parameters)
+                                mv_ref = pg_backend.create_source_selection_mv(
+                                    layer=self.source_layer,
+                                    fids=visible_fids,
+                                    pk_field=pk_field,
+                                    geom_field=source_geom_field
+                                )
+                                
+                                if mv_ref:
+                                    source_filter = f'"{source_table_name}"."{pk_field}" IN (SELECT pk FROM {mv_ref})'
+                                    if not hasattr(self, '_source_selection_mvs'):
+                                        self._source_selection_mvs = []
+                                    self._source_selection_mvs.append(mv_ref)
+                                    logger.info(f"   ✓ Created MV for {len(visible_fids)} visible features")
+                                else:
+                                    # MV failed, use inline IN clause
+                                    fids_str = ', '.join(str(fid) for fid in visible_fids)
+                                    source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
+                                    logger.warning(f"   ⚠️ MV creation failed, using inline IN clause")
+                            else:
+                                # Small selection: use inline IN clause
+                                fids_str = ', '.join(str(fid) for fid in visible_fids)
+                                if source_table_name:
+                                    source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
+                                else:
+                                    source_filter = f'"{pk_field}" IN ({fids_str})'
+                            
+                            logger.info(f"   ✓ Generated source_filter from {len(visible_fids)} visible features")
+                            logger.debug(f"   → Filter preview: '{source_filter[:100]}...'")
+                        else:
+                            logger.warning(f"   ⚠️ No visible features found in source layer!")
+                    else:
+                        logger.warning(f"   ⚠️ Could not determine primary key field for source layer")
+                except Exception as e:
+                    logger.error(f"   ❌ Failed to generate filter from visible features: {e}")
+                    import traceback
+                    logger.debug(f"   Traceback: {traceback.format_exc()}")
             else:
                 logger.debug(f"Geometric filtering: Source layer has no subsetString and no selection")
         else:
@@ -6940,12 +6976,7 @@ class FilterEngineTask(QgsTask):
             # 3. PostgreSQLGeometricFilter for PostgreSQL layers - needs SQL expression
             backend_name = backend.get_backend_name().lower()
             
-            # v2.4.20: Log backend selection to QGIS Message Panel for debugging
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"execute_geometric_filtering: {layer.name()} → backend={backend_name.upper()}",
-                "FilterMate", Qgis.Info
-            )
+            logger.debug(f"execute_geometric_filtering: {layer.name()} → backend={backend_name.upper()}")
             
             # Log actual backend being used
             if forced_backend and backend_name != forced_backend:
@@ -7196,6 +7227,32 @@ class FilterEngineTask(QgsTask):
                 # PostgreSQL backend may fail due to timeout (complex spatial queries),
                 # connection issues, or SQL errors. OGR uses QGIS processing which is
                 # slower but more reliable.
+                # v2.8.2: BUT skip OGR fallback for very large PostgreSQL tables (>100k features)
+                # OGR fallback downloads ALL features from PostgreSQL which is impractical
+                # for tables with millions of rows.
+                layer_feature_count = layer.featureCount()
+                is_large_pg_table = (backend_name == 'postgresql' and 
+                                     layer.providerType() == 'postgres' and 
+                                     layer_feature_count > 100000)
+                
+                if is_large_pg_table:
+                    logger.error(f"⚠️ PostgreSQL query FAILED for large table {layer.name()} ({layer_feature_count:,} features)")
+                    logger.error(f"  → OGR fallback is NOT available for tables > 100k features")
+                    logger.error(f"  → PostgreSQL timeout may be too short for complex spatial queries")
+                    logger.error(f"  → Solutions:")
+                    logger.error(f"     1. Reduce source selection count (fewer features to intersect)")
+                    logger.error(f"     2. Increase PostgreSQL statement_timeout on server")
+                    logger.error(f"     3. Add spatial index (GiST) on geometry column")
+                    logger.error(f"     4. Use simpler predicates (e.g., intersects instead of contains)")
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        f"⚠️ {layer.name()}: PostgreSQL timeout on {layer_feature_count:,} features - "
+                        f"reduce source count or increase server timeout",
+                        "FilterMate", Qgis.Critical
+                    )
+                    # Skip fallback, return failure
+                    return False
+                
                 should_fallback = was_forced or (backend_name in ('spatialite', 'postgresql'))
                 
                 if should_fallback:
@@ -7328,15 +7385,7 @@ class FilterEngineTask(QgsTask):
                 feature_count = layer.featureCount()
                 
                 # CRITICAL DIAGNOSTIC: Verify filter was actually applied
-                logger.info(f"✓ Filter operation completed for {layer.name()}")
-                logger.info(f"  - Backend returned: SUCCESS")
-                
-                # Log to QGIS Message Panel for visibility
-                from qgis.core import QgsMessageLog, Qgis
-                QgsMessageLog.logMessage(
-                    f"execute_geometric_filtering ✓ {layer.name()} → backend returned SUCCESS",
-                    "FilterMate", Qgis.Info
-                )
+                logger.debug(f"✓ execute_geometric_filtering: {layer.name()} → backend returned SUCCESS")
                 logger.info(f"  - Features after filter: {feature_count:,}")
                 logger.info(f"  - Subset string applied: {final_expression[:200] if final_expression else '(empty)'}")
                 
@@ -7409,11 +7458,7 @@ class FilterEngineTask(QgsTask):
                 )
             
             # DIAGNOSTIC: Log final return value
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"execute_geometric_filtering → returning result={result} for {layer.name()}",
-                "FilterMate", Qgis.Info
-            )
+            logger.debug(f"execute_geometric_filtering → returning result={result} for {layer.name()}")
             return result
             
         except Exception as e:
@@ -10777,23 +10822,13 @@ class FilterEngineTask(QgsTask):
         # This is called from the main Qt thread (unlike run() which is on a worker thread).
         # Process all pending subset requests stored during run()
         if hasattr(self, '_pending_subset_requests') and self._pending_subset_requests:
-            logger.info(f"Applying {len(self._pending_subset_requests)} pending subset requests on main thread")
+            logger.debug(f"finished(): Applying {len(self._pending_subset_requests)} pending subset requests on main thread")
             
-            # DIAGNOSTIC: Log to QGIS Message Panel
-            # Note: Qgis and QgsMessageLog are already imported at module level
-            QgsMessageLog.logMessage(
-                f"finished(): Applying {len(self._pending_subset_requests)} pending subset requests",
-                "FilterMate", Qgis.Info
-            )
-            
-            # v2.7.9: ENHANCED DIAGNOSTIC - Log all pending requests details
+            # v2.7.9: Log all pending requests details
             for idx, (lyr, expr) in enumerate(self._pending_subset_requests):
                 lyr_name = lyr.name() if lyr and is_valid_layer(lyr) else "INVALID"
                 expr_preview = (expr[:80] + '...') if expr and len(expr) > 80 else (expr or 'EMPTY')
-                QgsMessageLog.logMessage(
-                    f"  [{idx+1}] {lyr_name}: {expr_preview}",
-                    "FilterMate", Qgis.Info
-                )
+                logger.debug(f"  [{idx+1}] {lyr_name}: {expr_preview}")
             
             # v2.6.5: PERFORMANCE - Skip updateExtents for large layers to prevent freeze
             MAX_FEATURES_FOR_UPDATE_EXTENTS = 50000
@@ -10833,11 +10868,7 @@ class FilterEngineTask(QgsTask):
                             logger.debug(f"  ✓ Filter already applied to {layer.name()}, triggered reload+repaint")
                             
                             count_str = f"{feature_count} features" if feature_count >= 0 else "(count pending)"
-                            
-                            QgsMessageLog.logMessage(
-                                f"finished() ✓ Repaint: {layer.name()} → {count_str} (filter already applied)",
-                                "FilterMate", Qgis.Info
-                            )
+                            logger.debug(f"finished() ✓ Repaint: {layer.name()} → {count_str} (filter already applied)")
                         else:
                             # FIX v2.4.13: Use safe_set_subset_string to apply PostgreSQL type casting
                             # This fixes "operator does not exist: character varying < integer" errors
@@ -10872,10 +10903,7 @@ class FilterEngineTask(QgsTask):
                                 else:
                                     count_str = "(count pending)"
                                 
-                                QgsMessageLog.logMessage(
-                                    f"finished() ✓ Applied: {layer.name()} → {count_str}",
-                                    "FilterMate", Qgis.Info
-                                )
+                                logger.debug(f"finished() ✓ Applied: {layer.name()} → {count_str}")
                             else:
                                 # ENHANCED DIAGNOSTIC v2.4.12: Log detailed error information
                                 error_msg = 'Unknown error'
