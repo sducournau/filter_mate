@@ -6,11 +6,210 @@ sidebar_position: 100
 
 All notable changes to FilterMate are documented here.
 
+## [2.9.2] - January 4, 2026 - Centroid & Simplification Optimizations
+
+### 🎯 Enhanced: Centroid Optimization with ST_PointOnSurface
+
+Major improvement for centroid-based filtering on complex polygons:
+
+**Problem Solved:**
+
+- `ST_Centroid()` can return a point **outside** concave polygons (L-shapes, rings, C-shapes)
+- This caused incorrect spatial predicate results for complex geometries
+
+**Solution:**
+
+- Now uses `ST_PointOnSurface()` by default for polygon geometries
+- `ST_PointOnSurface()` is **guaranteed** to return a point inside the polygon
+- Configurable via `CENTROID_MODE` constant ('centroid', 'point_on_surface', 'auto')
+
+**Mode Options:**
+
+| Mode               | Function              | Use Case                                        |
+| ------------------ | --------------------- | ----------------------------------------------- |
+| `point_on_surface` | `ST_PointOnSurface()` | Default for polygons (accurate)                 |
+| `centroid`         | `ST_Centroid()`       | Legacy, faster for simple shapes                |
+| `auto`             | Adaptive              | PointOnSurface for polygons, Centroid for lines |
+
+### 📐 Enhanced: Adaptive Simplification Before Buffer
+
+Improved geometry simplification for buffer operations:
+
+**Automatic Tolerance Calculation:**
+
+- Tolerance = `buffer_distance × 0.1` (configurable)
+- Clamped to [0.5, 10.0] meters for safety
+- No UI action required - auto-applies when config enabled
+
+**Performance Impact:**
+
+- Reduces vertex count by 50-90% before buffer
+- ST_Buffer runs 2-10x faster on simplified geometry
+- Particularly effective for detailed road/railway networks
+
+---
+
+## [2.9.1] - January 4, 2026 - PostgreSQL MV Performance Optimizations
+
+### 🚀 Performance: Advanced Materialized View Optimizations
+
+Major performance improvements for large datasets with PostgreSQL:
+
+| Optimization            | Improvement                       | PostgreSQL |
+| ----------------------- | --------------------------------- | ---------- |
+| INCLUDE in GIST indexes | 10-30% faster spatial queries     | 11+        |
+| Bbox pre-filter column  | 2-5x faster && checks             | All        |
+| Async CLUSTER           | Non-blocking for 50-100k features | All        |
+| Extended statistics     | Better query plans                | 10+        |
+
+---
+
+## [2.8.9] - January 4, 2026 - Enhanced MV Management & Simplified UI
+
+### ✨ Enhanced: PostgreSQL Materialized Views Management
+
+- **MV Status Widget**: Real-time display of active materialized views count
+- **Quick Cleanup Actions**: Session/Orphaned/All MVs cleanup
+- **Simplified Optimization Popup**: Streamlined dialog for faster workflow
+
+---
+
+## [2.8.8] - January 4, 2026 - Selection Sync Initialization Fix
+
+### 🐛 Bug Fix
+
+- **Selection Auto-Sync Not Working on Project Load** - Fixed initialization of bidirectional sync when loading projects with "Auto Selection" enabled
+
+---
+
+## [2.8.7] - January 4, 2026 - Complex Expression Materialization Fix
+
+### 🐛 Critical Performance Fix
+
+- **Slow Canvas Rendering** - Complex spatial expressions (EXISTS + ST_Buffer) now always materialized
+- **10-100x faster canvas rendering** with complex multi-step filters
+- **Eliminates "features appearing slowly"** issue after geometric filtering
+
+### 🚀 New Feature: Post-Buffer Simplification
+
+- Automatic geometry simplification after buffer operations
+- Configurable via `auto_simplify_after_buffer` and `buffer_simplify_after_tolerance`
+
+### ♻️ Refactoring
+
+- **Centralized psycopg2 imports** - New `psycopg2_availability.py` module
+- **Deduplicated buffer methods** - ~230 lines removed, moved to `base_backend.py`
+- **Message bar standardization** - Centralized via `feedback_utils`
+
+---
+
+## [2.8.4] - January 4, 2026 - Custom Expression Cache Validation Fix
+
+### 🐛 Bug Fix
+
+- **Flash/Zoom Shows All Features** - Added expression validation before cache usage
+- **Cache validation** verifies cached expression matches current widget expression
+
+---
+
+## [2.8.2] - January 3, 2026 - Exploring Cache Invalidation
+
+### 🐛 Bug Fix
+
+- **Flash/Identify shows all features** - Exploring cache now properly invalidated when custom expression changes
+
+---
+
+## [2.8.1] - January 3, 2026 - Orphaned MV Reference Cleanup
+
+### 🐛 Bug Fix
+
+- **"Relation does not exist" error** when reopening projects with PostgreSQL filters
+- **Automatic detection and cleanup** of orphaned materialized view references
+
+---
+
+## [2.8.0] - January 2, 2026 - Enhanced Auto-Optimization System
+
+### 🚀 Major Features
+
+| Feature                            | Description                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| **Performance Metrics Collection** | Track and analyze optimization effectiveness across sessions             |
+| **Query Pattern Detection**        | Identify recurring queries and automatically pre-optimize                |
+| **Adaptive Thresholds**            | Automatically tune optimization thresholds based on observed performance |
+| **Parallel Processing**            | Multi-threaded spatial operations for large datasets (2x speedup)        |
+| **LRU Caching**                    | Intelligent caching with automatic eviction and TTL support              |
+| **Selectivity Histograms**         | Better selectivity estimation using sampled data                         |
+
+### 📊 Performance Improvements
+
+| Dataset Size | Sequential | Parallel (4 workers) | Speedup |
+| ------------ | ---------- | -------------------- | ------- |
+| 500,000      | 28s        | 14s                  | 2.0x    |
+| 1,000,000    | 62s        | 28s                  | 2.2x    |
+
+---
+
+## [2.7.14] - January 2, 2026 - WKT Precision Optimization
+
+### 🐛 Bug Fix
+
+- **PostgreSQL refiltering with negative buffer** returns ALL features → Fixed
+
+### 🚀 Performance
+
+- **WKT coordinate precision** optimized by CRS (60-70% smaller for metric CRS)
+- **Aggressive WKT simplification** with Convex Hull/Bounding Box fallbacks
+
+---
+
+## [2.6.6] - January 1, 2026 - Spatialite Filtering Freeze Fix
+
+### 🐛 Critical Fix
+
+- **QGIS freeze when filtering** with Spatialite/GeoPackage backend - Fixed
+- **Removed reloadData() calls** for OGR/Spatialite layers (causes freeze)
+- Only PostgreSQL uses `reloadData()` for MV-based complex filters
+
+---
+
+## [2.6.5] - December 31, 2025 - UI Freeze Prevention
+
+### 🐛 Bug Fix
+
+- **QGIS freeze on plugin reload** with large layers - Fixed
+- `get_filtered_layer_extent()` now limits iteration to 10k features
+
+---
+
+## [2.6.4] - December 31, 2025 - SQLite Thread-Safety & Large WKT
+
+### 🐛 Bug Fixes
+
+- **"SQLite objects created in a thread" error** - Fixed with `check_same_thread=False`
+- **QGIS freeze with large source geometries** (>100K chars WKT) - Fixed
+- **Automatic R-tree optimization** for large WKT (LARGE_WKT_THRESHOLD=100K)
+
+---
+
+## [2.6.0] - December 31, 2025 - Performance & Stability
+
+### 🚀 Major Features
+
+- **Progressive Filtering**: Two-phase filtering (bbox + full predicate) for complex queries
+- **Query Complexity Estimator**: Dynamic SQL analysis with automatic strategy selection
+- **Multi-Backend Canvas Refresh**: Extended refresh system to Spatialite/OGR backends
+- **CRS Utilities Module**: Automatic metric CRS conversion with optimal UTM zone detection
+
+---
+
 ## [2.5.7] - December 31, 2025 - Improved CRS Compatibility
 
 ### ✨ New Features
 
 - **NEW MODULE crs_utils.py** - Dedicated CRS management module
+
   - `is_geographic_crs()`: Detects geographic CRS (lat/lon)
   - `is_metric_crs()`: Detects metric CRS
   - `get_optimal_metric_crs()`: Finds best metric CRS (UTM or Web Mercator)

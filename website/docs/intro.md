@@ -7,6 +7,20 @@ slug: /
 
 **FilterMate v2.9.2** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
+## ✨ Key Features
+
+| Feature                    | Description                                        |
+| -------------------------- | -------------------------------------------------- |
+| 🔍 **Smart Search**        | Intuitive entity search across all layer types     |
+| 📐 **Geometric Filtering** | Spatial predicates with buffer support             |
+| ⭐ **Filter Favorites**    | Save, organize and reuse filter configurations     |
+| 📝 **Undo/Redo**           | Complete filter history with context-aware restore |
+| 🌍 **21 Languages**        | Full internationalization support                  |
+| 🎨 **Dark Mode**           | Automatic theme detection and synchronization      |
+| 🚀 **Multi-Backend**       | PostgreSQL, Spatialite, OGR - optimal performance  |
+
+---
+
 ## 🎉 What's New in v2.9.2 - Centroid & Simplification Optimizations
 
 This release brings major improvements to centroid-based filtering and geometry simplification for buffer operations.
@@ -35,6 +49,8 @@ This release brings major improvements to centroid-based filtering and geometry 
 | **Auto-tolerance**      | buffer × 0.1 (clamped 0.5-10m) |
 | **No UI action needed** | Automatic when config enabled  |
 
+---
+
 ## 🎉 What's New in v2.9.1 - PostgreSQL MV Performance
 
 ### 🚀 Advanced Materialized View Optimizations
@@ -46,99 +62,51 @@ This release brings major improvements to centroid-based filtering and geometry 
 | Async CLUSTER           | Non-blocking for 50-100k features | All        |
 | Extended statistics     | Better query plans                | 10+        |
 
-## 🎉 What's in v2.8.9 - Enhanced MV Management
+---
 
-- ✨ **MV Status Widget** - Real-time count of materialized views
+## 📋 Recent Releases Summary
+
+### v2.8.x Series - Enhanced Auto-Optimization (January 2026)
+
+- ✨ **MV Status Widget** - Real-time materialized views count
 - 🧹 **Quick cleanup actions** - Session/Orphaned/All MVs
-- 🎨 **Simplified optimization popup** - Faster workflow
+- 🚀 **Complex expression materialization** - 10-100x faster canvas rendering
+- 🔧 **Post-buffer simplification** - Automatic vertex reduction
+- ♻️ **Code refactoring** - Centralized psycopg2, deduplicated buffer methods
 
-## 🎉 What's in v2.8.7 - Complex Expression Materialization Fix
-
-- Complex spatial expressions (EXISTS + ST_Buffer) now always materialized
-- 10-100x faster canvas rendering with complex multi-step filters
-- Eliminates "features appearing slowly" issue after geometric filtering
-
-## 🎉 What's in v2.8.0 - Enhanced Auto-Optimization System
-
-This major release introduces an **Enhanced Auto-Optimization System** that significantly improves filtering performance through intelligent optimization strategies.
-
-### 🚀 New Features
+### v2.8.0 - Enhanced Auto-Optimization System
 
 | Feature                            | Description                                                              |
 | ---------------------------------- | ------------------------------------------------------------------------ |
 | **Performance Metrics Collection** | Track and analyze optimization effectiveness across sessions             |
 | **Query Pattern Detection**        | Identify recurring queries and automatically pre-optimize                |
 | **Adaptive Thresholds**            | Automatically tune optimization thresholds based on observed performance |
-| **Parallel Processing**            | Multi-threaded spatial operations for large datasets                     |
+| **Parallel Processing**            | Multi-threaded spatial operations for large datasets (2x speedup)        |
 | **LRU Caching**                    | Intelligent caching with automatic eviction and TTL support              |
-| **Selectivity Histograms**         | Better selectivity estimation using sampled data                         |
 
-### 📊 Performance Improvements
+### v2.7.x Series - WKT Optimization (January 2026)
 
-| Dataset Size | Sequential | Parallel (4 workers) | Speedup |
-| ------------ | ---------- | -------------------- | ------- |
-| 500,000      | 28s        | 14s                  | 2.0x    |
-| 1,000,000    | 62s        | 28s                  | 2.2x    |
+- 🐛 **PostgreSQL refiltering with negative buffer** - Fixed
+- 🔧 **WKT coordinate precision** optimized by CRS (60-70% smaller)
+- 🚀 **Aggressive WKT simplification** with Convex Hull/Bounding Box fallbacks
 
-| Scenario           | Without Cache | With Cache (80% hit) | Improvement |
-| ------------------ | ------------- | -------------------- | ----------- |
-| Layer analysis     | 50ms          | 10ms                 | 5x          |
-| Strategy selection | 30ms          | 5ms                  | 6x          |
+### v2.6.x Series - Stability (January 2026)
 
-### 🔧 New Configuration
+- 🐛 **Spatialite/GeoPackage Freeze** - Removed `reloadData()` calls
+- 🐛 **UI Freeze with large layers** - Limited extent iterations
+- 🐛 **SQLite thread-safety** - Fixed with `check_same_thread=False`
+- 🚀 **Progressive Filtering** - Two-phase filtering (bbox + full predicate)
+- 🚀 **CRS Utilities** - Automatic metric CRS conversion
 
-New `v2.8.0_enhanced` section in config.json:
+### v2.5.x Series - Stability (December 2025)
 
-- `enable_metrics`: Track optimization effectiveness
-- `enable_parallel_processing`: Multi-threaded spatial ops
-- `enable_adaptive_thresholds`: Auto-tune thresholds
-- `parallel_workers`: Number of parallel workers (default: 4)
-- `cache_max_size`: LRU cache size (default: 200)
-- `cache_ttl_seconds`: Cache TTL in seconds (default: 600)
+- 🔄 **Bidirectional Sync** - QGIS selection ↔ widgets perfectly synchronized
+- 🐛 **PostgreSQL ST_IsEmpty** - Correctly detects ALL empty geometry types
+- 🎨 **HiDPI Profile** - New UI profile for 4K/Retina displays
 
-### Previous Releases
+> 📖 See [Changelog](/docs/changelog) for complete version history.
 
-## 🎯 v2.7.14 - WKT Coordinate Precision Optimization
-
-- **PostgreSQL refiltering with negative buffer** - Fixed (returns ALL features → correct subset)
-- **WKT coordinate precision** optimized by CRS (60-70% smaller for metric CRS)
-- **Aggressive WKT simplification** with Convex Hull/Bounding Box fallbacks
-
-## 🎯 v2.6.6 - Fix: Spatialite Filtering Freeze
-
-- **Spatialite/GeoPackage Freeze** - Removed `reloadData()` calls for OGR/Spatialite layers
-- **UI Thread Blocking** - Only PostgreSQL uses `reloadData()` for MV-based filters
-- **Improved Responsiveness** - Better UI reactivity for local data sources
-
-## 🎯 v2.6.5 - UI Freeze Prevention for Large Layers
-
-- **QGIS freeze on plugin reload** with large layers (batiment, etc.) - Fixed
-- **get_filtered_layer_extent()** now limits iteration to 10k features
-- **Multiple selection extent** calculation limited to 500 items
-- Uses **updateExtents()** for large filtered datasets instead of iterating
-
-## 🎯 v2.6.4 - SQLite Thread-Safety & Large WKT
-
-- **"SQLite objects created in a thread" error** - Fixed with `check_same_thread=False`
-- **QGIS freeze with large source geometries** (>100K chars WKT) - Fixed
-- **Automatic R-tree optimization** for large WKT (LARGE_WKT_THRESHOLD=100K)
-
-## 🎯 v2.6.1 - Performance: Optimized MVs & Source Tables
-
-## 🎯 v2.6.0 - Major Release: Performance & Stability
-
-- **Progressive Filtering**: Two-phase filtering (bbox + full predicate) for complex queries
-- **Query Complexity Estimator**: Dynamic SQL analysis with automatic strategy selection
-- **Multi-Backend Canvas Refresh**: Extended refresh system to Spatialite/OGR backends
-- **CRS Utilities Module**: Automatic metric CRS conversion with optimal UTM zone detection
-
-### Previous Releases
-
-## 🎯 v2.5.6 - Auto Focus with Native QGIS Selection Tool
-
-- **Bidirectional Sync**: Select with QGIS native tools → FilterMate widgets auto-update
-- **Complete Synchronization**: Check AND uncheck widgets based on QGIS selection
-- **Anti-Loop Protection**: Robust `_syncing_from_qgis` flag prevents infinite recursion
+---
 
 ## 🔧 v2.5.5 - Critical Fix: PostgreSQL Negative Buffer Detection
 

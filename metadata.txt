@@ -77,13 +77,34 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
+    Version 2.9.2 (January 2026) - Centroid & Simplification Optimizations
+    🎯 IMPROVED: Centroid filtering now uses ST_PointOnSurface() for polygons (guaranteed inside)
+    📐 IMPROVED: Adaptive simplification before buffer (tolerance = buffer × 0.1)
+    ⚙️ NEW: CENTROID_MODE config ('centroid', 'point_on_surface', 'auto')
+    🚀 PERF: 2-10x faster buffer operations on simplified geometries
+    
+    Version 2.9.1 (January 2026) - PostgreSQL MV Performance Optimizations
+    🚀 PERF: INCLUDE clause in GIST indexes (PostgreSQL 11+) for 10-30%% faster spatial queries
+    📦 PERF: Bbox pre-filter column for ultra-fast && operator checks (2-5x faster)
+    ⚡ PERF: Async CLUSTER for medium datasets (50k-100k features) - non-blocking
+    📊 PERF: Extended statistics for better query plans (PostgreSQL 10+)
+    
+    Version 2.8.9 (January 2026) - Enhanced MV Management
+    ✨ NEW: MV Status Widget with real-time materialized views count
+    🧹 NEW: Quick cleanup actions (Session/Orphaned/All MVs)
+    🎨 IMPROVED: Simplified optimization confirmation popup
+    
+    Version 2.8.7 (January 2026) - Complex Expression Materialization
+    🐛 FIX: Slow canvas rendering with complex spatial expressions
+    🚀 PERF: 10-100x faster canvas rendering with complex multi-step filters
+    ♻️ REFACTOR: Centralized psycopg2 imports, deduplicated buffer methods
+    
     Version 2.8.0 (January 2026) - Enhanced Auto-Optimization System
     🚀 NEW: Performance Metrics Collection - Track and analyze optimization effectiveness
     🚀 NEW: Query Pattern Detection - Identify recurring queries and pre-optimize
     🚀 NEW: Adaptive Thresholds - Automatically tune thresholds based on performance
     🚀 NEW: Parallel Processing - Multi-threaded spatial ops (2x speedup on 1M features)
     🚀 NEW: LRU Caching - Intelligent caching with TTL support
-    🚀 NEW: Selectivity Histograms - Better selectivity estimation using sampled data
     📊 STATS: Cache hit rate 80%%, strategy selection 6x faster
     
     Version 2.7.14 (January 2026) - WKT Precision Optimization
@@ -94,7 +115,8 @@ changelog=
     Version 2.6.x (January 2026) - Stability Improvements
     🐛 FIX: QGIS freeze on plugin reload with large layers
     🐛 FIX: SQLite thread-safety issues
-    🚀 NEW: Automatic R-tree optimization for large WKT
+    🚀 NEW: Progressive filtering (bbox + full predicate)
+    🚀 NEW: CRS utilities module with automatic metric CRS conversion
     
     Version 2.3.9 (December 2025) - Critical Stability Fix
     🔥 CRITICAL: Fixed GEOS crash during OGR backend filtering
