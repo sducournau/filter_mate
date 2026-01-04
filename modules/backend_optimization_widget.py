@@ -1140,6 +1140,16 @@ class GlobalOptimizationPanel(QWidget):
         )
         layout.addWidget(self.simplify_buffer_toggle)
         
+        # Simplify After Buffer (v2.8.6)
+        self.simplify_after_buffer_toggle = OptimizationToggle(
+            tr("Simplify After Buffer"),
+            tr("Simplify the resulting polygon after buffer operations. "
+               "Reduces vertex count for complex polygons from negative/positive buffer sequences."),
+            speedup="1.5-2x",
+            default_enabled=True
+        )
+        layout.addWidget(self.simplify_after_buffer_toggle)
+        
         # Parallel Filtering
         self.parallel_toggle = OptimizationToggle(
             tr("Parallel Layer Filtering"),
@@ -1204,6 +1214,7 @@ class GlobalOptimizationPanel(QWidget):
             self.auto_strategy_toggle.set_enabled(auto_opt.get('auto_strategy_selection', {}).get('value', True))
             self.simplify_toggle.set_enabled(auto_opt.get('auto_simplify_geometry', {}).get('value', False))
             self.simplify_buffer_toggle.set_enabled(auto_opt.get('auto_simplify_before_buffer', {}).get('value', True))
+            self.simplify_after_buffer_toggle.set_enabled(auto_opt.get('auto_simplify_after_buffer', {}).get('value', True))
             self.show_hints_toggle.set_enabled(auto_opt.get('show_optimization_hints', {}).get('value', True))
             
             parallel = app_opts.get('PARALLEL_FILTERING', {})
@@ -1227,6 +1238,7 @@ class GlobalOptimizationPanel(QWidget):
             'auto_strategy_selection': self.auto_strategy_toggle.is_enabled(),
             'auto_simplify_geometry': self.simplify_toggle.is_enabled(),
             'simplify_before_buffer': self.simplify_buffer_toggle.is_enabled(),
+            'simplify_after_buffer': self.simplify_after_buffer_toggle.is_enabled(),
             'parallel_filtering': {
                 'enabled': self.parallel_toggle.is_enabled(),
                 'max_workers': self.max_workers_spin.value()
@@ -1352,6 +1364,7 @@ class BackendOptimizationWidget(QWidget):
         panel.auto_strategy_toggle.set_enabled(settings.get('auto_strategy_selection', True))
         panel.simplify_toggle.set_enabled(settings.get('auto_simplify_geometry', False))
         panel.simplify_buffer_toggle.set_enabled(settings.get('simplify_before_buffer', True))
+        panel.simplify_after_buffer_toggle.set_enabled(settings.get('simplify_after_buffer', True))
         
         parallel = settings.get('parallel_filtering', {})
         panel.parallel_toggle.set_enabled(parallel.get('enabled', True))

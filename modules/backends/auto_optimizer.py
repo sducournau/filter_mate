@@ -112,6 +112,9 @@ def get_auto_optimization_config() -> Dict[str, Any]:
         'auto_simplify_geometry': False,
         'auto_strategy_selection': True,
         'show_optimization_hints': True,
+        'auto_simplify_before_buffer': True,
+        'auto_simplify_after_buffer': True,
+        'buffer_simplify_after_tolerance': 0.5,
     }
     
     try:
@@ -154,6 +157,18 @@ def get_auto_optimization_config() -> Dict[str, Any]:
             'show_optimization_hints': get_value(
                 auto_opt.get('show_optimization_hints', defaults['show_optimization_hints']),
                 defaults['show_optimization_hints']
+            ),
+            'auto_simplify_before_buffer': get_value(
+                auto_opt.get('auto_simplify_before_buffer', defaults['auto_simplify_before_buffer']),
+                defaults['auto_simplify_before_buffer']
+            ),
+            'auto_simplify_after_buffer': get_value(
+                auto_opt.get('auto_simplify_after_buffer', defaults['auto_simplify_after_buffer']),
+                defaults['auto_simplify_after_buffer']
+            ),
+            'buffer_simplify_after_tolerance': get_value(
+                auto_opt.get('buffer_simplify_after_tolerance', defaults['buffer_simplify_after_tolerance']),
+                defaults['buffer_simplify_after_tolerance']
             ),
         }
     except Exception as e:
@@ -207,7 +222,8 @@ class OptimizationType(Enum):
     USE_CENTROID = "use_centroid"
     SIMPLIFY_GEOMETRY = "simplify_geometry"
     SIMPLIFY_BEFORE_BUFFER = "simplify_before_buffer"  # Simplify geometry before buffer
-    REDUCE_BUFFER_SEGMENTS = "reduce_buffer_segments"  # Reduce buffer arc segments for performance
+    REDUCE_BUFFER_SEGMENTS = "reduce_buffer_segments"  # Reduce buffer segments
+    ENABLE_BUFFER_TYPE = "enable_buffer_type"  # Enable buffer type with 1 segment
     BBOX_PREFILTER = "bbox_prefilter"
     ATTRIBUTE_FIRST = "attribute_first"
     PROGRESSIVE_CHUNKS = "progressive_chunks"
@@ -476,7 +492,8 @@ class AutoOptimizer:
         enable_auto_centroid: Optional[bool] = None,
         enable_auto_simplify: Optional[bool] = None,
         enable_auto_strategy: Optional[bool] = None,
-        enable_auto_simplify_buffer: Optional[bool] = None
+        enable_auto_simplify_buffer: Optional[bool] = None,
+        enable_auto_simplify_after_buffer: Optional[bool] = None
     ):
         """
         Initialize the auto-optimizer.
@@ -486,6 +503,7 @@ class AutoOptimizer:
             enable_auto_simplify: Auto-enable geometry simplification (None = use config)
             enable_auto_strategy: Auto-select optimal filtering strategy (None = use config)
             enable_auto_simplify_buffer: Auto-simplify geometry before buffer (None = use config)
+            enable_auto_simplify_after_buffer: Auto-simplify result after buffer (None = use config)
         """
         # Load configuration
         config = get_auto_optimization_config()
@@ -498,6 +516,7 @@ class AutoOptimizer:
         self.enable_auto_simplify = enable_auto_simplify if enable_auto_simplify is not None else config.get('auto_simplify_geometry', False)
         self.enable_auto_strategy = enable_auto_strategy if enable_auto_strategy is not None else config.get('auto_strategy_selection', True)
         self.enable_auto_simplify_buffer = enable_auto_simplify_buffer if enable_auto_simplify_buffer is not None else config.get('auto_simplify_before_buffer', True)
+        self.enable_auto_simplify_after_buffer = enable_auto_simplify_after_buffer if enable_auto_simplify_after_buffer is not None else config.get('auto_simplify_after_buffer', True)
         self.enable_reduce_buffer_segments = config.get('auto_reduce_buffer_segments', True)
         
         # Load thresholds from config
@@ -644,7 +663,9 @@ class AutoOptimizer:
     def get_recommendations(
         self,
         layer_analysis: 'LayerAnalysis',
-        user_centroid_enabled: Optional[bool] = None
+        user_centroid_enabled: Optional[bool] = None,
+        has_buffer: bool = False,
+        has_buffer_type: bool = False
     ) -> List[OptimizationRecommendation]:
         """
         Get optimization recommendations for a single layer.
@@ -657,6 +678,8 @@ class AutoOptimizer:
             user_centroid_enabled: True if user has already enabled centroid optimization
                                    (via checkbox or previous choice). If True, centroid
                                    recommendation will be skipped.
+            has_buffer: True if buffer is being applied
+            has_buffer_type: True if buffer type UI is already enabled
             
         Returns:
             List of OptimizationRecommendation objects
@@ -696,6 +719,16 @@ class AutoOptimizer:
         )
         if strategy_rec:
             recommendations.append(strategy_rec)
+        
+        # 4. ENABLE BUFFER TYPE OPTIMIZATION - recommend enabling buffer type with segments=1
+        # when buffer is active but buffer type UI is disabled
+        buffer_type_rec = self._evaluate_enable_buffer_type_optimization(
+            target=layer_analysis,
+            has_buffer=has_buffer,
+            has_buffer_type=has_buffer_type
+        )
+        if buffer_type_rec:
+            recommendations.append(buffer_type_rec)
         
         # Sort by priority (lowest number = highest priority)
         recommendations.sort(key=lambda r: r.priority)
@@ -953,6 +986,61 @@ class AutoOptimizer:
             requires_user_consent=False,
             parameters={
                 "segments": self.buffer_segments_reduced,
+                "original_segments": BUFFER_SEGMENTS_DEFAULT
+            }
+        )
+    
+    def _evaluate_enable_buffer_type_optimization(
+        self,
+        target: LayerAnalysis,
+        has_buffer: bool,
+        has_buffer_type: bool
+    ) -> Optional[OptimizationRecommendation]:
+        """
+        Evaluate if enabling buffer type with reduced segments should be recommended.
+        
+        When the buffer type UI is disabled but buffer is being used, recommend
+        enabling buffer type with segments=1 for significant performance improvement.
+        Using 1 segment (instead of default 5) creates simpler buffer geometries
+        with fewer vertices, dramatically improving performance.
+        
+        Args:
+            target: Target layer analysis
+            has_buffer: Whether buffer is being applied
+            has_buffer_type: Whether buffer type UI is already enabled
+            
+        Returns:
+            OptimizationRecommendation if buffer type activation is recommended
+        """
+        # Only recommend if buffer is used but buffer type UI is disabled
+        if not has_buffer:
+            return None
+        
+        if has_buffer_type:
+            # Buffer type already enabled, no need to recommend
+            return None
+        
+        # Calculate speedup based on feature count
+        # Reducing from 5 segments to 1 provides significant speedup
+        if target.feature_count > 100000:
+            estimated_speedup = 2.5
+        elif target.feature_count > 50000:
+            estimated_speedup = 2.0
+        elif target.feature_count > 10000:
+            estimated_speedup = 1.8
+        else:
+            estimated_speedup = 1.5
+        
+        return OptimizationRecommendation(
+            optimization_type=OptimizationType.ENABLE_BUFFER_TYPE,
+            priority=2,  # Medium priority, same as reduce_buffer_segments
+            estimated_speedup=estimated_speedup,
+            reason=f"Enable buffer type with 1 segment ({target.feature_count:,} features - Flat type with 1 segment instead of Round with 5)",
+            auto_applicable=True,
+            requires_user_consent=False,
+            parameters={
+                "buffer_type": "Flat",
+                "segments": 1,
                 "original_segments": BUFFER_SEGMENTS_DEFAULT
             }
         )

@@ -1852,6 +1852,18 @@ class FilterMateApp:
                 task_parameters["task"]["auto_apply_optimizations"] = auto_apply_optimizations
                 logger.info(f"Passing approved optimizations to task: {approved_optimizations}")
                 
+                # v2.8.6: Apply enable_buffer_type optimization to task_parameters
+                # When user accepts this optimization, update buffer params for the task
+                for layer_id, opts in approved_optimizations.items():
+                    if opts.get('enable_buffer_type', False):
+                        if "filtering" not in task_parameters:
+                            task_parameters["filtering"] = {}
+                        task_parameters["filtering"]["has_buffer_type"] = True
+                        task_parameters["filtering"]["buffer_type"] = "Flat"
+                        task_parameters["filtering"]["buffer_segments"] = 1
+                        logger.info("AUTO-OPTIMIZATION: Applied buffer_type=Flat, buffer_segments=1 to task_parameters")
+                        break  # Only need to apply once
+                
             layers = []
             self.appTasks[task_name] = FilterEngineTask(self.tasks_descriptions[task_name], task_name, task_parameters)
             layers_props = [layer_infos for layer_infos in task_parameters["task"]["layers"]]
@@ -2320,6 +2332,11 @@ class FilterMateApp:
             # Get layers to filter from task parameters
             task_layers = task_parameters.get("task", {}).get("layers", [])
             
+            # v2.8.6: Get buffer parameters for optimization recommendations
+            filtering_params = task_parameters.get("filtering", {})
+            has_buffer = filtering_params.get("has_buffer_value", False)
+            has_buffer_type = filtering_params.get("has_buffer_type", False)
+            
             for layer_props in task_layers:
                 layer_id = layer_props.get("layer_id")
                 if not layer_id:
@@ -2342,21 +2359,32 @@ class FilterMateApp:
                     user_centroid_enabled = self.dockwidget._is_centroid_already_enabled(layer) if hasattr(self.dockwidget, '_is_centroid_already_enabled') else False
                 
                 # Get recommendations - skip centroid if already enabled
+                # v2.8.6: Pass buffer parameters for buffer type optimization
                 recommendations = optimizer.get_recommendations(
                     analysis, 
-                    user_centroid_enabled=user_centroid_enabled
+                    user_centroid_enabled=user_centroid_enabled,
+                    has_buffer=has_buffer,
+                    has_buffer_type=has_buffer_type
                 )
                 
-                # Check if centroid is recommended
+                # Check if any significant optimization is recommended
+                # v2.8.6: Include ENABLE_BUFFER_TYPE in addition to USE_CENTROID
+                has_significant_recommendation = False
                 for rec in recommendations:
-                    if rec.optimization_type == OptimizationType.USE_CENTROID and rec.auto_applicable:
-                        layers_needing_optimization.append({
-                            'layer': layer,
-                            'layer_id': layer_id,
-                            'analysis': analysis,
-                            'recommendations': recommendations
-                        })
+                    if rec.auto_applicable and rec.optimization_type in (
+                        OptimizationType.USE_CENTROID,
+                        OptimizationType.ENABLE_BUFFER_TYPE
+                    ):
+                        has_significant_recommendation = True
                         break
+                
+                if has_significant_recommendation:
+                    layers_needing_optimization.append({
+                        'layer': layer,
+                        'layer_id': layer_id,
+                        'analysis': analysis,
+                        'recommendations': recommendations
+                    })
             
             if not layers_needing_optimization:
                 logger.debug("No optimization recommendations for current filtering operation")
@@ -2471,6 +2499,39 @@ class FilterMateApp:
             # if selected_optimizations.get('bbox_prefilter', False):
             #     # Update bbox prefilter UI if it exists
             #     pass
+            
+            # v2.8.6: Handle enable_buffer_type optimization
+            # When user accepts, enable buffer type with Flat type and 1 segment
+            if selected_optimizations.get('enable_buffer_type', False):
+                # Enable the buffer type toggle button
+                if hasattr(self.dockwidget, 'pushButton_checkable_filtering_buffer_type'):
+                    if not self.dockwidget.pushButton_checkable_filtering_buffer_type.isChecked():
+                        self.dockwidget.pushButton_checkable_filtering_buffer_type.setChecked(True)
+                        logger.info("AUTO-OPTIMIZATION: Enabled 'buffer_type' toggle button")
+                
+                # Set buffer type to "Flat" (index 1) for performance
+                if hasattr(self.dockwidget, 'comboBox_filtering_buffer_type'):
+                    # Find "Flat" option in combobox
+                    flat_index = self.dockwidget.comboBox_filtering_buffer_type.findText("Flat")
+                    if flat_index >= 0:
+                        self.dockwidget.comboBox_filtering_buffer_type.setCurrentIndex(flat_index)
+                        logger.info("AUTO-OPTIMIZATION: Set buffer type to 'Flat'")
+                
+                # Set buffer segments to 1 for maximum performance
+                if hasattr(self.dockwidget, 'mQgsSpinBox_filtering_buffer_segments'):
+                    self.dockwidget.mQgsSpinBox_filtering_buffer_segments.setValue(1)
+                    logger.info("AUTO-OPTIMIZATION: Set buffer segments to 1")
+                
+                # Update the current layer's stored parameters
+                if hasattr(self.dockwidget, 'current_layer') and self.dockwidget.current_layer:
+                    layer_id = self.dockwidget.current_layer.id()
+                    if layer_id in self.PROJECT_LAYERS:
+                        if "filtering" not in self.PROJECT_LAYERS[layer_id]:
+                            self.PROJECT_LAYERS[layer_id]["filtering"] = {}
+                        self.PROJECT_LAYERS[layer_id]["filtering"]["has_buffer_type"] = True
+                        self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_type"] = "Flat"
+                        self.PROJECT_LAYERS[layer_id]["filtering"]["buffer_segments"] = 1
+                        logger.debug(f"AUTO-OPTIMIZATION: Updated PROJECT_LAYERS buffer params for {layer_id}")
             
             logger.debug(f"Applied optimization choices to UI: {selected_optimizations}")
             

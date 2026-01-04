@@ -281,6 +281,17 @@
           "choices": [true, false],
           "description": "Automatically simplify geometries before buffer operations (positive or negative). Improves buffer performance without affecting spatial results."
         },
+        "auto_simplify_after_buffer": {
+          "value": true,
+          "choices": [true, false],
+          "description": "Automatically simplify the resulting polygon after buffer operations. Reduces vertex count without significantly affecting spatial accuracy. Particularly useful for complex polygons from negative/positive buffer sequences."
+        },
+        "buffer_simplify_after_tolerance": {
+          "value": 0.5,
+          "min": 0.1,
+          "max": 50.0,
+          "description": "Simplification tolerance in meters for post-buffer simplification. Lower values preserve more detail, higher values create smoother polygons with fewer vertices."
+        },
         "buffer_simplify_vertex_threshold": {
           "value": 50,
           "min": 10,
