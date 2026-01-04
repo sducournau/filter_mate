@@ -95,6 +95,12 @@ SPATIALITE_BATCH_SIZE = 5000    # Process FIDs in batches to avoid memory issues
 SPATIALITE_PROGRESS_INTERVAL = 1000  # Report progress every N features
 SPATIALITE_INTERRUPT_CHECK_INTERVAL = 0.5  # Check for cancellation every N seconds
 
+# v2.8.7: WKT simplification thresholds to prevent GeomFromText freeze on complex geometries
+# GeomFromText parsing complexity is O(n²) for polygon validation
+SPATIALITE_WKT_SIMPLIFY_THRESHOLD = 100000  # 100KB - trigger Python simplification
+SPATIALITE_WKT_MAX_POINTS = 5000  # Max points before aggressive simplification
+SPATIALITE_GEOM_INSERT_TIMEOUT = 30  # Timeout for geometry insertion (seconds)
+
 
 class InterruptibleSQLiteQuery:
     """
@@ -1095,6 +1101,91 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
     VERY_LARGE_WKT_THRESHOLD = 500000  # WKT chars - above this, use bbox pre-filter
     SOURCE_TABLE_PREFIX = "_fm_source_"  # Prefix for permanent source tables
     
+    def _simplify_wkt_if_needed(self, wkt: str, max_points: int = None) -> str:
+        """
+        v2.8.7: Simplify WKT geometry using QGIS if it's too complex.
+        
+        This prevents GeomFromText() freezing on very complex geometries like
+        detailed administrative boundaries (communes, etc.).
+        
+        Args:
+            wkt: Input WKT geometry string
+            max_points: Maximum number of points (default: SPATIALITE_WKT_MAX_POINTS)
+        
+        Returns:
+            Simplified WKT string, or original if simplification not needed/failed
+        """
+        if max_points is None:
+            max_points = SPATIALITE_WKT_MAX_POINTS
+        
+        # Only simplify if WKT is large enough to potentially cause issues
+        if len(wkt) < SPATIALITE_WKT_SIMPLIFY_THRESHOLD:
+            return wkt
+        
+        try:
+            from qgis.core import QgsGeometry
+            
+            geom = QgsGeometry.fromWkt(wkt)
+            if geom.isNull() or geom.isEmpty():
+                self.log_warning(f"Could not parse WKT for simplification ({len(wkt)} chars)")
+                return wkt
+            
+            # Count vertices
+            vertex_count = 0
+            for part in geom.parts():
+                vertex_count += part.vertexCount()
+            
+            if vertex_count <= max_points:
+                self.log_debug(f"WKT has {vertex_count} vertices, no simplification needed")
+                return wkt
+            
+            self.log_info(f"🔧 Simplifying large WKT: {vertex_count} vertices → target {max_points}")
+            
+            # Calculate simplification tolerance based on extent
+            bbox = geom.boundingBox()
+            extent = max(bbox.width(), bbox.height())
+            
+            # Start with a small tolerance and increase until we get under max_points
+            # This is adaptive simplification
+            tolerance = extent / 10000  # Initial tolerance: 0.01% of extent
+            max_attempts = 10
+            
+            for attempt in range(max_attempts):
+                simplified = geom.simplify(tolerance)
+                
+                if simplified.isNull() or simplified.isEmpty():
+                    self.log_warning(f"Simplification with tolerance {tolerance} produced empty geometry")
+                    tolerance /= 2  # Reduce tolerance
+                    continue
+                
+                # Count simplified vertices
+                simplified_count = 0
+                for part in simplified.parts():
+                    simplified_count += part.vertexCount()
+                
+                if simplified_count <= max_points:
+                    result_wkt = simplified.asWkt()
+                    self.log_info(f"  ✓ Simplified: {vertex_count} → {simplified_count} vertices (tolerance: {tolerance:.6f})")
+                    self.log_info(f"  ✓ WKT size: {len(wkt):,} → {len(result_wkt):,} chars")
+                    return result_wkt
+                
+                # Increase tolerance for next attempt
+                tolerance *= 2
+            
+            # If we couldn't simplify enough, use the most simplified version
+            simplified = geom.simplify(tolerance)
+            if not simplified.isNull() and not simplified.isEmpty():
+                result_wkt = simplified.asWkt()
+                self.log_warning(f"Could not simplify to {max_points} vertices, using {simplified.constGet().vertexCount()} vertices")
+                return result_wkt
+            
+            self.log_warning("Simplification failed, using original WKT")
+            return wkt
+            
+        except Exception as e:
+            self.log_warning(f"WKT simplification error: {e}")
+            return wkt
+    
     def _extract_wkt_from_expression(self, expression: str) -> Optional[str]:
         """
         v2.6.5: Extract WKT string from a Spatialite expression as fallback.
@@ -1175,8 +1266,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 self.log_warning("mod_spatialite not available - cannot create permanent source table")
                 return None, False
             
-            # Connect and load spatialite
-            conn = sqlite3.connect(db_path)
+            # v2.8.7: Connect with check_same_thread=False to allow InterruptibleSQLiteQuery
+            # to execute in background thread for timeout/cancellation support
+            conn = sqlite3.connect(db_path, check_same_thread=False)
             conn.enable_load_extension(True)
             conn.load_extension(ext_name)
             cursor = conn.cursor()
@@ -1219,56 +1311,128 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # needs_spatialite_simplify = len(source_wkt) > LARGE_WKT_THRESHOLD_SIMPLIFY
             # simplify_tolerance = 10.0  # 10 meters
             
+            # v2.8.7: CRITICAL FIX - Simplify WKT BEFORE sending to Spatialite to prevent freeze
+            # GeomFromText on complex geometries (like detailed commune boundaries) can block indefinitely
+            # Python simplification is done BEFORE SQLite call, making it interruptible
+            
             if source_features and len(source_features) > 0:
                 # Multi-feature source (from selection or filtered layer)
                 for fid, wkt in source_features:
+                    # v2.8.7: Simplify large WKT in Python to prevent GeomFromText freeze
+                    simplified_wkt = self._simplify_wkt_if_needed(wkt)
+                    
                     if has_buffer:
                         if needs_spatialite_simplify:
                             cursor.execute(f'''
                                 INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
                                 VALUES (?, ST_Simplify(GeomFromText(?, ?), ?), ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?))
-                            ''', (fid, wkt, source_srid, simplify_tolerance, wkt, source_srid, simplify_tolerance, buffer_value))
+                            ''', (fid, simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
                         else:
-                            cursor.execute(f'''
+                            # v2.8.7: Use interruptible insert for geometry
+                            insert_sql = f'''
                                 INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                                VALUES (?, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
-                            ''', (fid, wkt, source_srid, wkt, source_srid, buffer_value))
+                                VALUES ({fid}, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), 
+                                        ST_Buffer(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), {buffer_value}))
+                            '''
+                            interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
+                            _, error = interruptible.execute(
+                                timeout=SPATIALITE_GEOM_INSERT_TIMEOUT,
+                                cancel_check=self._is_task_canceled
+                            )
+                            if error:
+                                self.log_error(f"Geometry insert timeout/error: {error}")
+                                raise Exception(f"Geometry insert failed: {error}")
                     else:
                         if needs_spatialite_simplify:
                             cursor.execute(f'''
                                 INSERT INTO "{table_name}" (source_fid, geom)
                                 VALUES (?, ST_Simplify(GeomFromText(?, ?), ?))
-                            ''', (fid, wkt, source_srid, simplify_tolerance))
+                            ''', (fid, simplified_wkt, source_srid, simplify_tolerance))
                         else:
-                            cursor.execute(f'''
+                            # v2.8.7: Use interruptible insert for geometry
+                            insert_sql = f'''
                                 INSERT INTO "{table_name}" (source_fid, geom)
-                                VALUES (?, GeomFromText(?, ?))
-                            ''', (fid, wkt, source_srid))
+                                VALUES ({fid}, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}))
+                            '''
+                            interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
+                            _, error = interruptible.execute(
+                                timeout=SPATIALITE_GEOM_INSERT_TIMEOUT,
+                                cancel_check=self._is_task_canceled
+                            )
+                            if error:
+                                self.log_error(f"Geometry insert timeout/error: {error}")
+                                raise Exception(f"Geometry insert failed: {error}")
                     inserted_count += 1
             else:
                 # Single geometry source
+                # v2.8.7: Simplify large WKT in Python to prevent GeomFromText freeze
+                simplified_wkt = self._simplify_wkt_if_needed(source_wkt)
+                
                 if has_buffer:
                     if needs_spatialite_simplify:
                         cursor.execute(f'''
                             INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
                             VALUES (0, ST_Simplify(GeomFromText(?, ?), ?), ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?))
-                        ''', (source_wkt, source_srid, simplify_tolerance, source_wkt, source_srid, simplify_tolerance, buffer_value))
+                        ''', (simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
                     else:
-                        cursor.execute(f'''
+                        # v2.8.7: Use interruptible insert with timeout for large geometries
+                        insert_sql = f'''
                             INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                            VALUES (0, GeomFromText(?, ?), ST_Buffer(GeomFromText(?, ?), ?))
-                        ''', (source_wkt, source_srid, source_wkt, source_srid, buffer_value))
+                            VALUES (0, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), 
+                                    ST_Buffer(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), {buffer_value}))
+                        '''
+                        self.log_info(f"  → Inserting geometry with {SPATIALITE_GEOM_INSERT_TIMEOUT}s timeout...")
+                        interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
+                        _, error = interruptible.execute(
+                            timeout=SPATIALITE_GEOM_INSERT_TIMEOUT,
+                            cancel_check=self._is_task_canceled
+                        )
+                        if error:
+                            error_msg = str(error)
+                            if "timeout" in error_msg.lower():
+                                self.log_error(f"Geometry insert timeout after {SPATIALITE_GEOM_INSERT_TIMEOUT}s - geometry too complex")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"GeomFromText timeout - geometry too complex ({len(simplified_wkt):,} chars). Try OGR backend.",
+                                    "FilterMate", Qgis.Warning
+                                )
+                            elif "cancelled" in error_msg.lower():
+                                self.log_info("Geometry insert cancelled by user")
+                            else:
+                                self.log_error(f"Geometry insert error: {error}")
+                            raise Exception(f"Geometry insert failed: {error}")
                 else:
                     if needs_spatialite_simplify:
                         cursor.execute(f'''
                             INSERT INTO "{table_name}" (source_fid, geom)
                             VALUES (0, ST_Simplify(GeomFromText(?, ?), ?))
-                        ''', (source_wkt, source_srid, simplify_tolerance))
+                        ''', (simplified_wkt, source_srid, simplify_tolerance))
                     else:
-                        cursor.execute(f'''
+                        # v2.8.7: Use interruptible insert with timeout for large geometries
+                        insert_sql = f'''
                             INSERT INTO "{table_name}" (source_fid, geom)
-                            VALUES (0, GeomFromText(?, ?))
-                        ''', (source_wkt, source_srid))
+                            VALUES (0, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}))
+                        '''
+                        self.log_info(f"  → Inserting geometry with {SPATIALITE_GEOM_INSERT_TIMEOUT}s timeout...")
+                        interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
+                        _, error = interruptible.execute(
+                            timeout=SPATIALITE_GEOM_INSERT_TIMEOUT,
+                            cancel_check=self._is_task_canceled
+                        )
+                        if error:
+                            error_msg = str(error)
+                            if "timeout" in error_msg.lower():
+                                self.log_error(f"Geometry insert timeout after {SPATIALITE_GEOM_INSERT_TIMEOUT}s - geometry too complex")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"GeomFromText timeout - geometry too complex ({len(simplified_wkt):,} chars). Try OGR backend.",
+                                    "FilterMate", Qgis.Warning
+                                )
+                            elif "cancelled" in error_msg.lower():
+                                self.log_info("Geometry insert cancelled by user")
+                            else:
+                                self.log_error(f"Geometry insert error: {error}")
+                            raise Exception(f"Geometry insert failed: {error}")
                 inserted_count = 1
             
             conn.commit()
@@ -1429,6 +1593,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             finally:
                 self._temp_table_name = None
                 self._temp_table_conn = None
+        
+        # v2.8.7: Clean up FID tables created for large result sets
+        self._cleanup_fid_tables()
     
     def build_expression(
         self,
@@ -2282,6 +2449,192 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         # Use MbrIntersects for fast bbox check (uses R-tree if available)
         return f"MbrIntersects({geom_expr}, GeomFromText('{bbox_wkt}', {srid})) = 1"
     
+    # v2.8.7: Threshold for using FID table instead of IN expression
+    # Above this, setSubsetString with IN(...) causes QGIS freeze
+    LARGE_FID_TABLE_THRESHOLD = 20000
+    FID_TABLE_PREFIX = "_fm_fids_"
+    
+    def _create_fid_table(self, db_path: str, fids: List[int]) -> Optional[str]:
+        """
+        v2.8.7: Create a temporary table with FIDs in the GeoPackage.
+        
+        For very large result sets (>20K FIDs), using IN(...) in setSubsetString
+        causes QGIS to freeze while parsing the expression. Creating a table
+        with FIDs and using EXISTS subquery is much faster.
+        
+        Args:
+            db_path: Path to GeoPackage database
+            fids: List of FIDs to store
+        
+        Returns:
+            Table name if created, None on failure
+        """
+        conn = None
+        try:
+            import uuid
+            timestamp = int(time.time())
+            table_name = f"{self.FID_TABLE_PREFIX}{timestamp}_{uuid.uuid4().hex[:6]}"
+            
+            self.log_info(f"📦 Creating FID table '{table_name}' with {len(fids):,} FIDs...")
+            
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Create simple FID table
+            cursor.execute(f'''
+                CREATE TABLE "{table_name}" (
+                    fid INTEGER PRIMARY KEY
+                )
+            ''')
+            
+            # Batch insert FIDs for performance
+            batch_size = 1000
+            for i in range(0, len(fids), batch_size):
+                batch = fids[i:i + batch_size]
+                placeholders = ",".join(["(?)"] * len(batch))
+                cursor.execute(f'INSERT INTO "{table_name}" (fid) VALUES {placeholders}', batch)
+            
+            conn.commit()
+            conn.close()
+            
+            self.log_info(f"  ✓ FID table created: {table_name}")
+            
+            # Store for cleanup
+            if not hasattr(self, '_fid_tables'):
+                self._fid_tables = []
+            self._fid_tables.append((db_path, table_name))
+            
+            return table_name
+            
+        except Exception as e:
+            self.log_error(f"Failed to create FID table: {e}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            return None
+    
+    def _build_fid_table_filter(self, db_path: str, pk_col: str, fids: List[int]) -> Optional[str]:
+        """
+        v2.8.7: Build filter using FID table for large result sets.
+        
+        Instead of: fid IN (1,2,3,...235000)  <- freezes QGIS
+        Uses:       fid IN (SELECT fid FROM _fm_fids_xxx)  <- fast
+        
+        Args:
+            db_path: Path to GeoPackage
+            pk_col: Primary key column name
+            fids: List of matching FIDs
+        
+        Returns:
+            SQL expression or None if table creation failed
+        """
+        table_name = self._create_fid_table(db_path, fids)
+        if not table_name:
+            return None
+        
+        # Use subquery instead of massive IN list
+        return f'"{pk_col}" IN (SELECT fid FROM "{table_name}")'
+    
+    def _cleanup_fid_tables(self):
+        """v2.8.7: Clean up FID tables created during filtering."""
+        if not hasattr(self, '_fid_tables'):
+            return
+        
+        for db_path, table_name in self._fid_tables:
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                conn.commit()
+                conn.close()
+                self.log_debug(f"Cleaned up FID table: {table_name}")
+            except Exception as e:
+                self.log_debug(f"Failed to cleanup FID table {table_name}: {e}")
+        
+        self._fid_tables = []
+    
+    def _build_range_based_filter(self, pk_col: str, fids: List[int]) -> str:
+        """
+        v2.8.7: Build FID filter using BETWEEN ranges for consecutive FIDs.
+        
+        This is MUCH more compact than IN() for large consecutive FID sets.
+        For 235K FIDs that are mostly consecutive, this can reduce expression
+        size from ~1.5MB to ~10KB or less.
+        
+        Example: [1,2,3,4,5,8,9,10,15] becomes:
+            ("fid" BETWEEN 1 AND 5) OR ("fid" BETWEEN 8 AND 10) OR "fid" = 15
+        
+        Args:
+            pk_col: Primary key column name
+            fids: List of FIDs to filter
+        
+        Returns:
+            SQL expression using BETWEEN ranges
+        """
+        if not fids:
+            return f'"{pk_col}" = -1'  # No match
+        
+        sorted_fids = sorted(set(fids))  # Remove duplicates and sort
+        
+        # Find consecutive ranges
+        ranges = []
+        singles = []
+        
+        i = 0
+        while i < len(sorted_fids):
+            start = sorted_fids[i]
+            end = start
+            
+            # Extend range while consecutive
+            while i + 1 < len(sorted_fids) and sorted_fids[i + 1] == end + 1:
+                i += 1
+                end = sorted_fids[i]
+            
+            if start == end:
+                singles.append(start)
+            else:
+                ranges.append((start, end))
+            
+            i += 1
+        
+        # Build expression parts
+        parts = []
+        
+        # Add BETWEEN ranges
+        for start, end in ranges:
+            if end - start >= 2:
+                # Use BETWEEN for ranges of 3+ consecutive FIDs
+                parts.append(f'("{pk_col}" BETWEEN {start} AND {end})')
+            else:
+                # For ranges of 2, just add to singles
+                singles.append(start)
+                singles.append(end)
+        
+        # Group singles into chunks to avoid too many OR clauses
+        if singles:
+            # Chunk singles into groups of 1000 for IN()
+            chunk_size = 1000
+            for i in range(0, len(singles), chunk_size):
+                chunk = singles[i:i + chunk_size]
+                parts.append(f'"{pk_col}" IN ({", ".join(str(f) for f in chunk)})')
+        
+        if not parts:
+            return f'"{pk_col}" = -1'
+        
+        result = "(" + " OR ".join(parts) + ")"
+        
+        # Log compression stats
+        original_chars = len(", ".join(str(f) for f in sorted_fids))
+        new_chars = len(result)
+        compression = (1 - new_chars / original_chars) * 100 if original_chars > 0 else 0
+        
+        self.log_info(f"  📊 RANGE filter: {len(ranges)} ranges + {len(singles)} singles")
+        self.log_info(f"  📊 Compression: {original_chars:,} → {new_chars:,} chars ({compression:.1f}% reduction)")
+        
+        return result
+    
     def _build_chunked_fid_filter(self, pk_col: str, fids: List[int], chunk_size: int = 5000) -> str:
         """
         v2.6.5: Build FID filter with chunked IN clauses to prevent expression parsing freeze.
@@ -2522,12 +2875,38 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
             # Build the SELECT query
             # The expression is the WHERE clause from build_expression
+            
+            # v2.8.8: CRITICAL FIX - Include old_subset FID filter in SQL query
+            # When re-filtering (e.g., adding buffer), old_subset may contain a FID filter
+            # from the previous filtering. If we don't include it, we query ALL features
+            # instead of just the previously filtered ones, returning wrong results.
+            old_subset_sql_filter = ""
+            if old_subset:
+                old_subset_upper = old_subset.upper()
+                # Check if old_subset is a simple FID filter (not spatial predicate)
+                has_source_alias = '__source' in old_subset.lower()
+                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                spatial_predicates = [
+                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                    'INTERSECTS', 'CONTAINS', 'WITHIN', 'GEOMFROMTEXT', 'GEOMFROMGPB'
+                ]
+                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                
+                if not has_source_alias and not has_exists and not has_spatial_predicate:
+                    # old_subset is a simple filter (likely FID-based) - include it in SQL
+                    old_subset_sql_filter = f"({old_subset}) AND "
+                    self.log_info(f"  → Including previous FID filter in SQL query")
+                else:
+                    # old_subset contains spatial predicates - will be replaced, not combined
+                    self.log_info(f"  → Old subset has spatial predicates - will be replaced")
+            
             if use_bbox_prefilter and bbox_filter:
                 # Use two-stage filtering: fast bbox check first, then precise geometry test
-                select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE ({bbox_filter}) AND ({expression})'
+                select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {old_subset_sql_filter}({bbox_filter}) AND ({expression})'
                 self.log_info(f"  → Using two-stage filter: bbox → geometry")
             else:
-                select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {expression}'
+                select_query = f'SELECT "{pk_col}" FROM "{table_name}" WHERE {old_subset_sql_filter}{expression}'
             
             self.log_info(f"  → Direct SQL query: {select_query[:200]}...")
             # v2.6.4: Also log to QgsMessageLog for visibility
@@ -2600,34 +2979,43 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
                 fid_expression = 'fid = -1'  # No valid FID is -1
                 self.log_info(f"  → No matching features, applying: {fid_expression}")
-            elif len(matching_fids) > 50000:
-                # v2.6.5: VERY large result set - check if we can use range-based filter
-                # If FIDs are mostly consecutive, a range is much more efficient
+            elif len(matching_fids) >= self.LARGE_FID_TABLE_THRESHOLD:
+                # v2.8.7: CRITICAL FIX - Use FID table with subquery for large result sets
+                # This avoids massive IN() expressions that freeze QGIS
+                
+                # Analyze FID distribution
                 sorted_fids = sorted(matching_fids)
                 min_fid, max_fid = sorted_fids[0], sorted_fids[-1]
                 fid_range = max_fid - min_fid + 1
                 coverage = len(matching_fids) / fid_range if fid_range > 0 else 0
                 
-                if coverage >= 0.8:
-                    # 80%+ coverage - use range filter (much faster to parse)
-                    # Find excluded FIDs (smaller list)
+                self.log_info(f"  📊 FID analysis: {len(matching_fids):,} FIDs in range {min_fid}-{max_fid} ({coverage*100:.1f}% coverage)")
+                
+                if coverage >= 0.95 and len(matching_fids) > 50000:
+                    # 95%+ coverage - use simple range with exclusions (most efficient)
                     all_in_range = set(range(min_fid, max_fid + 1))
                     excluded_fids = all_in_range - set(sorted_fids)
                     
                     if len(excluded_fids) < 1000:
-                        # Few exclusions - use range with NOT IN
+                        # Very few exclusions - use range with NOT IN
                         if excluded_fids:
                             excluded_str = ", ".join(str(f) for f in sorted(excluded_fids))
                             fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid} AND "{pk_col}" NOT IN ({excluded_str}))'
                         else:
                             fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid})'
-                        self.log_info(f"  📊 Using RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
+                        self.log_info(f"  📊 Using SIMPLE RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
                     else:
-                        # Too many exclusions, fall back to chunked IN
-                        fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                        # Many exclusions - use FID table with subquery
+                        fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
+                        if not fid_expression:
+                            self.log_warning("FID table creation failed, falling back to range-based filter")
+                            fid_expression = self._build_range_based_filter(pk_col, matching_fids)
                 else:
-                    # Sparse FIDs - use chunked IN filter
-                    fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                    # Sparse FIDs - use FID table with subquery
+                    fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
+                    if not fid_expression:
+                        self.log_warning("FID table creation failed, falling back to range-based filter")
+                        fid_expression = self._build_range_based_filter(pk_col, matching_fids)
                     
             elif len(matching_fids) > 10000:
                 # Large result set - warn but still use IN filter
@@ -3109,13 +3497,38 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Choose the best pre-filter (R-tree is preferred)
             final_prefilter = rtree_prefilter if rtree_prefilter else bbox_prefilter
             
+            # v2.8.8: CRITICAL FIX - Include old_subset FID filter in SQL query
+            # When re-filtering (e.g., adding buffer), old_subset may contain a FID filter
+            # from the previous filtering. If we don't include it, we query ALL features
+            # instead of just the previously filtered ones, returning wrong results.
+            old_subset_sql_filter = ""
+            if old_subset:
+                old_subset_upper = old_subset.upper()
+                # Check if old_subset is a simple FID filter (not spatial predicate)
+                has_source_alias = '__source' in old_subset.lower()
+                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
+                spatial_predicates = [
+                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
+                    'INTERSECTS', 'CONTAINS', 'WITHIN', 'GEOMFROMTEXT', 'GEOMFROMGPB'
+                ]
+                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
+                
+                if not has_source_alias and not has_exists and not has_spatial_predicate:
+                    # old_subset is a simple filter (likely FID-based) - include it in SQL
+                    old_subset_sql_filter = f"({old_subset}) AND "
+                    self.log_info(f"  → Including previous FID filter in SQL query")
+                else:
+                    # old_subset contains spatial predicates - will be replaced, not combined
+                    self.log_info(f"  → Old subset has spatial predicates - will be replaced")
+            
             # Build EXISTS query with optional bbox pre-filter
             # The bbox filter uses target R-tree index for O(log n) initial filtering
             predicates_sql = ' OR '.join(predicate_conditions)
             select_query = f'''
                 SELECT t."{pk_col}" 
                 FROM "{target_table}" t
-                WHERE {final_prefilter}EXISTS (
+                WHERE {old_subset_sql_filter}{final_prefilter}EXISTS (
                     SELECT 1 FROM "{source_table}" s 
                     WHERE {predicates_sql}
                 )
@@ -3315,15 +3728,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     f"⚠️ {layer.name()}: 0 features matched - applying empty filter (fid = -1)",
                     "FilterMate", Qgis.Warning
                 )
-            elif len(matching_fids) > 50000:
-                # Very large result - check if range-based filter is viable
+            elif len(matching_fids) >= self.LARGE_FID_TABLE_THRESHOLD:
+                # v2.8.7: CRITICAL FIX - Use FID table with subquery for large result sets
                 sorted_fids = sorted(matching_fids)
                 min_fid, max_fid = sorted_fids[0], sorted_fids[-1]
                 fid_range = max_fid - min_fid + 1
                 coverage = len(matching_fids) / fid_range if fid_range > 0 else 0
                 
-                if coverage >= 0.8:
-                    # High coverage - use range with exclusions
+                self.log_info(f"  📊 FID analysis: {len(matching_fids):,} FIDs in range {min_fid}-{max_fid} ({coverage*100:.1f}% coverage)")
+                
+                if coverage >= 0.95 and len(matching_fids) > 50000:
+                    # Very high coverage - try simple range filter (most efficient)
                     all_in_range = set(range(min_fid, max_fid + 1))
                     excluded_fids = all_in_range - set(sorted_fids)
                     
@@ -3333,11 +3748,19 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                             fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid} AND "{pk_col}" NOT IN ({excluded_str}))'
                         else:
                             fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid})'
-                        self.log_info(f"  📊 Using RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
+                        self.log_info(f"  📊 Using SIMPLE RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
                     else:
-                        fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                        # Many exclusions - use FID table with subquery
+                        fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
+                        if not fid_expression:
+                            self.log_warning("FID table creation failed, falling back to range-based filter")
+                            fid_expression = self._build_range_based_filter(pk_col, matching_fids)
                 else:
-                    fid_expression = self._build_chunked_fid_filter(pk_col, matching_fids)
+                    # Sparse FIDs - use FID table with subquery
+                    fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
+                    if not fid_expression:
+                        self.log_warning("FID table creation failed, falling back to range-based filter")
+                        fid_expression = self._build_range_based_filter(pk_col, matching_fids)
             else:
                 fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
             
