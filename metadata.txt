@@ -19,7 +19,7 @@ about=FilterMate v2.9.2 - Centroid & Simplification Optimizations
  - 🚀 PERF: 2-10x faster buffer operations on simplified geometries
 
  Previous in v2.9.1:
- - 🚀 PERF: INCLUDE clause in GIST indexes (PostgreSQL 11+) for 10-30% faster spatial queries
+ - 🚀 PERF: INCLUDE clause in GIST indexes (PostgreSQL 11+) for 10-30%% faster spatial queries
  - 📦 PERF: Bbox pre-filter column for ultra-fast && operator checks (2-5x faster)
  - ⚡ PERF: Async CLUSTER for medium datasets (50k-100k features) - non-blocking
  - 📊 PERF: Extended statistics for better query plans (PostgreSQL 10+)
