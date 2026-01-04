@@ -2,6 +2,14 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.8.6] - 2026-01-04 - Version Bump
+
+### 📦 Release
+
+Version bump release.
+
+---
+
 ## [2.8.5] - 2026-01-04 - Version Bump
 
 ### 📦 Release
