@@ -10023,10 +10023,16 @@ class FilterEngineTask(QgsTask):
         """
         Execute filter action using PostgreSQL backend.
         
-        Adapts filtering strategy based on dataset size:
-        - Small datasets (< 10k features): Uses direct setSubsetString for simplicity
+        Adapts filtering strategy based on dataset size and expression complexity:
+        - Small datasets (< 10k features) with simple expressions: Uses direct setSubsetString
         - Large datasets (≥ 10k features): Uses materialized views for performance
         - Custom buffer expressions: Always uses materialized views
+        - Complex expressions (EXISTS + ST_Buffer + ST_Intersects): Always uses materialized views
+          to avoid re-execution on each canvas interaction (pan, zoom, render)
+        
+        v2.8.6: Added expression complexity detection - complex spatial predicates with
+        EXISTS clauses and ST_Buffer are now always materialized to prevent slow canvas
+        rendering caused by re-executing expensive queries on each feature request.
         
         Args:
             layer: QgsVectorLayer to filter
@@ -10048,14 +10054,25 @@ class FilterEngineTask(QgsTask):
         # Threshold for using materialized views (10,000 features)
         MATERIALIZED_VIEW_THRESHOLD = 10000
         
-        # Decide on strategy based on dataset size and filter type
+        # v2.8.6: Check if expression contains complex spatial predicates that are expensive
+        # to re-execute on each canvas interaction. These patterns require materialization
+        # to cache the result and avoid slow rendering.
+        has_complex_expression = self._has_expensive_spatial_expression(sql_subset_string)
+        
+        # Decide on strategy based on dataset size, filter type, and expression complexity
         # Custom buffer filters always need materialized views for geometry operations
-        use_materialized_view = custom or feature_count >= MATERIALIZED_VIEW_THRESHOLD
+        # Complex expressions need materialization to avoid slow canvas rendering
+        use_materialized_view = custom or feature_count >= MATERIALIZED_VIEW_THRESHOLD or has_complex_expression
         
         if use_materialized_view:
             # Log strategy decision
             if custom:
                 logger.info(f"PostgreSQL: Using materialized views for custom buffer expression")
+            elif has_complex_expression:
+                logger.info(
+                    f"PostgreSQL: Complex spatial expression detected (EXISTS/ST_Buffer/ST_Intersects). "
+                    f"Using materialized views to cache result and prevent slow canvas rendering."
+                )
             elif feature_count >= 100000:
                 logger.info(
                     f"PostgreSQL: Very large dataset ({feature_count:,} features). "
@@ -10656,6 +10673,80 @@ class FilterEngineTask(QgsTask):
                 # FIX v2.3.9: Reset prepared statements manager when connection closes
                 # to avoid "Cannot operate on a closed database" errors
                 self._ps_manager = None
+
+    def _has_expensive_spatial_expression(self, sql_string: str) -> bool:
+        """
+        Detect if a SQL expression contains expensive spatial predicates that should be materialized.
+        
+        v2.8.6: Added to prevent slow canvas rendering caused by re-executing expensive
+        spatial queries on each canvas interaction (pan, zoom, render tiles).
+        
+        When a layer's subsetString contains an expression like:
+            ("fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx")) 
+            AND 
+            (EXISTS (SELECT 1 FROM "table" WHERE ST_Intersects(..., ST_Buffer(...))))
+        
+        PostgreSQL must re-execute the expensive EXISTS + ST_Buffer + ST_Intersects
+        query for EVERY feature request from QGIS. This causes:
+        - Slow rendering when panning/zooming
+        - Features appearing slowly on the canvas
+        - Poor user experience
+        
+        Solution: Materialize the result in a MV and use a simple "fid IN (SELECT pk FROM mv)"
+        as the subsetString. The expensive query is executed ONCE during MV creation.
+        
+        Expensive patterns detected:
+        - EXISTS with ST_Intersects/ST_Contains/ST_Within
+        - EXISTS with ST_Buffer
+        - Combination of MV reference AND EXISTS clause
+        
+        Args:
+            sql_string: SQL expression or SELECT statement to analyze
+            
+        Returns:
+            True if expression contains expensive patterns that should be materialized
+        """
+        if not sql_string:
+            return False
+        
+        sql_upper = sql_string.upper()
+        
+        # Pattern 1: EXISTS clause with spatial predicate - always expensive
+        # These are evaluated for every row and cannot use indexes efficiently in subqueries
+        has_exists = 'EXISTS' in sql_upper or 'EXISTS(' in sql_upper
+        has_spatial_predicate = any(pred in sql_upper for pred in [
+            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+            'ST_OVERLAPS', 'ST_CROSSES', 'ST_COVERS', 'ST_COVEREDBY'
+        ])
+        
+        # Pattern 2: ST_Buffer in subquery - very expensive as buffer is computed for each row
+        has_buffer = 'ST_BUFFER' in sql_upper
+        
+        # Pattern 3: Combination patterns that are particularly expensive
+        # EXISTS + spatial predicate = expensive (re-evaluated per row)
+        if has_exists and has_spatial_predicate:
+            logger.debug(f"Detected expensive pattern: EXISTS + spatial predicate")
+            return True
+        
+        # EXISTS + ST_Buffer = very expensive (buffer computed per row)
+        if has_exists and has_buffer:
+            logger.debug(f"Detected expensive pattern: EXISTS + ST_Buffer")
+            return True
+        
+        # Pattern 4: MV reference AND EXISTS - this is the multi-step filter case
+        # Example: ("fid" IN (SELECT "pk" FROM "mv_xxx")) AND (EXISTS (...ST_Intersects...))
+        has_mv_reference = 'FILTERMATE_MV_' in sql_upper or 'MV_' in sql_upper
+        if has_mv_reference and has_exists:
+            logger.debug(f"Detected expensive pattern: MV reference + EXISTS clause")
+            return True
+        
+        # Pattern 5: __source alias with spatial predicate - indicates EXISTS subquery pattern
+        has_source_alias = '__SOURCE' in sql_upper
+        if has_source_alias and has_spatial_predicate:
+            logger.debug(f"Detected expensive pattern: __source alias + spatial predicate")
+            return True
+        
+        return False
 
     def _is_complex_filter(self, subset: str, provider_type: str) -> bool:
         """

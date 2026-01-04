@@ -20,7 +20,7 @@ Note:
     - PSYCOPG2_AVAILABLE depends on psycopg2 installation (for advanced features)
 
 Author: FilterMate Team
-Version: 2.8.6 (January 2026)
+Version: 2.8.7 (January 2026)
 """
 
 import logging

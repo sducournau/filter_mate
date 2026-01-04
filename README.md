@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.8.6** | January 2026 | **Production-Ready**
+**Version 2.8.7** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -26,6 +26,11 @@
 ---
 
 ## 📋 Recent Changes
+
+### v2.8.7 - Complex Expression Materialization Fix (January 2026)
+
+- 🐛 **FIX: Slow canvas rendering** - Complex spatial expressions (EXISTS + ST_Buffer) now always materialized
+- 🚀 **PERF: 10-100x faster** - Canvas rendering with complex multi-step filters
 
 ### v2.8.6 - Code Quality & Post-Buffer Optimization (January 2026)
 

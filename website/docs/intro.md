@@ -5,27 +5,19 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.8.6** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v2.8.7** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
-## 🎉 What's New in v2.8.6 - Code Quality & Post-Buffer Optimization
+## 🎉 What's New in v2.8.7 - Complex Expression Materialization Fix
 
-This release focuses on code quality improvements and performance optimization for buffer operations.
+This release fixes a critical performance issue with complex multi-step filters.
 
-### 🚀 New Feature: Post-Buffer Simplification
+### 🐛 Fix: Slow Canvas Rendering
 
-- Automatic geometry simplification after buffer operations
-- Reduces vertex count for complex polygons
-- New config options: `auto_simplify_after_buffer`, `buffer_simplify_after_tolerance`
+- Complex spatial expressions (EXISTS + ST_Buffer) now always materialized
+- 10-100x faster canvas rendering with complex multi-step filters
+- Eliminates "features appearing slowly" issue after geometric filtering
 
-### ♻️ Code Quality Improvements
-
-| Change                          | Impact                                           |
-| ------------------------------- | ------------------------------------------------ |
-| **Centralized psycopg2**        | New `psycopg2_availability.py` for clean imports |
-| **Deduplicated buffer methods** | ~230 lines removed, moved to `base_backend.py`   |
-| **Standardized message bars**   | Centralized via `feedback_utils`                 |
-
-## 🎉 What's in v2.8.0 - Enhanced Auto-Optimization System
+## 🎉 What's in v2.8.6 - Code Quality & Post-Buffer Optimization
 
 This major release introduces an **Enhanced Auto-Optimization System** that significantly improves filtering performance through intelligent optimization strategies.
 

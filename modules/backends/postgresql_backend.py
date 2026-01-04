@@ -180,6 +180,81 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.mv_schema = "public"  # Default schema for materialized views
         self.mv_prefix = "filtermate_mv_"  # Prefix for MV names
 
+    def _has_expensive_spatial_expression(self, sql_string: str) -> bool:
+        """
+        Detect if a SQL expression contains expensive spatial predicates that require materialization.
+        
+        v2.8.7: Added to prevent slow canvas rendering caused by re-executing expensive
+        spatial queries on each canvas interaction (pan, zoom, render tiles).
+        
+        When a layer's subsetString contains complex spatial expressions like:
+            ("fid" IN (SELECT "pk" FROM "public"."filtermate_mv_xxx")) 
+            AND 
+            (EXISTS (SELECT 1 FROM "table" WHERE ST_Intersects(..., ST_Buffer(...))))
+        
+        PostgreSQL must re-execute the expensive EXISTS + ST_Buffer + ST_Intersects
+        query for EVERY feature request from QGIS. This causes:
+        - Slow rendering when panning/zooming
+        - Features appearing slowly on the canvas
+        - Poor user experience
+        
+        Solution: Force materialization even for small datasets when expression is complex.
+        The expensive query is executed ONCE during MV creation.
+        
+        Expensive patterns detected:
+        - EXISTS with ST_Intersects/ST_Contains/ST_Within
+        - EXISTS with ST_Buffer
+        - Combination of MV reference AND EXISTS clause (multi-step filter)
+        - __source alias with spatial predicate
+        
+        Args:
+            sql_string: SQL expression to analyze
+            
+        Returns:
+            True if expression contains expensive patterns requiring materialization
+        """
+        if not sql_string:
+            return False
+        
+        sql_upper = sql_string.upper()
+        
+        # Pattern 1: EXISTS clause with spatial predicate - always expensive
+        # These are evaluated for every row and cannot use indexes efficiently in subqueries
+        has_exists = 'EXISTS' in sql_upper or 'EXISTS(' in sql_upper
+        has_spatial_predicate = any(pred in sql_upper for pred in [
+            'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
+            'ST_OVERLAPS', 'ST_CROSSES', 'ST_COVERS', 'ST_COVEREDBY'
+        ])
+        
+        # Pattern 2: ST_Buffer in subquery - very expensive as buffer is computed for each row
+        has_buffer = 'ST_BUFFER' in sql_upper
+        
+        # Pattern 3: Combination patterns that are particularly expensive
+        # EXISTS + spatial predicate = expensive (re-evaluated per row)
+        if has_exists and has_spatial_predicate:
+            self.log_debug(f"Detected expensive pattern: EXISTS + spatial predicate")
+            return True
+        
+        # EXISTS + ST_Buffer = very expensive (buffer computed per row)
+        if has_exists and has_buffer:
+            self.log_debug(f"Detected expensive pattern: EXISTS + ST_Buffer")
+            return True
+        
+        # Pattern 4: MV reference AND EXISTS - this is the multi-step filter case
+        # Example: ("fid" IN (SELECT "pk" FROM "mv_xxx")) AND (EXISTS (...ST_Intersects...))
+        has_mv_reference = 'FILTERMATE_MV_' in sql_upper or 'MV_' in sql_upper
+        if has_mv_reference and has_exists:
+            self.log_debug(f"Detected expensive pattern: MV reference + EXISTS clause")
+            return True
+        
+        # Pattern 5: __source alias with spatial predicate - indicates EXISTS subquery pattern
+        has_source_alias = '__SOURCE' in sql_upper
+        if has_source_alias and has_spatial_predicate:
+            self.log_debug(f"Detected expensive pattern: __source alias + spatial predicate")
+            return True
+        
+        return False
+
     # Note: _get_buffer_endcap_style(), _get_buffer_segments(), _get_simplify_tolerance()
     # are inherited from GeometricFilterBackend (v2.8.6 refactoring)
     
@@ -1586,8 +1661,21 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                     )
                 
                 return self._apply_with_materialized_view(layer, final_expression)
+            
+            # v2.8.7: Check if expression contains expensive spatial predicates
+            # that require materialization even for small datasets.
+            # This prevents slow canvas rendering from re-executing EXISTS + ST_Buffer
+            # on every pan/zoom/render operation.
+            elif self._has_expensive_spatial_expression(final_expression):
+                self.log_info(
+                    f"PostgreSQL: Complex spatial expression detected (EXISTS/ST_Buffer/ST_Intersects) "
+                    f"on {feature_count:,} features. Using materialized views to cache result "
+                    f"and prevent slow canvas rendering."
+                )
+                return self._apply_with_materialized_view(layer, final_expression)
+            
             else:
-                # Small dataset - use direct setSubsetString
+                # Small dataset with simple expression - use direct setSubsetString
                 self.log_info(
                     f"PostgreSQL: Small dataset ({feature_count:,} features < {self.MATERIALIZED_VIEW_THRESHOLD:,}). "
                     f"Using direct setSubsetString for simplicity."

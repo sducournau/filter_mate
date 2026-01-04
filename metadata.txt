@@ -6,13 +6,13 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.8.6
+version=2.8.7
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.8.6 - Code Quality & Post-Buffer Optimization
+about=FilterMate v2.8.7 - Complex Expression Materialization Fix
 
- NEW in v2.8.6:
+ NEW in v2.8.7:
  - 🚀 NEW: Post-buffer simplification optimization (reduces vertex count after buffer ops)
  - 📦 NEW: Centralized psycopg2 imports via modules/psycopg2_availability.py
  - ♻️ REFACTOR: Deduplicated buffer methods moved to base_backend.py (~230 lines removed)
