@@ -148,6 +148,10 @@ Uruchom ponownie QGIS, aby zastosować wszystkie zmiany.</translation>
         <translation>nie-wielokąt</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Wartość bufora w metrach (tylko dodatnia gdy centroidy są włączone. Ujemne bufory nie mogą być stosowane do punktów)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Tryb wsadowy</translation>
     </message>
@@ -726,6 +730,14 @@ Pierwszy atrybut: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Użyj centroidów</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Użyj centroidów dla odległych warstw</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Włącz typ bufora</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

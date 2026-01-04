@@ -3531,11 +3531,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Check if centroid is already enabled by user (via checkbox or layer override)
             user_centroid_enabled = self._is_centroid_already_enabled(current_layer)
             
+            # v2.8.9: Get buffer status to properly evaluate centroid recommendations
+            # Don't recommend centroids for polygon source layer when buffer is active
+            has_buffer = False
+            has_buffer_type = False
+            try:
+                buffer_value = self.mQgsDoubleSpinBox_filtering_buffer_value.value()
+                has_buffer = buffer_value != 0.0
+                has_buffer_type = getattr(self, 'checkBox_filtering_buffer_type', None) and \
+                                  self.checkBox_filtering_buffer_type.isChecked()
+            except Exception:
+                pass
+            
             # Get recommendations - skip centroid if already enabled
+            # v2.8.9: Pass buffer parameters and is_source_layer=True for source layer
             optimizer = AutoOptimizer()
             recommendations = optimizer.get_recommendations(
                 layer_analysis, 
-                user_centroid_enabled=user_centroid_enabled
+                user_centroid_enabled=user_centroid_enabled,
+                has_buffer=has_buffer,
+                has_buffer_type=has_buffer_type,
+                is_source_layer=True
             )
             
             if not recommendations:
@@ -3564,7 +3580,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 
                 # Apply selected optimizations
                 applied = []
-                if selected.get('use_centroid', False):
+                if selected.get('use_centroid_distant', False):
                     # Store centroid preference for this layer
                     if not hasattr(self, '_layer_centroid_overrides'):
                         self._layer_centroid_overrides = {}
@@ -5026,7 +5042,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "SOURCE_LAYER_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_source_layer_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='source_layer_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
                                     "OTHER_LAYERS_COMBINE_OPERATOR":{"TYPE":"ComboBox", "WIDGET":self.comboBox_filtering_other_layers_combine_operator, "SIGNALS":[("currentIndexChanged", lambda index, x='other_layers_combine_operator': self.layer_property_changed(x, self._index_to_combine_operator(index)))]},
                                     "GEOMETRIC_PREDICATES":{"TYPE":"CheckableComboBox", "WIDGET":self.comboBox_filtering_geometric_predicates, "SIGNALS":[("checkedItemsChanged", lambda state, x='geometric_predicates': self.layer_property_changed(x, state))]},
-                                    "USE_CENTROIDS_SOURCE_LAYER":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_source_layer, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_source_layer': self.layer_property_changed(x, bool(state)))]},
+                                    "USE_CENTROIDS_SOURCE_LAYER":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_source_layer, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_source_layer', custom_functions={"ON_CHANGE": lambda x: self._update_buffer_validation()}: self.layer_property_changed(x, bool(state), custom_functions))]},
                                     "USE_CENTROIDS_DISTANT_LAYERS":{"TYPE":"CheckBox", "WIDGET":self.checkBox_filtering_use_centroids_distant_layers, "SIGNALS":[("stateChanged", lambda state, x='use_centroids_distant_layers': self.layer_property_changed(x, bool(state)))]},
                                     "BUFFER_VALUE":{"TYPE":"QgsDoubleSpinBox", "WIDGET":self.mQgsDoubleSpinBox_filtering_buffer_value, "SIGNALS":[("valueChanged", lambda state, x='buffer_value': self.layer_property_changed_with_buffer_style(x, state))]},
                                     "BUFFER_VALUE_PROPERTY":{"TYPE":"PropertyOverrideButton", "WIDGET":self.mPropertyOverrideButton_filtering_buffer_value_property, "SIGNALS":[("changed", lambda state=None, x='buffer_value_property', custom_functions={"ON_CHANGE": lambda x: self.filtering_buffer_property_changed(), "CUSTOM_DATA": lambda x: self.get_buffer_property_state()}: self.layer_property_changed(x, state, custom_functions))]},
@@ -10181,7 +10197,32 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Check if geometry is polygon/multipolygon
                 is_polygon = geom_type == QgsWkbTypes.PolygonGeometry
                 
-                if not is_polygon:
+                # v2.8.9: Check if centroids are enabled for source layer
+                # When using centroids, the source layer becomes points, so negative buffer not allowed
+                use_centroids_source = False
+                if hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
+                    use_centroids_source = self.checkBox_filtering_use_centroids_source_layer.isChecked()
+                
+                if use_centroids_source:
+                    # Centroids enabled: source layer is effectively points, no negative buffer
+                    min_value = 0.0
+                    tooltip = self.tr(
+                        "Buffer value in meters (positive only when centroids are enabled. "
+                        "Negative buffers cannot be applied to points)"
+                    )
+                    
+                    # If current value is negative, reset to 0
+                    current_value = spinbox.value()
+                    if current_value < 0:
+                        logger.info(f"Resetting negative buffer to 0: centroids enabled for source layer")
+                        spinbox.setValue(0.0)
+                        
+                        # Update PROJECT_LAYERS if layer exists
+                        if hasattr(self, 'current_layer') and self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
+                            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["buffer_value"] = 0.0
+                    
+                    logger.debug(f"Buffer validation: Centroids enabled, negative buffers disabled")
+                elif not is_polygon:
                     # Point or Line geometry: disable negative buffers
                     min_value = 0.0
                     

@@ -175,7 +175,7 @@ class OptimizationRecommendationDialog(QDialog):
         """Get human-readable text for optimization type."""
         faster = tr("faster")
         opt_names = {
-            'use_centroid': f"{tr('Use centroids')} ({speedup:.0f}x {faster})",
+            'use_centroid_distant': f"{tr('Use centroids for distant layers')} ({speedup:.0f}x {faster})",
             'simplify_geometry': f"{tr('Simplify geometries')} ({speedup:.0f}x {faster}) ⚠️",
             'simplify_before_buffer': f"{tr('Simplify before buffer')} ({speedup:.0f}x {faster})",
             'reduce_buffer_segments': f"{tr('Reduce buffer segments')} ({speedup:.0f}x {faster})",
@@ -414,7 +414,7 @@ def show_optimization_hint(layer_name: str, optimization_type: str, speedup: flo
     
     faster = tr("faster")
     opt_descriptions = {
-        'use_centroid': tr("Centroids enabled for '{0}' (~{1}x {2})").format(
+        'use_centroid_distant': tr("Centroids enabled for '{0}' (~{1}x {2})").format(
             layer_name, int(speedup), faster
         ),
         'bbox_prefilter': tr("BBox pre-filter enabled for '{0}'").format(layer_name),

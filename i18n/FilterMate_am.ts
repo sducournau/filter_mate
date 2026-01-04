@@ -242,6 +242,10 @@ Please restart QGIS to apply the changes.</translation>
         <translation>ባልሆነ-ፖሊጎን</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>የቋት እሴት በሜትር (ሴንትሮይድ ሲነቃ አዎንታዊ ብቻ። አሉታዊ ቋቶች በነጥቦች ላይ ሊተገበሩ አይችሉም)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>የባች ሁነታ</translation>
     </message>
@@ -730,6 +734,14 @@ First attribute: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>ምብት ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>ለርቀነው ትሩፍታት ምብት ይጠቀሙ</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>የባፍር አይነት አንቃ</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

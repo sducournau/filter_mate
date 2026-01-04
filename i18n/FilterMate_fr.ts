@@ -148,6 +148,10 @@ Veuillez redémarrer QGIS pour appliquer tous les changements.</translation>
         <translation>non-polygone</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Valeur du tampon en mètres (positif uniquement quand les centroïdes sont activés. Les tampons négatifs ne peuvent pas être appliqués aux points)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Mode batch</translation>
     </message>
@@ -726,6 +730,14 @@ Premier attribut : {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Utiliser les centroïdes</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Utiliser les centroïdes pour les couches distantes</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Activer le type de buffer</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

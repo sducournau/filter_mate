@@ -148,6 +148,10 @@ Tüm değişiklikleri uygulamak için lütfen QGIS&apos;i yeniden başlatın.</t
         <translation>çokgen-olmayan</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Metre cinsinden tampon değeri (yalnızca santroidler etkinleştirildiğinde pozitif. Negatif tamponlar noktalara uygulanamaz)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Toplu işlem modu</translation>
     </message>
@@ -730,6 +734,14 @@ First attribute: {1}</source>
     <message>
         <source>Use centroids</source>
         <translation>Merkez kullan</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Uzak katmanlar için merkez kullan</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Tampon türünü etkinleştir</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

@@ -148,6 +148,10 @@ Vui lòng khởi động lại QGIS để áp dụng tất cả các thay đổi
         <translation>không phải đa giác</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Giá trị vùng đệm tính bằng mét (chỉ dương khi centroid được bật. Vùng đệm âm không thể áp dụng cho điểm)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Chế độ batch</translation>
     </message>
@@ -730,6 +734,14 @@ Thuộc tính đầu tiên: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Dùng tâm</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Dùng tâm cho các lớp xa</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Bật loại vùng đệm</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

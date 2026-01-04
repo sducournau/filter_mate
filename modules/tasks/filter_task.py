@@ -6914,7 +6914,7 @@ class FilterEngineTask(QgsTask):
             
             if layer_id and layer_id in approved_optimizations:
                 layer_opts = approved_optimizations[layer_id]
-                if layer_opts.get('use_centroid', False):
+                if layer_opts.get('use_centroid_distant', False):
                     passed_use_centroids_distant = True
                     logger.info(f"🎯 USER-APPROVED OPTIMIZATION: Centroid mode for {layer.name()}")
             

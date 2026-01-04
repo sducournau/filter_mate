@@ -148,6 +148,10 @@ Start QGIS på nytt for å bruke alle endringene.</translation>
         <translation>ikke-polygon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Bufferverdi i meter (kun positiv når sentroider er aktivert. Negative buffere kan ikke brukes på punkter)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Batch-modus</translation>
     </message>
@@ -726,6 +730,14 @@ Første attributt: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Bruk sentroider</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Bruk sentroider for fjerne lag</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Aktiver buffertype</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

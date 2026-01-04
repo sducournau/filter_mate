@@ -148,6 +148,10 @@ Please restart QGIS to apply all changes.</source>
         <translation>गैर-बहुभुज</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>मीटर में बफर मान (केवल सकारात्मक जब सेंट्रोइड सक्षम हों। नकारात्मक बफर बिंदुओं पर लागू नहीं किए जा सकते)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>बैच मोड</translation>
     </message>
@@ -730,6 +734,14 @@ First attribute: {1}</source>
     <message>
         <source>Use centroids</source>
         <translation>सेंट्रॉइड का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>दूर की परतों के लिए सेंट्रॉइड का उपयोग करें</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>बफर प्रकार सक्षम करें</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

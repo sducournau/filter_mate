@@ -148,6 +148,10 @@ Bitte starten Sie QGIS neu, um alle Änderungen anzuwenden.</translation>
         <translation>Nicht-Polygon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Pufferwert in Metern (nur positiv, wenn Zentroide aktiviert sind. Negative Puffer können nicht auf Punkte angewendet werden)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Batch-Modus</translation>
     </message>
@@ -726,6 +730,14 @@ Erstes Attribut: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Zentroide verwenden</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Zentroide für entfernte Layer verwenden</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Puffertyp aktivieren</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

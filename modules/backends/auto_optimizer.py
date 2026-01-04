@@ -219,7 +219,8 @@ VERY_HIGH_COMPLEXITY_VERTICES = 200         # Average vertices for "very complex
 class OptimizationType(Enum):
     """Types of automatic optimizations that can be applied."""
     NONE = "none"
-    USE_CENTROID = "use_centroid"
+    # v2.8.7: Centroid for distant/filtering layers only
+    USE_CENTROID_DISTANT = "use_centroid_distant"
     SIMPLIFY_GEOMETRY = "simplify_geometry"
     SIMPLIFY_BEFORE_BUFFER = "simplify_before_buffer"  # Simplify geometry before buffer
     REDUCE_BUFFER_SEGMENTS = "reduce_buffer_segments"  # Reduce buffer segments
@@ -613,7 +614,7 @@ class AutoOptimizer:
         
         # Determine final settings
         final_use_centroids = user_requested_centroids if user_requested_centroids is not None else (
-            any(r.optimization_type == OptimizationType.USE_CENTROID and r.auto_applicable 
+            any(r.optimization_type == OptimizationType.USE_CENTROID_DISTANT and r.auto_applicable 
                 for r in recommendations)
         )
         
@@ -642,7 +643,7 @@ class AutoOptimizer:
         # Calculate total estimated speedup
         total_speedup = 1.0
         for rec in recommendations:
-            if rec.auto_applicable or rec.optimization_type == OptimizationType.USE_CENTROID:
+            if rec.auto_applicable or rec.optimization_type == OptimizationType.USE_CENTROID_DISTANT:
                 total_speedup *= rec.estimated_speedup
         
         plan = OptimizationPlan(
@@ -665,7 +666,8 @@ class AutoOptimizer:
         layer_analysis: 'LayerAnalysis',
         user_centroid_enabled: Optional[bool] = None,
         has_buffer: bool = False,
-        has_buffer_type: bool = False
+        has_buffer_type: bool = False,
+        is_source_layer: bool = True
     ) -> List[OptimizationRecommendation]:
         """
         Get optimization recommendations for a single layer.
@@ -680,6 +682,7 @@ class AutoOptimizer:
                                    recommendation will be skipped.
             has_buffer: True if buffer is being applied
             has_buffer_type: True if buffer type UI is already enabled
+            is_source_layer: True if this is the source layer for filtering (default True)
             
         Returns:
             List of OptimizationRecommendation objects
@@ -690,11 +693,18 @@ class AutoOptimizer:
         recommendations = []
         
         # 1. CENTROID OPTIMIZATION - check if layer would benefit from centroid usage
-        # Skip if user has already enabled centroids (avoid redundant recommendation)
-        if user_centroid_enabled is True:
+        # v2.8.9: NEVER recommend centroids for source layer - it doesn't make sense
+        # The source layer defines the filtering zone, using centroids would lose spatial information
+        # Centroid optimization only makes sense for distant/target layers being filtered
+        if is_source_layer:
+            # Skip centroid recommendation entirely for source layer
+            logger.debug(f"Skipping centroid recommendation for {layer_analysis.layer_name}: "
+                        f"source layer - centroid optimization not applicable")
+        elif user_centroid_enabled is True:
             # User already has centroid enabled - no need to recommend
             logger.debug(f"Skipping centroid recommendation for {layer_analysis.layer_name}: already enabled by user")
         else:
+            # Only evaluate centroid for non-source layers (distant/target layers)
             centroid_rec = self._evaluate_centroid_optimization(
                 target=layer_analysis,
                 source=None,
@@ -750,7 +760,7 @@ class AutoOptimizer:
         # User explicitly enabled
         if user_requested is True:
             return OptimizationRecommendation(
-                optimization_type=OptimizationType.USE_CENTROID,
+                optimization_type=OptimizationType.USE_CENTROID_DISTANT,
                 priority=1,
                 estimated_speedup=3.0,
                 reason="User requested centroid optimization",
@@ -803,13 +813,96 @@ class AutoOptimizer:
             return None
         
         return OptimizationRecommendation(
-            optimization_type=OptimizationType.USE_CENTROID,
+            optimization_type=OptimizationType.USE_CENTROID_DISTANT,
             priority=1,
             estimated_speedup=speedup,
             reason=f"Centroid recommended: {'; '.join(reason_parts)}",
             auto_applicable=True,
             requires_user_consent=False,
             parameters={"auto_detected": True}
+        )
+    
+    def evaluate_distant_layers_centroid(
+        self,
+        distant_layers_analyses: List['LayerAnalysis'],
+        user_already_enabled: bool = False
+    ) -> Optional[OptimizationRecommendation]:
+        """
+        Evaluate if centroid optimization should be recommended for distant/filtering layers.
+        
+        v2.8.7: New method to specifically evaluate distant layers used in spatial filtering
+        operations. When filtering with Intersect/Contains/etc, the distant layers' geometries
+        are used in spatial predicates. Using centroids can significantly speed up operations.
+        
+        Args:
+            distant_layers_analyses: List of LayerAnalysis for distant layers
+            user_already_enabled: True if user has already enabled distant centroid checkbox
+            
+        Returns:
+            OptimizationRecommendation if centroid should be recommended, None otherwise
+        """
+        # Skip if user already enabled centroids for distant layers
+        if user_already_enabled:
+            return None
+        
+        # Skip if auto-optimization is disabled
+        if not self.globally_enabled or not self.enable_auto_centroid:
+            return None
+        
+        if not distant_layers_analyses:
+            return None
+        
+        # Analyze distant layers for optimization opportunity
+        total_features = 0
+        has_distant_layer = False
+        has_complex_geometries = False
+        max_speedup = 1.0
+        reason_parts = []
+        
+        for analysis in distant_layers_analyses:
+            total_features += analysis.feature_count
+            
+            # Case 1: Remote/distant layer
+            if analysis.is_distant:
+                has_distant_layer = True
+                if analysis.feature_count > self.centroid_threshold_distant:
+                    reason_parts.append(
+                        f"distant layer '{analysis.layer_name}' with {analysis.feature_count:,} features"
+                    )
+                    max_speedup = max(max_speedup, 5.0)
+            
+            # Case 2: Complex geometries (polygons)
+            if analysis.geometry_type == GEOMETRY_TYPE_POLYGON:
+                has_complex_geometries = True
+                if analysis.feature_count > 1000:  # Lower threshold for polygon layers
+                    reason_parts.append(
+                        f"polygon layer '{analysis.layer_name}' ({analysis.feature_count:,} features)"
+                    )
+                    max_speedup = max(max_speedup, 3.0)
+            
+            # Case 3: Large local layer
+            if analysis.feature_count > self.centroid_threshold_local:
+                reason_parts.append(
+                    f"large layer '{analysis.layer_name}' ({analysis.feature_count:,} features)"
+                )
+                max_speedup = max(max_speedup, 2.0)
+        
+        # Recommend if any significant optimization opportunity found
+        if not reason_parts:
+            return None
+        
+        return OptimizationRecommendation(
+            optimization_type=OptimizationType.USE_CENTROID_DISTANT,
+            priority=1,
+            estimated_speedup=max_speedup,
+            reason=f"Centroid for distant layers: {'; '.join(reason_parts[:2])}",  # Limit to 2 reasons
+            auto_applicable=True,
+            requires_user_consent=False,
+            parameters={
+                "auto_detected": True,
+                "total_distant_features": total_features,
+                "layer_count": len(distant_layers_analyses)
+            }
         )
     
     def _evaluate_simplify_optimization(

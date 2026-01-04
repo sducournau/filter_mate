@@ -19,11 +19,11 @@ This release focuses on code quality improvements and performance optimization f
 
 ### ♻️ Code Quality Improvements
 
-| Change                          | Impact                                          |
-| ------------------------------- | ----------------------------------------------- |
+| Change                          | Impact                                           |
+| ------------------------------- | ------------------------------------------------ |
 | **Centralized psycopg2**        | New `psycopg2_availability.py` for clean imports |
-| **Deduplicated buffer methods** | ~230 lines removed, moved to `base_backend.py`  |
-| **Standardized message bars**   | Centralized via `feedback_utils`                |
+| **Deduplicated buffer methods** | ~230 lines removed, moved to `base_backend.py`   |
+| **Standardized message bars**   | Centralized via `feedback_utils`                 |
 
 ## 🎉 What's in v2.8.0 - Enhanced Auto-Optimization System
 

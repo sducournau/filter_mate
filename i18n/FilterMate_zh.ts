@@ -148,6 +148,10 @@ Please restart QGIS to apply all changes.</source>
         <translation>非多边形</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>缓冲区值（米）（启用质心时仅允许正值。负缓冲区不能应用于点）</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>批处理模式</translation>
     </message>
@@ -726,6 +730,14 @@ First attribute: {1}</source>
     <message>
         <source>Use centroids</source>
         <translation>使用质心</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>为远程图层使用质心</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>启用缓冲区类型</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

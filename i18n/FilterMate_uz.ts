@@ -242,6 +242,10 @@ O&apos;zgarishlarni qo&apos;llash uchun QGIS ni qayta ishga tushiring.</translat
         <translation>ko&apos;pburchak-emas</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Bufer qiymati metrda (faqat sentroidlar yoqilganda ijobiy. Salbiy buferlar nuqtalarga qo&apos;llanilmaydi)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Ommaviy rejim</translation>
     </message>
@@ -730,6 +734,14 @@ Birinchi atribut: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Markazlardan foydalanish</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Uzoq qatlamlar uchun markazlardan foydalanish</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Bufer turini yoqish</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

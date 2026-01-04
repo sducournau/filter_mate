@@ -148,6 +148,10 @@ Silakan restart QGIS untuk menerapkan semua perubahan.</translation>
         <translation>bukan-poligon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Nilai buffer dalam meter (hanya positif ketika centroid diaktifkan. Buffer negatif tidak dapat diterapkan ke titik)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Mode batch</translation>
     </message>
@@ -730,6 +734,14 @@ Atribut pertama: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Gunakan centroid</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Gunakan centroid untuk layer jauh</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Aktifkan tipe buffer</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

@@ -9,6 +9,7 @@ All notable changes to FilterMate will be documented in this file.
 Added automatic geometry simplification after buffer operations to reduce vertex count and improve performance with complex polygons.
 
 **New Configuration Options:**
+
 - `auto_simplify_after_buffer`: Enable/disable post-buffer simplification (default: true)
 - `buffer_simplify_after_tolerance`: Simplification tolerance in meters (default: 0.5)
 

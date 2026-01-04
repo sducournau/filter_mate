@@ -242,6 +242,10 @@ Please restart QGIS to apply the changes.</translation>
         <translation>ne-poligon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Vrednost medpomnilnika v metrih (samo pozitivna, ko so centroidi omogočeni. Negativnih medpomnilnikov ni mogoče uporabiti za točke)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Paketni način</translation>
     </message>
@@ -730,6 +734,14 @@ First attribute: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Uporabi centroide</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Uporabi centroide za oddaljene sloje</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Omogoči tip medpomnilnika</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

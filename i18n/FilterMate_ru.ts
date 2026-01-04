@@ -148,6 +148,10 @@ Please restart QGIS to apply all changes.</source>
         <translation>не-полигон</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Значение буфера в метрах (только положительное, когда центроиды включены. Отрицательные буферы не могут применяться к точкам)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Пакетный режим</translation>
     </message>
@@ -726,6 +730,14 @@ First attribute: {1}</source>
     <message>
         <source>Use centroids</source>
         <translation>Использовать центроиды</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Использовать центроиды для удалённых слоёв</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Включить тип буфера</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

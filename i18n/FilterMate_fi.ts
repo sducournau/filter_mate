@@ -148,6 +148,10 @@ Käynnistä QGIS uudelleen ottaaksesi kaikki muutokset käyttöön.</translation
         <translation>ei-polygoni</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Puskurin arvo metreinä (vain positiivinen kun keskipisteet ovat käytössä. Negatiivisia puskureita ei voi soveltaa pisteisiin)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Eräkäsittely-tila</translation>
     </message>
@@ -726,6 +730,14 @@ Ensimmäinen ominaisuus: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Käytä keskipisteitä</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Käytä keskipisteitä etäisille tasoille</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Ota puskurityyppi käyttöön</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

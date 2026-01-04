@@ -148,6 +148,10 @@ Start QGIS opnieuw om alle wijzigingen toe te passen.</translation>
         <translation>geen-polygoon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Bufferwaarde in meters (alleen positief wanneer centroïden zijn ingeschakeld. Negatieve buffers kunnen niet worden toegepast op punten)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Batchmodus</translation>
     </message>
@@ -726,6 +730,14 @@ Eerste attribuut: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Centroïden gebruiken</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Centroïden gebruiken voor verre lagen</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Buffertype activeren</translation>
     </message>
     <message>
         <source>Simplify geometries</source>

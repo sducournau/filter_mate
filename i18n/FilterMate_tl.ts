@@ -242,6 +242,10 @@ Please restart QGIS to apply the changes.</translation>
         <translation>hindi-polygon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Halaga ng buffer sa metro (positibo lamang kapag ang mga sentroid ay naka-enable. Ang mga negatibong buffer ay hindi maaaring ilapat sa mga punto)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Batch mode</translation>
     </message>
@@ -730,6 +734,14 @@ First attribute: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Gamitin ang centroid</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Gamitin ang centroid para sa malalayong layer</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>I-enable ang buffer type</translation>
     </message>
     <message>
         <source>Simplify complex geometries to reduce processing time</source>

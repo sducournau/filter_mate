@@ -2331,6 +2331,36 @@ class FilterMateApp:
             has_buffer = filtering_params.get("has_buffer_value", False)
             has_buffer_type = filtering_params.get("has_buffer_type", False)
             
+            # v2.8.7: Get distant layers (layers_to_filter) for centroid optimization
+            has_layers_to_filter = filtering_params.get("has_layers_to_filter", False)
+            layers_to_filter_ids = filtering_params.get("layers_to_filter", [])
+            
+            # v2.8.7: Check if distant layers centroid is already enabled
+            distant_centroid_enabled = False
+            if self.dockwidget and hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
+                distant_centroid_enabled = self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked()
+            
+            # v2.8.7: Collect and analyze distant layers for centroid optimization
+            distant_layers_recommendations = []
+            distant_layers_analyses = []  # Initialize outside the if block
+            if has_layers_to_filter and layers_to_filter_ids and not distant_centroid_enabled:
+                for distant_layer_id in layers_to_filter_ids:
+                    distant_layer = self.PROJECT.mapLayer(distant_layer_id)
+                    if distant_layer and distant_layer.isValid():
+                        distant_analysis = analyzer.analyze_layer(distant_layer)
+                        if distant_analysis:
+                            distant_layers_analyses.append(distant_analysis)
+                
+                # Evaluate centroid optimization for distant layers
+                if distant_layers_analyses:
+                    distant_centroid_rec = optimizer.evaluate_distant_layers_centroid(
+                        distant_layers_analyses,
+                        user_already_enabled=distant_centroid_enabled
+                    )
+                    if distant_centroid_rec:
+                        distant_layers_recommendations.append(distant_centroid_rec)
+                        logger.debug(f"Distant layers centroid optimization recommended: {distant_centroid_rec.reason}")
+            
             for layer_props in task_layers:
                 layer_id = layer_props.get("layer_id")
                 if not layer_id:
@@ -2354,19 +2384,21 @@ class FilterMateApp:
                 
                 # Get recommendations - skip centroid if already enabled
                 # v2.8.6: Pass buffer parameters for buffer type optimization
+                # v2.8.9: is_source_layer=False because these are target layers being filtered
                 recommendations = optimizer.get_recommendations(
                     analysis, 
                     user_centroid_enabled=user_centroid_enabled,
                     has_buffer=has_buffer,
-                    has_buffer_type=has_buffer_type
+                    has_buffer_type=has_buffer_type,
+                    is_source_layer=False
                 )
                 
                 # Check if any significant optimization is recommended
-                # v2.8.6: Include ENABLE_BUFFER_TYPE in addition to USE_CENTROID
+                # v2.8.6: Include ENABLE_BUFFER_TYPE in addition to USE_CENTROID_DISTANT
                 has_significant_recommendation = False
                 for rec in recommendations:
                     if rec.auto_applicable and rec.optimization_type in (
-                        OptimizationType.USE_CENTROID,
+                        OptimizationType.USE_CENTROID_DISTANT,
                         OptimizationType.ENABLE_BUFFER_TYPE
                     ):
                         has_significant_recommendation = True
@@ -2380,27 +2412,78 @@ class FilterMateApp:
                         'recommendations': recommendations
                     })
             
-            if not layers_needing_optimization:
+            # v2.8.7: Check if we have distant layer recommendations OR target layer recommendations
+            has_any_recommendations = bool(layers_needing_optimization) or bool(distant_layers_recommendations)
+            
+            if not has_any_recommendations:
                 logger.debug("No optimization recommendations for current filtering operation")
                 return approved_optimizations, auto_apply
             
             # Show confirmation dialog
-            logger.info(f"Found {len(layers_needing_optimization)} layer(s) with optimization recommendations")
+            total_recommendations = len(layers_needing_optimization)
+            if distant_layers_recommendations:
+                total_recommendations += 1
+            logger.info(f"Found {total_recommendations} optimization recommendation(s) (including distant layers)")
             
             from .modules.optimization_dialogs import OptimizationRecommendationDialog
             
-            # For now, show dialog for the first layer (most impactful)
-            # Future: Could show multi-layer dialog
-            first_layer_info = layers_needing_optimization[0]
-            layer = first_layer_info['layer']
-            analysis = first_layer_info['analysis']
-            recommendations = first_layer_info['recommendations']
+            # v2.8.7: Combine recommendations from target layer and distant layers
+            # Determine what to display in the dialog based on recommendation types
+            recommendations = []
+            dialog_layer_name = ""
+            dialog_feature_count = 0
+            dialog_location_type = "local_file"
+            
+            if layers_needing_optimization:
+                # Use first target layer info for recommendations
+                first_layer_info = layers_needing_optimization[0]
+                layer = first_layer_info['layer']
+                analysis = first_layer_info['analysis']
+                recommendations = list(first_layer_info['recommendations'])
+                # v2.8.8: Always use source layer name in dialog title for context
+                dialog_layer_name = current_layer.name()
+                dialog_feature_count = analysis.feature_count
+                dialog_location_type = analysis.location_type.value
+            
+            # v2.8.7: If we have distant layer recommendations, adjust dialog info
+            if distant_layers_recommendations:
+                recommendations.extend(distant_layers_recommendations)
+                
+                # If ONLY distant layer recommendations (no target layer recs),
+                # display info about the distant layers instead
+                if not layers_needing_optimization:
+                    # Calculate total features from all distant layers
+                    total_distant_features = 0
+                    distant_layer_names = []
+                    for distant_layer_id in layers_to_filter_ids:
+                        distant_layer = self.PROJECT.mapLayer(distant_layer_id)
+                        if distant_layer and distant_layer.isValid():
+                            total_distant_features += distant_layer.featureCount()
+                            distant_layer_names.append(distant_layer.name())
+                    
+                    # Use source layer name but indicate it's about distant layers
+                    dialog_layer_name = current_layer.name()
+                    dialog_feature_count = total_distant_features
+                    # Get location type from first distant layer analysis
+                    if distant_layers_analyses:
+                        dialog_location_type = distant_layers_analyses[0].location_type.value
+            
+            # v2.8.10: Deduplicate recommendations by optimization_type
+            # Keep the recommendation with the highest speedup for each type
+            deduped_recommendations = {}
+            for rec in recommendations:
+                opt_type = rec.optimization_type.value if hasattr(rec.optimization_type, 'value') else str(rec.optimization_type)
+                if opt_type not in deduped_recommendations:
+                    deduped_recommendations[opt_type] = rec
+                elif rec.estimated_speedup > deduped_recommendations[opt_type].estimated_speedup:
+                    deduped_recommendations[opt_type] = rec
+            recommendations = list(deduped_recommendations.values())
             
             dialog = OptimizationRecommendationDialog(
-                layer_name=layer.name(),
+                layer_name=dialog_layer_name,
                 recommendations=[r.to_dict() for r in recommendations],
-                feature_count=analysis.feature_count,
-                location_type=analysis.location_type.value,
+                feature_count=dialog_feature_count,
+                location_type=dialog_location_type,
                 parent=self.dockwidget
             )
             
@@ -2448,19 +2531,22 @@ class FilterMateApp:
         
         Args:
             selected_optimizations: Dict of {optimization_type: bool} choices
-                e.g., {'use_centroid': True, 'simplify_geometry': False}
+                e.g., {'use_centroid_distant': True, 'simplify_geometry': False}
         
         v2.7.1: New method for UI synchronization after optimization acceptance
+        v2.8.7: Added support for use_centroid_distant optimization type
         """
         if not self.dockwidget or not selected_optimizations:
             return
         
         try:
-            # Handle centroid optimization - update ONLY distant layer checkbox
+            # Handle centroid optimization for distant layers only
             # IMPORTANT v2.7.2: Do NOT enable centroids for source layer when it's a polygon
             # used for spatial intersection - this would give geometrically incorrect results.
             # Centroid optimization should only apply to distant layers being filtered.
-            if selected_optimizations.get('use_centroid', False):
+            use_distant_centroids = selected_optimizations.get('use_centroid_distant', False)
+            
+            if use_distant_centroids:
                 # Update distant layers centroid checkbox (primary target for remote layers)
                 if hasattr(self.dockwidget, 'checkBox_filtering_use_centroids_distant_layers'):
                     if not self.dockwidget.checkBox_filtering_use_centroids_distant_layers.isChecked():

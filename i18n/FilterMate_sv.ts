@@ -148,6 +148,10 @@ Starta om QGIS för att tillämpa alla ändringar.</translation>
         <translation>icke-polygon</translation>
     </message>
     <message>
+        <source>Buffer value in meters (positive only when centroids are enabled. Negative buffers cannot be applied to points)</source>
+        <translation>Buffervärde i meter (endast positivt när centroider är aktiverade. Negativa buffertar kan inte tillämpas på punkter)</translation>
+    </message>
+    <message>
         <source>Mode batch</source>
         <translation>Batchläge</translation>
     </message>
@@ -726,6 +730,14 @@ Första attribut: {1}</translation>
     <message>
         <source>Use centroids</source>
         <translation>Använd centroider</translation>
+    </message>
+    <message>
+        <source>Use centroids for distant layers</source>
+        <translation>Använd centroider för avlägsna lager</translation>
+    </message>
+    <message>
+        <source>Enable buffer type</source>
+        <translation>Aktivera buffertyp</translation>
     </message>
     <message>
         <source>Simplify geometries</source>
