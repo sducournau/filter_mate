@@ -4559,9 +4559,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.mFieldExpressionWidget_exploring_multiple_selection.setFilters(field_filters)
         self.mFieldExpressionWidget_exploring_custom_selection.setFilters(field_filters)
         
-        # Configure QgsFieldComboBox for multiple selection sort field
-        self.mFieldComboBox_exploring_multiple_selection.setFilters(field_filters)
-        
         # NOTE: setLayer() calls are deferred to manage_interactions() via _deferred_manage_interactions()
         # to prevent blocking during project load. The old synchronous calls here caused freezes.
         
@@ -5029,7 +5026,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                     "MULTIPLE_SELECTION_FEATURES":{"TYPE":"CustomCheckableFeatureComboBox", "WIDGET":self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, "SIGNALS":[("updatingCheckedItemList", self.exploring_features_changed),("filteringCheckedItemList", lambda: self.exploring_source_params_changed(groupbox_override="multiple_selection"))]},
                                     # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
                                     "MULTIPLE_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_multiple_selection, "SIGNALS":[("fieldChanged", None)]},
-                                    "MULTIPLE_SELECTION_FIELD":{"TYPE":"QgsFieldComboBox", "WIDGET":self.mFieldComboBox_exploring_multiple_selection, "SIGNALS":[("fieldChanged", self._on_multiple_selection_field_changed)]},
                                     
                                     # NOTE: fieldChanged signal handled by _setup_expression_widget_direct_connections() with debounce
                                     "CUSTOM_SELECTION_EXPRESSION":{"TYPE":"QgsFieldExpressionWidget", "WIDGET":self.mFieldExpressionWidget_exploring_custom_selection, "SIGNALS":[("fieldChanged", None)]}
@@ -6951,11 +6947,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
             self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-            self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setEnabled(True)
             
             try:
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(self.current_layer)
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setLayer(self.current_layer)
             except (AttributeError, KeyError, RuntimeError) as e:
                 logger.error(f"Error setting multiple selection expression widget: {type(e).__name__}: {e}")
 
@@ -8064,9 +8058,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             if target_groupbox == "single_selection":
 
-                expression = self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].expression()
+                expression_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"]
+                expression = expression_widget.expression()
                 logger.debug(f"single_selection expression from widget: {expression}")
-                if expression is not None:
+                
+                # CRITICAL: Only update if expression is valid (non-empty and parseable)
+                if expression is not None and expression.strip() != '' and QgsExpression(expression).isValid():
                     # PERFORMANCE: Skip update if expression hasn't changed
                     current_expression = layer_props["exploring"]["single_selection_expression"]
                     if current_expression == expression:
@@ -8079,11 +8076,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.exploring_link_widgets()
                         # Invalidate cache for this layer since expression changed
                         self.invalidate_expression_cache(self.current_layer.id())
+                elif expression is not None and expression.strip() != '':
+                    logger.debug(f"single_selection: Expression '{expression}' is not valid, skipping update")
 
             elif target_groupbox == "multiple_selection":
 
-                expression = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].expression()
-                if expression is not None:
+                expression_widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"]
+                expression = expression_widget.expression()
+                
+                # CRITICAL: Only update if expression is valid (non-empty and parseable)
+                if expression is not None and expression.strip() != '' and QgsExpression(expression).isValid():
                     # PERFORMANCE: Skip update if expression hasn't changed
                     current_expression = layer_props["exploring"]["multiple_selection_expression"]
                     if current_expression == expression:
@@ -8097,6 +8099,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.exploring_link_widgets()
                         # Invalidate cache for this layer since expression changed
                         self.invalidate_expression_cache(self.current_layer.id())
+                elif expression is not None and expression.strip() != '':
+                    logger.debug(f"multiple_selection: Expression '{expression}' is not valid, skipping update")
 
             elif target_groupbox == "custom_selection":
 
@@ -8130,8 +8134,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Update buffer validation based on source layer geometry type
             self._update_buffer_validation()
-
- 
 
 
     def exploring_custom_selection(self):
@@ -8247,31 +8249,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.current_layer.removeSelection()
                 self.current_layer.select([feature.id() for feature in features])
 
-    def _on_multiple_selection_field_changed(self, field_name):
-        """
-        Handle field change in the multiple selection QgsFieldComboBox.
-        
-        This method updates the sort field for the multiple selection feature list
-        when the user selects a different field in the QgsFieldComboBox.
-        
-        Args:
-            field_name (str): The name of the selected field
-        """
-        if not self.widgets_initialized or self.current_layer is None:
-            return
-        
-        logger.debug(f"Multiple selection field changed: {field_name}")
-        
-        # Update the sort field in the checkable combobox widget
-        if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection'):
-            widget = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
-            if widget is not None:
-                # Get current sort order (ASC/DESC) and update with new field
-                current_order, _ = widget.getSortOrder()
-                widget.setSortOrder(current_order, field_name)
-                logger.debug(f"Updated multiple selection sort field to: {field_name} (order: {current_order})")
-
-    
     def exploring_features_changed(self, input=[], identify_by_primary_key_name=False, custom_expression=None, preserve_filter_if_empty=False):
         """
         Handle feature selection changes in exploration widgets.
@@ -9403,7 +9380,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'disconnect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FIELD"], 'disconnect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'disconnect')
             
             # Auto-initialize empty expressions with best available field
@@ -9473,11 +9449,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_expr)
             
-            # Multiple selection field combobox - for sorting field selection
-            if "MULTIPLE_SELECTION_FIELD" in self.widgets.get("EXPLORING", {}):
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setLayer(layer)
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setEnabled(layer is not None)
-            
             if "CUSTOM_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setExpression(custom_expr)
@@ -9488,7 +9459,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect', 'filteringCheckedItemList')
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FIELD"], 'connect', 'fieldChanged')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect', 'fieldChanged')
             
             # DEBUG: Log widget state after reload
@@ -9570,7 +9540,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if self.current_layer is not None:
                     self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setEnabled(True)
                     self.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
-                    self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FIELD"]["WIDGET"].setEnabled(True)
                     
             elif groupbox_name == "custom_selection":
                 single_gb.setChecked(False)
@@ -10139,7 +10108,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_EXPRESSION"], 'connect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'connect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_EXPRESSION"], 'connect')
-            self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FIELD"], 'connect')
             self.manageSignal(["EXPLORING","CUSTOM_SELECTION_EXPRESSION"], 'connect')
 
     def layer_property_changed_with_buffer_style(self, input_property, input_data=None):

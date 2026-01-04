@@ -1150,41 +1150,6 @@
                       <number>2</number>
                      </property>
                      <item>
-                      <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_multiple_selection">
-                       <property name="enabled">
-                        <bool>false</bool>
-                       </property>
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>28</height>
-                        </size>
-                       </property>
-                       <property name="font">
-                        <font>
-                         <family>Segoe UI</family>
-                         <pointsize>10</pointsize>
-                         <weight>75</weight>
-                         <italic>false</italic>
-                         <bold>true</bold>
-                         <underline>false</underline>
-                         <strikeout>false</strikeout>
-                         <stylestrategy>PreferAntialias</stylestrategy>
-                         <kerning>true</kerning>
-                        </font>
-                       </property>
-                       <property name="cursor">
-                        <cursorShape>PointingHandCursor</cursorShape>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_exploring_multiple_feature_picker">
                        <property name="spacing">
                         <number>2</number>
@@ -1192,7 +1157,7 @@
                       </layout>
                      </item>
                      <item>
-                      <widget class="QgsFieldComboBox" name="mFieldComboBox_exploring_multiple_selection">
+                      <widget class="QgsFieldExpressionWidget" name="mFieldExpressionWidget_exploring_multiple_selection">
                        <property name="enabled">
                         <bool>false</bool>
                        </property>

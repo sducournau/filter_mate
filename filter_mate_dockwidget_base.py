@@ -482,6 +482,10 @@ class Ui_FilterMateDockWidgetBase(object):
         self.verticalLayout_exploring_multiple_selection.setContentsMargins(2, 2, 2, 2)
         self.verticalLayout_exploring_multiple_selection.setSpacing(2)
         self.verticalLayout_exploring_multiple_selection.setObjectName("verticalLayout_exploring_multiple_selection")
+        self.horizontalLayout_exploring_multiple_feature_picker = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_exploring_multiple_feature_picker.setSpacing(2)
+        self.horizontalLayout_exploring_multiple_feature_picker.setObjectName("horizontalLayout_exploring_multiple_feature_picker")
+        self.verticalLayout_exploring_multiple_selection.addLayout(self.horizontalLayout_exploring_multiple_feature_picker)
         self.mFieldExpressionWidget_exploring_multiple_selection = QgsFieldExpressionWidget(self.mGroupBox_exploring_multiple_selection)
         self.mFieldExpressionWidget_exploring_multiple_selection.setEnabled(False)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
@@ -504,32 +508,6 @@ class Ui_FilterMateDockWidgetBase(object):
         self.mFieldExpressionWidget_exploring_multiple_selection.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.mFieldExpressionWidget_exploring_multiple_selection.setObjectName("mFieldExpressionWidget_exploring_multiple_selection")
         self.verticalLayout_exploring_multiple_selection.addWidget(self.mFieldExpressionWidget_exploring_multiple_selection)
-        self.horizontalLayout_exploring_multiple_feature_picker = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_exploring_multiple_feature_picker.setSpacing(2)
-        self.horizontalLayout_exploring_multiple_feature_picker.setObjectName("horizontalLayout_exploring_multiple_feature_picker")
-        self.verticalLayout_exploring_multiple_selection.addLayout(self.horizontalLayout_exploring_multiple_feature_picker)
-        self.mFieldComboBox_exploring_multiple_selection = QgsFieldComboBox(self.mGroupBox_exploring_multiple_selection)
-        self.mFieldComboBox_exploring_multiple_selection.setEnabled(False)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.mFieldComboBox_exploring_multiple_selection.sizePolicy().hasHeightForWidth())
-        self.mFieldComboBox_exploring_multiple_selection.setSizePolicy(sizePolicy)
-        self.mFieldComboBox_exploring_multiple_selection.setMinimumSize(QtCore.QSize(0, 28))
-        font = QtGui.QFont()
-        font.setFamily("Segoe UI")
-        font.setPointSize(10)
-        font.setBold(True)
-        font.setItalic(False)
-        font.setUnderline(False)
-        font.setWeight(75)
-        font.setStrikeOut(False)
-        font.setKerning(True)
-        font.setStyleStrategy(QtGui.QFont.PreferAntialias)
-        self.mFieldComboBox_exploring_multiple_selection.setFont(font)
-        self.mFieldComboBox_exploring_multiple_selection.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.mFieldComboBox_exploring_multiple_selection.setObjectName("mFieldComboBox_exploring_multiple_selection")
-        self.verticalLayout_exploring_multiple_selection.addWidget(self.mFieldComboBox_exploring_multiple_selection)
         self.verticalLayout_exploring_tabs_content.addWidget(self.mGroupBox_exploring_multiple_selection)
         spacerItem6 = QtWidgets.QSpacerItem(36, 3, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.verticalLayout_exploring_tabs_content.addItem(spacerItem6)
@@ -1653,7 +1631,6 @@ from qgscheckablecombobox import QgsCheckableComboBox
 from qgscollapsiblegroupbox import QgsCollapsibleGroupBox
 from qgsdoublespinbox import QgsDoubleSpinBox
 from qgsfeaturepickerwidget import QgsFeaturePickerWidget
-from qgsfieldcombobox import QgsFieldComboBox
 from qgsfieldexpressionwidget import QgsFieldExpressionWidget
 from qgsmaplayercombobox import QgsMapLayerComboBox
 from qgsprojectionselectionwidget import QgsProjectionSelectionWidget
