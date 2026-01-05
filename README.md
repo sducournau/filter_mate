@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.9.4** | January 2026 | **Production-Ready**
+**Version 2.9.5** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -26,6 +26,12 @@
 ---
 
 ## 📋 Recent Changes
+
+### v2.9.5 - QGIS Shutdown Crash Fix (January 2026)
+
+- 🐛 **FIX: Windows crash** - Fixed fatal access violation during QGIS shutdown
+- 🔧 **FIX: Task cancellation** - Now uses Python logger instead of QgsMessageLog
+- ✅ **Safe shutdown** - Avoids calling destroyed C++ objects during QgsTaskManager::cancelAll()
 
 ### v2.9.4 - Spatialite Subquery Filter Fix (January 2026)
 

@@ -1653,17 +1653,24 @@ class LayersManagementEngineTask(QgsTask):
         CRASH FIX (v2.8.6): Check if QGIS is alive before calling QgsMessageLog.
         During QGIS shutdown (QgsTaskManager::cancelAll), the C++ objects may
         already be destroyed, causing Windows fatal access violation.
+        
+        CRASH FIX (v2.8.7): Strengthened protection - skip ALL logging during cancel.
+        The is_qgis_alive() check is not sufficient because QgsMessageLog may be
+        destroyed before QApplication during QgsApplication::~QgsApplication().
+        Since cancel() is often called during shutdown, we now avoid QgsMessageLog
+        entirely in this method to prevent the Windows fatal exception.
         """
-        # Only log if QGIS is still alive - prevents access violation during shutdown
-        if is_qgis_alive():
-            try:
-                QgsMessageLog.logMessage(
-                    f'"{self.description()}" task was canceled',
-                    MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info
-                )
-            except (RuntimeError, OSError, SystemError):
-                # Silently ignore if QGIS is shutting down
-                pass
+        # CRASH FIX (v2.8.7): Do NOT use QgsMessageLog in cancel() method.
+        # During QGIS shutdown, QgsTaskManager::cancelAll() is called, and
+        # QgsMessageLog may already be destroyed even if QApplication exists.
+        # Use Python logger only (file-based, safe during shutdown).
+        try:
+            logger.info(f'"{self.description()}" task was canceled')
+        except Exception:
+            # Even Python logging might fail during shutdown, ignore silently
+            pass
+        
+        # Call parent cancel without any QGIS API calls
         super().cancel()
 
     def finished(self, result):

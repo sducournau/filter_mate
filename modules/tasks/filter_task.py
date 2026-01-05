@@ -11265,7 +11265,13 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"Error during PostgreSQL MV cleanup: {e}")
     
     def cancel(self):
-        """Cancel task and cleanup all active database connections"""
+        """Cancel task and cleanup all active database connections.
+        
+        CRASH FIX (v2.8.7): Removed QgsMessageLog call to prevent Windows fatal
+        exception (access violation) during QGIS shutdown. When QgsTaskManager::cancelAll()
+        is called during QgsApplication destruction, QgsMessageLog may already be
+        destroyed even if QApplication.instance() is still valid. Use Python logger only.
+        """
         # Cleanup PostgreSQL materialized views before closing connections
         self._cleanup_postgresql_materialized_views()
         
@@ -11280,9 +11286,13 @@ class FilterEngineTask(QgsTask):
         # FIX v2.3.9: Reset prepared statements manager when connections close
         self._ps_manager = None
         
-        QgsMessageLog.logMessage(
-            '"{name}" task was canceled'.format(name=self.description()),
-            MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info)
+        # CRASH FIX (v2.8.7): Use Python logger only, NOT QgsMessageLog
+        # QgsMessageLog may be destroyed during QGIS shutdown, causing access violation
+        try:
+            logger.info(f'"{self.description()}" task was canceled')
+        except Exception:
+            pass
+        
         super().cancel()
 
 

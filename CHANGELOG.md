@@ -2,6 +2,52 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.9.5] - 2026-01-05 - QGIS Shutdown Crash Fix
+
+### 🐛 Bug Fix: Windows Fatal Access Violation During Shutdown
+
+**Problem Solved:**
+
+- QGIS crashed on Windows during shutdown with fatal access violation
+- Error occurred in `QgsTaskManager::cancelAll()` when closing QGIS
+- Affected all FilterMate tasks that were active or pending cancellation
+
+**Root Cause:**
+
+- `QgsMessageLog` C++ object is destroyed before `QApplication` during `QgsApplication::~QgsApplication()`
+- The `cancel()` method was calling `QgsMessageLog.logMessage()` during task cancellation
+- Even the `is_qgis_alive()` check was insufficient as `QgsMessageLog` destruction order is unpredictable
+
+**Solution:**
+
+- Removed all `QgsMessageLog` calls from `cancel()` method in `LayersManagementEngineTask`
+- Now uses Python file-based logger (`logger.info()`) which is safe during shutdown
+- Added explicit comment explaining the crash prevention strategy
+
+**Technical Details:**
+
+```python
+# BEFORE (v2.8.6): Caused crash
+def cancel(self):
+    if is_qgis_alive():
+        QgsMessageLog.logMessage(...)  # CRASH: Object may be destroyed!
+    super().cancel()
+
+# AFTER (v2.9.5): Safe during shutdown
+def cancel(self):
+    try:
+        logger.info(...)  # Python logger - always safe
+    except Exception:
+        pass
+    super().cancel()
+```
+
+### 📊 Files Modified
+
+- `modules/tasks/layer_management_task.py`: Safe cancel() implementation
+
+---
+
 ## [2.9.4] - 2026-01-05 - Spatialite Subquery Filter Fix
 
 ### 🐛 Bug Fix: Spatialite Large Dataset Filtering

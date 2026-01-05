@@ -6,13 +6,18 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.9.4
+version=2.9.5
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.4 - Spatialite Subquery Filter Fix
+about=FilterMate v2.9.5 - QGIS Shutdown Crash Fix
 
- NEW in v2.9.4:
+ NEW in v2.9.5:
+ - 🐛 FIX: Windows crash during QGIS shutdown (fatal access violation)
+ - 🔧 FIX: Task cancellation now uses Python logger instead of QgsMessageLog
+ - ✅ Safe shutdown: Avoids calling destroyed C++ objects during QgsTaskManager::cancelAll()
+
+ Previous in v2.9.4:
  - 🐛 FIX: Spatialite large dataset filtering now works correctly
  - 🔧 FIX: Replaced SQL subquery with range-based filter for OGR compatibility
  - ✅ Filter expressions now use BETWEEN/IN() instead of unsupported subqueries

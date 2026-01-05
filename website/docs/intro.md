@@ -5,7 +5,7 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.9.4** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v2.9.5** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
 ## ✨ Key Features
 
@@ -21,25 +21,29 @@ slug: /
 
 ---
 
-## 🎉 What's New in v2.9.4 - Spatialite Subquery Filter Fix
+## 🎉 What's New in v2.9.5 - QGIS Shutdown Crash Fix
 
-This release fixes a critical bug with Spatialite backend filtering on large datasets.
+This release fixes a critical Windows crash that occurred during QGIS shutdown.
 
-### 🐛 Bug Fix: Spatialite Large Dataset Filtering
+### 🐛 Bug Fix: Windows Fatal Access Violation
 
-- **Problem:** Filtering layers with ≥20,000 matching features failed silently
-- **Cause:** SQL subquery `"fid" IN (SELECT fid FROM ...)` not supported by OGR provider
-- **Solution:** Replaced with range-based BETWEEN/IN() filter expressions
+- **Problem:** QGIS crashed on Windows during shutdown with fatal exception
+- **Cause:** `QgsMessageLog` destroyed before `QApplication` during `QgsApplication::~QgsApplication()`
+- **Solution:** Task cancellation now uses Python file-based logger instead of QgsMessageLog
 
-### ✅ New Filter Expression Format
+### ✅ Safe Shutdown Implementation
 
-```sql
--- Before (v2.8.7-v2.9.3): NOT WORKING
-"fid" IN (SELECT fid FROM "_fm_fids_xxx")
+- `cancel()` method no longer calls any QGIS C++ API during shutdown
+- Python logger (file-based) used for task cancellation logging
+- No more access violations during `QgsTaskManager::cancelAll()`
 
--- After (v2.9.4): WORKING with all providers
-("fid" BETWEEN 1 AND 500) OR ("fid" BETWEEN 502 AND 1000) OR "fid" IN (503, 507)
-```
+---
+
+## Previous: v2.9.4 - Spatialite Subquery Filter Fix
+
+- 🐛 Spatialite large dataset filtering now works correctly (≥20K features)
+- 🔧 Replaced SQL subquery with range-based BETWEEN/IN() filter
+- ✅ Compatible with all OGR providers
 
 ---
 
