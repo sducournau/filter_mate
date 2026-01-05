@@ -6,6 +6,15 @@ sidebar_position: 100
 
 All notable changes to FilterMate are documented here.
 
+## [2.9.3] - January 5, 2026 - Maintenance Release
+
+### 🔧 Maintenance
+
+- Version bump and documentation updates
+- Updated changelog and documentation synchronization
+
+---
+
 ## [2.9.2] - January 4, 2026 - Centroid & Simplification Optimizations
 
 ### 🎯 Enhanced: Centroid Optimization with ST_PointOnSurface

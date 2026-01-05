@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.9.2** | January 2026 | **Production-Ready**
+**Version 2.9.3** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -26,6 +26,10 @@
 ---
 
 ## 📋 Recent Changes
+
+### v2.9.3 - Maintenance Release (January 2026)
+
+- 🔧 **MAINT: Version bump** - Documentation updates and synchronization
 
 ### v2.9.2 - Centroid & Simplification Optimizations (January 2026)
 

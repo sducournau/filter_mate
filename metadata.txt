@@ -6,13 +6,17 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.9.2
+version=2.9.3
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.2 - Centroid & Simplification Optimizations
+about=FilterMate v2.9.3 - Maintenance Release
 
- NEW in v2.9.2:
+ NEW in v2.9.3:
+ - 🔧 MAINT: Version bump and documentation updates
+ - 📚 DOCS: Updated changelog and documentation
+
+ Previous in v2.9.2:
  - 🎯 IMPROVED: Centroid filtering now uses ST_PointOnSurface() for polygons (guaranteed inside)
  - 📐 IMPROVED: Adaptive simplification before buffer (tolerance = buffer × 0.1)
  - ⚙️ NEW: CENTROID_MODE config ('centroid', 'point_on_surface', 'auto')

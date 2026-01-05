@@ -177,13 +177,22 @@ class FilterMateApp:
                     filtered_reasons.append(f"{name}: not a vector layer")
                     continue
                 
+                # FIX v2.8.6: Enhanced logging for PostgreSQL layers
+                is_postgres = l.providerType() == 'postgres'
+                
                 # Use object_safety module for comprehensive validation
                 if not is_valid_layer(l):
                     try:
                         name = l.name()
+                        is_valid_qgis = l.isValid()
                     except RuntimeError:
                         name = 'unknown'
-                    filtered_reasons.append(f"{name}: invalid layer (C++ object may be deleted)")
+                        is_valid_qgis = False
+                    reason = f"{name}: invalid layer (isValid={is_valid_qgis}, C++ object may be deleted)"
+                    if is_postgres:
+                        reason += " [PostgreSQL]"
+                        logger.warning(f"PostgreSQL layer '{name}' failed is_valid_layer check (isValid={is_valid_qgis})")
+                    filtered_reasons.append(reason)
                     continue
                 
                 # IMPORTANT: For layer loading, we don't require psycopg2 to be available
@@ -191,7 +200,11 @@ class FilterMateApp:
                 # (like filtering with PostgreSQL backend) won't work.
                 # Export uses QGIS API, not psycopg2 directly.
                 if not is_layer_source_available(l, require_psycopg2=False):
-                    filtered_reasons.append(f"{l.name()}: source not available (provider={l.providerType()})")
+                    reason = f"{l.name()}: source not available (provider={l.providerType()})"
+                    if is_postgres:
+                        reason += " [PostgreSQL]"
+                        logger.warning(f"PostgreSQL layer '{l.name()}' failed is_layer_source_available check")
+                    filtered_reasons.append(reason)
                     continue
                 usable.append(l)
             
@@ -282,23 +295,36 @@ class FilterMateApp:
             weak_self = weakref.ref(self)
             captured_pending = postgres_pending
             
-            def retry_postgres():
+            def retry_postgres(retry_attempt=1):
                 strong_self = weak_self()
                 if strong_self is None:
                     return
                 
                 now_valid = []
+                still_pending = []
                 for layer in captured_pending:
                     try:
-                        if not is_sip_deleted(layer) and layer.isValid() and layer.id() not in strong_self.PROJECT_LAYERS:
+                        if is_sip_deleted(layer):
+                            continue
+                        if layer.isValid() and layer.id() not in strong_self.PROJECT_LAYERS:
                             now_valid.append(layer)
-                            logger.info(f"PostgreSQL layer '{layer.name()}' is now valid (retry)")
+                            logger.info(f"PostgreSQL layer '{layer.name()}' is now valid (retry #{retry_attempt})")
+                        elif not layer.isValid():
+                            still_pending.append(layer)
                     except (RuntimeError, AttributeError):
                         pass
                 
                 if now_valid:
-                    logger.info(f"FilterMate: Adding {len(now_valid)} PostgreSQL layers after retry")
+                    logger.info(f"FilterMate: Adding {len(now_valid)} PostgreSQL layers after retry #{retry_attempt}")
                     strong_self.manage_task('add_layers', now_valid)
+                
+                # FIX v2.8.6: Schedule a second retry if layers are still pending
+                if still_pending and retry_attempt < 3:
+                    logger.info(f"FilterMate: {len(still_pending)} PostgreSQL layers still not valid - scheduling retry #{retry_attempt + 1}")
+                    QTimer.singleShot(
+                        STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'] * retry_attempt,
+                        lambda: retry_postgres(retry_attempt + 1)
+                    )
             
             # Retry after PostgreSQL connection establishment delay
             QTimer.singleShot(STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'], retry_postgres)
@@ -1062,7 +1088,22 @@ class FilterMateApp:
                         logger.warning(f"Safety timer: PROJECT_LAYERS still empty after 5s, attempting recovery (total layers in project: {len(all_layers)})")
                         current_layers = self._filter_usable_layers(all_layers)
                         
-                        logger.info(f"Recovery diagnostic: total_layers={len(all_layers)}, usable_layers={len(current_layers)}, pending_tasks={self._pending_add_layers_tasks}")
+                        # FIX v2.8.6: Enhanced recovery for PostgreSQL layers
+                        # Sometimes PostgreSQL layers are valid but get filtered due to timing issues
+                        # Use a more permissive approach: include all valid QgsVectorLayer instances
+                        postgres_layers = [l for l in all_layers 
+                                          if isinstance(l, QgsVectorLayer) 
+                                          and l.providerType() == 'postgres'
+                                          and l.isValid()]
+                        missed_postgres = [l for l in postgres_layers if l not in current_layers]
+                        
+                        if missed_postgres:
+                            logger.warning(f"Recovery: Found {len(missed_postgres)} valid PostgreSQL layers that were filtered - adding them")
+                            for layer in missed_postgres:
+                                logger.info(f"  Adding missed PostgreSQL layer: {layer.name()} (id={layer.id()})")
+                            current_layers.extend(missed_postgres)
+                        
+                        logger.info(f"Recovery diagnostic: total_layers={len(all_layers)}, usable_layers={len(current_layers)}, postgres_layers={len(postgres_layers)}, missed_postgres={len(missed_postgres)}, pending_tasks={self._pending_add_layers_tasks}")
                         
                         if len(current_layers) > 0:
                             logger.info(f"Recovery: Found {len(current_layers)} usable layers, retrying add_layers")
@@ -1578,22 +1619,33 @@ class FilterMateApp:
                     
                     # FIX: Schedule retry for PostgreSQL layers that might be valid now
                     if captured_postgres_pending:
-                        def retry_postgres_layers():
+                        def retry_postgres_layers(retry_attempt=1):
                             strong_self2 = weak_self()
                             if strong_self2 is None:
                                 return
                             # Re-check PostgreSQL layers that were pending
                             now_valid = []
+                            still_pending = []
                             for layer in captured_postgres_pending:
                                 try:
                                     if layer.isValid() and layer.id() not in strong_self2.PROJECT_LAYERS:
                                         now_valid.append(layer)
-                                        logger.info(f"PostgreSQL layer '{layer.name()}' is now valid")
+                                        logger.info(f"PostgreSQL layer '{layer.name()}' is now valid (retry #{retry_attempt})")
+                                    elif not layer.isValid():
+                                        still_pending.append(layer)
                                 except (RuntimeError, AttributeError):
                                     pass
                             if now_valid:
                                 logger.info(f"FilterMate: Retrying {len(now_valid)} PostgreSQL layers that are now valid")
                                 strong_self2.manage_task('add_layers', now_valid)
+                            
+                            # FIX v2.8.6: Schedule additional retries if layers still pending
+                            if still_pending and retry_attempt < 3:
+                                logger.info(f"FilterMate: {len(still_pending)} PostgreSQL layers still not valid - scheduling retry #{retry_attempt + 1}")
+                                QTimer.singleShot(
+                                    STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'] * retry_attempt,
+                                    lambda: retry_postgres_layers(retry_attempt + 1)
+                                )
                         
                         # Retry PostgreSQL layers after additional delay
                         QTimer.singleShot(STABILITY_CONSTANTS['POSTGRESQL_EXTRA_DELAY_MS'] * 2, retry_postgres_layers)

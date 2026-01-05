@@ -111,7 +111,8 @@ class PostgreSQLBufferOptimizer:
     def __init__(
         self, 
         connection,
-        config: Optional[BufferOptimizationConfig] = None
+        config: Optional[BufferOptimizationConfig] = None,
+        source_layer = None
     ):
         """
         Initialize the buffer optimizer.
@@ -119,11 +120,76 @@ class PostgreSQLBufferOptimizer:
         Args:
             connection: psycopg2 database connection
             config: Optimization configuration
+            source_layer: Optional QgsVectorLayer for PK type detection
         """
         self.connection = connection
         self.config = config or BufferOptimizationConfig()
+        self.source_layer = source_layer
         self.mv_prefix = "filtermate_buf_"
         self.mv_schema = DEFAULT_TEMP_SCHEMA
+    
+    def _is_pk_numeric(self, pk_field: str = None) -> bool:
+        """
+        Check if the primary key field is numeric.
+        
+        CRITICAL FIX v2.8.5: UUID fields and other text-based PKs must be quoted in SQL.
+        
+        Args:
+            pk_field: Primary key field name (optional)
+            
+        Returns:
+            bool: True if PK is numeric, False if text (UUID, varchar, etc.)
+        """
+        if not self.source_layer:
+            return True  # Default to numeric if no layer available
+        
+        try:
+            # Auto-detect PK field if not provided
+            if not pk_field:
+                pk_indices = self.source_layer.primaryKeyAttributes()
+                if pk_indices:
+                    pk_field = self.source_layer.fields().field(pk_indices[0]).name()
+                else:
+                    return True  # Default
+            
+            field_idx = self.source_layer.fields().indexOf(pk_field)
+            if field_idx >= 0:
+                field = self.source_layer.fields().field(field_idx)
+                return field.isNumeric()
+        except Exception as e:
+            logger.debug(f"Could not determine PK type, assuming numeric: {e}")
+        
+        return True
+    
+    def _format_pk_values_for_sql(self, values: list, is_numeric: bool = None, pk_field: str = None) -> str:
+        """
+        Format primary key values for SQL IN clause.
+        
+        CRITICAL FIX v2.8.5: UUID fields must be quoted with single quotes in SQL.
+        
+        Args:
+            values: List of primary key values
+            is_numeric: Whether PK is numeric (optional, auto-detected if None)
+            pk_field: Primary key field name for auto-detection (optional)
+            
+        Returns:
+            str: Comma-separated values formatted for SQL IN clause
+        """
+        if not values:
+            return ''
+        
+        # Auto-detect if not specified
+        if is_numeric is None:
+            is_numeric = self._is_pk_numeric(pk_field)
+        
+        if is_numeric:
+            return ', '.join(str(v) for v in values)
+        else:
+            formatted = []
+            for v in values:
+                str_val = str(v).replace("'", "''")
+                formatted.append(f"'{str_val}'")
+            return ', '.join(formatted)
     
     def _get_pg_version(self) -> int:
         """
@@ -225,7 +291,8 @@ class PostgreSQLBufferOptimizer:
             if source_filter:
                 where_parts.append(f"({source_filter})")
             if source_fids:
-                fids_str = ', '.join(str(fid) for fid in source_fids)
+                # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+                fids_str = self._format_pk_values_for_sql(source_fids, pk_field=source_pk_col)
                 where_parts.append(f'"{source_pk_col}" IN ({fids_str})')
             
             where_clause = " AND ".join(where_parts) if where_parts else "TRUE"
@@ -522,7 +589,8 @@ class PostgreSQLBufferOptimizer:
         else:
             # Fallback to inline buffer (for small source sets)
             if source_fids and len(source_fids) <= self.config.buffer_mv_threshold:
-                fids_str = ', '.join(str(fid) for fid in source_fids)
+                # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+                fids_str = self._format_pk_values_for_sql(source_fids, pk_field=source_pk)
                 
                 # Still apply simplify if configured
                 if self.config.simplify_before_buffer:

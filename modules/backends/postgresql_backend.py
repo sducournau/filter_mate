@@ -2370,11 +2370,85 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_debug(f"Could not extract source bounds: {e}")
             return None
     
+    def _is_pk_numeric(self, layer: QgsVectorLayer, pk_field: str = None) -> bool:
+        """
+        Check if the primary key field is numeric.
+        
+        CRITICAL FIX v2.8.5: UUID fields and other text-based PKs must be quoted in SQL.
+        
+        Args:
+            layer: QgsVectorLayer to check
+            pk_field: Primary key field name (optional, auto-detected if None)
+            
+        Returns:
+            bool: True if PK is numeric (int, bigint, etc.), False if text (UUID, varchar, etc.)
+        """
+        if not layer:
+            return True  # Default to numeric
+        
+        # Auto-detect PK field if not provided
+        if not pk_field:
+            pk_indices = layer.primaryKeyAttributes()
+            if pk_indices:
+                pk_field = layer.fields().field(pk_indices[0]).name()
+            else:
+                pk_field = 'id'  # Default
+        
+        try:
+            field_idx = layer.fields().indexOf(pk_field)
+            if field_idx >= 0:
+                field = layer.fields().field(field_idx)
+                return field.isNumeric()
+        except Exception as e:
+            self.log_debug(f"Could not determine PK type, assuming numeric: {e}")
+        
+        return True
+    
+    def _format_pk_values_for_sql(self, values: list, is_numeric: bool = None, 
+                                   layer: QgsVectorLayer = None, pk_field: str = None) -> str:
+        """
+        Format primary key values for SQL IN clause.
+        
+        CRITICAL FIX v2.8.5: UUID fields must be quoted with single quotes in SQL.
+        Example: 
+            - Numeric: IN (1, 2, 3)
+            - UUID/Text: IN ('7b2e1a3e-b812-4d51-bf33-7f0cd0271ef3', ...)
+        
+        Args:
+            values: List of primary key values
+            is_numeric: Whether PK is numeric (optional, auto-detected if None)
+            layer: QgsVectorLayer to check PK type (optional)
+            pk_field: Primary key field name (optional)
+            
+        Returns:
+            str: Comma-separated values formatted for SQL IN clause
+        """
+        if not values:
+            return ''
+        
+        # Auto-detect if not specified
+        if is_numeric is None:
+            is_numeric = self._is_pk_numeric(layer, pk_field)
+        
+        if is_numeric:
+            # Numeric: simple conversion to string
+            return ', '.join(str(v) for v in values)
+        else:
+            # Text/UUID: quote with single quotes, escape existing quotes
+            formatted = []
+            for v in values:
+                # Convert to string and escape single quotes
+                str_val = str(v).replace("'", "''")
+                formatted.append(f"'{str_val}'")
+            return ', '.join(formatted)
+    
     def _build_in_clause_expression(
         self,
         feature_ids: list,
         primary_key: str,
-        max_ids_per_clause: int = 10000
+        max_ids_per_clause: int = 10000,
+        is_numeric: bool = None,
+        layer: QgsVectorLayer = None
     ) -> str:
         """
         Build optimized IN clause expression from feature IDs.
@@ -2382,10 +2456,14 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         For very large ID lists, uses multiple IN clauses combined with OR
         to avoid PostgreSQL query length limits.
         
+        CRITICAL FIX v2.8.5: Now supports UUID/text primary keys with proper quoting.
+        
         Args:
             feature_ids: List of feature IDs to include
             primary_key: Primary key column name
             max_ids_per_clause: Maximum IDs per IN clause
+            is_numeric: Whether PK is numeric (optional, auto-detected if None)
+            layer: QgsVectorLayer to check PK type (optional)
         
         Returns:
             SQL expression string
@@ -2394,16 +2472,22 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             # Return impossible condition for empty results
             return f'"{primary_key}" IS NULL AND "{primary_key}" IS NOT NULL'
         
+        # Auto-detect PK type if not specified
+        if is_numeric is None:
+            is_numeric = self._is_pk_numeric(layer, primary_key)
+        
         if len(feature_ids) <= max_ids_per_clause:
             # Simple case - single IN clause
-            ids_str = ','.join(str(id) for id in feature_ids)
+            # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql for proper quoting
+            ids_str = self._format_pk_values_for_sql(feature_ids, is_numeric)
             return f'"{primary_key}" IN ({ids_str})'
         
         # Large ID list - chunk into multiple IN clauses
         clauses = []
         for i in range(0, len(feature_ids), max_ids_per_clause):
             chunk = feature_ids[i:i + max_ids_per_clause]
-            ids_str = ','.join(str(id) for id in chunk)
+            # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql for proper quoting
+            ids_str = self._format_pk_values_for_sql(chunk, is_numeric)
             clauses.append(f'"{primary_key}" IN ({ids_str})')
         
         # Combine with OR
@@ -2990,7 +3074,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_info(f"   MV: {full_mv_name}")
             
             # Build FIDs string for IN clause
-            fids_str = ', '.join(str(fid) for fid in fids)
+            # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+            fids_str = self._format_pk_values_for_sql(fids, layer=layer, pk_field=pk_field)
             
             # Drop existing MV if any (unlikely but safe)
             sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS {full_mv_name} CASCADE;'

@@ -1818,6 +1818,73 @@ class FilterEngineTask(QgsTask):
         
         return expression
     
+    def _is_pk_numeric(self, layer=None, pk_field=None):
+        """
+        Check if the primary key field is numeric.
+        
+        CRITICAL FIX v2.8.5: UUID fields and other text-based PKs must be quoted in SQL.
+        
+        Args:
+            layer: QgsVectorLayer to check (optional, uses source_layer if None)
+            pk_field: Primary key field name (optional, uses self.primary_key_name if None)
+            
+        Returns:
+            bool: True if PK is numeric (int, bigint, etc.), False if text (UUID, varchar, etc.)
+        """
+        check_layer = layer or self.source_layer
+        check_pk = pk_field or getattr(self, 'primary_key_name', None)
+        
+        if not check_layer or not check_pk:
+            # Default to numeric for safety (most common case)
+            return True
+        
+        try:
+            field_idx = check_layer.fields().indexOf(check_pk)
+            if field_idx >= 0:
+                field = check_layer.fields().field(field_idx)
+                return field.isNumeric()
+        except Exception as e:
+            logger.debug(f"Could not determine PK type, assuming numeric: {e}")
+        
+        return True
+    
+    def _format_pk_values_for_sql(self, values, is_numeric=None, layer=None, pk_field=None):
+        """
+        Format primary key values for SQL IN clause.
+        
+        CRITICAL FIX v2.8.5: UUID fields must be quoted with single quotes in SQL.
+        Example: 
+            - Numeric: IN (1, 2, 3)
+            - UUID/Text: IN ('7b2e1a3e-b812-4d51-bf33-7f0cd0271ef3', ...)
+        
+        Args:
+            values: List of primary key values
+            is_numeric: Whether PK is numeric (optional, auto-detected if None)
+            layer: QgsVectorLayer to check PK type (optional)
+            pk_field: Primary key field name (optional)
+            
+        Returns:
+            str: Comma-separated values formatted for SQL IN clause
+        """
+        if not values:
+            return ''
+        
+        # Auto-detect if not specified
+        if is_numeric is None:
+            is_numeric = self._is_pk_numeric(layer, pk_field)
+        
+        if is_numeric:
+            # Numeric: simple conversion to string
+            return ', '.join(str(v) for v in values)
+        else:
+            # Text/UUID: quote with single quotes, escape existing quotes
+            formatted = []
+            for v in values:
+                # Convert to string and escape single quotes
+                str_val = str(v).replace("'", "''")
+                formatted.append(f"'{str_val}'")
+            return ', '.join(formatted)
+    
     def _optimize_duplicate_in_clauses(self, expression):
         """
         Remove duplicate IN clauses from an expression.
@@ -6723,7 +6790,8 @@ class FilterEngineTask(QgsTask):
                             else:
                                 # MV creation failed, fall back to inline IN clause
                                 logger.warning(f"   ⚠️ MV creation failed, using inline IN clause (may be slow)")
-                                fids_str = ', '.join(str(fid) for fid in fids)
+                                # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+                                fids_str = self._format_pk_values_for_sql(fids, layer=self.source_layer, pk_field=pk_field)
                                 if source_table_name:
                                     source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
                                 else:
@@ -6733,7 +6801,8 @@ class FilterEngineTask(QgsTask):
                             # CRITICAL FIX v2.7.9: Prefix with source table name for _adapt_filter_for_subquery
                             # Without table prefix, the filter "fid" IN (135) is ambiguous in EXISTS subquery
                             # because both source and target tables may have a "fid" column.
-                            fids_str = ', '.join(str(fid) for fid in fids)
+                            # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+                            fids_str = self._format_pk_values_for_sql(fids, layer=self.source_layer, pk_field=pk_field)
                             
                             if source_table_name:
                                 # Use qualified column name: "table"."column"
@@ -6844,12 +6913,14 @@ class FilterEngineTask(QgsTask):
                                     logger.info(f"   ✓ Created MV for {len(visible_fids)} visible features")
                                 else:
                                     # MV failed, use inline IN clause
-                                    fids_str = ', '.join(str(fid) for fid in visible_fids)
+                                    # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+                                    fids_str = self._format_pk_values_for_sql(visible_fids, layer=self.source_layer, pk_field=pk_field)
                                     source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
                                     logger.warning(f"   ⚠️ MV creation failed, using inline IN clause")
                             else:
                                 # Small selection: use inline IN clause
-                                fids_str = ', '.join(str(fid) for fid in visible_fids)
+                                # CRITICAL FIX v2.8.5: Use _format_pk_values_for_sql to properly quote UUID/text PKs
+                                fids_str = self._format_pk_values_for_sql(visible_fids, layer=self.source_layer, pk_field=pk_field)
                                 if source_table_name:
                                     source_filter = f'"{source_table_name}"."{pk_field}" IN ({fids_str})'
                                 else:

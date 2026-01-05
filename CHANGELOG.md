@@ -2,6 +2,15 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.9.3] - 2026-01-05 - Maintenance Release
+
+### 🔧 Maintenance
+
+- Version bump and documentation updates
+- Updated changelog and documentation synchronization
+
+---
+
 ## [2.9.2] - 2026-01-04 - Centroid & Simplification Optimizations
 
 ### 🎯 Enhanced: Centroid Optimization with ST_PointOnSurface

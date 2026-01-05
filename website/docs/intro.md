@@ -5,7 +5,7 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.9.2** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v2.9.3** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
 ## ✨ Key Features
 
@@ -21,9 +21,18 @@ slug: /
 
 ---
 
-## 🎉 What's New in v2.9.2 - Centroid & Simplification Optimizations
+## 🎉 What's New in v2.9.3 - Maintenance Release
 
-This release brings major improvements to centroid-based filtering and geometry simplification for buffer operations.
+This release includes version bump and documentation updates.
+
+- 🔧 **Version bump** and documentation synchronization
+- 📚 **Updated changelog** across all documentation
+
+---
+
+## Previous: v2.9.2 - Centroid & Simplification Optimizations
+
+Major improvements to centroid-based filtering and geometry simplification for buffer operations.
 
 ### 🎯 Enhanced: Centroid Optimization with ST_PointOnSurface
 
