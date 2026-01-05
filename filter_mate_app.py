@@ -523,6 +523,20 @@ class FilterMateApp:
         self.favorites_manager.load_from_project()
         logger.info(f"FilterMate: FavoritesManager initialized ({self.favorites_manager.count} favorites loaded)")
         
+        # v2.8.11: Initialize Spatialite cache for multi-step filtering
+        try:
+            from modules.backends.spatialite_cache import get_cache, cleanup_cache
+            self._spatialite_cache = get_cache()
+            # Cleanup expired entries on startup
+            expired_count = cleanup_cache()
+            if expired_count > 0:
+                logger.info(f"FilterMate: Cleaned up {expired_count} expired cache entries")
+            cache_stats = self._spatialite_cache.get_cache_stats()
+            logger.info(f"FilterMate: Spatialite cache initialized ({cache_stats['total_entries']} entries, {cache_stats['db_size_mb']} MB)")
+        except Exception as e:
+            logger.debug(f"FilterMate: Spatialite cache not available: {e}")
+            self._spatialite_cache = None
+        
         # Log PostgreSQL availability status
         if POSTGRESQL_AVAILABLE:
             logger.info("FilterMate: PostgreSQL support enabled (psycopg2 available)")
@@ -3953,6 +3967,15 @@ class FilterMateApp:
             return
 
         if task_name == 'unfilter':
+            # v2.8.11: Clear Spatialite cache for this layer when unfiltering
+            try:
+                from modules.backends.spatialite_cache import get_cache
+                cache = get_cache()
+                cache.clear_layer_cache(layer.id())
+                logger.debug(f"FilterMate: Cleared Spatialite cache for {layer.name()}")
+            except Exception as e:
+                logger.debug(f"Could not clear Spatialite cache: {e}")
+            
             # Use history manager for proper undo
             history = self.history_manager.get_history(layer.id())
             

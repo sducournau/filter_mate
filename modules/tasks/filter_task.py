@@ -1749,18 +1749,22 @@ class FilterEngineTask(QgsTask):
         is_numeric = self.task_parameters["infos"]["primary_key_is_numeric"]
         
         if self.param_source_provider_type == PROVIDER_OGR:
-            # OGR: Simple syntax with quoted field name
-            # CRITICAL FIX: Use actual primary_key_name, not hardcoded "fid"
+            # OGR: Simple syntax
+            # CRITICAL FIX v2.8.10: Use unquoted 'fid' for OGR/GeoPackage compatibility
+            # OGR driver does NOT support quoted "fid" in setSubsetString()
+            pk_ref = 'fid' if self.primary_key_name == 'fid' else f'"{self.primary_key_name}"'
             if is_numeric:
-                expression = f'"{self.primary_key_name}" IN ({", ".join(features_ids)})'
+                expression = f'{pk_ref} IN ({", ".join(features_ids)})'
             else:
-                expression = f'"{self.primary_key_name}" IN ({", ".join(repr(fid) for fid in features_ids)})'
+                expression = f'{pk_ref} IN ({", ".join(repr(fid) for fid in features_ids)})'
         elif self.param_source_provider_type == PROVIDER_SPATIALITE:
-            # Spatialite: Simple syntax with quoted field name (no table qualification needed)
+            # Spatialite: Simple syntax
+            # CRITICAL FIX v2.8.10: Use unquoted 'fid' for GeoPackage compatibility
+            pk_ref = 'fid' if self.primary_key_name == 'fid' else f'"{self.primary_key_name}"'
             if is_numeric:
-                expression = f'"{self.primary_key_name}" IN ({", ".join(features_ids)})'
+                expression = f'{pk_ref} IN ({", ".join(features_ids)})'
             else:
-                expression = f'"{self.primary_key_name}" IN ({", ".join(repr(fid) for fid in features_ids)})'
+                expression = f'{pk_ref} IN ({", ".join(repr(fid) for fid in features_ids)})'
         else:
             # PostgreSQL/Spatialite: Qualified syntax
             if is_numeric:

@@ -83,6 +83,24 @@ except ImportError:
     BackendSelectivityEstimator = None
     WKTCache = None
 
+# v2.8.11: Import Spatialite Cache for multi-step filtering
+try:
+    from .spatialite_cache import (
+        get_cache as get_spatialite_cache,
+        store_filter_fids,
+        get_previous_filter_fids,
+        intersect_filter_fids,
+        SpatialiteCacheDB
+    )
+    SPATIALITE_CACHE_AVAILABLE = True
+except ImportError:
+    SPATIALITE_CACHE_AVAILABLE = False
+    get_spatialite_cache = None
+    store_filter_fids = None
+    get_previous_filter_fids = None
+    intersect_filter_fids = None
+    SpatialiteCacheDB = None
+
 
 # Cache for mod_spatialite availability (tested once per session)
 _MOD_SPATIALITE_AVAILABLE: Optional[bool] = None
@@ -2566,6 +2584,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         v2.8.7: Build FID filter using BETWEEN ranges for consecutive FIDs.
         
+        v2.8.10: FIX - Use unquoted 'fid' for OGR/GeoPackage compatibility.
+        OGR drivers don't support quoted column names in setSubsetString().
+        
         This is MUCH more compact than IN() for large consecutive FID sets.
         For 235K FIDs that are mostly consecutive, this can reduce expression
         size from ~1.5MB to ~10KB or less.
@@ -2581,7 +2602,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             SQL expression using BETWEEN ranges
         """
         if not fids:
-            return f'"{pk_col}" = -1'  # No match
+            # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+            return 'fid = -1' if pk_col == 'fid' else f'"{pk_col}" = -1'  # No match
         
         sorted_fids = sorted(set(fids))  # Remove duplicates and sort
         
@@ -2613,7 +2635,11 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         for start, end in ranges:
             if end - start >= 2:
                 # Use BETWEEN for ranges of 3+ consecutive FIDs
-                parts.append(f'("{pk_col}" BETWEEN {start} AND {end})')
+                # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+                if pk_col == 'fid':
+                    parts.append(f'(fid BETWEEN {start} AND {end})')
+                else:
+                    parts.append(f'("{pk_col}" BETWEEN {start} AND {end})')
             else:
                 # For ranges of 2, just add to singles
                 singles.append(start)
@@ -2625,10 +2651,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             chunk_size = 1000
             for i in range(0, len(singles), chunk_size):
                 chunk = singles[i:i + chunk_size]
-                parts.append(f'"{pk_col}" IN ({", ".join(str(f) for f in chunk)})')
+                # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+                if pk_col == 'fid':
+                    parts.append(f'fid IN ({", ".join(str(f) for f in chunk)})')
+                else:
+                    parts.append(f'"{pk_col}" IN ({", ".join(str(f) for f in chunk)})')
         
         if not parts:
-            return f'"{pk_col}" = -1'
+            # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+            return 'fid = -1' if pk_col == 'fid' else f'"{pk_col}" = -1'
         
         result = "(" + " OR ".join(parts) + ")"
         
@@ -2646,6 +2677,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         v2.6.5: Build FID filter with chunked IN clauses to prevent expression parsing freeze.
         
+        v2.8.10: FIX - Use unquoted 'fid' for OGR/GeoPackage compatibility.
+        
         SQLite/QGIS can freeze when parsing very long IN (...) expressions.
         Breaking into chunks with OR helps the parser.
         
@@ -2659,15 +2692,18 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         sorted_fids = sorted(fids)
         
+        # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+        col_ref = 'fid' if pk_col == 'fid' else f'"{pk_col}"'
+        
         # If small enough, use single IN
         if len(sorted_fids) <= chunk_size:
-            return f'"{pk_col}" IN ({", ".join(str(f) for f in sorted_fids)})'
+            return f'{col_ref} IN ({", ".join(str(f) for f in sorted_fids)})'
         
         # Build chunked expression
         chunks = []
         for i in range(0, len(sorted_fids), chunk_size):
             chunk = sorted_fids[i:i + chunk_size]
-            chunks.append(f'"{pk_col}" IN ({", ".join(str(f) for f in chunk)})')
+            chunks.append(f'{col_ref} IN ({", ".join(str(f) for f in chunk)})')
         
         # Combine with OR
         result = "(" + " OR ".join(chunks) + ")"
@@ -2982,6 +3018,65 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             )
             self.log_info(f"  → Found {len(matching_fids)} matching features via direct SQL")
             
+            # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+            step_number = 1
+            if SPATIALITE_CACHE_AVAILABLE and old_subset:
+                # Check if this is a re-filter (multi-step)
+                previous_fids = get_previous_filter_fids(layer)
+                if previous_fids is not None:
+                    original_count = len(matching_fids)
+                    # Intersect new results with previous
+                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                    matching_fids = list(matching_fids_set)
+                    self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                    QgsMessageLog.logMessage(
+                        f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                        "FilterMate", Qgis.Info
+                    )
+            
+            # v2.8.11: Store result in cache for future multi-step filtering
+            QgsMessageLog.logMessage(
+                f"  📦 Cache check: AVAILABLE={SPATIALITE_CACHE_AVAILABLE}, fids_count={len(matching_fids)}",
+                "FilterMate", Qgis.Info
+            )
+            if SPATIALITE_CACHE_AVAILABLE and matching_fids:
+                try:
+                    source_wkt = ""
+                    predicates_list = []
+                    buffer_val = 0.0
+                    if hasattr(self, 'task_params') and self.task_params:
+                        infos = self.task_params.get('infos', {})
+                        source_wkt = infos.get('source_geom_wkt', '')
+                        # v2.8.12: FIX - geometric_predicates can be list or dict
+                        geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                        if isinstance(geom_preds, dict):
+                            predicates_list = list(geom_preds.keys())
+                        elif isinstance(geom_preds, list):
+                            predicates_list = geom_preds
+                        else:
+                            predicates_list = []
+                        buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                    
+                    cache_key = store_filter_fids(
+                        layer=layer,
+                        fids=matching_fids,
+                        source_geom_wkt=source_wkt,
+                        predicates=predicates_list,
+                        buffer_value=buffer_val,
+                        step_number=step_number
+                    )
+                    QgsMessageLog.logMessage(
+                        f"  💾 Direct SQL cached {len(matching_fids)} FIDs (key={cache_key[:8] if cache_key else 'None'}, step={step_number})",
+                        "FilterMate", Qgis.Info
+                    )
+                except Exception as cache_err:
+                    QgsMessageLog.logMessage(
+                        f"  ⚠️ Cache storage failed: {cache_err}",
+                        "FilterMate", Qgis.Warning
+                    )
+                    import traceback
+                    self.log_debug(f"Cache storage traceback: {traceback.format_exc()}")
+            
             if len(matching_fids) == 0:
                 # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
                 fid_expression = 'fid = -1'  # No valid FID is -1
@@ -3005,31 +3100,25 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     f"Large result set ({len(matching_fids)} FIDs). "
                     f"Consider PostgreSQL for better performance."
                 )
-                fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
+                # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+                col_ref = 'fid' if pk_col == 'fid' else f'"{pk_col}"'
+                fid_expression = f'{col_ref} IN ({", ".join(str(fid) for fid in matching_fids)})'
             else:
-                fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
+                # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+                col_ref = 'fid' if pk_col == 'fid' else f'"{pk_col}"'
+                fid_expression = f'{col_ref} IN ({", ".join(str(fid) for fid in matching_fids)})'
             
-            # Combine with old_subset if needed
-            if old_subset:
-                old_subset_upper = old_subset.upper()
-                
-                # Check for patterns that should not be combined
-                has_source_alias = '__source' in old_subset.lower()
-                has_exists = 'EXISTS (' in old_subset_upper or 'EXISTS(' in old_subset_upper
-                spatial_predicates = [
-                    'ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'ST_TOUCHES',
-                    'ST_OVERLAPS', 'ST_CROSSES', 'ST_DISJOINT', 'ST_EQUALS',
-                    'INTERSECTS', 'CONTAINS', 'WITHIN'
-                ]
-                has_spatial_predicate = any(pred in old_subset_upper for pred in spatial_predicates)
-                
-                if has_source_alias or has_exists or has_spatial_predicate:
-                    self.log_info(f"🔄 Old subset contains geometric filter - replacing")
-                    final_expression = fid_expression
-                else:
-                    if not combine_operator:
-                        combine_operator = 'AND'
-                    final_expression = f"({old_subset}) {combine_operator} ({fid_expression})"
+            # v2.8.10: FIX - Combine with old_subset correctly
+            # If old_subset was already included in SQL query via old_subset_sql_filter,
+            # DON'T re-combine - the matching_fids already reflect the intersection
+            if old_subset and not old_subset_sql_filter:
+                # old_subset was NOT included in SQL (had spatial predicates) - just use new FIDs
+                self.log_info(f"🔄 Old subset had spatial predicates - replacing with new FID filter")
+                final_expression = fid_expression
+            elif old_subset and old_subset_sql_filter:
+                # old_subset WAS included in SQL - matching_fids already combined, use as-is
+                self.log_info(f"  → FID filter already combined in SQL query, using result directly")
+                final_expression = fid_expression
             else:
                 final_expression = fid_expression
             
@@ -3401,7 +3490,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 target_geom_expr = f't."{geom_col}"'
             
             predicate_conditions = []
-            for key in predicates.keys():
+            # v2.8.12: FIX - predicates can be list or dict
+            predicate_keys = list(predicates.keys()) if isinstance(predicates, dict) else (predicates if isinstance(predicates, list) else [])
+            for key in predicate_keys:
                 if key in index_to_func:
                     func = index_to_func[key]
                 elif key.upper().startswith('ST_'):
@@ -3676,6 +3767,46 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 "FilterMate", Qgis.Info
             )
             
+            # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+            step_number = 1
+            if SPATIALITE_CACHE_AVAILABLE and old_subset:
+                # Check if this is a re-filter (multi-step)
+                previous_fids = get_previous_filter_fids(layer)
+                if previous_fids is not None:
+                    original_count = len(matching_fids)
+                    # Intersect new results with previous
+                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                    matching_fids = list(matching_fids_set)
+                    self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                    QgsMessageLog.logMessage(
+                        f"  → Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                        "FilterMate", Qgis.Info
+                    )
+            
+            # v2.8.11: Store result in cache for future multi-step filtering
+            if SPATIALITE_CACHE_AVAILABLE and matching_fids:
+                try:
+                    source_wkt = source_wkt if 'source_wkt' in dir() else ""
+                    # v2.8.12: FIX - predicates can be list or dict
+                    if isinstance(predicates, dict):
+                        predicates_list = list(predicates.keys())
+                    elif isinstance(predicates, list):
+                        predicates_list = predicates
+                    else:
+                        predicates_list = []
+                    
+                    cache_key = store_filter_fids(
+                        layer=layer,
+                        fids=matching_fids,
+                        source_geom_wkt=source_wkt,
+                        predicates=predicates_list,
+                        buffer_value=buffer_value,
+                        step_number=step_number
+                    )
+                    self.log_info(f"  💾 Cached {len(matching_fids)} FIDs (key={cache_key[:8]}, step={step_number})")
+                except Exception as cache_err:
+                    self.log_debug(f"Cache storage failed (non-fatal): {cache_err}")
+            
             # v2.6.5: Build optimized FID-based filter expression
             if len(matching_fids) == 0:
                 # v2.6.10: Suspicious 0 results on large dataset - might be geometry issue
@@ -3723,18 +3854,21 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 # Use range-based filter for OGR compatibility (no subqueries)
                 fid_expression = self._build_range_based_filter(pk_col, matching_fids)
             else:
-                fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
+                # v2.8.10: FIX - Use unquoted fid for OGR/GeoPackage compatibility
+                col_ref = 'fid' if pk_col == 'fid' else f'"{pk_col}"'
+                fid_expression = f'{col_ref} IN ({", ".join(str(fid) for fid in matching_fids)})'
             
             # Combine with old_subset if needed (same logic as _apply_filter_direct_sql)
-            if old_subset:
-                old_upper = old_subset.upper()
-                has_spatial = any(p in old_upper for p in ['ST_INTERSECTS', 'ST_CONTAINS', 'ST_WITHIN', 'EXISTS ('])
-                
-                if has_spatial or '__source' in old_subset.lower():
-                    final_expression = fid_expression
-                else:
-                    op = combine_operator or 'AND'
-                    final_expression = f"({old_subset}) {op} ({fid_expression})"
+            # v2.8.10: FIX - If old_subset was already included in SQL query via old_subset_sql_filter,
+            # DON'T re-combine - the matching_fids already reflect the intersection
+            if old_subset and not old_subset_sql_filter:
+                # old_subset was NOT included in SQL (had spatial predicates) - just use new FIDs
+                final_expression = fid_expression
+                self.log_info(f"  → Replacing old spatial filter with new FID filter")
+            elif old_subset and old_subset_sql_filter:
+                # old_subset WAS included in SQL - matching_fids already combined, use as-is
+                final_expression = fid_expression
+                self.log_info(f"  → FID filter already combined in SQL query, using result directly")
             else:
                 final_expression = fid_expression
             

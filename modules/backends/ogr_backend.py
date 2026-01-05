@@ -101,6 +101,25 @@ except ImportError:
     OGROptimizer = None
     BackendSelectivityEstimator = None
 
+# v2.8.11: Import Spatialite Cache for multi-step filtering
+# OGR backend uses the same cache as Spatialite for FID persistence
+try:
+    from .spatialite_cache import (
+        get_cache as get_spatialite_cache,
+        store_filter_fids,
+        get_previous_filter_fids,
+        intersect_filter_fids,
+        SpatialiteCacheDB
+    )
+    SPATIALITE_CACHE_AVAILABLE = True
+except ImportError:
+    SPATIALITE_CACHE_AVAILABLE = False
+    get_spatialite_cache = None
+    store_filter_fids = None
+    get_previous_filter_fids = None
+    intersect_filter_fids = None
+    SpatialiteCacheDB = None
+
 logger = get_tasks_logger()
 
 # Thread safety tracking (v2.3.9)
@@ -479,12 +498,61 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     self.log_warning("Spatial selection on temp layer failed")
                     return None
                 
-                # Get final matching IDs
+                # Get final matching IDs - collect both QGIS FIDs and PK values
                 final_matching = set()
+                matching_fids = []  # For cache (QGIS FIDs)
                 for feat in temp_layer.selectedFeatures():
                     # Need to map back to original layer FIDs
                     # Features in temp layer have same attribute values
                     final_matching.add(feat.id())
+                    matching_fids.append(feat.id())
+                
+                # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+                step_number = 1
+                if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
+                    previous_fids = get_previous_filter_fids(layer)
+                    if previous_fids is not None:
+                        original_count = len(matching_fids)
+                        matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                        matching_fids = list(matching_fids_set)
+                        final_matching = matching_fids_set
+                        self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"  → OGR ATTRIBUTE_FIRST Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                            "FilterMate", Qgis.Info
+                        )
+                
+                # v2.8.11: Store result in cache for future multi-step filtering
+                if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
+                    try:
+                        source_wkt = ""
+                        predicates_list = []
+                        buffer_val = 0.0
+                        if hasattr(self, 'task_params') and self.task_params:
+                            infos = self.task_params.get('infos', {})
+                            source_wkt = infos.get('source_geom_wkt', '')
+                            # v2.8.12: FIX - geometric_predicates can be list or dict
+                            geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                            if isinstance(geom_preds, dict):
+                                predicates_list = list(geom_preds.keys())
+                            elif isinstance(geom_preds, list):
+                                predicates_list = geom_preds
+                            else:
+                                predicates_list = []
+                            buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                        
+                        cache_key = store_filter_fids(
+                            layer=layer,
+                            fids=matching_fids,
+                            source_geom_wkt=source_wkt,
+                            predicates=predicates_list,
+                            buffer_value=buffer_val,
+                            step_number=step_number
+                        )
+                        self.log_info(f"  💾 OGR ATTRIBUTE_FIRST Cached {len(matching_fids)} FIDs (key={cache_key[:8] if cache_key else 'N/A'}, step={step_number})")
+                    except Exception as cache_err:
+                        self.log_debug(f"Cache storage failed (non-fatal): {cache_err}")
                 
                 # The FIDs in temp_layer match the original because we copied them
                 # But we need to use the attribute values to find original FIDs
@@ -493,11 +561,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 if pk_field:
                     # Get PK values from selected temp features
+                    # v2.8.11: Only get PK values for FIDs that passed cache intersection
                     pk_values = []
                     for feat in temp_layer.selectedFeatures():
-                        pk_val = feat.attribute(pk_field)
-                        if pk_val is not None:
-                            pk_values.append(pk_val)
+                        if feat.id() in final_matching:  # Only include if in intersected set
+                            pk_val = feat.attribute(pk_field)
+                            if pk_val is not None:
+                                pk_values.append(pk_val)
                     
                     if pk_values:
                         # Build subset expression
@@ -515,10 +585,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
                         new_expression = 'fid = -1'  # No valid FID is -1
                 else:
-                    # Fall back to $id
-                    selected_ids = [f.id() for f in temp_layer.selectedFeatures()]
-                    if selected_ids:
-                        id_list = ','.join(str(fid) for fid in selected_ids)
+                    # Fall back to $id - use final_matching (already intersected with cache)
+                    if final_matching:
+                        id_list = ','.join(str(fid) for fid in final_matching)
                         new_expression = f'$id IN ({id_list})'
                     else:
                         # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
@@ -1882,14 +1951,66 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     self.log_warning(f"No primary key found for {layer.name()}, using $id (may not work for all formats)")
                 
                 # Get actual field values from selected features
+                # We'll collect both QGIS FIDs (for cache) and PK values (for filter expression)
+                matching_fids = []  # QGIS feature IDs for cache
+                
                 if pk_field == "$id":
                     # Use QGIS feature IDs
                     # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
                     try:
                         selected_ids = [f.id() for f in layer.selectedFeatures()]
+                        matching_fids = selected_ids  # FIDs are the same
                     except (RuntimeError, AttributeError) as e:
                         self.log_error(f"Failed to get selected features: {e}")
                         return False
+                    
+                    # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+                    step_number = 1
+                    if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
+                        previous_fids = get_previous_filter_fids(layer)
+                        if previous_fids is not None:
+                            original_count = len(matching_fids)
+                            matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                            matching_fids = list(matching_fids_set)
+                            selected_ids = matching_fids  # Update for expression building
+                            self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                                "FilterMate", Qgis.Info
+                            )
+                    
+                    # v2.8.11: Store result in cache for future multi-step filtering
+                    if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
+                        try:
+                            source_wkt = ""
+                            predicates_list = []
+                            buffer_val = 0.0
+                            if hasattr(self, 'task_params') and self.task_params:
+                                infos = self.task_params.get('infos', {})
+                                source_wkt = infos.get('source_geom_wkt', '')
+                                # v2.8.12: FIX - geometric_predicates can be list or dict
+                                geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                                if isinstance(geom_preds, dict):
+                                    predicates_list = list(geom_preds.keys())
+                                elif isinstance(geom_preds, list):
+                                    predicates_list = geom_preds
+                                else:
+                                    predicates_list = []
+                                buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                            
+                            cache_key = store_filter_fids(
+                                layer=layer,
+                                fids=matching_fids,
+                                source_geom_wkt=source_wkt,
+                                predicates=predicates_list,
+                                buffer_value=buffer_val,
+                                step_number=step_number if 'step_number' in dir() else 1
+                            )
+                            self.log_info(f"  💾 OGR Cached {len(matching_fids)} FIDs (key={cache_key[:8] if cache_key else 'N/A'}, step={step_number if 'step_number' in dir() else 1})")
+                        except Exception as cache_err:
+                            self.log_debug(f"Cache storage failed (non-fatal): {cache_err}")
+                    
                     id_list = ','.join(str(fid) for fid in selected_ids)
                     new_subset_expression = f"$id IN ({id_list})"
                 else:
@@ -1903,13 +2024,71 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     
                     field_type = layer.fields()[field_idx].type()
                     
-                    # Extract values from the primary key field
+                    # Extract values from the primary key field AND collect QGIS FIDs for cache
                     # STABILITY FIX v2.3.9: Wrap in try-except to catch access violations
                     try:
-                        selected_values = [f.attribute(pk_field) for f in layer.selectedFeatures()]
+                        selected_values = []
+                        matching_fids = []  # QGIS feature IDs for cache
+                        for f in layer.selectedFeatures():
+                            selected_values.append(f.attribute(pk_field))
+                            matching_fids.append(f.id())  # Collect QGIS FID for cache
                     except (RuntimeError, AttributeError) as e:
                         self.log_error(f"Failed to get selected features for PK extraction: {e}")
                         return False
+                    
+                    # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+                    step_number = 1
+                    if SPATIALITE_CACHE_AVAILABLE and intersect_filter_fids and old_subset:
+                        previous_fids = get_previous_filter_fids(layer)
+                        if previous_fids is not None:
+                            original_count = len(matching_fids)
+                            matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                            matching_fids = list(matching_fids_set)
+                            
+                            # We need to re-map FIDs to PK values after intersection
+                            # Get the PK values for the intersected FIDs
+                            if len(matching_fids) < original_count:
+                                # Need to filter selected_values to match intersected FIDs
+                                fid_to_value = dict(zip([f.id() for f in layer.selectedFeatures()], selected_values))
+                                selected_values = [fid_to_value[fid] for fid in matching_fids if fid in fid_to_value]
+                            
+                            self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"  → OGR Multi-step step {step_number}: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)} FIDs",
+                                "FilterMate", Qgis.Info
+                            )
+                    
+                    # v2.8.11: Store result in cache for future multi-step filtering
+                    if SPATIALITE_CACHE_AVAILABLE and store_filter_fids and matching_fids:
+                        try:
+                            source_wkt = ""
+                            predicates_list = []
+                            buffer_val = 0.0
+                            if hasattr(self, 'task_params') and self.task_params:
+                                infos = self.task_params.get('infos', {})
+                                source_wkt = infos.get('source_geom_wkt', '')
+                                # v2.8.12: FIX - geometric_predicates can be list or dict
+                                geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                                if isinstance(geom_preds, dict):
+                                    predicates_list = list(geom_preds.keys())
+                                elif isinstance(geom_preds, list):
+                                    predicates_list = geom_preds
+                                else:
+                                    predicates_list = []
+                                buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+                            
+                            cache_key = store_filter_fids(
+                                layer=layer,
+                                fids=matching_fids,
+                                source_geom_wkt=source_wkt,
+                                predicates=predicates_list,
+                                buffer_value=buffer_val,
+                                step_number=step_number
+                            )
+                            self.log_info(f"  💾 OGR Cached {len(matching_fids)} FIDs (key={cache_key[:8] if cache_key else 'N/A'}, step={step_number})")
+                        except Exception as cache_err:
+                            self.log_debug(f"Cache storage failed (non-fatal): {cache_err}")
                     
                     # Quote string values, keep numeric values unquoted
                     if field_type == QMetaType.Type.QString:
