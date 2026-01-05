@@ -40,6 +40,7 @@ import logging
 import threading
 import time
 import os
+import atexit
 from typing import Dict, Optional, Tuple, Any, Generator
 from contextlib import contextmanager
 from collections import OrderedDict
@@ -190,9 +191,24 @@ class PostgreSQLConnectionPool:
             self._start_health_check_thread()
     
     def _start_health_check_thread(self):
-        """Start background thread for periodic health checks."""
+        """Start background thread for periodic health checks.
+        
+        CRASH FIX (v2.8.6): Added additional safety checks to detect QGIS shutdown
+        and prevent the thread from causing access violations when QGIS exits.
+        """
         def health_check_loop():
             while not self._shutdown_event.is_set():
+                # CRASH FIX (v2.8.6): Check if QGIS is still alive before any operation
+                # This prevents access violations when QGIS is shutting down
+                try:
+                    from qgis.PyQt.QtWidgets import QApplication
+                    if QApplication.instance() is None:
+                        logger.debug("QApplication gone, stopping health check thread")
+                        break
+                except Exception:
+                    # If we can't check QGIS state, assume it's shutting down
+                    break
+                
                 try:
                     self._perform_health_check()
                 except Exception as e:
@@ -976,3 +992,19 @@ def cleanup_pools():
         _pool_manager.close_all_pools()
         _pool_manager = None
         logger.info("✓ Connection pool cleanup complete")
+
+
+# CRASH FIX (v2.8.6): Register atexit handler to ensure pools are cleaned up
+# even if the plugin's unload() is not called (e.g., during QGIS crash or kill)
+def _atexit_cleanup():
+    """Cleanup handler called when Python interpreter exits."""
+    global _pool_manager
+    if _pool_manager is not None:
+        try:
+            _pool_manager.close_all_pools()
+            _pool_manager = None
+        except Exception:
+            pass  # Silently ignore errors during exit
+
+
+atexit.register(_atexit_cleanup)

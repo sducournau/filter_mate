@@ -1648,11 +1648,22 @@ class LayersManagementEngineTask(QgsTask):
         return return_typed_value(value_as_string, action)
 
     def cancel(self):
-        """Handle task cancellation."""
-        QgsMessageLog.logMessage(
-            f'"{self.description()}" task was canceled',
-            MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info
-        )
+        """Handle task cancellation.
+        
+        CRASH FIX (v2.8.6): Check if QGIS is alive before calling QgsMessageLog.
+        During QGIS shutdown (QgsTaskManager::cancelAll), the C++ objects may
+        already be destroyed, causing Windows fatal access violation.
+        """
+        # Only log if QGIS is still alive - prevents access violation during shutdown
+        if is_qgis_alive():
+            try:
+                QgsMessageLog.logMessage(
+                    f'"{self.description()}" task was canceled',
+                    MESSAGE_TASKS_CATEGORIES[self.task_action], Qgis.Info
+                )
+            except (RuntimeError, OSError, SystemError):
+                # Silently ignore if QGIS is shutting down
+                pass
         super().cancel()
 
     def finished(self, result):
