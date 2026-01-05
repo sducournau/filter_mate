@@ -2632,6 +2632,12 @@ class FilterEngineTask(QgsTask):
                 logger.error("    3. No features selected/filtered in source layer")
                 logger.error("    4. Geometry preparation failed")
                 logger.error("=" * 60)
+                
+                # v2.8.6: Try to use source_layer directly as emergency fallback
+                if self.source_layer and self.source_layer.isValid() and self.source_layer.featureCount() > 0:
+                    logger.warning("  → EMERGENCY FALLBACK: Using source_layer directly as ogr_source_geom")
+                    self.ogr_source_geom = self.source_layer
+                    logger.info(f"  → ogr_source_geom set to source_layer ({self.source_layer.featureCount()} features)")
             
             logger.info("=" * 60)
 
@@ -7429,8 +7435,21 @@ class FilterEngineTask(QgsTask):
                         ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters)
                         
                         # Prepare OGR source geometry if not already done
-                        if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
+                        # v2.8.6 FIX: Force re-preparation for fallback to ensure fresh data
+                        # The initial preparation may have used stale task_features that became
+                        # invalid when passed between threads (QgsFeature thread-safety issue)
+                        ogr_needs_refresh = (
+                            not hasattr(self, 'ogr_source_geom') or 
+                            self.ogr_source_geom is None or
+                            (isinstance(self.ogr_source_geom, QgsVectorLayer) and 
+                             self.ogr_source_geom.featureCount() == 0)
+                        )
+                        
+                        if ogr_needs_refresh:
                             logger.info(f"  → Preparing OGR source geometry for fallback...")
+                            # v2.8.6: Log reason for re-preparation
+                            if hasattr(self, 'ogr_source_geom') and isinstance(self.ogr_source_geom, QgsVectorLayer):
+                                logger.warning(f"    ⚠️ Existing ogr_source_geom has 0 features - refreshing")
                             self.prepare_ogr_source_geom()
                             
                             # Check if preparation succeeded
@@ -7438,7 +7457,14 @@ class FilterEngineTask(QgsTask):
                                 logger.error(f"  ✗ OGR source geometry preparation FAILED")
                                 logger.error(f"    → Source layer: {self.source_layer.name() if self.source_layer else 'None'}")
                                 logger.error(f"    → Source features: {self.source_layer.featureCount() if self.source_layer else 0}")
-                                return False
+                                # v2.8.6: Try using source_layer directly as last resort
+                                if self.source_layer and self.source_layer.isValid() and self.source_layer.featureCount() > 0:
+                                    logger.warning(f"  → Using source_layer directly as fallback geometry")
+                                    self.ogr_source_geom = self.source_layer
+                                else:
+                                    return False
+                        else:
+                            logger.info(f"  → OGR source geometry already prepared")
                         
                         ogr_source_geom = self._prepare_source_geometry(PROVIDER_OGR)
                         
@@ -7642,9 +7668,16 @@ class FilterEngineTask(QgsTask):
                         # and return Spatialite backend (which just timed out!) instead of OGR
                         ogr_backend = BackendFactory.get_backend('ogr', layer, self.task_parameters, force_ogr=True)
                         
-                        # v2.6.11: Ensure OGR source geometry is prepared
-                        # This is critical for the fallback to work
-                        if not hasattr(self, 'ogr_source_geom') or self.ogr_source_geom is None:
+                        # v2.8.6: Enhanced OGR geometry preparation for fallback
+                        # Check if existing ogr_source_geom is valid and has features
+                        ogr_needs_refresh = (
+                            not hasattr(self, 'ogr_source_geom') or 
+                            self.ogr_source_geom is None or
+                            (isinstance(self.ogr_source_geom, QgsVectorLayer) and 
+                             self.ogr_source_geom.featureCount() == 0)
+                        )
+                        
+                        if ogr_needs_refresh:
                             logger.info(f"  → Preparing OGR source geometry for fallback...")
                             QgsMessageLog.logMessage(
                                 f"OGR fallback: preparing source geometry...",
@@ -7654,6 +7687,13 @@ class FilterEngineTask(QgsTask):
                         
                         # v2.6.11: Use ogr_source_geom directly after preparation
                         ogr_source_geom = getattr(self, 'ogr_source_geom', None)
+                        
+                        # v2.8.6: If ogr_source_geom is still empty, try using source_layer directly
+                        if ogr_source_geom is None or (isinstance(ogr_source_geom, QgsVectorLayer) and ogr_source_geom.featureCount() == 0):
+                            logger.warning(f"  → ogr_source_geom is None or empty, trying source_layer as fallback...")
+                            if self.source_layer and self.source_layer.isValid() and self.source_layer.featureCount() > 0:
+                                logger.info(f"  → Using source_layer directly ({self.source_layer.featureCount()} features)")
+                                ogr_source_geom = self.source_layer
                         
                         # If still None, try _prepare_source_geometry as fallback
                         if ogr_source_geom is None:
