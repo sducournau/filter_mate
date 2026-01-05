@@ -5,7 +5,7 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.9.3** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v2.9.4** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
 ## ✨ Key Features
 
@@ -21,20 +21,33 @@ slug: /
 
 ---
 
-## 🎉 What's New in v2.9.3 - UUID Filtering Fix & Spatialite Performance
+## 🎉 What's New in v2.9.4 - Spatialite Subquery Filter Fix
 
-This release fixes UUID filtering and improves Spatialite backend performance.
+This release fixes a critical bug with Spatialite backend filtering on large datasets.
 
-### 🐛 Bug Fix: UUID Filtering
+### 🐛 Bug Fix: Spatialite Large Dataset Filtering
 
-- Fixed UUID filtering with primary key (PM) detection
-- UUID columns now correctly identified and used in spatial queries
+- **Problem:** Filtering layers with ≥20,000 matching features failed silently
+- **Cause:** SQL subquery `"fid" IN (SELECT fid FROM ...)` not supported by OGR provider
+- **Solution:** Replaced with range-based BETWEEN/IN() filter expressions
 
-### 🚀 Performance: Spatialite Backend
+### ✅ New Filter Expression Format
 
-- Simplified architecture for better performance
-- Cleaner query execution with reduced overhead
-- More efficient temporary table management
+```sql
+-- Before (v2.8.7-v2.9.3): NOT WORKING
+"fid" IN (SELECT fid FROM "_fm_fids_xxx")
+
+-- After (v2.9.4): WORKING with all providers
+("fid" BETWEEN 1 AND 500) OR ("fid" BETWEEN 502 AND 1000) OR "fid" IN (503, 507)
+```
+
+---
+
+## Previous: v2.9.3 - UUID Filtering Fix & Spatialite Performance
+
+- 🐛 Fixed UUID filtering with primary key (PM) detection
+- 🚀 Simplified Spatialite backend architecture
+- ♻️ Cleaner query execution with reduced overhead
 
 ---
 

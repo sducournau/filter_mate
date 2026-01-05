@@ -2519,8 +2519,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         """
         v2.8.7: Build filter using FID table for large result sets.
         
+        DEPRECATED (v2.8.9): This method is NO LONGER USED because the generated
+        subquery "fid IN (SELECT fid FROM _fm_fids_xxx)" is NOT supported by the
+        OGR provider in QGIS setSubsetString(). Use _build_range_based_filter() instead.
+        
+        The subquery approach only works with direct SQLite connections, not with
+        QGIS layer filters.
+        
         Instead of: fid IN (1,2,3,...235000)  <- freezes QGIS
-        Uses:       fid IN (SELECT fid FROM _fm_fids_xxx)  <- fast
+        Uses:       fid IN (SELECT fid FROM _fm_fids_xxx)  <- NOT SUPPORTED by OGR
         
         Args:
             db_path: Path to GeoPackage
@@ -2980,42 +2987,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 fid_expression = 'fid = -1'  # No valid FID is -1
                 self.log_info(f"  → No matching features, applying: {fid_expression}")
             elif len(matching_fids) >= self.LARGE_FID_TABLE_THRESHOLD:
-                # v2.8.7: CRITICAL FIX - Use FID table with subquery for large result sets
-                # This avoids massive IN() expressions that freeze QGIS
+                # v2.8.9: FIX - Use range-based filter instead of FID table subquery
+                # The subquery "fid IN (SELECT fid FROM _fm_fids_xxx)" does NOT work
+                # with setSubsetString() because the OGR provider doesn't support
+                # SQL subqueries in filter expressions. Range-based is compatible.
                 
-                # Analyze FID distribution
                 sorted_fids = sorted(matching_fids)
                 min_fid, max_fid = sorted_fids[0], sorted_fids[-1]
-                fid_range = max_fid - min_fid + 1
-                coverage = len(matching_fids) / fid_range if fid_range > 0 else 0
+                self.log_info(f"  📊 FID analysis: {len(matching_fids):,} FIDs in range {min_fid}-{max_fid}")
                 
-                self.log_info(f"  📊 FID analysis: {len(matching_fids):,} FIDs in range {min_fid}-{max_fid} ({coverage*100:.1f}% coverage)")
-                
-                if coverage >= 0.95 and len(matching_fids) > 50000:
-                    # 95%+ coverage - use simple range with exclusions (most efficient)
-                    all_in_range = set(range(min_fid, max_fid + 1))
-                    excluded_fids = all_in_range - set(sorted_fids)
-                    
-                    if len(excluded_fids) < 1000:
-                        # Very few exclusions - use range with NOT IN
-                        if excluded_fids:
-                            excluded_str = ", ".join(str(f) for f in sorted(excluded_fids))
-                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid} AND "{pk_col}" NOT IN ({excluded_str}))'
-                        else:
-                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid})'
-                        self.log_info(f"  📊 Using SIMPLE RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
-                    else:
-                        # Many exclusions - use FID table with subquery
-                        fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
-                        if not fid_expression:
-                            self.log_warning("FID table creation failed, falling back to range-based filter")
-                            fid_expression = self._build_range_based_filter(pk_col, matching_fids)
-                else:
-                    # Sparse FIDs - use FID table with subquery
-                    fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
-                    if not fid_expression:
-                        self.log_warning("FID table creation failed, falling back to range-based filter")
-                        fid_expression = self._build_range_based_filter(pk_col, matching_fids)
+                # Use range-based filter for OGR compatibility (no subqueries)
+                fid_expression = self._build_range_based_filter(pk_col, matching_fids)
                     
             elif len(matching_fids) > 10000:
                 # Large result set - warn but still use IN filter
@@ -3729,38 +3711,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     "FilterMate", Qgis.Warning
                 )
             elif len(matching_fids) >= self.LARGE_FID_TABLE_THRESHOLD:
-                # v2.8.7: CRITICAL FIX - Use FID table with subquery for large result sets
+                # v2.8.9: FIX - Use range-based filter instead of FID table subquery
+                # The subquery "fid IN (SELECT fid FROM _fm_fids_xxx)" does NOT work
+                # with setSubsetString() because the OGR provider doesn't support
+                # SQL subqueries in filter expressions. Range-based is compatible.
+                
                 sorted_fids = sorted(matching_fids)
                 min_fid, max_fid = sorted_fids[0], sorted_fids[-1]
-                fid_range = max_fid - min_fid + 1
-                coverage = len(matching_fids) / fid_range if fid_range > 0 else 0
+                self.log_info(f"  📊 FID analysis: {len(matching_fids):,} FIDs in range {min_fid}-{max_fid}")
                 
-                self.log_info(f"  📊 FID analysis: {len(matching_fids):,} FIDs in range {min_fid}-{max_fid} ({coverage*100:.1f}% coverage)")
-                
-                if coverage >= 0.95 and len(matching_fids) > 50000:
-                    # Very high coverage - try simple range filter (most efficient)
-                    all_in_range = set(range(min_fid, max_fid + 1))
-                    excluded_fids = all_in_range - set(sorted_fids)
-                    
-                    if len(excluded_fids) < 1000:
-                        if excluded_fids:
-                            excluded_str = ", ".join(str(f) for f in sorted(excluded_fids))
-                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid} AND "{pk_col}" NOT IN ({excluded_str}))'
-                        else:
-                            fid_expression = f'("{pk_col}" >= {min_fid} AND "{pk_col}" <= {max_fid})'
-                        self.log_info(f"  📊 Using SIMPLE RANGE filter ({min_fid}-{max_fid}, {len(excluded_fids)} exclusions)")
-                    else:
-                        # Many exclusions - use FID table with subquery
-                        fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
-                        if not fid_expression:
-                            self.log_warning("FID table creation failed, falling back to range-based filter")
-                            fid_expression = self._build_range_based_filter(pk_col, matching_fids)
-                else:
-                    # Sparse FIDs - use FID table with subquery
-                    fid_expression = self._build_fid_table_filter(source_path, pk_col, matching_fids)
-                    if not fid_expression:
-                        self.log_warning("FID table creation failed, falling back to range-based filter")
-                        fid_expression = self._build_range_based_filter(pk_col, matching_fids)
+                # Use range-based filter for OGR compatibility (no subqueries)
+                fid_expression = self._build_range_based_filter(pk_col, matching_fids)
             else:
                 fid_expression = f'"{pk_col}" IN ({", ".join(str(fid) for fid in matching_fids)})'
             

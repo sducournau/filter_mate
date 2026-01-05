@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.9.3** | January 2026 | **Production-Ready**
+**Version 2.9.4** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -26,6 +26,12 @@
 ---
 
 ## 📋 Recent Changes
+
+### v2.9.4 - Spatialite Subquery Filter Fix (January 2026)
+
+- 🐛 **FIX: Spatialite large datasets** - Filtering now works correctly for ≥20K features
+- 🔧 **FIX: OGR compatibility** - Replaced SQL subquery with range-based BETWEEN/IN() filter
+- ✅ **Compatible with all providers** - GeoPackage, Shapefile, and other OGR formats
 
 ### v2.9.3 - UUID Filtering Fix & Spatialite Performance (January 2026)
 

@@ -1950,18 +1950,41 @@ class FilterMateApp:
             
             logger.info(f"Backend detection: selected provider_type={provider_type}")
             
+            # v2.8.8: Check if backend is forced for all layers - override provider_type for UI message
+            forced_backends = {}
+            is_fallback = False  # Initialize here
+            if self.dockwidget and hasattr(self.dockwidget, 'forced_backends'):
+                forced_backends = self.dockwidget.forced_backends
+            
+            # Check if ALL layers have the same forced backend
+            backend_was_forced = False
+            if forced_backends:
+                all_layer_ids = [current_layer.id()] + [layer.id() for layer in layers]
+                forced_types = set(forced_backends.get(lid) for lid in all_layer_ids if lid in forced_backends)
+                
+                if len(forced_types) == 1 and None not in forced_types:
+                    forced_type = list(forced_types)[0]
+                    logger.info(f"Backend detection: ALL layers forced to {forced_type.upper()}")
+                    provider_type = forced_type
+                    is_fallback = (forced_type == 'ogr')
+                    backend_was_forced = True
+                elif forced_types:
+                    # Mixed forced backends - use 'ogr' as indicator since it's the fallback
+                    logger.info(f"Backend detection: Mixed forced backends: {forced_types}")
+            
             # Check if PostgreSQL layer is using OGR fallback (no connection available)
             # CRITICAL FIX v2.5.14: Default to True for PostgreSQL layers - they're always
             # filterable via QGIS native API (setSubsetString). Only explicitly False means fallback.
-            is_fallback = (
-                provider_type == 'postgresql' and 
-                task_parameters["infos"].get("postgresql_connection_available", True) is False
-            )
+            if not backend_was_forced:
+                is_fallback = (
+                    provider_type == 'postgresql' and 
+                    task_parameters["infos"].get("postgresql_connection_available", True) is False
+                )
             
             # Check if Spatialite functions are available for the distant layers
             # If not, OGR fallback will be used
             spatialite_fallback = False
-            if provider_type == 'spatialite' and layers:
+            if provider_type == 'spatialite' and layers and not backend_was_forced:
                 from .modules.backends.spatialite_backend import SpatialiteGeometricFilter
                 spatialite_backend = SpatialiteGeometricFilter({})
                 # Test first layer to see if Spatialite functions work

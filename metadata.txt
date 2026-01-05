@@ -6,13 +6,18 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.9.3
+version=2.9.4
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.3 - UUID Filtering Fix & Spatialite Performance
+about=FilterMate v2.9.4 - Spatialite Subquery Filter Fix
 
- NEW in v2.9.3:
+ NEW in v2.9.4:
+ - 🐛 FIX: Spatialite large dataset filtering now works correctly
+ - 🔧 FIX: Replaced SQL subquery with range-based filter for OGR compatibility
+ - ✅ Filter expressions now use BETWEEN/IN() instead of unsupported subqueries
+
+ Previous in v2.9.3:
  - 🐛 FIX: UUID filtering now works correctly with primary key detection
  - 🚀 PERF: Simplified Spatialite backend for better performance
  - ♻️ REFACTOR: Cleaner Spatialite query execution

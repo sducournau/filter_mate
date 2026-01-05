@@ -2,6 +2,45 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.9.4] - 2026-01-05 - Spatialite Subquery Filter Fix
+
+### 🐛 Bug Fix: Spatialite Large Dataset Filtering
+
+**Problem Solved:**
+
+- Filtering layers with ≥20,000 matching features failed silently
+- Filter expression used SQL subquery: `"fid" IN (SELECT fid FROM "_fm_fids_xxx")`
+- OGR provider doesn't support subqueries in `setSubsetString()` filter expressions
+
+**Root Cause:**
+
+- v2.8.7 introduced FID table optimization to avoid QGIS freeze with large IN() lists
+- The subquery approach only works with direct SQLite connections
+- QGIS `setSubsetString()` uses OGR SQL parser which doesn't support subqueries
+
+**Solution:**
+
+- Replaced `_build_fid_table_filter()` with `_build_range_based_filter()` for large datasets
+- Range-based filter uses BETWEEN/IN() clauses which are fully OGR-compatible
+- Marked `_build_fid_table_filter()` as DEPRECATED
+
+**New Filter Expression Format:**
+
+```sql
+-- Before (v2.8.7-v2.9.3): NOT WORKING with OGR
+"fid" IN (SELECT fid FROM "_fm_fids_xxx")
+
+-- After (v2.9.4): WORKING with all providers
+("fid" BETWEEN 1 AND 500) OR ("fid" BETWEEN 502 AND 1000) OR "fid" IN (503, 507)
+```
+
+### 📊 Files Modified
+
+- `modules/backends/spatialite_backend.py`: Use range-based filter instead of subquery
+- `docs/FIX_SPATIALITE_SUBQUERY_2026-01.md`: Documentation of the fix
+
+---
+
 ## [2.9.3] - 2026-01-05 - UUID Filtering Fix & Spatialite Performance
 
 ### 🐛 Bug Fix: UUID Filtering
