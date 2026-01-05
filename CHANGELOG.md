@@ -2,12 +2,18 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [2.9.3] - 2026-01-05 - Maintenance Release
+## [2.9.3] - 2026-01-05 - UUID Filtering Fix & Spatialite Performance
 
-### 🔧 Maintenance
+### 🐛 Bug Fix: UUID Filtering
 
-- Version bump and documentation updates
-- Updated changelog and documentation synchronization
+- Fixed UUID filtering with primary key (PM) detection
+- UUID columns now correctly identified and used in spatial queries
+
+### 🚀 Performance: Spatialite Backend
+
+- Simplified Spatialite backend architecture for better performance
+- Cleaner query execution with reduced overhead
+- More efficient temporary table management
 
 ---
 

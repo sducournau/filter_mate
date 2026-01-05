@@ -10,11 +10,12 @@ version=2.9.3
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.3 - Maintenance Release
+about=FilterMate v2.9.3 - UUID Filtering Fix & Spatialite Performance
 
  NEW in v2.9.3:
- - 🔧 MAINT: Version bump and documentation updates
- - 📚 DOCS: Updated changelog and documentation
+ - 🐛 FIX: UUID filtering now works correctly with primary key detection
+ - 🚀 PERF: Simplified Spatialite backend for better performance
+ - ♻️ REFACTOR: Cleaner Spatialite query execution
 
  Previous in v2.9.2:
  - 🎯 IMPROVED: Centroid filtering now uses ST_PointOnSurface() for polygons (guaranteed inside)

@@ -21,12 +21,20 @@ slug: /
 
 ---
 
-## 🎉 What's New in v2.9.3 - Maintenance Release
+## 🎉 What's New in v2.9.3 - UUID Filtering Fix & Spatialite Performance
 
-This release includes version bump and documentation updates.
+This release fixes UUID filtering and improves Spatialite backend performance.
 
-- 🔧 **Version bump** and documentation synchronization
-- 📚 **Updated changelog** across all documentation
+### 🐛 Bug Fix: UUID Filtering
+
+- Fixed UUID filtering with primary key (PM) detection
+- UUID columns now correctly identified and used in spatial queries
+
+### 🚀 Performance: Spatialite Backend
+
+- Simplified architecture for better performance
+- Cleaner query execution with reduced overhead
+- More efficient temporary table management
 
 ---
 

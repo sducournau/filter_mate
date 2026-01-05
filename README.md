@@ -27,9 +27,11 @@
 
 ## 📋 Recent Changes
 
-### v2.9.3 - Maintenance Release (January 2026)
+### v2.9.3 - UUID Filtering Fix & Spatialite Performance (January 2026)
 
-- 🔧 **MAINT: Version bump** - Documentation updates and synchronization
+- 🐛 **FIX: UUID filtering** - Now works correctly with primary key detection
+- 🚀 **PERF: Spatialite backend** - Simplified and more performant architecture
+- ♻️ **REFACTOR: Cleaner queries** - Reduced overhead in Spatialite execution
 
 ### v2.9.2 - Centroid & Simplification Optimizations (January 2026)
 
