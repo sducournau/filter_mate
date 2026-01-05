@@ -6909,9 +6909,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.exploring_link_widgets()
             
             # Update feature selection state if there's a selected feature
-            selected_feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
-            if selected_feature is not None and selected_feature.isValid():
-                self.exploring_features_changed(selected_feature)
+            # CRITICAL FIX: Skip if syncing from QGIS - the widget hasn't been updated yet
+            # with the QGIS selection, so we would be using stale data.
+            # The sync will happen after in _sync_single_selection_from_qgis()
+            if not self._syncing_from_qgis:
+                selected_feature = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].feature()
+                if selected_feature is not None and selected_feature.isValid():
+                    self.exploring_features_changed(selected_feature)
         else:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
@@ -6979,9 +6983,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.exploring_link_widgets()
             
             # Update feature selection state if there are selected features
-            selected_features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
-            if selected_features:
-                self.exploring_features_changed(selected_features, True)
+            # CRITICAL FIX: Skip if syncing from QGIS - the widget hasn't been updated yet
+            # with the QGIS selection, so we would be using stale data.
+            # The sync will happen after in _sync_multiple_selection_from_qgis()
+            if not self._syncing_from_qgis:
+                selected_features = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].currentSelectedFeatures()
+                if selected_features:
+                    self.exploring_features_changed(selected_features, True)
         else:
             self.manageSignal(["EXPLORING","SINGLE_SELECTION_FEATURES"], 'disconnect')
             self.manageSignal(["EXPLORING","MULTIPLE_SELECTION_FEATURES"], 'disconnect')
