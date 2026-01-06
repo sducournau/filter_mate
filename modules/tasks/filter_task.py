@@ -4021,22 +4021,39 @@ class FilterEngineTask(QgsTask):
             self.spatialite_source_geom = None
             return
 
-        # STABILITY FIX v2.3.9: Use safe_collect_geometry wrapper
-        # This prevents access violations on certain machines
-        collected_geometry = safe_collect_geometry(geometries)
+        # v2.9.8: DISSOLVE OPTIMIZATION - Use unaryUnion to merge overlapping geometries
+        # This significantly reduces WKT size by eliminating redundant vertices and merging
+        # adjacent/overlapping polygons into a single geometry.
+        # Benefits:
+        # - Reduces WKT string length (less vertices = smaller string)
+        # - Eliminates overlapping regions (single boundary instead of duplicated)
+        # - Produces simpler geometry that's faster to process in Spatialite
+        # - Prevents RTTOPO/MakeValid errors caused by complex GeometryCollections
+        #
+        # Note: For very large datasets (>100 features), unaryUnion may take a few seconds
+        # but this is offset by the much faster SQL execution due to smaller WKT
+        logger.info(f"v2.9.8: Applying dissolve (unaryUnion) on {len(geometries)} geometries for WKT optimization")
+        collected_geometry = safe_unary_union(geometries)
+        
+        # Fallback to collect if unaryUnion fails (e.g., mixed geometry types)
+        if collected_geometry is None:
+            logger.warning("v2.9.8: unaryUnion failed, falling back to safe_collect_geometry")
+            collected_geometry = safe_collect_geometry(geometries)
         
         if collected_geometry is None:
-            logger.error("prepare_spatialite_source_geom: safe_collect_geometry returned None")
+            logger.error("prepare_spatialite_source_geom: Both unaryUnion and collect failed")
             self.spatialite_source_geom = None
             return
         
+        # Log the result of dissolve optimization
+        collected_type = get_geometry_type_name(collected_geometry)
+        logger.info(f"v2.9.8: Dissolved geometry type: {collected_type}")
+        
         # CRITICAL FIX: Prevent GeometryCollection from causing issues with typed layers
         # GeoPackage and other backends require homogeneous geometry types
-        collected_type = get_geometry_type_name(collected_geometry)
-        logger.debug(f"Initial collected geometry type: {collected_type}")
         
         if 'GeometryCollection' in collected_type:
-            logger.warning(f"collectGeometry produced {collected_type} - converting to homogeneous type")
+            logger.warning(f"v2.9.8: Dissolve produced {collected_type} - converting to homogeneous type")
             
             # Determine the dominant geometry type from input geometries using safe wrapper
             has_polygons = any('Polygon' in get_geometry_type_name(g) for g in geometries if validate_geometry(g))
@@ -7659,6 +7676,11 @@ class FilterEngineTask(QgsTask):
                         logger.warning(f"  → Spatialite functions may not be available (GDAL without Spatialite)")
                     logger.warning(f"  → Attempting OGR fallback (QGIS processing)...")
                     
+                    # v2.8.12: FIX - Import QgsMessageLog here to ensure it's available
+                    # Previous code only imported in conditional branches (zero_result_fallback, is_large_pg_table)
+                    # but this log message is outside those branches, causing "cannot access local variable" error
+                    from qgis.core import QgsMessageLog, Qgis
+                    
                     # v2.6.11: Log OGR fallback attempt to QGIS MessageLog
                     QgsMessageLog.logMessage(
                         f"🔄 {layer.name()}: Attempting OGR fallback...",
@@ -7712,6 +7734,10 @@ class FilterEngineTask(QgsTask):
                                     f"OGR fallback: source geometry = {ogr_source_geom.name()} ({ogr_source_geom.featureCount()} features)",
                                     "FilterMate", Qgis.Info
                                 )
+                                
+                                # v2.9.7: Simplify complex geometries for OGR fallback
+                                # Large GeometryCollections can cause GEOS errors even with OGR
+                                ogr_source_geom = self._simplify_source_for_ogr_fallback(ogr_source_geom)
                             else:
                                 logger.info(f"  → OGR source geometry type: {type(ogr_source_geom).__name__}")
                                 QgsMessageLog.logMessage(
@@ -7960,6 +7986,136 @@ class FilterEngineTask(QgsTask):
         # Get operator and normalize to English SQL keyword
         other_op = getattr(self, 'param_other_layers_combine_operator', None)
         return self._normalize_sql_operator(other_op)
+    
+    def _simplify_source_for_ogr_fallback(self, source_layer):
+        """
+        v2.9.7: Simplify complex source geometries for OGR fallback.
+        
+        When Spatialite/PostgreSQL fails with complex geometries (like large
+        GeometryCollections), OGR fallback may also struggle. This method:
+        1. Converts GeometryCollections to MultiPolygon (extract polygons only)
+        2. Simplifies complex geometries to reduce vertex count
+        3. Applies makeValid() to ensure geometry validity
+        
+        Args:
+            source_layer: QgsVectorLayer containing source geometry
+            
+        Returns:
+            QgsVectorLayer: Simplified source layer (may be new memory layer)
+        """
+        if not source_layer or not source_layer.isValid():
+            return source_layer
+        
+        try:
+            from qgis.core import QgsVectorLayer, QgsFeature, QgsGeometry, QgsWkbTypes
+            
+            # Check if simplification is needed
+            needs_simplification = False
+            total_vertices = 0
+            has_geometry_collection = False
+            
+            for feat in source_layer.getFeatures():
+                geom = feat.geometry()
+                if geom and not geom.isEmpty():
+                    # Count vertices
+                    for part in geom.parts():
+                        total_vertices += part.vertexCount()
+                    
+                    # Check for GeometryCollection
+                    wkt = geom.asWkt()
+                    if wkt and wkt.strip().upper().startswith('GEOMETRYCOLLECTION'):
+                        has_geometry_collection = True
+            
+            # Thresholds for simplification
+            MAX_VERTICES = 5000
+            
+            if total_vertices > MAX_VERTICES or has_geometry_collection:
+                needs_simplification = True
+                logger.info(f"  🔧 OGR fallback: simplifying source ({total_vertices:,} vertices, GeomCollection={has_geometry_collection})")
+            
+            if not needs_simplification:
+                return source_layer
+            
+            # Create new memory layer with simplified geometries
+            crs_authid = source_layer.crs().authid()
+            simplified_layer = QgsVectorLayer(
+                f"MultiPolygon?crs={crs_authid}",
+                "ogr_fallback_simplified",
+                "memory"
+            )
+            
+            if not simplified_layer.isValid():
+                logger.warning("  Failed to create simplified layer, using original")
+                return source_layer
+            
+            simplified_features = []
+            
+            for feat in source_layer.getFeatures():
+                geom = feat.geometry()
+                if not geom or geom.isEmpty():
+                    continue
+                
+                # Step 1: Extract polygons from GeometryCollection
+                wkt = geom.asWkt()
+                if wkt and wkt.strip().upper().startswith('GEOMETRYCOLLECTION'):
+                    # Extract polygon parts
+                    polygons = []
+                    for part in geom.parts():
+                        part_geom = QgsGeometry(part.clone())
+                        geom_type = QgsWkbTypes.geometryType(part_geom.wkbType())
+                        if geom_type == QgsWkbTypes.PolygonGeometry:
+                            if part_geom.isMultipart():
+                                for sub in part_geom.parts():
+                                    polygons.append(QgsGeometry(sub.clone()))
+                            else:
+                                polygons.append(part_geom)
+                    
+                    if polygons:
+                        geom = QgsGeometry.collectGeometry(polygons)
+                        logger.debug(f"    Extracted {len(polygons)} polygons from GeometryCollection")
+                    else:
+                        logger.warning(f"    No polygons found in GeometryCollection, skipping")
+                        continue
+                
+                # Step 2: Apply makeValid
+                if not geom.isGeosValid():
+                    geom = geom.makeValid()
+                    if geom.isNull() or geom.isEmpty():
+                        continue
+                
+                # Step 3: Simplify if still too complex
+                vertex_count = sum(p.vertexCount() for p in geom.parts())
+                if vertex_count > 1000:
+                    # Calculate tolerance based on extent
+                    bbox = geom.boundingBox()
+                    extent = max(bbox.width(), bbox.height())
+                    tolerance = extent / 1000  # 0.1% of extent
+                    
+                    simplified = geom.simplify(tolerance)
+                    if simplified and not simplified.isEmpty():
+                        new_vertex_count = sum(p.vertexCount() for p in simplified.parts())
+                        logger.debug(f"    Simplified: {vertex_count:,} → {new_vertex_count:,} vertices")
+                        geom = simplified
+                
+                # Create new feature
+                new_feat = QgsFeature()
+                new_feat.setGeometry(geom)
+                simplified_features.append(new_feat)
+            
+            if simplified_features:
+                simplified_layer.dataProvider().addFeatures(simplified_features)
+                simplified_layer.updateExtents()
+                logger.info(f"  ✓ Simplified source: {len(simplified_features)} features, ready for OGR")
+                return simplified_layer
+            else:
+                logger.warning("  No features after simplification, using original")
+                return source_layer
+                
+        except Exception as e:
+            logger.warning(f"  OGR simplification error: {e}, using original")
+            import traceback
+            logger.debug(f"  Traceback: {traceback.format_exc()}")
+            return source_layer
     
     def _prepare_source_geometry(self, layer_provider_type):
         """
@@ -9941,8 +10097,8 @@ class FilterEngineTask(QgsTask):
             # Rollback failed transaction
             try:
                 connexion.rollback()
-            except:
-                pass
+            except Exception:
+                pass  # Connection may be in bad state
             
             # Try with explicit AUTHORIZATION CURRENT_USER as fallback
             try:
@@ -9955,8 +10111,8 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"Error creating schema with CURRENT_USER: {e2}")
                 try:
                     connexion.rollback()
-                except:
-                    pass
+                except Exception:
+                    pass  # Connection may be in bad state
                 
                 # Final fallback: try with postgres authorization
                 try:
@@ -9968,8 +10124,8 @@ class FilterEngineTask(QgsTask):
                 except Exception as e3:
                     try:
                         connexion.rollback()
-                    except:
-                        pass
+                    except Exception:
+                        pass  # Connection may be in bad state
                     
                     # v2.8.8: Fallback to 'public' schema if temp schema cannot be created
                     logger.warning(f"Cannot create schema '{schema_name}', falling back to 'public'. "

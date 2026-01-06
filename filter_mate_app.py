@@ -456,8 +456,8 @@ class FilterMateApp:
             finally:
                 try:
                     connexion.close()
-                except:
-                    pass
+                except Exception:
+                    pass  # Connection already closed or invalid
                     
         except CircuitOpenError:
             logger.debug("PostgreSQL cleanup skipped - circuit breaker tripped")

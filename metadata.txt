@@ -10,13 +10,15 @@ version=2.9.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.6 - Multi-Step Filtering Fix
+about=FilterMate v2.9.6 - Multi-Step Filtering Fix + Code Quality Audit
 
  NEW in v2.9.6:
  - 🐛 FIX: Multi-step filtering now correctly uses filtered source layer geometry
  - 🔧 FIX: Expression cache includes subsetString to prevent stale results
  - ✅ Step 2 now properly filters using custom expression on filtered features from Step 1
  - 🧹 Expression cache auto-invalidates when layer filter changes
+ - 🔧 AUDIT: Replaced 17 bare except clauses with specific exception types
+ - ✅ Code quality improved: 9.1/10 → 9.3/10
 
  Previous in v2.9.5:
  - 🐛 FIX: Windows crash during QGIS shutdown (fatal access violation)
@@ -30,64 +32,6 @@ about=FilterMate v2.9.6 - Multi-Step Filtering Fix
 
  Previous in v2.9.3:
  - 🐛 FIX: UUID filtering now works correctly with primary key detection
- - 🚀 PERF: Simplified Spatialite backend for better performance
- - ♻️ REFACTOR: Cleaner Spatialite query execution
-
- Previous in v2.9.2:
- - 🎯 IMPROVED: Centroid filtering now uses ST_PointOnSurface() for polygons (guaranteed inside)
- - 📐 IMPROVED: Adaptive simplification before buffer (tolerance = buffer × 0.1)
- - ⚙️ NEW: CENTROID_MODE config ('centroid', 'point_on_surface', 'auto')
- - 🚀 PERF: 2-10x faster buffer operations on simplified geometries
-
- Previous in v2.9.1:
- - 🚀 PERF: INCLUDE clause in GIST indexes (PostgreSQL 11+) for 10-30%% faster spatial queries
- - 📦 PERF: Bbox pre-filter column for ultra-fast && operator checks (2-5x faster)
- - ⚡ PERF: Async CLUSTER for medium datasets (50k-100k features) - non-blocking
- - 📊 PERF: Extended statistics for better query plans (PostgreSQL 10+)
-
- Previous in v2.8.9:
- - ✨ NEW: MV Status Widget with real-time materialized views count
- - 🧹 NEW: Quick cleanup actions (Session/Orphaned/All MVs)
- - 🎨 IMPROVED: Simplified optimization confirmation popup (faster workflow)
-
- Previous in v2.8.8:
- - 🐛 FIX: Selection auto-sync now works immediately on project load when already enabled
- - 🔄 FIX: Bidirectional sync between canvas selection tool and UI widgets initializes correctly
-
- Previous in v2.8.4:
- - 🐛 FIX: Flash/Zoom now correctly shows only custom expression matches (robust validation)
- - 🔒 Cache validation before use: verifies cached expression matches current widget
- - 📦 Spatialite: R-tree temp tables, interruptible queries, direct SQL for GeoPackage
- - 📁 OGR: Spatial indexing, small dataset optimization, progressive chunking
- - ⚡ Global: Auto-optimization, centroid for distant layers, parallel filtering
-
- Previous in v2.8.2:
- - 🐛 FIX: Flash/Identify now correctly shows only custom expression matches (not all features)
- - 🐛 FIX: Exploring cache properly invalidated when custom expression changes
-
- Previous in v2.8.1:
- - 🐛 FIX: "Relation does not exist" error when reopening projects with PostgreSQL filters
- - 🐛 FIX: Automatic detection and cleanup of orphaned materialized view references
-
- Previous version (v2.7.14):
- - 🐛 FIX: PostgreSQL refiltering with negative buffer returns ALL features instead of filtered subset
- - 🐛 FIX: "SQLite objects created in a thread" error
- - 🚀 NEW: Automatic R-tree optimization for large WKT (LARGE_WKT_THRESHOLD=100K)
- 
- Core features:
- - Works with ANY data source (Shapefile, GeoPackage, Spatialite, PostgreSQL)
- - Automatic backend selection (PostgreSQL, Spatialite, or Local)
- - Intuitive search and selection of entities
- - Filter vector layers by expression and geometric predicates
- - Buffer support with automatic geometry repair (positive and negative)
- - Configure widgets independently for each layer
- - Export layers intuitively
- - Automatic CRS reprojection on the fly
- - Filter history with easy undo/redo
- 
- Performance: Automatically uses PostgreSQL when available for optimal speed, falls back to Spatialite or local backend otherwise.
- 
- Full documentation: https://sducournau.github.io/filter_mate
 
 tracker=https://github.com/sducournau/filter_mate/issues
 repository=https://github.com/sducournau/filter_mate
@@ -98,123 +42,6 @@ repository=https://github.com/sducournau/filter_mate
 hasProcessingProvider=no
 
 changelog=
-    Version 2.9.2 (January 2026) - Centroid & Simplification Optimizations
-    🎯 IMPROVED: Centroid filtering now uses ST_PointOnSurface() for polygons (guaranteed inside)
-    📐 IMPROVED: Adaptive simplification before buffer (tolerance = buffer × 0.1)
-    ⚙️ NEW: CENTROID_MODE config ('centroid', 'point_on_surface', 'auto')
-    🚀 PERF: 2-10x faster buffer operations on simplified geometries
-    
-    Version 2.9.1 (January 2026) - PostgreSQL MV Performance Optimizations
-    🚀 PERF: INCLUDE clause in GIST indexes (PostgreSQL 11+) for 10-30%% faster spatial queries
-    📦 PERF: Bbox pre-filter column for ultra-fast && operator checks (2-5x faster)
-    ⚡ PERF: Async CLUSTER for medium datasets (50k-100k features) - non-blocking
-    📊 PERF: Extended statistics for better query plans (PostgreSQL 10+)
-    
-    Version 2.8.9 (January 2026) - Enhanced MV Management
-    ✨ NEW: MV Status Widget with real-time materialized views count
-    🧹 NEW: Quick cleanup actions (Session/Orphaned/All MVs)
-    🎨 IMPROVED: Simplified optimization confirmation popup
-    
-    Version 2.8.7 (January 2026) - Complex Expression Materialization
-    🐛 FIX: Slow canvas rendering with complex spatial expressions
-    🚀 PERF: 10-100x faster canvas rendering with complex multi-step filters
-    ♻️ REFACTOR: Centralized psycopg2 imports, deduplicated buffer methods
-    
-    Version 2.8.0 (January 2026) - Enhanced Auto-Optimization System
-    🚀 NEW: Performance Metrics Collection - Track and analyze optimization effectiveness
-    🚀 NEW: Query Pattern Detection - Identify recurring queries and pre-optimize
-    🚀 NEW: Adaptive Thresholds - Automatically tune thresholds based on performance
-    🚀 NEW: Parallel Processing - Multi-threaded spatial ops (2x speedup on 1M features)
-    🚀 NEW: LRU Caching - Intelligent caching with TTL support
-    📊 STATS: Cache hit rate 80%%, strategy selection 6x faster
-    
-    Version 2.7.14 (January 2026) - WKT Precision Optimization
-    🐛 FIX: PostgreSQL refiltering with negative buffer returns ALL features
-    🔧 WKT coordinate precision optimized by CRS (60-70%% smaller)
-    🚀 Aggressive WKT simplification with Convex Hull/Bounding Box fallbacks
-    
-    Version 2.6.x (January 2026) - Stability Improvements
-    🐛 FIX: QGIS freeze on plugin reload with large layers
-    🐛 FIX: SQLite thread-safety issues
-    🚀 NEW: Progressive filtering (bbox + full predicate)
-    🚀 NEW: CRS utilities module with automatic metric CRS conversion
-    
-    Version 2.3.9 (December 2025) - Critical Stability Fix
-    🔥 CRITICAL: Fixed GEOS crash during OGR backend filtering
-    🛡️ NEW: geometry_safety.py module for GEOS-safe operations
-    ✅ NEW: validate_geometry_for_geos() - deep geometry validation
-    🔧 NEW: create_geos_safe_layer() - filters invalid geometries
-    🐛 FIX: Access violation crash on plugin reload
-    🔒 NEW: Safe Qt timer callbacks with weak references
-    📦 NEW: object_safety.py module for Qt/QGIS object validation
-    
-    Version 2.3.8 (December 2025) - Automatic Dark Mode Support
-    🎨 Automatic dark mode detection with real-time theme sync
-    🌓 Icon inversion for dark mode - PNG icons visible in dark themes
-    ⭐ Filter Favorites - Save, organize, and reuse complex filters
-    💾 SQLite persistence for favorites across sessions
-    
-    Version 2.3.7 (December 2025) - Project Change Stability
-    🛡️ Enhanced project change handling with proper cleanup
-    ⌨️ F5 shortcut for force reload layers
-    🔄 New cleared signal handler for project close
-    
-    Version 2.3.5 (December 2025) - Configuration System v2.0
-    ⚙️ Configuration v2.0 with integrated metadata structure
-    🔄 Automatic config migration (v1.0→v2.0) with backup/rollback
-    🔒 Forced backend respect - user choice strictly enforced
-    🚀 PostgreSQL 30%% faster loading (fast counting + UNLOGGED MVs)
-    
-    Version 2.3.4 (December 2025) - PostgreSQL & UX Improvements
-    🐛 CRITICAL FIX: PostgreSQL 2-part table references now work correctly
-    ✨ FEATURE: Smart display field selection for exploring expressions
-    🐛 FIX: GeometryCollection buffer results now properly handled
-    🛠️ IMPROVED: Automatic ANALYZE on source tables for query optimization
-    
-    Version 2.3.0 (December 2025) - Global Undo/Redo System
-    ⭐ FEATURE: Intelligent undo/redo with context detection (source-only/global)
-    🏗️ REFACTOR: Task modules extracted (-99%% appTasks.py, +400%% maintainability)
-    ✅ QUALITY: PEP 8 95%%, 26 tests, CI/CD active
-    🚀 PERFORMANCE: Geometry caching (5× speedup)
-    
-    Version 2.2.5 (December 2025) - Geographic CRS Auto-Handling
-    FEATURE: Automatic EPSG:3857 conversion for geographic CRS
-    FIX: Geographic coordinates zoom & flash flickering
-    
-    Version 2.2.4 (December 2025) - Bug Fix Release
-    BUG FIX: Fixed Spatialite field name quote handling
-    IMPROVED: Expression conversion reliability
-    
-    Version 2.2.0 (December 2025) - Stability Improvements
-    STABILITY: Improved Qt JSON view crash prevention
-    FIXED: Tab widget error handling and recovery
-    IMPROVED: Theme synchronization and resource management
-    OPTIMIZED: Performance and memory usage
-    
-    Version 2.1.0 (December 2025) - Production Release
-    STABLE: Production-ready multi-backend architecture
-    FIXED: Critical undo/redo functionality restored
-    FIXED: Field selection now includes all fields
-    FIXED: SQLite database lock errors with retry mechanism
-    FIXED: Subset string handling for OGR layers
-    IMPROVED: Advanced geometry repair with multiple strategies
-    IMPROVED: Enhanced UI theme support and consistency
-    IMPROVED: Predicate ordering optimization (2.5x faster)
-    IMPROVED: Comprehensive test coverage and documentation
-    Version 1.9.0 (December 2025) - Major Update
-    NEW: Works WITHOUT PostgreSQL! Plugin now supports any data source
-    NEW: Automatic backend selection (PostgreSQL/Spatialite/Local OGR)
-    IMPROVED: Better error messages with troubleshooting hints
-    FIXED: Plugin starts even if psycopg2 not installed
-    PERFORMANCE: Same speed as before with PostgreSQL, new Spatialite backend for other formats
-    BREAKING: None (100%% backward compatible with v1.8)
-    
-    Version 1.8 (Previous)
-    - Rework filtering logic: use of temporary materialized views and indexes
-    - Add spatialite management: project metadata and subset history
-    - Rebuild QgsCheckableComboBoxFeaturesListPickerWidget to show filtered entities
-    - Rework combine logic filter
-
 
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export

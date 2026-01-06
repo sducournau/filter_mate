@@ -1,6 +1,6 @@
-# UI System Documentation - FilterMate v2.5.5
+# UI System Documentation - FilterMate v2.9.6
 
-**Last Updated:** December 29, 2025
+**Last Updated:** January 6, 2026
 
 ## Overview
 

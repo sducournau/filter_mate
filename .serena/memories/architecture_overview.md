@@ -1,8 +1,8 @@
-# Architecture Overview - FilterMate v2.6.0
+# Architecture Overview - FilterMate v2.9.6
 
-**Last Updated:** January 2, 2026
-**Current Version:** 2.6.0 (Production - Major Release)
-**Key Features:** Multi-backend filtering, Progressive filtering, Query complexity estimation, Multi-backend canvas refresh, Thread safety
+**Last Updated:** January 6, 2026
+**Current Version:** 2.9.6 (Production - Stable)
+**Key Features:** Multi-backend filtering, Progressive filtering, Query complexity estimation, Multi-backend canvas refresh, Thread safety, Advanced MV optimizations, Geometry validation
 
 ## System Architecture
 
@@ -135,17 +135,20 @@ FilterMate follows a layered architecture with clear separation of concerns:
 **Purpose:** Backwards compatibility re-exports for task classes
 
 **Actual Task Files (modules/tasks/):**
-- `filter_task.py`: FilterEngineTask (~950 lines)
-- `layer_management_task.py`: LayersManagementEngineTask (~1125 lines)
+- `filter_task.py`: FilterEngineTask (~950 lines) - core filtering with auto-materialization
+- `layer_management_task.py`: LayersManagementEngineTask (~1125 lines) - safe cancel() v2.9.5
 - `task_utils.py`: Common utilities (~328 lines)
 - `geometry_cache.py`: SourceGeometryCache (~146 lines)
 - `expression_evaluation_task.py`: Expression evaluation task
 - `multi_step_filter.py`: Multi-step filtering logic
 - `parallel_executor.py`: Parallel execution with ThreadPoolExecutor (~300 lines)
-- `progressive_filter.py`: Progressive/two-phase filtering (~750 lines) - NEW v2.5.9
+- `progressive_filter.py`: Progressive/two-phase filtering (~750 lines)
 - `query_cache.py`: Enhanced query cache with TTL (~280 lines)
-- `query_complexity_estimator.py`: SQL complexity analysis (~450 lines) - NEW v2.5.9
+- `query_complexity_estimator.py`: SQL complexity analysis (~450 lines)
 - `result_streaming.py`: Streaming exports (~350 lines)
+
+**New Modules (v2.8.7+):**
+- `modules/psycopg2_availability.py`: Centralized psycopg2 import handling
 
 **Key Classes:**
 

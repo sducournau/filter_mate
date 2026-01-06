@@ -1,6 +1,6 @@
-# Repository Structure - FilterMate v2.6.0
+# Repository Structure - FilterMate v2.9.6
 
-**Last Updated:** January 2, 2026
+**Last Updated:** January 6, 2026
 
 ## Overview
 
@@ -77,8 +77,10 @@ modules/
 ├── filter_history.py       # Filter history & undo/redo
 ├── logging_config.py       # Logging setup
 ├── prepared_statements.py  # SQL prepared statements
+├── psycopg2_availability.py  # Centralized psycopg2 imports (v2.8.7)
 ├── signal_utils.py         # Qt signal utilities
 ├── state_manager.py        # Application state
+├── crs_utils.py            # CRS utilities (v2.5.7)
 ├── type_utils.py           # Type conversion utilities
 ├── ui_config.py            # Dynamic UI dimensions
 ├── ui_elements.py          # UI element creation

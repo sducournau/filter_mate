@@ -996,8 +996,8 @@ class PostgreSQLOptimizationPanel(QWidget):
                 self.mv_status_widget.update_status(error=str(e)[:50])
                 try:
                     conn.close()
-                except:
-                    pass
+                except Exception:
+                    pass  # Connection may already be closed
                     
         except Exception as e:
             self.mv_status_widget.update_status(error=str(e)[:50])
@@ -1102,8 +1102,8 @@ class PostgreSQLOptimizationPanel(QWidget):
                 logger.error(f"MV cleanup error: {e}")
                 try:
                     conn.close()
-                except:
-                    pass
+                except Exception:
+                    pass  # Connection may already be closed
                     
         except Exception as e:
             logger.error(f"MV cleanup failed: {e}")

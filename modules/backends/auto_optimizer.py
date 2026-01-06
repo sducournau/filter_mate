@@ -364,8 +364,8 @@ class LayerAnalyzer:
         has_spatial_index = False
         try:
             has_spatial_index = layer.hasSpatialIndex() if hasattr(layer, 'hasSpatialIndex') else False
-        except:
-            pass
+        except (RuntimeError, AttributeError):
+            pass  # Layer may not support spatial index check
         
         # Estimate geometry complexity
         avg_vertices, complexity = cls._estimate_complexity(layer)

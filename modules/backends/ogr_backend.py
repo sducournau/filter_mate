@@ -1821,8 +1821,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # Clear any partial selection to avoid inconsistent state
             try:
                 input_layer.removeSelection()
-            except:
-                pass
+            except (RuntimeError, AttributeError):
+                pass  # Layer may be invalid or destroyed
             
             return False
     
@@ -2599,8 +2599,8 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     self.log_error(f"Failed to get selected features from memory layer: {e}")
                     try:
                         memory_layer.removeSelection()
-                    except:
-                        pass
+                    except (RuntimeError, AttributeError):
+                        pass  # Layer may be invalid or destroyed
                     return False
                 
                 # Build subset expression for PostgreSQL layer

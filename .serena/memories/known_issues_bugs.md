@@ -1,6 +1,153 @@
 # Known Issues & Bug Fixes - FilterMate
 
-**Last Updated:** January 3, 2026
+**Last Updated:** January 6, 2026
+
+## Critical Bug Fixes (v2.9.x Series - January 2026)
+
+### v2.9.8 - Dissolve Optimization for WKT Creation (January 6, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- Multiple overlapping/adjacent source geometries create unnecessarily complex WKT
+- `collectGeometry()` preserves all vertices even when geometries overlap
+- Large WKT strings slow down SQL execution and can cause RTTOPO errors
+
+**Solution:**
+- Use `safe_unary_union()` (dissolve) instead of `safe_collect_geometry()` in `prepare_spatialite_source_geom()`
+- Dissolve merges overlapping geometries into a single boundary
+- Falls back to `safe_collect_geometry()` if unaryUnion fails (e.g., mixed geometry types)
+
+**Benefits:**
+- WKT size reduced by 30-70% (less vertices)
+- Eliminates redundant overlapping boundaries
+- Produces simpler geometry faster to process in Spatialite
+- Prevents RTTOPO/MakeValid errors from complex GeometryCollections
+
+**Files Changed:**
+- `modules/tasks/filter_task.py` - `prepare_spatialite_source_geom()` method
+- `docs/FIX_GEOMETRYCOLLECTION_RTTOPO_2026-01.md` - Updated documentation
+
+---
+
+### v2.9.7 - GeometryCollection RTTOPO Error Fix (January 6, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- Filtering with complex GeometryCollection source geometries (~111K chars WKT) fails
+- Error: `MakeValid error - RTTOPO reports: Unknown Reason`
+- OGR fallback also fails (geometries too complex for GEOS)
+
+**Root Cause:**
+- GeometryCollection type problematic for RTTOPO/MakeValid in Spatialite
+- Excessive coordinate precision (15+ decimal places)
+- Complex multi-part geometries exceed RTTOPO internal limits
+
+**Solution (3 parts):**
+1. **Enhanced `_simplify_wkt_if_needed()`:**
+   - Convert GeometryCollection → MultiPolygon (extract polygons)
+   - Reduce coordinate precision (15 decimals → 2 decimals)
+   - Apply makeValid() in QGIS before SQL
+
+2. **SQL-level SimplifyPreserveTopology:**
+   - For WKT >50KB, add `SimplifyPreserveTopology()` wrapper
+   - Provides backup simplification in SQL engine
+
+3. **OGR Fallback Simplification:**
+   - New `_simplify_source_for_ogr_fallback()` method
+   - Simplifies source geometry before OGR processing
+
+**Files Changed:**
+- `modules/backends/spatialite_backend.py`
+- `modules/tasks/filter_task.py`
+- `docs/FIX_GEOMETRYCOLLECTION_RTTOPO_2026-01.md`
+
+---
+
+
+### v2.9.6 - Invalid Source Geometry Handling (January 6, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- Filtering multiple layers from the same GeoPackage returned 0 results for some layers
+- Source geometry (filter polygon) was geometrically invalid (self-intersecting, duplicate points)
+- Invalid geometries in spatial predicates cause databases to return 0 results
+
+**Solution:**
+- Added `MakeValid()`/`ST_MakeValid()` wrapper to ALL source geometry expressions
+- Spatialite: `MakeValid(GeomFromText('{wkt}', {srid}))`
+- PostgreSQL: `ST_MakeValid(ST_GeomFromText('{wkt}', {srid}))`
+- Applied in both `build_expression()` and `_create_permanent_source_table()`
+
+**Files Changed:**
+- `modules/backends/spatialite_backend.py`
+- `modules/backends/postgresql_backend.py`
+- `docs/FIX_INVALID_GEOMETRY_SPATIALITE_2026-01.md`
+
+---
+
+### v2.9.5 - QGIS Shutdown Crash Fix (January 5, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- Windows fatal access violation during QGIS shutdown
+- `QgsMessageLog` C++ object destroyed before `QApplication`
+- `cancel()` method called `QgsMessageLog.logMessage()` during task cancellation
+
+**Root Cause:**
+- `QgsMessageLog` destruction order is unpredictable during `QgsApplication::~QgsApplication()`
+- Even `is_qgis_alive()` check was insufficient
+
+**Solution:**
+- Removed all `QgsMessageLog` calls from `cancel()` method in `LayersManagementEngineTask`
+- Now uses Python file-based logger (`logger.info()`) which is safe during shutdown
+
+**Files Changed:**
+- `modules/tasks/layer_management_task.py`
+
+---
+
+### v2.9.4 - Spatialite Large Dataset Filter Fix (January 5, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- Filtering layers with ≥20,000 matching features failed silently
+- Filter expression used SQL subquery: `"fid" IN (SELECT fid FROM "_fm_fids_xxx")`
+- OGR provider doesn't support subqueries in `setSubsetString()` expressions
+
+**Root Cause:**
+- v2.8.7 introduced FID table optimization to avoid QGIS freeze
+- Subquery only works with direct SQLite connections, not OGR SQL parser
+
+**Solution:**
+- Replaced `_build_fid_table_filter()` with `_build_range_based_filter()`
+- Range-based uses BETWEEN/IN() clauses: `("fid" BETWEEN 1 AND 500) OR ...`
+- DEPRECATED: `_build_fid_table_filter()` method
+
+**Files Changed:**
+- `modules/backends/spatialite_backend.py`
+- `docs/FIX_SPATIALITE_SUBQUERY_2026-01.md`
+
+---
+
+### v2.9.2 - Centroid Accuracy Fix (January 4, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- `ST_Centroid()` can return a point OUTSIDE concave polygons (L-shapes, rings)
+- This caused incorrect spatial predicate results
+
+**Solution:**
+- Now uses `ST_PointOnSurface()` by default for polygon geometries
+- Guaranteed to return a point INSIDE the polygon
+- Configurable via `CENTROID_MODE` constant
+
+---
 
 ## Critical Bug Fixes (v2.8.x Series - January 2026)
 

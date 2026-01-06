@@ -1,7 +1,7 @@
 # Backend Architecture - FilterMate
 
-**Last Updated:** December 30, 2025
-**Current Version:** 2.5.8
+**Last Updated:** January 6, 2026
+**Current Version:** 2.9.6
 
 ## Multi-Backend System
 
@@ -414,6 +414,11 @@ This prevents C++ level crashes that Python cannot catch.
 - `GeometryBatch`: Batch geometry operations for worker threads
 - Uses WKB for thread-safe geometry operations
 
+**psycopg2_availability.py (v2.8.7):**
+- Centralized psycopg2 import handling
+- `get_psycopg2_version()` and `check_psycopg2_for_feature()` utilities
+- Used by 8+ modules
+
 ### EnhancedAutoOptimizer
 Extends AutoOptimizer with:
 - Session-based metrics tracking
@@ -422,8 +427,115 @@ Extends AutoOptimizer with:
 - Parallel processing for large datasets (>10k features)
 - LRU caching with TTL and pattern-based invalidation
 
-### Critical Fixes in v2.7.x
+### Critical Fixes in v2.7.x - v2.9.x
 
 1. **v2.7.2**: PostgreSQL target + OGR source now uses WKT mode correctly
 2. **v2.7.3**: WKT decision uses SELECTED feature count (not total)
 3. **v2.7.5**: CASE WHEN wrapper parsing for negative buffers in PostgreSQL
+4. **v2.8.7**: Auto-materialization of expensive spatial expressions
+5. **v2.8.7**: Centralized psycopg2 imports, deduplicated buffer methods
+6. **v2.9.1**: PostgreSQL MV optimizations (INCLUDE, CLUSTER async, bbox column)
+7. **v2.9.2**: ST_PointOnSurface for accurate polygon centroids
+8. **v2.9.4**: Range-based filter instead of FID subquery for Spatialite
+9. **v2.9.6**: MakeValid() wrapper on ALL source geometries
+
+---
+
+## v2.9.x PostgreSQL Advanced Optimizations
+
+### Materialized View Enhancements (v2.9.1)
+
+**INCLUDE Clause (PostgreSQL 11+):**
+```sql
+CREATE INDEX idx_mv_geom ON mv USING GIST (geom) INCLUDE (pk);
+```
+- Covering indexes avoid table lookups during spatial queries
+- 10-30% faster query performance
+
+**Bbox Column (≥10k features):**
+```sql
+CREATE TABLE mv AS SELECT pk, geom, ST_Envelope(geom) AS bbox FROM ...;
+CREATE INDEX idx_mv_bbox ON mv USING GIST (bbox);
+```
+- Pre-computed bounding boxes for ultra-fast `&&` pre-filtering
+- 2-5x faster for large datasets
+
+**Async CLUSTER (50k-100k features):**
+- Non-blocking CLUSTER in background thread
+- Threshold-based strategy: sync (<50k), async (50k-100k), skip (>100k)
+
+**Extended Statistics (PostgreSQL 10+):**
+```sql
+CREATE STATISTICS mv_stats ON pk, geom FROM mv;
+```
+- Better query plans for complex joins
+
+### Configuration Constants (constants.py)
+```python
+MV_ENABLE_INDEX_INCLUDE = True      # PostgreSQL 11+ covering indexes
+MV_ENABLE_EXTENDED_STATS = True     # PostgreSQL 10+ extended statistics
+MV_ENABLE_ASYNC_CLUSTER = True      # Background CLUSTER for medium datasets
+MV_ASYNC_CLUSTER_THRESHOLD = 50000  # Threshold for async CLUSTER
+MV_ENABLE_BBOX_COLUMN = True        # Bbox column for fast pre-filtering
+```
+
+---
+
+## v2.9.x Centroid & Simplification
+
+### ST_PointOnSurface (v2.9.2)
+
+**Problem:** `ST_Centroid()` can return a point OUTSIDE concave polygons.
+
+**Solution:**
+```python
+CENTROID_MODE_DEFAULT = 'point_on_surface'  # 'centroid' | 'point_on_surface' | 'auto'
+```
+
+| Mode | Function | Use Case |
+|------|----------|----------|
+| `point_on_surface` | `ST_PointOnSurface()` | Default for polygons (accurate) |
+| `centroid` | `ST_Centroid()` | Legacy, faster for simple shapes |
+| `auto` | Adaptive | PointOnSurface for polygons, Centroid for lines |
+
+### Adaptive Simplification (v2.9.2)
+
+```python
+SIMPLIFY_BEFORE_BUFFER_ENABLED = True
+SIMPLIFY_TOLERANCE_FACTOR = 0.1         # tolerance = buffer × factor
+SIMPLIFY_MIN_TOLERANCE = 0.5            # meters
+SIMPLIFY_MAX_TOLERANCE = 10.0           # meters
+SIMPLIFY_PRESERVE_TOPOLOGY = True
+```
+- Reduces vertex count by 50-90% before buffer
+- ST_Buffer runs 2-10x faster on simplified geometry
+
+---
+
+## v2.9.x Spatialite Improvements
+
+### Range-Based Filter (v2.9.4)
+
+**DEPRECATED:** `_build_fid_table_filter()` (subquery not supported by OGR)
+
+**NEW:** `_build_range_based_filter()`
+```sql
+-- Optimized expression for consecutive FID ranges
+("fid" BETWEEN 1 AND 500) OR ("fid" BETWEEN 502 AND 1000) OR "fid" IN (503, 507)
+```
+- Detects consecutive FID ranges and uses BETWEEN clauses
+- Groups non-consecutive FIDs into IN() chunks of ≤1000
+- Compatible with all OGR providers
+
+### MakeValid Wrapper (v2.9.6)
+
+All source geometries are now wrapped in `MakeValid()`:
+```python
+# Before (v2.9.5)
+source_geom_expr = f"GeomFromText('{source_geom}', {source_srid})"
+
+# After (v2.9.6)
+source_geom_expr = f"MakeValid(GeomFromText('{source_geom}', {source_srid}))"
+```
+- Applied in `build_expression()` and `_create_permanent_source_table()`
+- Prevents 0 results from invalid source geometries

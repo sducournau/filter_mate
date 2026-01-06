@@ -263,8 +263,8 @@ class PostgreSQLConnectionPool:
                 try:
                     self._pool.put_nowait(conn)
                     self._connection_timestamps[id(conn)] = time.time()
-                except:
-                    self._close_connection(conn)
+                except queue.Full:
+                    self._close_connection(conn)  # Pool is full
             else:
                 self._close_connection(conn)
         

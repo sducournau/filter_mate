@@ -2326,8 +2326,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not zoom to filtered extent: {e}")
             try:
                 iface.mapCanvas().refresh()
-            except:
-                pass
+            except (RuntimeError, AttributeError):
+                pass  # Canvas may be unavailable during shutdown
         
         # Update usage stats
         self._favorites_manager.mark_favorite_used(favorite_id)
@@ -3269,8 +3269,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         finally:
             try:
                 connexion.close()
-            except:
-                pass
+            except Exception:
+                pass  # Connection already closed
     
     def _cleanup_postgresql_schema_if_empty(self):
         """
@@ -3373,8 +3373,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         finally:
             try:
                 connexion.close()
-            except:
-                pass
+            except Exception:
+                pass  # Connection already closed
     
     def _show_postgresql_session_info(self):
         """
@@ -3454,8 +3454,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             finally:
                 try:
                     connexion.close()
-                except:
-                    pass
+                except Exception:
+                    pass  # Connection already closed
         else:
             info_text += "<b>Database:</b> No PostgreSQL connection available<br>"
         

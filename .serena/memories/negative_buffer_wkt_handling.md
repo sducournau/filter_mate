@@ -1,7 +1,7 @@
 # Negative Buffer & WKT Generation - FilterMate
 
-**Last Updated:** December 29, 2025
-**Versions Covered:** v2.3.9 - v2.5.5+
+**Last Updated:** January 6, 2026
+**Versions Covered:** v2.3.9 - v2.9.6+
 
 ## Overview
 
@@ -115,6 +115,12 @@ layer.setSubsetString(expression)
 ```
 
 ## Version History
+
+### v2.9.6 (January 6, 2026) - CRITICAL FIX ⭐ NEW
+- **Spatialite/PostgreSQL**: Added `MakeValid()` wrapper to ALL source geometry expressions
+- Invalid source geometries (self-intersecting, duplicate points) now handled automatically
+- Applied in: `build_expression()`, `_create_permanent_source_table()`
+- Fixes 0 results when filtering with geometrically invalid selection polygons
 
 ### v2.5.5 (December 29, 2025) - CRITICAL FIX
 - **PostgreSQL**: Fixed empty geometry detection using `ST_IsEmpty()` instead of `NULLIF`

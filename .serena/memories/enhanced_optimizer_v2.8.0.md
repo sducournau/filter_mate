@@ -1,8 +1,10 @@
-# Enhanced Auto-Optimization System (v2.8.0)
+# Enhanced Auto-Optimization System (v2.8.0 - v2.9.6)
+
+**Last Updated:** January 6, 2026
 
 ## Overview
 
-FilterMate v2.8.0 introduces an **Enhanced Auto-Optimization System** with:
+FilterMate v2.8.0+ introduces an **Enhanced Auto-Optimization System** with:
 
 - **Performance Metrics Collection**: Track optimization effectiveness
 - **Query Pattern Detection**: Identify recurring queries and pre-optimize
@@ -102,6 +104,89 @@ cache_key = cache.get_cache_key(
 - `QgsVectorLayer` access
 - QGIS API calls
 - Expression evaluation with QGIS context
+
+## v2.9.x PostgreSQL Advanced Optimizations
+
+### Materialized View Enhancements (v2.9.1)
+
+**INCLUDE Clause (PostgreSQL 11+):**
+- Covering indexes include primary key column
+- Avoids table lookups during spatial queries
+- 10-30% faster query performance
+- Config: `MV_ENABLE_INDEX_INCLUDE = True`
+
+**Bbox Column (≥10k features):**
+- Pre-computed `ST_Envelope(geom)` column
+- Dedicated GIST index for `&&` operator
+- 2-5x faster for large datasets
+- Config: `MV_ENABLE_BBOX_COLUMN = True`
+
+**Async CLUSTER (50k-100k features):**
+- Non-blocking CLUSTER in background thread
+- Config: `MV_ENABLE_ASYNC_CLUSTER = True`
+- Threshold: `MV_ASYNC_CLUSTER_THRESHOLD = 50000`
+
+**Extended Statistics (PostgreSQL 10+):**
+- Auto-creation on pk + geom columns
+- Better query plans for complex joins
+- Config: `MV_ENABLE_EXTENDED_STATS = True`
+
+### Complex Expression Materialization (v2.8.7)
+
+Automatic detection and materialization of expensive expressions:
+
+**Patterns Detected:**
+- `EXISTS` clause with spatial predicates (ST_Intersects, ST_Contains, etc.)
+- `EXISTS` clause with `ST_Buffer`
+- Multi-step filters combining MV references with EXISTS clauses
+- `__source` alias patterns with spatial predicates
+
+**Benefits:**
+- 10-100x faster canvas rendering for complex multi-step filters
+- Expensive spatial operations executed ONCE during MV creation
+- Simple `"fid" IN (SELECT pk FROM mv_result)` for setSubsetString
+
+### Centroid Optimization (v2.9.2)
+
+**ST_PointOnSurface for Polygons:**
+```python
+CENTROID_MODE_DEFAULT = 'point_on_surface'  # Guaranteed inside polygon
+```
+
+| Mode | Function | Use Case |
+|------|----------|----------|
+| `point_on_surface` | `ST_PointOnSurface()` | Default for polygons (accurate) |
+| `centroid` | `ST_Centroid()` | Legacy, faster for simple shapes |
+| `auto` | Adaptive | PointOnSurface for polygons, Centroid for lines |
+
+### Adaptive Simplification (v2.9.2)
+
+Automatic geometry simplification before buffer operations:
+```python
+SIMPLIFY_BEFORE_BUFFER_ENABLED = True
+SIMPLIFY_TOLERANCE_FACTOR = 0.1         # tolerance = buffer × factor
+SIMPLIFY_MIN_TOLERANCE = 0.5            # meters
+SIMPLIFY_MAX_TOLERANCE = 10.0           # meters
+SIMPLIFY_PRESERVE_TOPOLOGY = True
+```
+
+**Performance:**
+- Reduces vertex count by 50-90% before buffer
+- ST_Buffer runs 2-10x faster on simplified geometry
+
+### MV Management UI (v2.8.9)
+
+**MV Status Widget:**
+- Real-time display of active materialized views count
+- Shows session views vs. other sessions views
+- Color-coded status (Clean ✅, Active 📊, Error ⚠️)
+
+**Quick Cleanup Actions:**
+- 🧹 Session: Cleanup MVs from current session only
+- 🗑️ Orphaned: Cleanup MVs from inactive sessions
+- ⚠️ All: Cleanup all MVs (with confirmation)
+
+---
 
 ## Tests
 

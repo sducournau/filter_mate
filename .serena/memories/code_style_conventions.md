@@ -1,6 +1,6 @@
-# Code Style Conventions - FilterMate v2.6.0
+# Code Style Conventions - FilterMate v2.9.6
 
-**Last Updated:** January 2, 2026
+**Last Updated:** January 6, 2026
 
 ## Python Standards
 
@@ -1099,7 +1099,22 @@ Before submitting code:
 
 ## Version-Specific Patterns
 
-### v2.5.20 (Current - January 2026)
+### v2.9.6 (Current - January 2026)
+- **MakeValid geometry**: All source geometries wrapped in `MakeValid()`/`ST_MakeValid()`
+- **Spatialite geometry fix**: Invalid source geometries now handled automatically
+- **Range-based filter**: Use `_build_range_based_filter()` instead of FID subquery
+
+### v2.9.x (January 2026)
+- **ST_PointOnSurface**: Use for accurate polygon centroids (`CENTROID_MODE_DEFAULT = 'point_on_surface'`)
+- **Adaptive simplification**: Auto-simplify before buffer (`SIMPLIFY_BEFORE_BUFFER_ENABLED = True`)
+- **PostgreSQL MV optimizations**: INCLUDE clause, bbox column, async CLUSTER
+- **psycopg2 centralization**: Use `modules/psycopg2_availability.py` for all imports
+
+### v2.8.x (January 2026)
+- **Complex expression materialization**: `_has_expensive_spatial_expression()` auto-detects
+- **Safe shutdown**: Task `cancel()` uses Python logger, not QgsMessageLog
+
+### v2.5.20 (December 2025)
 - **Multi-backend canvas refresh**: Use `_delayed_canvas_refresh()` with pattern detection
 - **Spatialite/OGR refresh**: Detect complex filters and force `dataProvider().reloadData()`
 - **Double-pass refresh**: 800ms + 2000ms for guaranteed display

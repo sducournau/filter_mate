@@ -1,6 +1,6 @@
-# Performance Optimizations - FilterMate v2.6.0
+# Performance Optimizations - FilterMate v2.9.6
 
-**Last Updated:** January 2, 2026
+**Last Updated:** January 6, 2026
 
 ## Overview
 
@@ -846,8 +846,134 @@ LAZY_CURSOR_THRESHOLD = 50000         # Features for streaming cursor
 
 ---
 
+## v2.9.x PostgreSQL Advanced MV Optimizations (January 2026) ⭐ NEW
+
+### Covering GIST Indexes (v2.9.1)
+
+**Status:** ✅ Implemented  
+**Requirement:** PostgreSQL 11+
+
+```sql
+CREATE INDEX idx_mv_geom ON mv USING GIST (geom) INCLUDE (pk);
+```
+
+**Impact:** 10-30% faster spatial queries (avoids table lookups)
+
+---
+
+### Bbox Pre-filter Column (v2.9.1)
+
+**Status:** ✅ Implemented  
+**Threshold:** ≥10k features
+
+```sql
+CREATE TABLE mv AS SELECT pk, geom, ST_Envelope(geom) AS bbox FROM ...;
+CREATE INDEX idx_mv_bbox ON mv USING GIST (bbox);
+```
+
+**Impact:** 2-5x faster for `&&` operator pre-filtering
+
+---
+
+### Async CLUSTER (v2.9.1)
+
+**Status:** ✅ Implemented  
+**Thresholds:**
+- < 50k: Synchronous CLUSTER
+- 50k-100k: Async CLUSTER (background thread, non-blocking)
+- > 100k: Skip CLUSTER (too expensive)
+
+---
+
+### ST_PointOnSurface (v2.9.2)
+
+**Status:** ✅ Implemented  
+**Problem:** `ST_Centroid()` can return point OUTSIDE concave polygons
+
+**Solution:**
+```python
+CENTROID_MODE_DEFAULT = 'point_on_surface'  # 'centroid' | 'point_on_surface' | 'auto'
+```
+
+**Impact:** More accurate centroid-based filtering for complex polygons
+
+---
+
+### Adaptive Simplification (v2.9.2)
+
+**Status:** ✅ Implemented
+
+```python
+SIMPLIFY_BEFORE_BUFFER_ENABLED = True
+SIMPLIFY_TOLERANCE_FACTOR = 0.1         # tolerance = buffer × 0.1
+SIMPLIFY_MIN_TOLERANCE = 0.5            # meters
+SIMPLIFY_MAX_TOLERANCE = 10.0           # meters
+```
+
+**Impact:** 
+- Reduces vertex count 50-90% before buffer operations
+- ST_Buffer runs 2-10x faster on simplified geometry
+
+---
+
+### Complex Expression Materialization (v2.8.7)
+
+**Status:** ✅ Implemented
+
+Automatic detection and materialization of expensive spatial expressions:
+- EXISTS clause with spatial predicates
+- EXISTS clause with ST_Buffer
+- Multi-step filters with MV + EXISTS combinations
+
+**Impact:** 10-100x faster canvas rendering for complex multi-step filters
+
+---
+
+## v2.9.x Spatialite Optimizations ⭐ NEW
+
+### Range-Based Filter (v2.9.4)
+
+**Status:** ✅ Implemented  
+**Problem:** SQL subqueries not supported by OGR setSubsetString()
+
+**Solution:** `_build_range_based_filter()` replaces `_build_fid_table_filter()`
+
+```sql
+-- Before (v2.8.7): NOT WORKING with OGR
+"fid" IN (SELECT fid FROM "_fm_fids_xxx")
+
+-- After (v2.9.4): WORKING with all providers
+("fid" BETWEEN 1 AND 500) OR ("fid" BETWEEN 502 AND 1000) OR "fid" IN (503, 507)
+```
+
+**Impact:** Large dataset filtering (≥20k features) now works correctly
+
+---
+
+### MakeValid Wrapper (v2.9.6)
+
+**Status:** ✅ Implemented  
+**Problem:** Invalid source geometries cause 0 results
+
+**Solution:** All source geometries wrapped in MakeValid():
+```sql
+MakeValid(GeomFromText('{wkt}', {srid}))
+```
+
+**Impact:** Layers from same GeoPackage now filter correctly
+
+---
+
 ## Version History
 
+- **v2.9.6** (Jan 6, 2026): MakeValid wrapper for all source geometries
+- **v2.9.5** (Jan 5, 2026): QGIS shutdown crash fix (QgsMessageLog)
+- **v2.9.4** (Jan 5, 2026): Range-based filter for Spatialite large datasets
+- **v2.9.2** (Jan 4, 2026): ST_PointOnSurface, adaptive simplification
+- **v2.9.1** (Jan 4, 2026): PostgreSQL MV optimizations (INCLUDE, async CLUSTER, bbox)
+- **v2.8.9** (Jan 4, 2026): MV management UI, simplified popup
+- **v2.8.7** (Jan 4, 2026): Complex expression materialization, psycopg2 centralization
+- **v2.8.1** (Jan 3, 2026): Orphaned MV recovery
 - **v2.5.20** (Jan 3, 2026): Multi-backend extended canvas refresh
 - **v2.5.19** (Jan 3, 2026): PostgreSQL complex filter display fix
 - **v2.5.9** (Dec 31, 2025): Progressive filtering, complexity estimation, enhanced cache

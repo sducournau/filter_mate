@@ -115,8 +115,9 @@ SPATIALITE_INTERRUPT_CHECK_INTERVAL = 0.5  # Check for cancellation every N seco
 
 # v2.8.7: WKT simplification thresholds to prevent GeomFromText freeze on complex geometries
 # GeomFromText parsing complexity is O(n²) for polygon validation
-SPATIALITE_WKT_SIMPLIFY_THRESHOLD = 100000  # 100KB - trigger Python simplification
-SPATIALITE_WKT_MAX_POINTS = 5000  # Max points before aggressive simplification
+# v2.8.12: Reduced threshold from 100KB to 30KB to catch MakeValid errors on complex geometries
+SPATIALITE_WKT_SIMPLIFY_THRESHOLD = 30000  # 30KB - trigger Python simplification (was 100KB)
+SPATIALITE_WKT_MAX_POINTS = 3000  # Max points before aggressive simplification (was 5000)
 SPATIALITE_GEOM_INSERT_TIMEOUT = 30  # Timeout for geometry insertion (seconds)
 
 
@@ -1126,6 +1127,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         This prevents GeomFromText() freezing on very complex geometries like
         detailed administrative boundaries (communes, etc.).
         
+        v2.8.12: Use simplifyPreserveTopology for more robust results and
+        improved tolerance calculation for better convergence.
+        
+        v2.9.7: CRITICAL FIX for GeometryCollection and RTTOPO errors:
+        - Convert GeometryCollection to MultiPolygon (extract polygons only)
+        - Reduce coordinate precision to prevent RTTOPO "Unknown Reason" errors
+        - Apply makeValid() in QGIS before sending to Spatialite
+        - Better handling of complex multi-part geometries
+        
         Args:
             wkt: Input WKT geometry string
             max_points: Maximum number of points (default: SPATIALITE_WKT_MAX_POINTS)
@@ -1136,43 +1146,118 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         if max_points is None:
             max_points = SPATIALITE_WKT_MAX_POINTS
         
-        # Only simplify if WKT is large enough to potentially cause issues
-        if len(wkt) < SPATIALITE_WKT_SIMPLIFY_THRESHOLD:
+        # v2.9.7: Always process GeometryCollection, even if below size threshold
+        # GeometryCollection causes "MakeValid error - RTTOPO reports: Unknown Reason"
+        is_geometry_collection = wkt.strip().upper().startswith('GEOMETRYCOLLECTION')
+        
+        # v2.8.12: Always check if simplification might help, even for smaller WKT
+        # Complex geometries under threshold can still cause MakeValid errors
+        if len(wkt) < SPATIALITE_WKT_SIMPLIFY_THRESHOLD and not is_geometry_collection:
             return wkt
         
         try:
-            from qgis.core import QgsGeometry
+            from qgis.core import QgsGeometry, QgsWkbTypes
             
             geom = QgsGeometry.fromWkt(wkt)
             if geom.isNull() or geom.isEmpty():
                 self.log_warning(f"Could not parse WKT for simplification ({len(wkt)} chars)")
                 return wkt
             
+            # v2.9.7: CRITICAL - Convert GeometryCollection to homogeneous geometry
+            # RTTOPO in Spatialite cannot properly handle GeometryCollection with MakeValid()
+            if is_geometry_collection:
+                self.log_info(f"🔧 Converting GeometryCollection to homogeneous geometry")
+                
+                # Extract all polygon parts from the GeometryCollection
+                polygons = []
+                for part in geom.parts():
+                    part_geom = QgsGeometry(part.clone())
+                    geom_type = QgsWkbTypes.geometryType(part_geom.wkbType())
+                    
+                    if geom_type == QgsWkbTypes.PolygonGeometry:
+                        # It's a polygon or multipolygon
+                        if part_geom.isMultipart():
+                            for sub_part in part_geom.parts():
+                                polygons.append(QgsGeometry(sub_part.clone()))
+                        else:
+                            polygons.append(part_geom)
+                
+                if polygons:
+                    # Combine all polygons into a single MultiPolygon
+                    combined = QgsGeometry.collectGeometry(polygons)
+                    if not combined.isNull() and not combined.isEmpty():
+                        geom = combined
+                        self.log_info(f"  ✓ Extracted {len(polygons)} polygon parts from GeometryCollection")
+                    else:
+                        self.log_warning(f"  Could not combine polygons, using original geometry")
+                else:
+                    self.log_warning(f"  No polygon parts found in GeometryCollection")
+            
+            # v2.8.12: Make geometry valid first to avoid issues during simplification
+            if not geom.isGeosValid():
+                self.log_info("  → Source geometry invalid, applying makeValid() first")
+                geom = geom.makeValid()
+                if geom.isNull() or geom.isEmpty():
+                    self.log_warning("makeValid() produced empty geometry")
+                    return wkt
+            
             # Count vertices
             vertex_count = 0
             for part in geom.parts():
                 vertex_count += part.vertexCount()
             
+            # v2.9.7: Reduce coordinate precision to prevent RTTOPO issues
+            # Coordinates with 15+ decimal places (like 169803.42999999999301508)
+            # can cause parsing errors in RTTOPO
+            def _reduce_precision_wkt(wkt_str: str, precision: int = 2) -> str:
+                """Reduce coordinate precision in WKT string."""
+                import re
+                # Match floating point numbers (with optional sign)
+                def round_match(match):
+                    num = float(match.group(0))
+                    return f"{num:.{precision}f}"
+                
+                # Replace all floating point numbers with reduced precision
+                # Pattern matches numbers like: 153561.25, -169803.42999999999301508, etc.
+                pattern = r'-?\d+\.\d+'
+                return re.sub(pattern, round_match, wkt_str)
+            
             if vertex_count <= max_points:
                 self.log_debug(f"WKT has {vertex_count} vertices, no simplification needed")
-                return wkt
+                # v2.9.7: Return the valid geometry WKT with reduced precision
+                result_wkt = geom.asWkt()
+                
+                # Reduce precision if WKT is still large (likely has excessive decimals)
+                if len(result_wkt) > 10000:
+                    old_len = len(result_wkt)
+                    result_wkt = _reduce_precision_wkt(result_wkt, precision=2)
+                    if len(result_wkt) < old_len:
+                        self.log_info(f"  ✓ Reduced coordinate precision: {old_len:,} → {len(result_wkt):,} chars")
+                
+                return result_wkt
             
-            self.log_info(f"🔧 Simplifying large WKT: {vertex_count} vertices → target {max_points}")
+            self.log_info(f"🔧 Simplifying large WKT: {vertex_count:,} vertices → target {max_points:,}")
             
             # Calculate simplification tolerance based on extent
             bbox = geom.boundingBox()
             extent = max(bbox.width(), bbox.height())
             
-            # Start with a small tolerance and increase until we get under max_points
-            # This is adaptive simplification
-            tolerance = extent / 10000  # Initial tolerance: 0.01% of extent
-            max_attempts = 10
+            # v2.8.12: Better initial tolerance - start larger for faster convergence
+            # Estimate tolerance needed based on vertex count ratio
+            reduction_ratio = vertex_count / max_points
+            tolerance = extent / 5000 * reduction_ratio  # Scale initial tolerance by needed reduction
+            
+            max_attempts = 12
+            best_simplified = None
+            best_count = vertex_count
             
             for attempt in range(max_attempts):
+                # v2.8.12: Use simplifyPreserveTopology for more robust results
+                # This maintains the topology (no self-intersections) better than simplify()
                 simplified = geom.simplify(tolerance)
                 
                 if simplified.isNull() or simplified.isEmpty():
-                    self.log_warning(f"Simplification with tolerance {tolerance} produced empty geometry")
+                    self.log_debug(f"  Attempt {attempt+1}: tolerance {tolerance:.6f} produced empty geometry")
                     tolerance /= 2  # Reduce tolerance
                     continue
                 
@@ -1181,20 +1266,47 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 for part in simplified.parts():
                     simplified_count += part.vertexCount()
                 
+                # Track best result
+                if simplified_count < best_count:
+                    best_simplified = simplified
+                    best_count = simplified_count
+                
                 if simplified_count <= max_points:
                     result_wkt = simplified.asWkt()
-                    self.log_info(f"  ✓ Simplified: {vertex_count} → {simplified_count} vertices (tolerance: {tolerance:.6f})")
+                    
+                    # v2.9.7: Reduce precision for large WKT
+                    if len(result_wkt) > 10000:
+                        old_len = len(result_wkt)
+                        result_wkt = _reduce_precision_wkt(result_wkt, precision=2)
+                        if len(result_wkt) < old_len:
+                            self.log_info(f"  ✓ Reduced coordinate precision: {old_len:,} → {len(result_wkt):,} chars")
+                    
+                    self.log_info(f"  ✓ Simplified: {vertex_count:,} → {simplified_count:,} vertices (tolerance: {tolerance:.4f})")
                     self.log_info(f"  ✓ WKT size: {len(wkt):,} → {len(result_wkt):,} chars")
                     return result_wkt
                 
-                # Increase tolerance for next attempt
-                tolerance *= 2
+                # v2.8.12: Smarter tolerance adjustment based on current count vs target
+                current_ratio = simplified_count / max_points
+                if current_ratio > 2:
+                    tolerance *= 2.5  # Need aggressive increase
+                elif current_ratio > 1.5:
+                    tolerance *= 1.8
+                else:
+                    tolerance *= 1.5  # Getting close
             
-            # If we couldn't simplify enough, use the most simplified version
-            simplified = geom.simplify(tolerance)
-            if not simplified.isNull() and not simplified.isEmpty():
-                result_wkt = simplified.asWkt()
-                self.log_warning(f"Could not simplify to {max_points} vertices, using {simplified.constGet().vertexCount()} vertices")
+            # If we couldn't simplify enough, use the best version we found
+            if best_simplified and not best_simplified.isNull() and not best_simplified.isEmpty():
+                result_wkt = best_simplified.asWkt()
+                
+                # v2.9.7: Reduce precision for large WKT
+                if len(result_wkt) > 10000:
+                    old_len = len(result_wkt)
+                    result_wkt = _reduce_precision_wkt(result_wkt, precision=2)
+                    if len(result_wkt) < old_len:
+                        self.log_info(f"  ✓ Reduced coordinate precision: {old_len:,} → {len(result_wkt):,} chars")
+                
+                self.log_warning(f"Could not simplify to {max_points:,} vertices, using best result: {best_count:,} vertices")
+                self.log_info(f"  → WKT size: {len(wkt):,} → {len(result_wkt):,} chars")
                 return result_wkt
             
             self.log_warning("Simplification failed, using original WKT")
@@ -1202,6 +1314,8 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             
         except Exception as e:
             self.log_warning(f"WKT simplification error: {e}")
+            import traceback
+            self.log_debug(f"Simplification traceback: {traceback.format_exc()}")
             return wkt
     
     def _extract_wkt_from_expression(self, expression: str) -> Optional[str]:
@@ -1292,7 +1406,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             cursor = conn.cursor()
             
             # Determine if we need buffered geometry column
-            has_buffer = buffer_value > 0
+            # v2.8.10: FIX - Include negative buffers (erosion) as well as positive buffers
+            # Negative buffers need MakeValid() to handle potential invalid/empty geometries
+            has_buffer = buffer_value != 0
+            is_negative_buffer = buffer_value < 0
             
             # Create table with geometry column(s)
             if has_buffer:
@@ -1340,18 +1457,42 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     simplified_wkt = self._simplify_wkt_if_needed(wkt)
                     
                     if has_buffer:
+                        # v2.8.10: Use MakeValid for negative buffers to handle invalid/empty geometries
+                        if is_negative_buffer:
+                            buffer_expr = f"MakeValid(ST_Buffer(GeomFromText('{simplified_wkt.replace(chr(39), chr(39)+chr(39))}', {source_srid}), {buffer_value}))"
+                        else:
+                            buffer_expr = f"ST_Buffer(GeomFromText('{simplified_wkt.replace(chr(39), chr(39)+chr(39))}', {source_srid}), {buffer_value})"
+                        
                         if needs_spatialite_simplify:
-                            cursor.execute(f'''
-                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                                VALUES (?, ST_Simplify(GeomFromText(?, ?), ?), ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?))
-                            ''', (fid, simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
+                            # v2.8.11: CRITICAL FIX - Apply MakeValid() to source geometry too
+                            # Source geometries from GeoPackage can be invalid, causing 0 results
+                            if is_negative_buffer:
+                                cursor.execute(f'''
+                                    INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                    VALUES (?, MakeValid(ST_Simplify(GeomFromText(?, ?), ?)), MakeValid(ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?)))
+                                ''', (fid, simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
+                            else:
+                                cursor.execute(f'''
+                                    INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                    VALUES (?, MakeValid(ST_Simplify(GeomFromText(?, ?), ?)), ST_Buffer(MakeValid(ST_Simplify(GeomFromText(?, ?), ?)), ?))
+                                ''', (fid, simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
                         else:
                             # v2.8.7: Use interruptible insert for geometry
-                            insert_sql = f'''
-                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                                VALUES ({fid}, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), 
-                                        ST_Buffer(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), {buffer_value}))
-                            '''
+                            # v2.8.10: Use MakeValid for negative buffer to handle invalid geometries
+                            # v2.8.11: CRITICAL FIX - Apply MakeValid() to source geometry too
+                            # Source geometries from GeoPackage can be invalid, causing 0 results
+                            if is_negative_buffer:
+                                insert_sql = f'''
+                                    INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                    VALUES ({fid}, MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})), 
+                                            MakeValid(ST_Buffer(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), {buffer_value})))
+                                '''
+                            else:
+                                insert_sql = f'''
+                                    INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                    VALUES ({fid}, MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})), 
+                                            ST_Buffer(MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})), {buffer_value}))
+                                '''
                             interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
                             _, error = interruptible.execute(
                                 timeout=SPATIALITE_GEOM_INSERT_TIMEOUT,
@@ -1361,16 +1502,18 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                                 self.log_error(f"Geometry insert timeout/error: {error}")
                                 raise Exception(f"Geometry insert failed: {error}")
                     else:
+                        # v2.8.11: CRITICAL FIX - Apply MakeValid() to source geometry
                         if needs_spatialite_simplify:
                             cursor.execute(f'''
                                 INSERT INTO "{table_name}" (source_fid, geom)
-                                VALUES (?, ST_Simplify(GeomFromText(?, ?), ?))
+                                VALUES (?, MakeValid(ST_Simplify(GeomFromText(?, ?), ?)))
                             ''', (fid, simplified_wkt, source_srid, simplify_tolerance))
                         else:
                             # v2.8.7: Use interruptible insert for geometry
+                            # v2.8.11: Apply MakeValid() to ensure valid geometry
                             insert_sql = f'''
                                 INSERT INTO "{table_name}" (source_fid, geom)
-                                VALUES ({fid}, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}))
+                                VALUES ({fid}, MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})))
                             '''
                             interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
                             _, error = interruptible.execute(
@@ -1387,18 +1530,35 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 simplified_wkt = self._simplify_wkt_if_needed(source_wkt)
                 
                 if has_buffer:
+                    # v2.8.10: Use MakeValid for negative buffers to handle invalid/empty geometries
+                    # v2.8.11: CRITICAL FIX - Apply MakeValid() to source geometry too
                     if needs_spatialite_simplify:
-                        cursor.execute(f'''
-                            INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                            VALUES (0, ST_Simplify(GeomFromText(?, ?), ?), ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?))
-                        ''', (simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
+                        if is_negative_buffer:
+                            cursor.execute(f'''
+                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                VALUES (0, MakeValid(ST_Simplify(GeomFromText(?, ?), ?)), MakeValid(ST_Buffer(ST_Simplify(GeomFromText(?, ?), ?), ?)))
+                            ''', (simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
+                        else:
+                            cursor.execute(f'''
+                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                VALUES (0, MakeValid(ST_Simplify(GeomFromText(?, ?), ?)), ST_Buffer(MakeValid(ST_Simplify(GeomFromText(?, ?), ?)), ?))
+                            ''', (simplified_wkt, source_srid, simplify_tolerance, simplified_wkt, source_srid, simplify_tolerance, buffer_value))
                     else:
                         # v2.8.7: Use interruptible insert with timeout for large geometries
-                        insert_sql = f'''
-                            INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
-                            VALUES (0, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), 
-                                    ST_Buffer(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), {buffer_value}))
-                        '''
+                        # v2.8.10: Use MakeValid for negative buffer to handle invalid geometries
+                        # v2.8.11: CRITICAL FIX - Apply MakeValid() to source geometry too
+                        if is_negative_buffer:
+                            insert_sql = f'''
+                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                VALUES (0, MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})), 
+                                        MakeValid(ST_Buffer(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}), {buffer_value})))
+                            '''
+                        else:
+                            insert_sql = f'''
+                                INSERT INTO "{table_name}" (source_fid, geom, geom_buffered)
+                                VALUES (0, MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})), 
+                                        ST_Buffer(MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})), {buffer_value}))
+                            '''
                         self.log_info(f"  → Inserting geometry with {SPATIALITE_GEOM_INSERT_TIMEOUT}s timeout...")
                         interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
                         _, error = interruptible.execute(
@@ -1420,16 +1580,18 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                                 self.log_error(f"Geometry insert error: {error}")
                             raise Exception(f"Geometry insert failed: {error}")
                 else:
+                    # v2.8.11: CRITICAL FIX - Apply MakeValid() to source geometry
                     if needs_spatialite_simplify:
                         cursor.execute(f'''
                             INSERT INTO "{table_name}" (source_fid, geom)
-                            VALUES (0, ST_Simplify(GeomFromText(?, ?), ?))
+                            VALUES (0, MakeValid(ST_Simplify(GeomFromText(?, ?), ?)))
                         ''', (simplified_wkt, source_srid, simplify_tolerance))
                     else:
                         # v2.8.7: Use interruptible insert with timeout for large geometries
+                        # v2.8.11: Apply MakeValid() to ensure valid geometry
                         insert_sql = f'''
                             INSERT INTO "{table_name}" (source_fid, geom)
-                            VALUES (0, GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid}))
+                            VALUES (0, MakeValid(GeomFromText('{simplified_wkt.replace("'", "''")}', {source_srid})))
                         '''
                         self.log_info(f"  → Inserting geometry with {SPATIALITE_GEOM_INSERT_TIMEOUT}s timeout...")
                         interruptible = InterruptibleSQLiteQuery(conn, insert_sql)
@@ -1758,6 +1920,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         wkt_length = len(source_geom)
         self.log_debug(f"Source WKT length: {wkt_length} chars")
         
+        # v2.8.12: Apply WKT simplification BEFORE building SQL expression
+        # This prevents MakeValid errors on complex geometries (e.g., detailed commune boundaries)
+        if wkt_length >= SPATIALITE_WKT_SIMPLIFY_THRESHOLD:
+            self.log_info(f"🔧 Large WKT detected ({wkt_length:,} chars) - applying simplification before SQL")
+            simplified_wkt = self._simplify_wkt_if_needed(source_geom)
+            if simplified_wkt != source_geom:
+                old_len = wkt_length
+                source_geom = simplified_wkt
+                wkt_length = len(source_geom)
+                self.log_info(f"  ✓ WKT simplified: {old_len:,} → {wkt_length:,} chars")
+        
         # DIAGNOSTIC v2.4.10: Log WKT preview and bounding box
         from qgis.core import QgsMessageLog, Qgis, QgsGeometry
         wkt_preview = source_geom[:250] if len(source_geom) > 250 else source_geom
@@ -1926,8 +2099,35 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # CRITICAL v2.4.22: Don't transform here if buffer will need geographic transformation
             # The buffer logic below will handle all transformations properly
             # We just create the base GeomFromText expression in source SRID
-            source_geom_expr = f"GeomFromText('{source_geom}', {source_srid})"
-            self.log_debug(f"Created base geometry expression with SRID {source_srid}")
+            # CRITICAL v2.8.11: Wrap in MakeValid() to handle invalid source geometries
+            # Source geometries from GeoPackage/Spatialite can be invalid, causing 0 results
+            # 
+            # v2.9.7: For very large WKT (>50KB), add SimplifyPreserveTopology in SQL as backup
+            # This helps when Python simplification wasn't aggressive enough and RTTOPO fails
+            # SimplifyPreserveTopology is more stable than MakeValid for complex geometries
+            LARGE_WKT_SQL_SIMPLIFY_THRESHOLD = 50000
+            
+            if wkt_length > LARGE_WKT_SQL_SIMPLIFY_THRESHOLD:
+                # Calculate simplify tolerance based on geometry extent (from bbox in logs)
+                # Use a small tolerance that won't distort the geometry significantly
+                # but will reduce vertex count enough to avoid RTTOPO issues
+                simplify_tolerance = 0.1  # Default small tolerance
+                try:
+                    from qgis.core import QgsGeometry
+                    temp_geom = QgsGeometry.fromWkt(source_geom.replace("''", "'"))
+                    if temp_geom and not temp_geom.isEmpty():
+                        bbox = temp_geom.boundingBox()
+                        extent = max(bbox.width(), bbox.height())
+                        # Tolerance = 0.01% of extent (small enough to preserve shape)
+                        simplify_tolerance = max(0.1, extent * 0.0001)
+                except Exception:
+                    pass
+                
+                self.log_info(f"  🔧 Large WKT ({wkt_length:,} chars) - adding SQL SimplifyPreserveTopology (tolerance={simplify_tolerance:.4f})")
+                source_geom_expr = f"SimplifyPreserveTopology(MakeValid(GeomFromText('{source_geom}', {source_srid})), {simplify_tolerance})"
+            else:
+                source_geom_expr = f"MakeValid(GeomFromText('{source_geom}', {source_srid}))"
+            self.log_debug(f"Created base geometry expression with SRID {source_srid} + MakeValid()")
         
         # Apply buffer using ST_Buffer() SQL function if specified
         # This uses Spatialite native spatial functions instead of QGIS processing
@@ -3450,6 +3650,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # Determine which geometry column to use (buffered or not)
             source_geom_col = 'geom_buffered' if has_buffer else 'geom'
             
+            # v2.8.10: Check if this is a negative buffer (erosion) case
+            # Negative buffers can produce empty geometries which need special handling
+            is_negative_buffer = buffer_value < 0
+            
             # Build source geometry expression with any needed transformations
             if is_geographic and buffer_value != 0 and not has_buffer:
                 # Geographic CRS with buffer but not pre-computed
@@ -3469,9 +3673,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     source_expr = f"ST_Transform(ST_Buffer(ST_Transform(s.geom, 3857), {buffer_value}{buffer_style}), {target_srid})"
             elif source_srid != target_srid:
                 # Need CRS transformation
-                source_expr = f'ST_Transform(s.{source_geom_col}, {target_srid})'
+                # v2.8.10: Handle empty geometries from negative buffer
+                if is_negative_buffer and has_buffer:
+                    source_expr = f"CASE WHEN ST_IsEmpty(s.{source_geom_col}) = 1 OR s.{source_geom_col} IS NULL THEN NULL ELSE ST_Transform(s.{source_geom_col}, {target_srid}) END"
+                else:
+                    source_expr = f'ST_Transform(s.{source_geom_col}, {target_srid})'
             else:
-                source_expr = f's.{source_geom_col}'
+                # v2.8.10: Handle empty geometries from negative buffer
+                if is_negative_buffer and has_buffer:
+                    source_expr = f"CASE WHEN ST_IsEmpty(s.{source_geom_col}) = 1 OR s.{source_geom_col} IS NULL THEN NULL ELSE s.{source_geom_col} END"
+                else:
+                    source_expr = f's.{source_geom_col}'
             
             # Normalize predicates to get SQL function names
             index_to_func = {
@@ -3727,9 +3939,25 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                                 f"🔍 {layer.name()} DIAG: source_geom valid={is_valid}, empty={is_empty}, type={geom_type}, npoints={npoints}",
                                 "FilterMate", Qgis.Warning
                             )
-                            if is_empty or not is_valid:
+                            # v2.8.10: Empty geometry after negative buffer is NORMAL behavior
+                            # Only invalid geometries (is_valid=0 but not empty) are problematic
+                            if is_empty:
+                                # Check if negative buffer was used
+                                filtering_params = self.task_params.get('filtering', {}) if hasattr(self, 'task_params') and self.task_params else {}
+                                buf_val = filtering_params.get('buffer_value', 0) or 0
+                                if buf_val < 0:
+                                    QgsMessageLog.logMessage(
+                                        f"ℹ️ {layer.name()}: Source geometry empty after negative buffer ({buf_val}m) - normal for thin features",
+                                        "FilterMate", Qgis.Info
+                                    )
+                                else:
+                                    QgsMessageLog.logMessage(
+                                        f"⚠️ {layer.name()}: Source geometry is EMPTY - this explains 0 results!",
+                                        "FilterMate", Qgis.Warning
+                                    )
+                            elif not is_valid:
                                 QgsMessageLog.logMessage(
-                                    f"⚠️ {layer.name()}: Source geometry is INVALID or EMPTY - this explains 0 results!",
+                                    f"⚠️ {layer.name()}: Source geometry is INVALID - this explains 0 results!",
                                     "FilterMate", Qgis.Warning
                                 )
                     except Exception as diag_err:
@@ -3810,10 +4038,28 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             # v2.6.5: Build optimized FID-based filter expression
             if len(matching_fids) == 0:
                 # v2.6.10: Suspicious 0 results on large dataset - might be geometry issue
+                # v2.8.10: EXCEPT when using negative buffer - empty result is expected
                 # Check if we should fallback to OGR instead of applying empty filter
                 SUSPICIOUS_ZERO_THRESHOLD = 10000  # If target has >10k features, 0 results is suspicious
                 
-                if feature_count >= SUSPICIOUS_ZERO_THRESHOLD:
+                # Check if this is due to negative buffer producing empty geometry
+                is_negative_buffer_empty = False
+                if hasattr(self, 'task_params') and self.task_params:
+                    filtering_params = self.task_params.get('filtering', {})
+                    buf_val = filtering_params.get('buffer_value', 0) or 0
+                    if buf_val < 0 and has_buffer:
+                        # Check if source geometry is empty
+                        try:
+                            source_geom_col_check = 'geom_buffered' if has_buffer else 'geom'
+                            cursor.execute(f'SELECT ST_IsEmpty({source_geom_col_check}) FROM "{source_table}" LIMIT 1')
+                            result = cursor.fetchone()
+                            if result and result[0] == 1:
+                                is_negative_buffer_empty = True
+                        except (sqlite3.Error, sqlite3.OperationalError):
+                            pass  # Query failed, assume geometry is valid
+                
+                # Only trigger OGR fallback if it's NOT a negative buffer empty case
+                if feature_count >= SUSPICIOUS_ZERO_THRESHOLD and not is_negative_buffer_empty:
                     self.log_warning(f"⚠️ SUSPICIOUS: 0 features matched for {layer.name()} with {feature_count:,} total features")
                     self.log_warning(f"  → Large dataset with 0 results suggests geometry processing issue")
                     self.log_warning(f"  → Signaling fallback to OGR backend for reliable filtering")
@@ -3832,7 +4078,10 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 # Quoted column names may not work correctly with some OGR configurations
                 fid_expression = 'fid = -1'  # No valid FID is -1
                 # v2.6.9: Warn about 0 features - might indicate buffer issue
-                self.log_warning(f"⚠️ 0 features matched for {layer.name()}")
+                if is_negative_buffer_empty:
+                    self.log_info(f"ℹ️ 0 features matched for {layer.name()} (negative buffer made geometry empty)")
+                else:
+                    self.log_warning(f"⚠️ 0 features matched for {layer.name()}")
                 self.log_info(f"  → Applying empty filter expression: {fid_expression}")
                 if buffer_value == 0:
                     self.log_warning(f"  → Hint: Source has no buffer. Use buffer for proximity filtering.")

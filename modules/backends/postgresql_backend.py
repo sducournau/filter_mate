@@ -315,8 +315,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                 logger.warning(f"Async CLUSTER failed: {cluster_err}")
                                 try:
                                     bg_conn.rollback()
-                                except:
-                                    pass
+                                except Exception:
+                                    pass  # Connection may be in bad state
                             finally:
                                 bg_conn.close()
                         break
@@ -373,8 +373,8 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
             self.log_warning(f"Cannot create schema '{schema_name}': {e}")
             try:
                 conn.rollback()
-            except:
-                pass
+            except Exception:
+                pass  # Connection may be in bad state
             
             # Fallback to public schema
             self.log_info(f"Using 'public' schema as fallback for MVs")
@@ -1042,7 +1042,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
         self.log_debug(f"📝 _build_simple_wkt_expression: buffer_value={buffer_value}, source_srid={source_srid}")
         
         # Build source geometry from WKT
-        source_geom_sql = f"ST_GeomFromText('{source_wkt}', {source_srid})"
+        # CRITICAL v2.9.6: Wrap in ST_MakeValid() to handle invalid source geometries
+        # Source geometries can be invalid (self-intersecting, etc.) causing 0 results
+        source_geom_sql = f"ST_MakeValid(ST_GeomFromText('{source_wkt}', {source_srid}))"
         
         # Apply buffer if specified (with endcap style)
         # Supports both positive (expand) and negative (shrink/erode) buffers
@@ -1613,8 +1615,9 @@ class PostgreSQLGeometricFilter(GeometricFilterBackend):
                                     pass
                         
                         # Wrap WKT in ST_GeomFromText
-                        source_geom_sql = f"ST_GeomFromText('{source_geom}', {fallback_srid})"
-                        self.log_info(f"  ✓ Wrapped WKT in ST_GeomFromText with SRID={fallback_srid}")
+                        # CRITICAL v2.9.6: Wrap in ST_MakeValid() to handle invalid source geometries
+                        source_geom_sql = f"ST_MakeValid(ST_GeomFromText('{source_geom}', {fallback_srid}))"
+                        self.log_info(f"  ✓ Wrapped WKT in ST_MakeValid(ST_GeomFromText()) with SRID={fallback_srid}")
                         
                         # Apply buffer if needed
                         if buffer_value is not None and buffer_value != 0:

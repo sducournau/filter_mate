@@ -365,10 +365,10 @@ class SpatialIndexManager:
             # Try to load spatialite extension
             try:
                 conn.load_extension('mod_spatialite')
-            except:
+            except sqlite3.OperationalError:
                 try:
                     conn.load_extension('mod_spatialite.dll')
-                except:
+                except sqlite3.OperationalError:
                     logger.debug("Spatialite extension not available, using fallback")
                     conn.close()
                     return self._create_qgis_index(layer)

@@ -1,6 +1,6 @@
-# Undo/Redo System - FilterMate v2.4.10
+# Undo/Redo System - FilterMate v2.9.6
 
-**Last Updated:** December 23, 2025
+**Last Updated:** January 6, 2026
 **Status:** ✅ Fully Implemented
 
 ## Overview
