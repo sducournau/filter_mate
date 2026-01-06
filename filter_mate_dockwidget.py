@@ -11952,8 +11952,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.info(f"  custom_selection_expression: '{custom_expr}'")
             logger.info(f"  layer subset string: '{self.current_layer.subsetString()[:80] if self.current_layer.subsetString() else '(none)'}'...")
             
-            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
-            logger.info(f"  layers_to_filter count: {len(self.get_layers_to_filter())}")
+            # v2.9.29: Update layers_to_filter from combobox and persist to database
+            # This ensures the checked layers are properly saved before any filter/undo/redo operation
+            current_layers_to_filter = self.get_layers_to_filter()
+            self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = current_layers_to_filter
+            logger.info(f"  layers_to_filter count: {len(current_layers_to_filter)}")
+            
+            # v2.9.29: Also save to database to ensure persistence across widget repopulation
+            # This fixes an issue where combobox repopulation after undo/redo would lose checked items
+            self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
+            
             logger.info(f"  → Emitting launchingTask signal for '{task_name}'")
             logger.info(f"=" * 60)
             self.launchingTask.emit(task_name)
