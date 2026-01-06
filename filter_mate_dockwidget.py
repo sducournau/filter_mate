@@ -9492,8 +9492,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug(f"  picker feature valid: {picker_widget.feature().isValid() if picker_widget.feature() else False}")
         except (AttributeError, KeyError, RuntimeError) as e:
             # Widget may not be ready yet or already destroyed
-            logger.warning(f"Error in _reload_exploration_widgets: {type(e).__name__}: {e}")
+            # KeyError typically means widget dictionary keys are missing (e.g., 'buildFeaturesList', 'loadFeaturesList')
+            # which can happen when widgets are accessed before full initialization
+            error_type = type(e).__name__
+            error_details = str(e)
+            logger.warning(f"Error in _reload_exploration_widgets: {error_type}: {error_details}")
             logger.debug(f"Layer: {layer.name() if layer else 'None'}, widgets_initialized: {self.widgets_initialized}")
+            
+            # More detailed logging for KeyError to help diagnose missing widget keys
+            if isinstance(e, KeyError):
+                logger.debug(f"Missing key: {error_details}")
+                logger.debug(f"Available EXPLORING widgets: {list(self.widgets.get('EXPLORING', {}).keys()) if hasattr(self, 'widgets') else 'widgets not initialized'}")
+            
             import traceback
             logger.debug(f"Traceback: {traceback.format_exc()}")
 

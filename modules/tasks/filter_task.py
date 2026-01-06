@@ -5850,14 +5850,37 @@ class FilterEngineTask(QgsTask):
         
         # Validate at least one geometry is valid
         has_valid_geom = False
+        invalid_reason = "unknown"
         for feature in layer.getFeatures():
             geom = feature.geometry()
             if validate_geometry(geom):
                 has_valid_geom = True
                 break
+            else:
+                # FIX v2.9.9: Enhanced diagnostic - log WHY geometry is invalid
+                if geom is None:
+                    invalid_reason = "geometry is None"
+                elif geom.isNull():
+                    invalid_reason = "geometry is Null"
+                elif geom.isEmpty():
+                    invalid_reason = "geometry is Empty"
+                else:
+                    wkb_type = geom.wkbType()
+                    invalid_reason = f"wkbType={wkb_type} (Unknown or NoGeometry)"
         
         if not has_valid_geom:
-            logger.error("prepare_ogr_source_geom: Final layer has no valid geometries")
+            logger.error(f"prepare_ogr_source_geom: Final layer has no valid geometries")
+            logger.error(f"  → Layer name: {layer.name()}")
+            logger.error(f"  → Layer features: {layer.featureCount()}")
+            logger.error(f"  → Last invalid reason: {invalid_reason}")
+            logger.error(f"  → Source layer name: {self.source_layer.name() if self.source_layer else 'None'}")
+            logger.error(f"  → Source layer features: {self.source_layer.featureCount() if self.source_layer else 0}")
+            # Log to QGIS MessageLog for visibility
+            QgsMessageLog.logMessage(
+                f"OGR source geometry preparation FAILED: {layer.name()} has no valid geometries "
+                f"({layer.featureCount()} features, reason: {invalid_reason})",
+                "FilterMate", Qgis.Critical
+            )
             self.ogr_source_geom = None
             return
         
@@ -5874,6 +5897,15 @@ class FilterEngineTask(QgsTask):
         
         # Store result
         self.ogr_source_geom = layer
+        
+        # FIX v2.8.14: Prevent garbage collection of memory layers
+        # If the layer is a memory layer created by _copy_filtered_layer_to_memory(),
+        # add it to the QGIS project with addToLegend=False to prevent C++ object deletion
+        # This is critical for OGR backend which may reuse the layer across multiple target layers
+        if layer and layer.isValid() and layer.providerType() == 'memory':
+            logger.debug(f"prepare_ogr_source_geom: Adding memory layer to project to prevent GC")
+            QgsProject.instance().addMapLayer(layer, addToLegend=False)
+        
         logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
 
 
@@ -7492,7 +7524,13 @@ class FilterEngineTask(QgsTask):
                         if ogr_source_geom:
                             if isinstance(ogr_source_geom, QgsVectorLayer):
                                 logger.info(f"  → OGR source geometry: {ogr_source_geom.name()} ({ogr_source_geom.featureCount()} features)")
-                            
+                        else:
+                            logger.error(f"  ✗ OGR source geometry preparation returned None for {layer.name()}")
+                            logger.error(f"    → Cannot perform geometric filtering without valid source geometry")
+                            logger.error(f"    → Skipping {layer.name()}")
+                            return False
+                        
+                        if ogr_source_geom:
                             ogr_expression = self._build_backend_expression(ogr_backend, layer_props, ogr_source_geom)
                             
                             if ogr_expression:
@@ -7781,7 +7819,8 @@ class FilterEngineTask(QgsTask):
                                 )
                         else:
                             logger.error(f"✗ Could not prepare OGR source geometry for fallback")
-                            logger.error(f"  → ogr_source_geom is None")
+                            logger.error(f"  → ogr_source_geom is None for {layer.name()}")
+                            logger.error(f"  → Cannot perform geometric filtering without valid source geometry")
                             QgsMessageLog.logMessage(
                                 f"⚠️ OGR fallback: source geometry is None for {layer.name()}",
                                 "FilterMate", Qgis.Warning
@@ -7790,6 +7829,8 @@ class FilterEngineTask(QgsTask):
                                 logger.error(f"  → self.ogr_source_geom exists but is {self.ogr_source_geom}")
                             else:
                                 logger.error(f"  → self.ogr_source_geom was never set")
+                            # Return False to indicate failure
+                            return False
                     except Exception as fallback_error:
                         logger.error(f"✗ OGR fallback exception: {fallback_error}")
                         import traceback
@@ -8260,7 +8301,12 @@ class FilterEngineTask(QgsTask):
         else:
             logger.error("✗ No valid selection mode detected!")
             logger.error("  → features_list is empty AND expression is empty")
-            self.message = "No valid selection mode: no features selected and no expression provided"
+            logger.error("  → Please select a feature, check multiple features, or enter a filter expression")
+            # Provide user-friendly message with guidance
+            self.message = (
+                "No valid selection: please select a feature, check features, "
+                "or enter a filter expression in the 'Exploring' tab before filtering."
+            )
             return False
         
         # Exécuter le filtrage de la couche source
@@ -11674,6 +11720,17 @@ class FilterEngineTask(QgsTask):
         # - export: After exporting data (MVs were temporary for export)
         if self.task_action in ('reset', 'unfilter', 'export'):
             self._cleanup_postgresql_materialized_views()
+        
+        # FIX v2.8.14: Cleanup memory layer added to project to prevent GC
+        # Remove ogr_source_geom from project if it was added with addToLegend=False
+        if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom is not None:
+            if self.ogr_source_geom.isValid() and self.ogr_source_geom.providerType() == 'memory':
+                # Check if layer is in project (addToLegend=False layers are still in project)
+                if QgsProject.instance().mapLayer(self.ogr_source_geom.id()):
+                    logger.debug(f"finished(): Removing OGR source memory layer from project")
+                    QgsProject.instance().removeMapLayer(self.ogr_source_geom.id())
+            # Clear reference
+            self.ogr_source_geom = None
 
         if self.exception is None:
             if result is None:

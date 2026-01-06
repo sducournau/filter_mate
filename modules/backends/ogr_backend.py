@@ -41,6 +41,7 @@ v2.6.2 Improvements:
 - Task cancellation checks before and during processing operations
 """
 
+import logging
 import threading
 from typing import Dict, Optional
 from qgis.core import (
@@ -450,7 +451,10 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 # Step 2: Create a temporary layer with only pre-filtered features
                 # and run spatial filter on that reduced set
-                from qgis.core import QgsFeatureRequest, QgsVectorLayer, QgsMemoryProviderUtils
+                # NOTE: QgsVectorLayer is already imported at module level (line 48)
+                # Using local import here would shadow the global and cause:
+                # "cannot access local variable 'QgsVectorLayer'" errors in Python 3.11+
+                from qgis.core import QgsFeatureRequest
                 
                 # Build a temporary layer with pre-filtered features
                 request = QgsFeatureRequest()
@@ -758,6 +762,20 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 
                 self.log_debug(f"Applying OGR filter to {layer.name()} using QGIS processing")
                 
+                # FIX v2.9.10: Clear temporary layer references from previous layer processing
+                # Each target layer gets its own set of temporary GEOS-safe layers that should NOT
+                # persist to the next layer. Clearing here (at the start of processing each layer)
+                # prevents Qt GC issues with stale references while ensuring references live long
+                # enough for the current layer's processing.
+                #
+                # CONTEXT: _safe_select_by_location() creates temporary memory layers and stores
+                # references in self._temp_layers_keep_alive to prevent Python GC. Without clearing
+                # between layers, these references accumulate and Qt's C++ GC may delete old layers
+                # while Python still holds references, causing "wrapped C/C++ object has been deleted".
+                if hasattr(self, '_temp_layers_keep_alive'):
+                    self._temp_layers_keep_alive = []
+                    self.log_debug("🧹 Cleared temporary layer references from previous iteration")
+                
                 # Get source layer - should be set by build_expression
                 source_layer = getattr(self, 'source_geom', None)
                 
@@ -772,12 +790,30 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         f"OGR apply_filter: source_geom is None for '{layer.name()}'",
                         "FilterMate", Qgis.Critical
                     )
+                    return False  # FIX v2.9.9: Return False immediately if source is None
                 elif not isinstance(source_layer, QgsVectorLayer):
                     self.log_error(f"  → source_geom is not a QgsVectorLayer: {type(source_layer).__name__}")
                     QgsMessageLog.logMessage(
                         f"OGR apply_filter: source_geom is not a QgsVectorLayer for '{layer.name()}': {type(source_layer).__name__}",
                         "FilterMate", Qgis.Critical
                     )
+                    return False  # FIX v2.9.9: Return False immediately if source type is wrong
+                elif not source_layer.isValid():
+                    # FIX v2.9.9: Check if source layer is still valid (might have been GC'd)
+                    self.log_error(f"  → source_geom is INVALID (layer: {source_layer.name()})")
+                    QgsMessageLog.logMessage(
+                        f"OGR apply_filter: source_geom is INVALID for '{layer.name()}' - layer may have been garbage collected",
+                        "FilterMate", Qgis.Critical
+                    )
+                    return False  # FIX v2.9.9: Return False if source layer is invalid
+                elif source_layer.featureCount() == 0:
+                    # FIX v2.9.9: Check if source layer has features
+                    self.log_error(f"  → source_geom has 0 features (layer: {source_layer.name()})")
+                    QgsMessageLog.logMessage(
+                        f"OGR apply_filter: source_geom has 0 features for '{layer.name()}'",
+                        "FilterMate", Qgis.Critical
+                    )
+                    return False  # FIX v2.9.9: Return False if source has no features
                 else:
                     self.log_info(f"  → Name: {source_layer.name()}")
                     self.log_info(f"  → Valid: {source_layer.isValid()}")
@@ -795,14 +831,35 @@ class OGRGeometricFilter(GeometricFilterBackend):
                             self.log_info(f"  → First geometry valid: {geom is not None and not geom.isEmpty()}")
                             if geom and not geom.isEmpty():
                                 self.log_info(f"  → First geometry type: {geom.wkbType()}")
+                                # FIX v2.8.13: Log detailed geometry info to QGIS MessagePanel
+                                QgsMessageLog.logMessage(
+                                    f"OGR apply_filter: first geometry for '{layer.name()}' - "
+                                    f"type={geom.wkbType()}, isNull={geom.isNull()}, isEmpty={geom.isEmpty()}, "
+                                    f"area={geom.area():.2f}",
+                                    "FilterMate", Qgis.Info
+                                )
+                            else:
+                                # FIX v2.8.13: Log if geometry is invalid
+                                QgsMessageLog.logMessage(
+                                    f"OGR apply_filter: first geometry for '{layer.name()}' is INVALID - "
+                                    f"geom is None: {geom is None}, isEmpty: {geom.isEmpty() if geom else 'N/A'}",
+                                    "FilterMate", Qgis.Warning
+                                )
                             break
                 
                 if not source_layer:
-                    self.log_error("No source layer/geometry provided for geometric filtering")
+                    # FIX v2.9.9: This should never be reached due to earlier checks, but keep for safety
+                    self.log_error("No source layer/geometry provided for geometric filtering (should have been caught earlier)")
                     return False
                 
                 # Check feature count and decide on strategy
                 feature_count = layer.featureCount()
+                
+                # FIX v2.8.13: Log target layer details
+                QgsMessageLog.logMessage(
+                    f"OGR apply_filter: target layer '{layer.name()}' has {feature_count} features",
+                    "FilterMate", Qgis.Info
+                )
                 
                 # Ensure spatial index exists (performance boost)
                 self._ensure_spatial_index(layer)
@@ -818,14 +875,35 @@ class OGRGeometricFilter(GeometricFilterBackend):
                     attribute_filter = old_subset if old_subset and not self._should_clear_old_subset(old_subset) else None
                     
                     if attribute_filter or feature_count >= 50000:
+                        # FIX v2.8.13: Log multi-step path for debugging
+                        QgsMessageLog.logMessage(
+                            f"OGR apply_filter: trying MULTI-STEP optimizer for '{layer.name()}' "
+                            f"(features={feature_count}, attr_filter={attribute_filter is not None})",
+                            "FilterMate", Qgis.Info
+                        )
                         multi_result = self._try_multi_step_filter(
                             layer, attribute_filter, source_layer, predicates,
                             buffer_value, old_subset, combine_operator
                         )
                         
                         if multi_result is not None:
+                            # FIX v2.8.13: Log multi-step result
+                            QgsMessageLog.logMessage(
+                                f"OGR apply_filter: MULTI-STEP returned {multi_result} for '{layer.name()}'",
+                                "FilterMate", Qgis.Info if multi_result else Qgis.Warning
+                            )
                             return multi_result  # True or False
                         # else: fall through to standard method
+                        QgsMessageLog.logMessage(
+                            f"OGR apply_filter: MULTI-STEP returned None, falling through to STANDARD for '{layer.name()}'",
+                            "FilterMate", Qgis.Info
+                        )
+                
+                # FIX v2.8.13: Log standard path for debugging
+                QgsMessageLog.logMessage(
+                    f"OGR apply_filter: using STANDARD method for '{layer.name()}' (features={feature_count})",
+                    "FilterMate", Qgis.Info
+                )
                 
                 # FIX v2.4.6: Use standard method for OGR layers
                 # The large dataset optimization (using _fm_match_ temp field) causes
@@ -834,15 +912,29 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # - The database file is on a network drive or has access issues
                 # - The database is opened read-only by another process
                 # The standard method is reliable and performs well with spatial indexes.
-                return self._apply_filter_standard(
+                result = self._apply_filter_standard(
                     layer, source_layer, predicates, buffer_value,
                     old_subset, combine_operator
                 )
                 
+                # FIX v2.8.13: Log result for debugging
+                QgsMessageLog.logMessage(
+                    f"OGR apply_filter: _apply_filter_standard returned {result} for '{layer.name()}'",
+                    "FilterMate", Qgis.Info if result else Qgis.Warning
+                )
+                return result
+                
             except Exception as e:
                 self.log_error(f"Error applying OGR filter: {str(e)}")
                 import traceback
-                self.log_debug(f"Traceback: {traceback.format_exc()}")
+                tb = traceback.format_exc()
+                self.log_debug(f"Traceback: {tb}")
+                # FIX v2.8.13: Log exception to QGIS MessagePanel for visibility
+                QgsMessageLog.logMessage(
+                    f"OGR apply_filter EXCEPTION for '{layer.name()}': {str(e)}\n"
+                    f"Traceback: {tb[:500]}",
+                    "FilterMate", Qgis.Critical
+                )
                 return False
     
     # Note: _get_buffer_endcap_style(), _get_buffer_segments(), _get_simplify_tolerance()
@@ -1080,7 +1172,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 # Negative buffers can collapse polygons to empty geometries if the erosion
                 # is too large. These must be removed or selectbylocation will fail.
                 if buffer_dist < 0:
-                    from qgis.core import QgsVectorLayer, QgsFeature
+                    # Note: QgsVectorLayer and QgsFeature are already imported at module level
                     
                     # Count and collect valid features
                     valid_features = []
@@ -1168,10 +1260,9 @@ class OGRGeometricFilter(GeometricFilterBackend):
         Returns:
             QgsVectorLayer: Layer with geometries converted to MultiPolygon
         """
-        from qgis.core import (
-            QgsWkbTypes, QgsFeature, QgsGeometry, 
-            QgsMemoryProviderUtils, QgsVectorLayer
-        )
+        # NOTE: QgsVectorLayer, QgsFeature, QgsGeometry, QgsMemoryProviderUtils, QgsWkbTypes
+        # are already imported at module level (lines 47-54)
+        # Avoid local imports that shadow global names (Python 3.11+ issue)
         
         try:
             # Check if any features have GeometryCollection type
@@ -1514,6 +1605,7 @@ class OGRGeometricFilter(GeometricFilterBackend):
             return False
         
         # Check that at least one feature has a valid geometry
+        # FIX v2.8.13: Enhanced diagnostic logging
         has_valid_geometry = False
         invalid_geom_count = 0
         try:
@@ -1521,9 +1613,19 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 geom = feature.geometry()
                 if validate_geometry(geom):
                     has_valid_geometry = True
+                    self.log_debug(f"Found valid geometry in feature {feature.id()}")
                     break
                 else:
                     invalid_geom_count += 1
+                    # FIX v2.8.13: Log WHY the geometry is invalid
+                    if geom is None:
+                        self.log_debug(f"Feature {feature.id()}: geometry is None")
+                    elif geom.isNull():
+                        self.log_debug(f"Feature {feature.id()}: geometry is Null")
+                    elif geom.isEmpty():
+                        self.log_debug(f"Feature {feature.id()}: geometry is Empty")
+                    else:
+                        self.log_debug(f"Feature {feature.id()}: wkbType={geom.wkbType()}")
                     if invalid_geom_count >= 10:  # Check first 10 only for performance
                         break
         except (RuntimeError, OSError) as iter_error:
@@ -1532,6 +1634,13 @@ class OGRGeometricFilter(GeometricFilterBackend):
         
         if not has_valid_geometry:
             self.log_error(f"Intersect layer has no valid geometries (checked {invalid_geom_count} features)")
+            # FIX v2.8.13: Log to QGIS MessagePanel for visibility
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"OGR _validate_intersect_layer: NO VALID GEOMETRIES in '{intersect_layer.name()}' "
+                f"(checked {invalid_geom_count} features)",
+                "FilterMate", Qgis.Critical
+            )
             return False
         
         self.log_info(f"✓ Intersect layer validated: {intersect_layer.name()} ({feature_count} features)")
@@ -1644,13 +1753,41 @@ class OGRGeometricFilter(GeometricFilterBackend):
                 self.log_info(f"    - Valid: {intersect_layer.isValid()}")
                 self.log_info(f"    - Feature count: {intersect_layer.featureCount()}")
             
+            # FIX v2.8.14: Log validation steps to QGIS MessageLog for visibility
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: validating input layer '{input_layer.name() if input_layer else 'None'}'...",
+                "FilterMate", Qgis.Info
+            )
+            
             if not self._validate_input_layer(input_layer):
                 self.log_error("Input layer validation failed - see details above")
+                # FIX v2.8.13: Log to QGIS MessagePanel for visibility
+                QgsMessageLog.logMessage(
+                    f"OGR _safe_select_by_location: INPUT layer validation FAILED for '{input_layer.name() if input_layer else 'None'}'",
+                    "FilterMate", Qgis.Critical
+                )
                 return False
+            
+            # FIX v2.8.14: Log validation steps to QGIS MessageLog for visibility
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: input layer OK, validating intersect layer '{intersect_layer.name() if intersect_layer else 'None'}'...",
+                "FilterMate", Qgis.Info
+            )
             
             if not self._validate_intersect_layer(intersect_layer):
                 self.log_error("Intersect layer validation failed - see details above")
+                # FIX v2.8.13: Log to QGIS MessagePanel for visibility
+                QgsMessageLog.logMessage(
+                    f"OGR _safe_select_by_location: INTERSECT layer validation FAILED for '{intersect_layer.name() if intersect_layer else 'None'}'",
+                    "FilterMate", Qgis.Critical
+                )
                 return False
+            
+            # FIX v2.8.14: Log progress to QGIS MessageLog
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: both layers validated, configuring processing context...",
+                "FilterMate", Qgis.Info
+            )
             
             # Configure processing context to handle invalid geometries gracefully
             from qgis.core import QgsProcessingContext, QgsFeatureRequest
@@ -1672,7 +1809,41 @@ class OGRGeometricFilter(GeometricFilterBackend):
             # STABILITY FIX v2.3.9.2: Use create_geos_safe_layer() for geometry validation
             # The function now handles fallbacks gracefully and returns original layer as last resort
             self.log_info("🛡️ Creating GEOS-safe intersect layer (geometry validation)...")
-            safe_intersect = create_geos_safe_layer(intersect_layer, "_safe_intersect")
+            
+            # FIX v2.8.14 + v2.9.10: Keep references to temporary layers to prevent garbage collection
+            # The memory layers created by create_geos_safe_layer can be deleted by Python GC
+            # before they are used, causing "wrapped C/C++ object has been deleted" errors.
+            # 
+            # STRATEGY (v2.9.10): The list is cleared at the START of apply_filter() for each
+            # new target layer, then accumulates references during that layer's processing.
+            # This ensures references live long enough (duration of one layer) without accumulating
+            # stale references across multiple layers (which causes Qt C++ GC issues).
+            if not hasattr(self, '_temp_layers_keep_alive') or self._temp_layers_keep_alive is None:
+                self._temp_layers_keep_alive = []
+            # NOTE: List is cleared in apply_filter() at the start of each layer's processing
+            
+            # FIX v2.8.14: Log to QGIS MessageLog before create_geos_safe_layer
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: creating GEOS-safe intersect layer for '{intersect_layer.name()}'...",
+                "FilterMate", Qgis.Info
+            )
+            
+            try:
+                safe_intersect = create_geos_safe_layer(intersect_layer, "_safe_intersect")
+                # FIX v2.8.14: Keep reference to prevent GC
+                # CRITICAL FIX: Always add to keep-alive list, even if same as original layer!
+                # The original layer (source_from_task) may also be a memory layer that can be GC'd
+                if safe_intersect is not None:
+                    self._temp_layers_keep_alive.append(safe_intersect)
+                # Also keep reference to original intersect_layer in case it's a memory layer
+                if intersect_layer is not None:
+                    self._temp_layers_keep_alive.append(intersect_layer)
+            except Exception as geos_err:
+                QgsMessageLog.logMessage(
+                    f"_safe_select_by_location: create_geos_safe_layer FAILED for intersect: {geos_err}",
+                    "FilterMate", Qgis.Critical
+                )
+                return False
             
             # create_geos_safe_layer now returns the original layer as fallback, never None for valid input
             if safe_intersect is None:
@@ -1681,32 +1852,106 @@ class OGRGeometricFilter(GeometricFilterBackend):
             
             if not safe_intersect.isValid() or safe_intersect.featureCount() == 0:
                 self.log_error("No valid geometries in intersect layer")
+                # FIX v2.8.13: Log to QGIS MessagePanel for visibility
+                QgsMessageLog.logMessage(
+                    f"OGR _safe_select_by_location: GEOS-safe intersect layer is invalid or empty "
+                    f"(valid={safe_intersect.isValid() if safe_intersect else False}, "
+                    f"features={safe_intersect.featureCount() if safe_intersect else 0})",
+                    "FilterMate", Qgis.Critical
+                )
                 return False
             
             self.log_info(f"✓ Safe intersect layer: {safe_intersect.featureCount()} features")
+            
+            # FIX v2.8.14: Log to QGIS MessageLog
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: GEOS-safe intersect layer OK ({safe_intersect.featureCount()} features)",
+                "FilterMate", Qgis.Info
+            )
             
             # Also process input layer if not too large
             safe_input = input_layer
             use_safe_input = False
             if input_layer.featureCount() <= 50000:  # Only process smaller layers for performance
                 self.log_debug("🛡️ Creating GEOS-safe input layer...")
-                temp_safe_input = create_geos_safe_layer(input_layer, "_safe_input")
+                
+                # FIX v2.8.14: Log to QGIS MessageLog before create_geos_safe_layer for input
+                QgsMessageLog.logMessage(
+                    f"_safe_select_by_location: creating GEOS-safe input layer for '{input_layer.name()}' ({input_layer.featureCount()} features)...",
+                    "FilterMate", Qgis.Info
+                )
+                
+                try:
+                    temp_safe_input = create_geos_safe_layer(input_layer, "_safe_input")
+                    # FIX v2.8.14: Keep reference to prevent GC
+                    # CRITICAL FIX: Always add to keep-alive list, even if same as original layer!
+                    if temp_safe_input is not None:
+                        self._temp_layers_keep_alive.append(temp_safe_input)
+                    # Also keep reference to original input_layer in case it's a memory layer
+                    if input_layer is not None:
+                        self._temp_layers_keep_alive.append(input_layer)
+                except Exception as geos_input_err:
+                    QgsMessageLog.logMessage(
+                        f"_safe_select_by_location: create_geos_safe_layer FAILED for input '{input_layer.name()}': {geos_input_err}",
+                        "FilterMate", Qgis.Critical
+                    )
+                    # Don't fail here, fall back to original layer
+                    temp_safe_input = None
+                    
                 if temp_safe_input and temp_safe_input.isValid() and temp_safe_input.featureCount() > 0:
                     safe_input = temp_safe_input
                     use_safe_input = True
                     self.log_debug(f"✓ Safe input layer: {safe_input.featureCount()} features")
+                    QgsMessageLog.logMessage(
+                        f"_safe_select_by_location: GEOS-safe input layer OK ({safe_input.featureCount()} features)",
+                        "FilterMate", Qgis.Info
+                    )
+                else:
+                    # FIX v2.8.14: Log fallback to original layer
+                    QgsMessageLog.logMessage(
+                        f"_safe_select_by_location: GEOS-safe input creation failed/empty, using original layer",
+                        "FilterMate", Qgis.Warning
+                    )
             
             self.log_info(f"🔍 Executing selectbylocation with GEOS-safe geometries")
             
             # STABILITY FIX v2.3.9.3: Pre-flight validation of layers before processing.run()
             # This catches issues that would cause checkParameterValues to crash at C++ level
             actual_input = input_layer if not use_safe_input else safe_input
+            
+            # FIX v2.8.14: Log pre-flight checks to QGIS MessageLog
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: running pre-flight check for INPUT layer '{actual_input.name()}'...",
+                "FilterMate", Qgis.Info
+            )
+            
             if not self._preflight_layer_check(actual_input, "INPUT"):
                 self.log_error("Pre-flight check failed for INPUT layer")
+                QgsMessageLog.logMessage(
+                    f"_safe_select_by_location: PRE-FLIGHT CHECK FAILED for INPUT layer '{actual_input.name()}'",
+                    "FilterMate", Qgis.Critical
+                )
                 return False
+            
+            # FIX v2.8.14: Log pre-flight checks to QGIS MessageLog
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: running pre-flight check for INTERSECT layer '{safe_intersect.name()}'...",
+                "FilterMate", Qgis.Info
+            )
+                
             if not self._preflight_layer_check(safe_intersect, "INTERSECT"):
                 self.log_error("Pre-flight check failed for INTERSECT layer")
+                QgsMessageLog.logMessage(
+                    f"_safe_select_by_location: PRE-FLIGHT CHECK FAILED for INTERSECT layer '{safe_intersect.name()}'",
+                    "FilterMate", Qgis.Critical
+                )
                 return False
+            
+            # FIX v2.8.14: Log before executing selectbylocation
+            QgsMessageLog.logMessage(
+                f"_safe_select_by_location: executing processing.run('native:selectbylocation') for '{input_layer.name()}'...",
+                "FilterMate", Qgis.Info
+            )
             
             # Execute with error handling - use safe layers
             if not use_safe_input:
@@ -1809,13 +2054,20 @@ class OGRGeometricFilter(GeometricFilterBackend):
             return True
             
         except Exception as e:
-            self.log_error(f"selectbylocation failed: {str(e)}")
             import traceback
-            self.log_debug(f"Traceback: {traceback.format_exc()}")
+            tb_str = traceback.format_exc()
+            self.log_error(f"selectbylocation failed: {str(e)}")
+            self.log_debug(f"Traceback: {tb_str}")
             
+            # FIX v2.8.14: Enhanced error logging to QGIS MessagePanel for visibility
             QgsMessageLog.logMessage(
                 f"selectbylocation FAILED on {input_layer.name() if input_layer else 'Unknown'}: {str(e)}",
                 "FilterMate", Qgis.Critical
+            )
+            # Log full traceback to MessageLog for debugging
+            QgsMessageLog.logMessage(
+                f"selectbylocation traceback:\n{tb_str}",
+                "FilterMate", Qgis.Warning
             )
             
             # Clear any partial selection to avoid inconsistent state
@@ -1838,12 +2090,20 @@ class OGRGeometricFilter(GeometricFilterBackend):
         STABILITY FIX v2.3.9: Added layer validation to prevent access violations.
         FIX v2.4.18: Clear existing subset before selectbylocation to prevent GDAL errors.
         """
+        # FIX v2.8.13: Log entry to this method for debugging
+        from qgis.core import QgsMessageLog, Qgis
+        QgsMessageLog.logMessage(
+            f"OGR _apply_filter_standard: ENTERING for '{layer.name() if layer else 'None'}' "
+            f"with source '{source_layer.name() if source_layer else 'None'}' "
+            f"(predicates={predicates}, buffer={buffer_value})",
+            "FilterMate", Qgis.Info
+        )
+        
         # Initialize existing_subset early for exception handling
         existing_subset = None
         
         # STABILITY FIX v2.3.9: Validate layers before any operations
         # FIX v2.6.13: Add QGIS MessagePanel logging for visibility
-        from qgis.core import QgsMessageLog, Qgis
         
         if layer is None or not layer.isValid():
             self.log_error("Target layer is None or invalid - cannot proceed with standard filtering")
@@ -1926,8 +2186,22 @@ class OGRGeometricFilter(GeometricFilterBackend):
         predicate_codes = self._map_predicates(predicates)
         
         # STABILITY FIX v2.3.9: Use safe wrapper for selectbylocation
+        # FIX v2.8.13: Add detailed logging before selectbylocation for debugging
+        QgsMessageLog.logMessage(
+            f"OGR selectbylocation: target={layer.name()} ({layer.featureCount()} features), "
+            f"intersect={intersect_layer.name()} ({intersect_layer.featureCount()} features), "
+            f"predicates={predicate_codes}",
+            "FilterMate", Qgis.Info
+        )
+        
         if not self._safe_select_by_location(layer, intersect_layer, predicate_codes):
             self.log_error("Safe select by location failed - cannot proceed")
+            # FIX v2.8.13: Add QGIS MessageLog for visibility
+            QgsMessageLog.logMessage(
+                f"OGR _apply_filter_standard: selectbylocation FAILED for '{layer.name()}' - "
+                f"intersect layer '{intersect_layer.name()}' ({intersect_layer.featureCount()} features)",
+                "FilterMate", Qgis.Critical
+            )
             # FIX v2.4.18: Restore original subset if selectbylocation failed
             if existing_subset:
                 self.log_warning(f"Restoring original subset after selectbylocation failure")

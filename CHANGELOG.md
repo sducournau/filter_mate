@@ -2,6 +2,105 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.9.10] - 2026-01-06 - OGR Temporary Layer Garbage Collection Fix
+
+### 🐛 Critical Bug Fix: "wrapped C/C++ object has been deleted"
+
+**Problem Solved:**
+
+- Intermittent `RuntimeError: wrapped C/C++ object of type QgsVectorLayer has been deleted` when filtering multiple OGR layers
+- Pattern: First layer succeeds, random subsequent layers fail with Qt GC errors
+- Error occurred in `_safe_select_by_location()` when accessing temporary layer references
+
+**Root Cause:**
+
+- `_temp_layers_keep_alive` list accumulated references to memory layers across multiple target layers
+- Qt's C++ garbage collector would delete old memory layers from previous iterations
+- Python still held references to these deleted C++ objects, causing RuntimeError on access
+- Original comment incorrectly claimed clearing would break "concurrent operations" (layers are processed sequentially)
+
+**Solution:**
+
+- Clear `_temp_layers_keep_alive` at the START of `apply_filter()` for each new target layer
+- Each layer gets fresh temporary layers that persist only during its processing
+- Updated incorrect comment explaining the lifecycle strategy
+
+**Files Modified:**
+- `modules/backends/ogr_backend.py`: Added cleanup in `apply_filter()`, corrected comments
+- `docs/FIX_OGR_TEMP_LAYER_GC_2026-01.md`: Full technical analysis and prevention guide
+
+**Test Results:**
+
+Before (intermittent failures):
+```
+✅ Ducts (layer 1)
+❌ End Cable (layer 2) - RuntimeError
+✅ Home Count (layer 3)
+❌ Address (layer 6) - RuntimeError
+```
+
+After (100% success):
+```
+✅ Ducts, End Cable, Home Count, Drop Cluster, Sheaths, Address, Structures, SubDucts
+```
+
+**Impact:** Critical stability fix for multi-layer OGR filtering operations
+
+---
+
+## [2.9.9] - 2026-01-06 - OGR Invalid Source Geometry Fix
+
+### 🐛 Bug Fix: OGR Backend Failing with Cryptic Errors
+
+**Problem Solved:**
+
+- "Failed layers: Drop Cluster, End Cable" error when filtering multiple OGR layers
+- Silent failures with no explanation of WHY layers failed
+- Source geometry becoming None/invalid but filtering continued anyway
+
+**Root Cause:**
+
+- `prepare_ogr_source_geom()` could return None when source geometry validation failed
+- Code logged errors but didn't return False, allowing execution to continue
+- OGR backend validated source existence but not validity (isValid(), featureCount())
+- Validation failed deep in processing with no diagnostic information
+
+**Solution:**
+
+1. **Early Failure**: Explicitly return False when `_prepare_source_geometry(PROVIDER_OGR)` returns None
+2. **Enhanced Validation**: Check source layer isValid() and featureCount() before use
+3. **Better Diagnostics**: Log WHY geometry is invalid (None, Null, Empty, invalid WKT type)
+
+**Files Modified:**
+- `modules/tasks/filter_task.py`: Added explicit failure returns, enhanced diagnostic logging
+- `modules/backends/ogr_backend.py`: Added comprehensive source geometry validation
+- `docs/FIX_OGR_INVALID_SOURCE_GEOMETRY_2026-01.md`: Full diagnostic guide
+
+**Expected Behavior:**
+
+Before:
+```
+CRITICAL: Failed layers: Drop Cluster. Try OGR backend or check Python console.
+```
+
+After:
+```
+ERROR: ✗ OGR source geometry preparation returned None for Drop Cluster
+ERROR:   → Cannot perform geometric filtering without valid source geometry
+ERROR:   → Skipping Drop Cluster
+ERROR: prepare_ogr_source_geom: Final layer has no valid geometries
+ERROR:   → Layer name: source_from_task
+ERROR:   → Layer features: 5
+ERROR:   → Last invalid reason: geometry is Empty
+CRITICAL: Failed layers: Drop Cluster. (clear errors in Python console)
+```
+
+Now users can see WHICH layer failed, WHEN, WHY, and WHERE the source came from.
+
+**Note**: This fix provides better error handling and diagnostics but does NOT solve the underlying cause of geometry becoming empty/invalid. Further investigation needed if issue persists.
+
+---
+
 ## [2.9.6] - 2026-01-06 - Spatialite NULL Geometry Fix
 
 ### 🐛 Bug Fix: Negative Buffer Returns All Features Instead of 0

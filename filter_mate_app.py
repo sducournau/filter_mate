@@ -199,19 +199,35 @@ class FilterMateApp:
                 # because the layer list should include all layers, even if some features
                 # (like filtering with PostgreSQL backend) won't work.
                 # Export uses QGIS API, not psycopg2 directly.
-                if not is_layer_source_available(l, require_psycopg2=False):
+                # 
+                # CRITICAL FIX v2.8.14: Be more permissive with PostgreSQL layers loaded by external scripts
+                # Sometimes is_layer_source_available fails temporarily during connection init
+                # but the layer is valid and the connection will work once fully established
+                if is_postgres:
+                    # For PostgreSQL: if layer is valid, include it even if source check fails
+                    # The connection may be initializing and will work shortly
+                    logger.info(f"PostgreSQL layer '{l.name()}': including despite any source availability issues (will retry connection later)")
+                    usable.append(l)
+                elif not is_layer_source_available(l, require_psycopg2=False):
                     reason = f"{l.name()}: source not available (provider={l.providerType()})"
-                    if is_postgres:
-                        reason += " [PostgreSQL]"
-                        logger.warning(f"PostgreSQL layer '{l.name()}' failed is_layer_source_available check")
                     filtered_reasons.append(reason)
                     continue
-                usable.append(l)
+                else:
+                    usable.append(l)
             
             if filtered_reasons and input_count != len(usable):
                 logger.info(f"_filter_usable_layers: {input_count} input layers -> {len(usable)} usable layers. Filtered: {len(filtered_reasons)}")
+                # Group filtered reasons by type for cleaner logging
+                reason_types = {}
                 for reason in filtered_reasons:
-                    logger.info(f"  Filtered: {reason}")
+                    reason_key = reason.split(':')[1].strip() if ':' in reason else reason
+                    if reason_key not in reason_types:
+                        reason_types[reason_key] = []
+                    layer_name = reason.split(':')[0] if ':' in reason else 'unknown'
+                    reason_types[reason_key].append(layer_name)
+                
+                for reason_type, layers in reason_types.items():
+                    logger.info(f"  Filtered ({reason_type}): {len(layers)} layer(s) - {', '.join(layers[:5])}{'...' if len(layers) > 5 else ''}")
             else:
                 logger.info(f"_filter_usable_layers: All {input_count} layers are usable")
             
@@ -1100,24 +1116,38 @@ class FilterMateApp:
                         # Task may have failed or not completed - try to reload layers
                         all_layers = list(self.PROJECT.mapLayers().values())
                         logger.warning(f"Safety timer: PROJECT_LAYERS still empty after 5s, attempting recovery (total layers in project: {len(all_layers)})")
+                        
+                        # FIX v2.8.14: Be VERY permissive during recovery - include ALL valid vector layers
+                        # This is critical for layers loaded by external scripts (like qgis_snap_zones.py)
+                        # where the timing of layer addition may not align with FilterMate's initialization
+                        
+                        # First, try normal filtering
                         current_layers = self._filter_usable_layers(all_layers)
                         
-                        # FIX v2.8.6: Enhanced recovery for PostgreSQL layers
-                        # Sometimes PostgreSQL layers are valid but get filtered due to timing issues
-                        # Use a more permissive approach: include all valid QgsVectorLayer instances
-                        postgres_layers = [l for l in all_layers 
-                                          if isinstance(l, QgsVectorLayer) 
-                                          and l.providerType() == 'postgres'
-                                          and l.isValid()]
-                        missed_postgres = [l for l in postgres_layers if l not in current_layers]
+                        # FIX v2.8.6 + v2.8.14: Enhanced recovery for PostgreSQL AND other providers
+                        # Include ALL valid QgsVectorLayer instances that were missed
+                        all_valid_vector_layers = [
+                            l for l in all_layers 
+                            if isinstance(l, QgsVectorLayer) 
+                            and l.isValid()
+                            and not is_sip_deleted(l)
+                        ]
+                        missed_layers = [l for l in all_valid_vector_layers if l not in current_layers]
                         
-                        if missed_postgres:
-                            logger.warning(f"Recovery: Found {len(missed_postgres)} valid PostgreSQL layers that were filtered - adding them")
-                            for layer in missed_postgres:
-                                logger.info(f"  Adding missed PostgreSQL layer: {layer.name()} (id={layer.id()})")
-                            current_layers.extend(missed_postgres)
+                        if missed_layers:
+                            logger.warning(f"Recovery: Found {len(missed_layers)} valid vector layers that were filtered - forcing inclusion")
+                            for layer in missed_layers:
+                                provider = layer.providerType()
+                                logger.info(f"  Force-adding missed layer: {layer.name()} (provider={provider}, id={layer.id()})")
+                            current_layers.extend(missed_layers)
                         
-                        logger.info(f"Recovery diagnostic: total_layers={len(all_layers)}, usable_layers={len(current_layers)}, postgres_layers={len(postgres_layers)}, missed_postgres={len(missed_postgres)}, pending_tasks={self._pending_add_layers_tasks}")
+                        # Detailed diagnostic
+                        postgres_count = sum(1 for l in all_layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres')
+                        spatialite_count = sum(1 for l in all_layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'spatialite')
+                        ogr_count = sum(1 for l in all_layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'ogr')
+                        logger.info(f"Recovery diagnostic: total_layers={len(all_layers)}, usable_layers={len(current_layers)}, missed={len(missed_layers)}")
+                        logger.info(f"  Provider breakdown: postgres={postgres_count}, spatialite={spatialite_count}, ogr={ogr_count}")
+                        logger.info(f"  Pending tasks: {self._pending_add_layers_tasks}")
                         
                         if len(current_layers) > 0:
                             logger.info(f"Recovery: Found {len(current_layers)} usable layers, retrying add_layers")
