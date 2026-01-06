@@ -11669,6 +11669,18 @@ class FilterEngineTask(QgsTask):
             # Clear the pending requests
             self._pending_subset_requests = []
             
+            # FIX v2.8.15: Force immediate canvas refresh after applying all filters
+            # This ensures OGR/Spatialite/PostgreSQL layers display correctly
+            # Without this, the canvas may show a white screen or not update
+            # FIX v2.8.16: Stop rendering first to prevent conflicts
+            try:
+                canvas = iface.mapCanvas()
+                canvas.stopRendering()  # Stop any ongoing rendering
+                canvas.refresh()  # Force immediate refresh
+                logger.debug("Immediate canvas refresh triggered after filter application (with stopRendering)")
+            except Exception as refresh_err:
+                logger.debug(f"Could not trigger immediate canvas refresh: {refresh_err}")
+            
             # FIX v2.5.15: Simplified canvas refresh with delayed second pass
             # Avoid processEvents() which can cause reentrancy issues and freezes
             # Use a QTimer for delayed refresh to allow PostgreSQL provider to update
@@ -11682,7 +11694,7 @@ class FilterEngineTask(QgsTask):
                 
                 # FIX v2.5.21: Skip immediate refreshAllLayers() - layers already got triggerRepaint()
                 # This avoids starting a render that will be cancelled by the delayed refresh
-                logger.debug("Skipping immediate refresh - layers already triggered repaint")
+                logger.debug("Skipping immediate refreshAllLayers - layers already triggered repaint")
                 
                 # FIX v2.5.21: Single delayed refresh with adaptive timing
                 # Check if any filter is complex (EXISTS, large IN clause, ST_*)

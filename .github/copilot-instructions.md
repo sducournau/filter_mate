@@ -22,11 +22,12 @@ FilterMate uses **Serena + BMAD** for comprehensive development support:
 | Need                  | Location                                                                   |
 | --------------------- | -------------------------------------------------------------------------- |
 | **Coding patterns**   | This file + `.serena/memories/code_style_conventions.md`                   |
-| **Architecture**      | `.bmad-core/architecture.md` + `.serena/memories/architecture_overview.md` |
-| **Requirements**      | `.bmad-core/prd.md`                                                        |
-| **User stories**      | `.bmad-core/epics.md`                                                      |
-| **Roadmap**           | `.bmad-core/roadmap.md`                                                    |
-| **Quality standards** | `.bmad-core/quality.md`                                                    |
+| **Architecture**      | `_bmad/bmm/data/` + `.serena/memories/architecture_overview.md`           |
+| **Requirements**      | `_bmad/bmm/data/` (PRDs et spécifications)                                |
+| **User stories**      | `_bmad/bmm/data/` (stories et epics)                                      |
+| **Workflows**         | `_bmad/core/workflows/` et `_bmad/bmm/workflows/`                         |
+| **Agents disponibles**| `_bmad/_config/agent-manifest.csv`                                        |
+| **Documentation**     | `_bmad/bmm/data/documentation-standards.md`                               |
 
 ### Serena Tools (MCP)
 
@@ -581,6 +582,44 @@ get_current_config()  # Shows active project and available tools
 - If tools unavailable: Check MCP server logs in VS Code Output panel
 - Verify `uvx serena` works from PowerShell/CMD
 - Ensure path uses forward slashes or escaped backslashes in JSON
+
+---
+
+## 🤖 Utilisation des Agents BMAD
+
+FilterMate utilise **BMAD v6.0.0-alpha.22** pour la gestion du développement.
+
+### Agents Disponibles
+
+| Agent | Rôle | Utilisation |
+|-------|------|-------------|
+| **@bmad-master** | Orchestrateur BMAD | Gestion des workflows, chargement de ressources |
+| **@analyst** (Mary) | Analyste Business | Recherche, analyse des besoins, spécifications |
+| **@architect** (Winston) | Architecte | Design système, choix techniques, patterns |
+| **@dev** (Amelia) | Développeur | Implémentation stricte selon les user stories |
+| **@pm** (John) | Product Manager | PRDs, découverte des besoins utilisateurs |
+| **@quick-flow-solo-dev** (Barry) | Dev Full-Stack Rapide | Implémentation rapide sans cérémonie |
+| **@sm** (Bob) | Scrum Master | Préparation des stories, specs développeur |
+| **@tea** (Murat) | Architecte Test | Tests automatisés, CI/CD, qualité |
+| **@tech-writer** (Paige) | Rédacteur Technique | Documentation, guides utilisateur |
+| **@ux-designer** (Sally) | Designer UX | Expérience utilisateur, UI |
+
+### Workflows BMAD
+
+- **Brainstorming**: `_bmad/core/workflows/brainstorming/`
+- **Party Mode**: `_bmad/core/workflows/party-mode/` (discussion multi-agents)
+- **BMM Workflows**: `_bmad/bmm/workflows/` (PRD, stories, architecture, etc.)
+
+### Utilisation
+
+Pour invoquer un agent BMAD:
+```
+@bmad-master charge le workflow [nom]
+@dev implémente la story [référence]
+@architect révise l'architecture du backend Spatialite
+```
+
+Les agents suivent les standards définis dans `_bmad/bmm/data/documentation-standards.md`.
 
 ---
 

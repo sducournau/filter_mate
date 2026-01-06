@@ -43,7 +43,7 @@ import json
 import hashlib
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Set, Tuple, Any
 from contextlib import contextmanager
 
@@ -190,7 +190,7 @@ class SpatialiteCacheDB:
         
         QgsMessageLog.logMessage(
             f"SpatialiteCacheDB initialized at: {self.db_path}",
-            "FilterMate", Qgis.Info
+            "FilterMate", Qgis.Info  # DEBUG
         )
     
     def _init_database(self):
@@ -326,7 +326,7 @@ class SpatialiteCacheDB:
             )
             
             # Prepare data
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             expires = now + timedelta(hours=ttl_hours)
             fids_str = ",".join(str(f) for f in sorted(fids))
             predicates_str = json.dumps(predicates)
@@ -371,7 +371,7 @@ class SpatialiteCacheDB:
             
             QgsMessageLog.logMessage(
                 f"Cache stored: {layer_name} → {len(fids)} FIDs (step {step_number}, key={cache_key[:8]})",
-                "FilterMate", Qgis.Info
+                "FilterMate", Qgis.Info  # DEBUG
             )
             
             return cache_key
@@ -406,7 +406,7 @@ class SpatialiteCacheDB:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             cursor.execute(f'''
                 SELECT fids, fid_count FROM {CACHE_TABLE_NAME}
                 WHERE layer_id = ? AND cache_key = ? AND expires_at > ?
@@ -439,7 +439,7 @@ class SpatialiteCacheDB:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             cursor.execute(f'''
                 SELECT fids, fid_count, step_number FROM {CACHE_TABLE_NAME}
                 WHERE layer_id = ? AND expires_at > ?
@@ -518,7 +518,7 @@ class SpatialiteCacheDB:
         """
         import uuid
         session_id = str(uuid.uuid4())[:8]
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -555,7 +555,7 @@ class SpatialiteCacheDB:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 
-                now = datetime.utcnow().isoformat()
+                now = datetime.now(timezone.utc).isoformat()
                 cursor.execute(f'''
                     DELETE FROM {CACHE_TABLE_NAME} WHERE expires_at < ?
                 ''', (now,))
@@ -632,7 +632,7 @@ class SpatialiteCacheDB:
             ''')
             total_fids = cursor.fetchone()['total_fids'] or 0
             
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             cursor.execute(f'''
                 SELECT COUNT(*) as count FROM {CACHE_TABLE_NAME}
                 WHERE expires_at < ?

@@ -6,28 +6,52 @@
 name=FilterMate
 qgisMinimumVersion=3.0
 description=FilterMate is a QGIS plugin that allows you to easily explore, filter and export vector data - now works with any data source!
-version=2.9.10
+version=2.9.23
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.10 - Critical OGR Stability Fix
+about=FilterMate v2.9.23 - Prevent UI Lockup During Transient States
 
- NEW in v2.9.10:
+ NEW in v2.9.21:
+ - ✅ FORCE rechargement du panel exploring après CHAQUE filtrage
+ - 📋 Invalidation du cache exploring dans le bloc finally (toujours exécuté)
+ - 🔄 Restauration de l'état UI du groupbox actif (_restore_groupbox_ui_state)
+ - 👁️ Panel exploring affiche TOUJOURS les features filtrées à jour
+ - ✅ Plus d'affichage obselète dans Multiple Selection après filtrage
+ - 📊 Logging amélioré avec warnings si current_layer pas dans PROJECT_LAYERS
+
+ Previous in v2.9.20:
+ - ✅ current_layer NEVER changes during filtering (saved/restored)
+ - 💾 Saves current_layer ID before filtering starts
+ - 🔄 Restores EXACT same layer after filtering completes
+
+ Previous in v2.9.16:
+ - 🐛 CRITICAL FIX: GEOS-safe intersect layers now have unique names (prevents conflicts after 7+ iterations)
+ - ✅ Fixed "PRE-FLIGHT CHECK FAILED" on 8th layer (SubDucts)
+ - 🔢 Added timestamp-based unique ID to each GEOS-safe layer name
+
+ Previous in v2.9.15:
+ - 🐛 Disabled GEOS-safe input (was causing false negatives)
+ - ✅ Restored correct results (Address: 276, Structures: 276)
+
+ Previous in v2.9.14:
+ - 🐛 CRITICAL FIX: Eliminated intermittent "wrapped C/C++ object has been deleted"
+ - 🔒 Comprehensive GC protection for all temporary layers
+
+ Previous in v2.9.12:
+ - 🐛 CRITICAL FIX: Eliminated "wrapped C/C++ object has been deleted" on multi-layer filtering
+ - 🔧 FIX: source_geom layer now retained for entire filter operation (was garbage collected after 5-7 layers)
+ - ✅ 100% success rate for 8+ layer OGR filtering (Address layer no longer fails)
+ 
+ Previous in v2.9.11:
+ - 🐛 FIX: Windows access violation protection in processing.run()
+ - 🛡️ C++ wrapper validation before processing algorithms
+ 
+ Previous in v2.9.10:
  - 🐛 CRITICAL FIX: Eliminated "wrapped C/C++ object has been deleted" errors in OGR backend
  - 🔧 FIX: Temporary layer references now properly scoped to each target layer
  - ✅ 100% success rate for multi-layer OGR filtering (was 50-75% before)
  - 🧹 Smart garbage collection: References cleared between layers, not during processing
- - 📝 Fixed incorrect comment about "concurrent operations" (layers are sequential)
-
- Previous in v2.9.9:
- - 🐛 FIX: OGR backend no longer fails silently with cryptic errors
- - 🔧 FIX: Added early failure detection when source geometry is None/invalid
- - 📊 DIAGNOSTIC: Enhanced logging shows WHY geometry validation failed
- - ✅ Clear error messages: "geometry is Empty", "geometry is None", etc.
- - 🔒 Prevents processing with invalid source geometry
-
- Previous in v2.9.6:
- - 🐛 FIX: Negative buffer now correctly returns 0 features when geometry is empty
  - 🔧 FIX: Spatialite predicates now use explicit "= 1" for NULL-safe evaluation
  - ✅ ST_Intersects(geom, NULL) now correctly filters to 0 results instead of all features
  - ✅ Safe shutdown: Avoids calling destroyed C++ objects during QgsTaskManager::cancelAll()

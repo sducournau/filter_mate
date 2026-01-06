@@ -709,20 +709,28 @@ def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Opti
     
     if layer is None:
         logger.error("create_geos_safe_layer: Input layer is None")
-        return None
+        return None  # Cannot fallback to original if it's None
     
     if not isinstance(layer, QgsVectorLayer):
         logger.error(f"create_geos_safe_layer: Input is not a QgsVectorLayer: {type(layer)}")
-        return None
+        return layer  # FIX v2.9.11: Return the input (even if wrong type) to prevent None
     
     if not layer.isValid():
         logger.error(f"create_geos_safe_layer: Input layer is not valid")
-        return None
+        return layer  # FIX v2.9.11: Return invalid layer rather than None (caller will validate)
+    
+    # FIX v2.9.11: Test if C++ wrapper is still valid before processing
+    try:
+        _ = layer.name()  # Force access to C++ object to detect if deleted
+        _ = layer.featureCount()  # Test another method
+    except RuntimeError as wrapper_error:
+        logger.error(f"create_geos_safe_layer: C++ wrapper has been deleted: {wrapper_error}")
+        return None  # Cannot use deleted layer
     
     feature_count = layer.featureCount()
     if feature_count == 0:
         logger.warning("create_geos_safe_layer: Input layer has no features")
-        return None
+        return layer  # FIX v2.9.11: Return empty layer rather than None
     
     try:
         # Create output memory layer

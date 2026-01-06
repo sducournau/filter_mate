@@ -223,8 +223,29 @@ class PopulateListEngineTask(QgsTask):
         import time
         
         try:
+            # FIX v2.8.16: Early validation to catch deleted/invalid layers (e.g., temporary Processing layers)
+            if self.layer is None:
+                logger.debug(f'Layer is None, skipping task: {self.action}')
+                return True
+            
+            # Test if layer C++ object is still valid before proceeding
+            try:
+                _ = self.layer.name()  # Force access to C++ object
+                layer_is_valid = self.layer.isValid()
+                if not layer_is_valid:
+                    logger.debug(f'Layer "{self.layer.name()}" is no longer valid, skipping task: {self.action}')
+                    return True
+            except (RuntimeError, AttributeError) as layer_err:
+                # C++ object already deleted - common with temporary Processing output layers
+                error_msg = str(layer_err)
+                if 'c++' in error_msg.lower() or 'deleted' in error_msg.lower():
+                    logger.debug(f'Layer C++ object deleted (temporary layer), skipping task {self.action}: {layer_err}')
+                else:
+                    logger.warning(f'Unable to access layer in task {self.action}: {layer_err}')
+                return True
+            
             # Vérifier que le layer et les widgets existent toujours
-            if self.layer is None or self.layer.id() not in self.parent.list_widgets:
+            if self.layer.id() not in self.parent.list_widgets:
                 logger.debug(f'Layer no longer exists in list_widgets, skipping task: {self.action}')
                 # Return True for graceful skip (not an error, layer was just removed)
                 return True
@@ -269,7 +290,10 @@ class PopulateListEngineTask(QgsTask):
             return True
         
         except Exception as e:
+            import traceback
             self.exception = e
+            # Capture the full traceback at the moment of exception
+            self.exception_traceback = traceback.format_exc()
             error_str = str(e).lower()
             
             # Check for known OGR/SQLite transient errors
@@ -369,6 +393,29 @@ class PopulateListEngineTask(QgsTask):
         - Pre-compiles expressions for complex display expressions
         - Respects cancellation for quick abort
         """
+        # FIX v2.8.16: Validate layer early to avoid cryptic errors with temporary/deleted layers
+        try:
+            if not self.layer:
+                logger.warning("buildFeaturesList: layer is None, skipping")
+                return
+            
+            # Test if layer C++ object is still valid
+            layer_name = self.layer.name()
+            layer_is_valid = self.layer.isValid()
+            
+            if not layer_is_valid:
+                logger.warning(f"buildFeaturesList: layer '{layer_name}' is not valid, skipping")
+                return
+                
+        except (RuntimeError, AttributeError) as e:
+            # C++ object already deleted - common with temporary Processing layers
+            error_msg = str(e)
+            if 'c++' in error_msg.lower() or 'deleted' in error_msg.lower():
+                logger.debug(f"buildFeaturesList: layer C++ object deleted (temporary layer), skipping: {e}")
+            else:
+                logger.warning(f"buildFeaturesList: unable to access layer: {e}")
+            return
+        
         features_list = []
 
         limit = 0
@@ -377,7 +424,7 @@ class PopulateListEngineTask(QgsTask):
         filter_expression_request = QgsFeatureRequest()
         
         # DEBUG: Log entry point
-        logger.debug(f"buildFeaturesList: Starting for layer '{self.layer.name() if self.layer else 'None'}'")
+        logger.debug(f"buildFeaturesList: Starting for layer '{layer_name}'")
         logger.debug(f"  → identifier_field_name: {self.identifier_field_name}")
         logger.debug(f"  → display_expression: {self.display_expression}")
         logger.debug(f"  → is_field_flag: {self.is_field_flag}")
@@ -391,11 +438,17 @@ class PopulateListEngineTask(QgsTask):
             total_features_list_count = data_provider_layer.featureCount()
             layer_features_source = data_provider_layer.featureSource()
 
-        if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
-            self.parent.list_widgets[self.layer.id()].setTotalFeaturesListCount(total_features_list_count)
+        # Check if list widget exists for this layer (may have been removed/changed)
+        layer_id = self.layer.id()
+        if layer_id not in self.parent.list_widgets:
+            logger.warning(f"buildFeaturesList: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            return True  # Graceful skip, not an error
+
+        if self.parent.list_widgets[layer_id].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
+            self.parent.list_widgets[layer_id].setTotalFeaturesListCount(total_features_list_count)
 
         if layer_features_source is not None and has_limit is True:
-            limit = self.parent.list_widgets[self.layer.id()].getLimit()
+            limit = self.parent.list_widgets[layer_id].getLimit()
             
         
         if layer_features_source is not None:
@@ -670,7 +723,13 @@ class PopulateListEngineTask(QgsTask):
 
 
     def loadFeaturesList(self, new_list=True):
-        current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[self.layer.id()].getSelectedFeaturesList()]
+        # Check if list widget exists for this layer (may have been removed/changed)
+        layer_id = self.layer.id()
+        if layer_id not in self.parent.list_widgets:
+            logger.warning(f"loadFeaturesList: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            return  # Graceful skip, not an error
+
+        current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[layer_id].getSelectedFeaturesList()]
         
         # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of iterating layer.
         # layer.getFeatures() is NOT thread-safe and causes access violations in multi-threaded context.
@@ -694,13 +753,13 @@ class PopulateListEngineTask(QgsTask):
             return
         
         if new_list is True:
-            self.parent.list_widgets[self.layer.id()].clear()
+            self.parent.list_widgets[layer_id].clear()
 
-        filter_text = self.parent.list_widgets[self.layer.id()].getFilterText()
+        filter_text = self.parent.list_widgets[layer_id].getFilterText()
         if filter_text != '':
             self.parent.filter_le.setText(filter_text)
 
-        list_to_load = self.parent.list_widgets[self.layer.id()].getFeaturesList()
+        list_to_load = self.parent.list_widgets[layer_id].getFeaturesList()
 
         total_count = len(list_to_load)
         
@@ -739,7 +798,7 @@ class PopulateListEngineTask(QgsTask):
                     lwi.setData(6,self.parent.font_by_state['unCheckedFiltered'][0])
                     lwi.setData(9,QBrush(self.parent.font_by_state['unCheckedFiltered'][1]))
                     lwi.setData(4,"False")
-            self.parent.list_widgets[self.layer.id()].addItem(lwi)
+            self.parent.list_widgets[layer_id].addItem(lwi)
             # PERFORMANCE: Use batched progress updates
             self._update_progress_batched(index, total_count)
 
@@ -748,18 +807,24 @@ class PopulateListEngineTask(QgsTask):
 
             
     def filterFeatures(self):
-        total_count = self.parent.list_widgets[self.layer.id()].count()
+        # Check if list widget exists for this layer (may have been removed/changed)
+        layer_id = self.layer.id()
+        if layer_id not in self.parent.list_widgets:
+            logger.warning(f"filterFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            return  # Graceful skip, not an error
+
+        total_count = self.parent.list_widgets[layer_id].count()
         filter_txt_splitted = self.parent.filter_txt.lower().strip().split(" ")
 
-        self.parent.list_widgets[self.layer.id()].setFilterText(self.parent.filter_txt)
+        self.parent.list_widgets[layer_id].setFilterText(self.parent.filter_txt)
 
-        if self.parent.list_widgets[self.layer.id()].getTotalFeaturesListCount() > total_count:
+        if self.parent.list_widgets[layer_id].getTotalFeaturesListCount() > total_count:
             self.buildFeaturesList(False, filter_txt_splitted)
             self.loadFeaturesList(True)
 
         else:
             filter_txt_splitted = [item.replace('é','e').replace('è','e').replace('â','a').replace('ô','o') for item in filter_txt_splitted]
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             widget_count = list_widget.count()
             for index in range(widget_count):
                 item = list_widget.item(index)
@@ -770,7 +835,7 @@ class PopulateListEngineTask(QgsTask):
                 self._update_progress_batched(index, total_count)
 
         visible_features_list = []
-        list_widget = self.parent.list_widgets[self.layer.id()]
+        list_widget = self.parent.list_widgets[layer_id]
         widget_count = list_widget.count()
         for index in range(widget_count):
             item = list_widget.item(index)
@@ -781,13 +846,19 @@ class PopulateListEngineTask(QgsTask):
 
 
     def selectAllFeatures(self):
+        # Check if list widget exists for this layer (may have been removed/changed)
+        layer_id = self.layer.id()
+        if layer_id not in self.parent.list_widgets:
+            logger.warning(f"selectAllFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            return  # Graceful skip, not an error
+
         # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of layer
         data_provider = self.layer.dataProvider()
         layer_features_source = data_provider.featureSource() if data_provider else None
 
         if self.sub_action == 'Select All':
 
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             total_count = list_widget.count()
             if layer_features_source:
                 nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
@@ -807,7 +878,7 @@ class PopulateListEngineTask(QgsTask):
         
         elif self.sub_action == 'Select All (non subset)':
 
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             widget_count = list_widget.count()
             if layer_features_source:
                 nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
@@ -834,7 +905,7 @@ class PopulateListEngineTask(QgsTask):
             else:
                 nonSubset_features_list = []
             total_count = len(nonSubset_features_list)
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             widget_count = list_widget.count()
 
             for index in range(widget_count):
@@ -852,13 +923,19 @@ class PopulateListEngineTask(QgsTask):
 
 
     def deselectAllFeatures(self):
+        # Check if list widget exists for this layer (may have been removed/changed)
+        layer_id = self.layer.id()
+        if layer_id not in self.parent.list_widgets:
+            logger.warning(f"deselectAllFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            return  # Graceful skip, not an error
+
         # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of layer
         data_provider = self.layer.dataProvider()
         layer_features_source = data_provider.featureSource() if data_provider else None
 
         if self.sub_action == 'De-select All':
 
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             total_count = list_widget.count()
             if layer_features_source:
                 nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
@@ -877,7 +954,7 @@ class PopulateListEngineTask(QgsTask):
 
         elif self.sub_action == 'De-select All (non subset)':
 
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             widget_count = list_widget.count()
             if layer_features_source:
                 nonSubset_features_list = [get_feature_attribute(feature, self.identifier_field_name) for feature in safe_iterate_features(layer_features_source)]
@@ -904,7 +981,7 @@ class PopulateListEngineTask(QgsTask):
             else:
                 nonSubset_features_list = []
             total_count = len(nonSubset_features_list)
-            list_widget = self.parent.list_widgets[self.layer.id()]
+            list_widget = self.parent.list_widgets[layer_id]
             widget_count = list_widget.count()
 
             for index in range(widget_count):
@@ -922,10 +999,15 @@ class PopulateListEngineTask(QgsTask):
 
     
     def updateFeatures(self):
+        # Check if list widget exists for this layer (may have been removed/changed)
+        layer_id = self.layer.id()
+        if layer_id not in self.parent.list_widgets:
+            logger.warning(f"updateFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            return  # Graceful skip, not an error
 
         selection_data = []
         visible_data = []
-        list_widget = self.parent.list_widgets[self.layer.id()]
+        list_widget = self.parent.list_widgets[layer_id]
         total_count = list_widget.count()
         for index in range(total_count):
             item = list_widget.item(index)
@@ -936,8 +1018,8 @@ class PopulateListEngineTask(QgsTask):
             self._update_progress_batched(index, total_count)
         selection_data.sort(key=lambda k: k[0])
         self.parent.items_le.setText(', '.join([data[0] for data in selection_data]))
-        self.parent.list_widgets[self.layer.id()].setSelectedFeaturesList(selection_data)
-        self.parent.list_widgets[self.layer.id()].setVisibleFeaturesList(visible_data)
+        self.parent.list_widgets[layer_id].setSelectedFeaturesList(selection_data)
+        self.parent.list_widgets[layer_id].setVisibleFeaturesList(visible_data)
         self.parent.updatedCheckedItemListEvent(selection_data, True)
         
     
@@ -959,17 +1041,37 @@ class PopulateListEngineTask(QgsTask):
                 pass
             elif self.exception is None:
                 # Task failed without exception - log details for debugging
-                layer_name = self.layer.name() if self.layer else 'Unknown'
+                # FIX v2.8.16: Safe layer name extraction - handle temporary/deleted layers
+                try:
+                    if self.layer and hasattr(self.layer, 'name'):
+                        layer_name = self.layer.name()
+                    else:
+                        layer_name = 'Unknown (layer deleted)'
+                except:
+                    layer_name = 'Unknown (unable to access layer)'
+                
                 QgsMessageLog.logMessage(
                     f'Task "{self.action}" failed for layer "{layer_name}" without exception',
                     'FilterMate', Qgis.Warning)
             else:
                 # Log full exception details to QGIS Message Log
-                import traceback
-                layer_name = self.layer.name() if self.layer else 'Unknown'
+                # FIX v2.8.16: Safe layer name extraction and proper traceback handling
+                try:
+                    if self.layer and hasattr(self.layer, 'name'):
+                        layer_name = self.layer.name()
+                    else:
+                        layer_name = 'Unknown (layer deleted)'
+                except:
+                    layer_name = 'Unknown (unable to access layer)'
+                
                 error_details = f'Task "{self.action}" failed for layer "{layer_name}": {str(self.exception)}'
                 QgsMessageLog.logMessage(error_details, 'FilterMate', Qgis.Critical)
-                QgsMessageLog.logMessage(f'Traceback: {traceback.format_exc()}', 'FilterMate', Qgis.Info)
+                
+                # Use captured traceback if available, otherwise just log the exception
+                if hasattr(self, 'exception_traceback') and self.exception_traceback:
+                    QgsMessageLog.logMessage(f'Traceback:\n{self.exception_traceback}', 'FilterMate', Qgis.Info)
+                else:
+                    QgsMessageLog.logMessage(f'Exception type: {type(self.exception).__name__}', 'FilterMate', Qgis.Info)
                 
                 show_error('FilterMate', f'Error occurred: {str(self.exception)}')
                 logger.error(f'Task failed with exception: {self.exception}', exc_info=True)

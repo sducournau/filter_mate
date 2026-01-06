@@ -1,0 +1,38 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-01-06T15:30:00Z",
+    "last_updated": "2026-01-06T15:32:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "deep",
+  "project_root": "/mnt/c/Users/SimonDucorneau/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/filter_mate",
+  "output_folder": "/mnt/c/Users/SimonDucorneau/AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins/filter_mate/docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-01-06T15:32:00Z",
+      "summary": "Classified as monolith (extension type) - QGIS Plugin FilterMate v2.9.12"
+    },
+    {
+      "step": "step_2",
+      "status": "completed",
+      "timestamp": "2026-01-06T15:33:00Z",
+      "summary": "Found 30+ existing docs (README, modules, backends, tasks, fixes)"
+    }
+  ],
+  "current_step": "step_3",
+  "findings": {
+    "project_classification": "Monolith extension/plugin, Python 3, QGIS Plugin",
+    "project_types": [
+      {
+        "part_id": "main",
+        "project_type_id": "extension",
+        "display_name": "FilterMate QGIS Plugin"
+      }
+    ]
+  },
+  "outputs_generated": ["project-scan-report.json"],
+  "resume_instructions": "Continue from step 2 - Documentation inventory"
+}

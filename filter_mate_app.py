@@ -1967,6 +1967,30 @@ class FilterMateApp:
                     if temp_layer.id() in layers_ids:
                         layers.append(temp_layer)
             
+            # v2.9.19: CRITICAL - Save current_layer BEFORE filtering to restore it after
+            # The combobox must NEVER change during filtering, regardless of what happens
+            self._current_layer_before_filter = self.dockwidget.current_layer if self.dockwidget else None
+            if self._current_layer_before_filter:
+                try:
+                    self._current_layer_id_before_filter = self._current_layer_before_filter.id()
+                    logger.info(f"v2.9.19: 💾 Saved current_layer '{self._current_layer_before_filter.name()}' before filtering")
+                except (RuntimeError, AttributeError):
+                    self._current_layer_id_before_filter = None
+                    logger.warning("v2.9.19: ⚠️ Could not save current_layer ID (layer invalid)")
+            else:
+                self._current_layer_id_before_filter = None
+                logger.warning("v2.9.19: ⚠️ No current_layer to save before filtering")
+            
+            # v2.8.16: CRITICAL - Disconnect current_layer combobox during filtering
+            # This prevents the combobox from automatically changing when layers are modified
+            # The combobox will be restored to the correct layer after filtering completes
+            if self.dockwidget:
+                try:
+                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
+                    logger.debug("v2.8.16: Disconnected current_layer combobox signal during filtering")
+                except Exception as e:
+                    logger.debug(f"Could not disconnect current_layer combobox: {e}")
+            
             # Show informational message with backend awareness
             layer_count = len(layers) + 1  # +1 for current layer
             source_provider_type = task_parameters["infos"].get("layer_provider_type", "unknown")
@@ -3969,6 +3993,116 @@ class FilterMateApp:
             self.iface.mapCanvas().refresh()
             
         self.dockwidget.PROJECT_LAYERS = self.PROJECT_LAYERS
+        
+        # v2.9.19: CRITICAL - Restore EXACT same current_layer that was active BEFORE filtering
+        # The combobox must show the SAME layer before and after filtering - NEVER change
+        restored_layer = None
+        if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
+            from qgis.core import QgsProject
+            restored_layer = QgsProject.instance().mapLayer(self._current_layer_id_before_filter)
+            if restored_layer and restored_layer.isValid():
+                self.dockwidget.current_layer = restored_layer
+                logger.info(f"v2.9.19: ✅ Restored current_layer to '{restored_layer.name()}' (same as before filtering)")
+            else:
+                logger.warning(f"v2.9.19: ⚠️ Could not restore layer ID {self._current_layer_id_before_filter} - layer no longer exists")
+                # Fallback: try to find ANY valid layer
+                self.dockwidget.current_layer = self.dockwidget._ensure_valid_current_layer(None)
+                if self.dockwidget.current_layer:
+                    logger.info(f"v2.9.19: ⚠️ Fallback: selected '{self.dockwidget.current_layer.name()}' as current_layer")
+        else:
+            logger.warning("v2.9.19: ⚠️ No saved current_layer to restore - searching for valid layer")
+            # Fallback: ensure we have SOME valid layer if layers exist
+            if not self.dockwidget.current_layer and len(self.PROJECT_LAYERS) > 0:
+                self.dockwidget.current_layer = self.dockwidget._ensure_valid_current_layer(None)
+                if self.dockwidget.current_layer:
+                    logger.info(f"v2.9.19: ⚠️ Auto-selected '{self.dockwidget.current_layer.name()}' as current_layer")
+        
+        # v2.8.15: CRITICAL FIX - Ensure current_layer combo and exploring panel stay synchronized after filtering
+        # v2.8.16: Extended to ALL backends (not just OGR) - Spatialite/PostgreSQL can also cause combobox reset
+        # Any backend can cause the combobox to reset to None and exploring widgets to not refresh properly
+        # This is because layers may reload their data provider after filtering, invalidating widget references
+        # v2.9.19: CRITICAL - finally block MUST be outside the if to guarantee execution
+        try:
+            if self.dockwidget.current_layer:
+                # 1. Ensure combobox still shows the current layer (CRITICAL for UX)
+                # v2.9.19: This should now be the EXACT same layer as before filtering
+                current_combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                if not current_combo_layer or current_combo_layer.id() != self.dockwidget.current_layer.id():
+                    logger.info(f"v2.9.19: 🔄 Combobox reset detected - restoring to '{self.dockwidget.current_layer.name()}'")
+                    # Temporarily disconnect to prevent signal during setLayer
+                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
+                    self.dockwidget.comboBox_filtering_current_layer.setLayer(self.dockwidget.current_layer)
+                    # Note: Don't reconnect here - let the finally block handle it for consistency
+                else:
+                    logger.info(f"v2.9.19: ✅ Combobox already shows correct layer '{self.dockwidget.current_layer.name()}'")
+                
+                # 2. Force reload of exploring widgets to refresh feature lists after filtering
+                # This ensures the multiple selection widget displays the filtered features
+                # v2.9.20: CRITICAL - ALWAYS reload exploring widgets, even if current_layer didn't change
+                # The features have changed due to filtering, so widgets MUST be refreshed
+                try:
+                    if self.dockwidget.current_layer.id() in self.PROJECT_LAYERS:
+                        layer_props = self.PROJECT_LAYERS[self.dockwidget.current_layer.id()]
+                        logger.info(f"v2.9.20: 🔄 Reloading exploring widgets for '{self.dockwidget.current_layer.name()}' after {display_backend} filter")
+                        
+                        # FORCE complete reload of exploring widgets
+                        self.dockwidget._reload_exploration_widgets(self.dockwidget.current_layer, layer_props)
+                        
+                        # v2.9.20: Also update the groupbox UI state to ensure proper visibility
+                        if hasattr(self.dockwidget, 'current_exploring_groupbox') and self.dockwidget.current_exploring_groupbox:
+                            self.dockwidget._restore_groupbox_ui_state(self.dockwidget.current_exploring_groupbox)
+                            logger.debug(f"v2.9.20: Restored groupbox UI state for '{self.dockwidget.current_exploring_groupbox}'")
+                        
+                        logger.info(f"v2.9.20: ✅ Exploring widgets reloaded successfully")
+                    else:
+                        logger.warning(f"v2.9.20: ⚠️ current_layer ID {self.dockwidget.current_layer.id()} not in PROJECT_LAYERS - cannot reload exploring widgets")
+                except Exception as exploring_error:
+                    logger.error(f"v2.9.20: ❌ Error reloading exploring widgets: {exploring_error}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                
+                # 3. v2.8.16: Force explicit layer repaint to ensure canvas displays filtered features
+                # All backends may require explicit triggerRepaint() on BOTH source and current layer
+                # v2.9.20: Isolated try-catch to ensure this always attempts to run
+                try:
+                    logger.debug(f"v2.9.20: {display_backend} filter completed - triggering layer repaint")
+                    if source_layer and source_layer.isValid():
+                        source_layer.triggerRepaint()
+                    if self.dockwidget.current_layer.isValid():
+                        self.dockwidget.current_layer.triggerRepaint()
+                    # Force canvas refresh with stopRendering first to prevent conflicts
+                    canvas = self.iface.mapCanvas()
+                    canvas.stopRendering()
+                    canvas.refresh()
+                    logger.info(f"v2.9.20: ✅ Canvas repaint completed")
+                except Exception as repaint_error:
+                    logger.error(f"v2.9.20: ❌ Error triggering layer repaint: {repaint_error}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+            else:
+                logger.warning(f"v2.9.19: ⚠️ current_layer is None after filtering - skipping UI refresh")
+                    
+        except (AttributeError, RuntimeError) as e:
+            logger.error(f"v2.9.19: ❌ Error refreshing UI after {display_backend} filter: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+        finally:
+            # v2.9.20: CRITICAL FIX - finally OUTSIDE if block to guarantee execution
+            # This ensures signal reconnection happens even if current_layer is None
+            if self.dockwidget:
+                try:
+                    # v2.9.20: ALWAYS reconnect signal
+                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+                    logger.info("v2.9.20: ✅ FINALLY - Reconnected current_layer signal after filtering")
+                    
+                    # v2.9.20: FORCE invalidation of exploring cache after filtering
+                    # This ensures the panel shows fresh, filtered features
+                    if hasattr(self.dockwidget, 'invalidate_exploring_cache') and self.dockwidget.current_layer:
+                        self.dockwidget.invalidate_exploring_cache(self.dockwidget.current_layer.id())
+                        logger.info(f"v2.9.20: ✅ Invalidated exploring cache for '{self.dockwidget.current_layer.name()}'")
+                    
+                except Exception as reconnect_error:
+                    logger.error(f"v2.9.20: ❌ Failed to reconnect layerChanged signal: {reconnect_error}")
         
         # v2.8.13: CRITICAL - Invalidate expression cache after filtering
         # When a layer's subsetString changes, cached expression results become stale.

@@ -9449,6 +9449,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Single selection widget - use validated layer parameter
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                # OGR FIX v2.8.16: Force refresh by clearing layer first, then resetting it
+                # QgsFeaturePickerWidget caches features internally and doesn't auto-refresh
+                # when the layer's subsetString changes (e.g., after OGR filtering).
+                # Setting layer to None first forces the widget to rebuild its internal model.
+                self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(None)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_expr)
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFetchGeometry(True)
@@ -9458,7 +9463,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Multiple selection widget - use validated layer parameter
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                # OGR FIX v2.8.16: Force feature list refresh after filtering
+                # The custom widget caches features and may not detect subsetString changes.
+                # Call setLayer first to ensure proper initialization, then force refresh via setDisplayExpression.
                 self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setLayer(layer, layer_props)
+                # Force refresh by explicitly calling setDisplayExpression even if expression hasn't changed
+                # This ensures the widget reloads features after OGR filtering
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(multiple_expr)
             
             # Field expression widgets - setLayer BEFORE setExpression - use validated layer parameter
             if "SINGLE_SELECTION_EXPRESSION" in self.widgets.get("EXPLORING", {}):
@@ -9692,6 +9703,66 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"_reconnect_layer_signals: is_selecting=True, initializing selection sync")
                 self.exploring_select_features()
 
+    
+    def _ensure_valid_current_layer(self, requested_layer):
+        """
+        Ensure we always have a valid current_layer when layers exist in project.
+        
+        v2.9.19: CRITICAL - current_layer must NEVER be None when layers exist.
+        This prevents UI freezing and signal disconnection issues.
+        
+        Args:
+            requested_layer: The layer requested to be current (can be None)
+            
+        Returns:
+            QgsVectorLayer or None: Valid layer to use as current_layer
+            
+        Logic:
+            1. If requested_layer is valid → use it
+            2. If requested_layer is None but PROJECT_LAYERS has layers → use first available
+            3. If no layers in project → return None (UI will be disabled)
+        """
+        # Case 1: Requested layer is valid - use it
+        if requested_layer is not None:
+            try:
+                # Verify it's actually valid and not C++ deleted
+                _ = requested_layer.id()
+                return requested_layer
+            except (RuntimeError, AttributeError):
+                logger.warning(f"_ensure_valid_current_layer: requested_layer is invalid/deleted")
+        
+        # Case 2: requested_layer is None or invalid - try to find a valid layer
+        logger.info("v2.9.19: current_layer is None, searching for valid layer in PROJECT_LAYERS")
+        
+        if not self.PROJECT_LAYERS or len(self.PROJECT_LAYERS) == 0:
+            logger.warning("v2.9.19: No layers in PROJECT_LAYERS - current_layer will be None")
+            return None
+        
+        # Try to find a valid vector layer from PROJECT_LAYERS
+        from qgis.core import QgsProject
+        project = QgsProject.instance()
+        
+        for layer_id in self.PROJECT_LAYERS.keys():
+            candidate_layer = project.mapLayer(layer_id)
+            if candidate_layer and candidate_layer.isValid():
+                try:
+                    # Extra validation
+                    _ = candidate_layer.featureCount()
+                    logger.info(f"v2.9.19: ✅ Auto-selected layer '{candidate_layer.name()}' as current_layer")
+                    return candidate_layer
+                except (RuntimeError, AttributeError):
+                    continue
+        
+        # Fallback: Try current combobox selection
+        if hasattr(self, 'comboBox_filtering_current_layer'):
+            combo_layer = self.comboBox_filtering_current_layer.currentLayer()
+            if combo_layer and combo_layer.isValid():
+                logger.info(f"v2.9.19: ✅ Using combobox layer '{combo_layer.name()}' as current_layer")
+                return combo_layer
+        
+        logger.warning("v2.9.19: ⚠️ Could not find any valid layer - current_layer will be None")
+        return None
+
 
     def current_layer_changed(self, layer):
         """
@@ -9700,11 +9771,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Orchestrates layer change by validating, disconnecting signals, 
         synchronizing widgets, and reconnecting signals.
         
+        v2.9.19: CRITICAL - Ensures current_layer is NEVER None when layers exist.
+        If layer parameter is None, automatically selects first available layer.
+        
         STABILITY FIX: Added checks for plugin busy state and deferred processing
         to prevent crashes during project load operations.
         """
         # CRITICAL: Check lock BEFORE any processing
         if self._updating_current_layer:
+            return
+        
+        # v2.9.19: CRITICAL - Ensure we have a valid layer when layers exist in project
+        # Never allow current_layer to be None if PROJECT_LAYERS has layers
+        layer = self._ensure_valid_current_layer(layer)
+        
+        # If still None after _ensure_valid_current_layer, truly no layers available
+        if layer is None:
+            if len(self.PROJECT_LAYERS) > 0:
+                logger.error("v2.9.19: ❌ CRITICAL - Could not find valid layer despite PROJECT_LAYERS having entries!")
+            else:
+                logger.debug("v2.9.19: No layers in project - current_layer remains None")
+            # Don't process further if no valid layer
             return
         
         # CACHE INVALIDATION: When changing layers, we don't need to invalidate 
@@ -11011,13 +11098,39 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     
                     return
                 else:
-                    # No project or no layers - disable UI
+                    # No project or no layers - BUT check if we still have a valid current_layer
                     logger.warning(f"Cannot update UI: PROJECT is None={self.PROJECT is None}, PROJECT_LAYERS empty={len(list(self.PROJECT_LAYERS)) == 0}")
-                    self.has_loaded_layers = False
-                    self.current_layer = None  # STABILITY FIX: Reset current_layer when no layers
-                    self.disconnect_widgets_signals()
-                    self._signals_connected = False
-                    self.set_widgets_enabled_state(False)
+                    
+                    # v2.9.23: CRITICAL - NEVER disable UI if current_layer is still valid
+                    # During transient states (filtering, layer operations), PROJECT_LAYERS can be temporarily empty
+                    # but current_layer is still valid. If we disable UI here, filtering becomes impossible!
+                    has_valid_current_layer = (self.current_layer is not None and self.current_layer.isValid())
+                    
+                    if has_valid_current_layer:
+                        # TRANSIENT STATE: PROJECT_LAYERS empty but current_layer valid
+                        # Keep UI ENABLED to allow continued operations (filter, unfilter, undo)
+                        logger.info(f"v2.9.23: ⚠️ TRANSIENT STATE: PROJECT_LAYERS empty but current_layer '{self.current_layer.name()}' valid - KEEPING UI ENABLED")
+                        
+                        # v2.9.23: CRITICAL - Ensure signals are connected in transient state
+                        # If signals were disconnected, we MUST reconnect them or buttons won't work!
+                        if not self._signals_connected:
+                            logger.warning("v2.9.23: ⚠️ TRANSIENT STATE: Signals were disconnected - RECONNECTING NOW")
+                            self.connect_widgets_signals()
+                            self._signals_connected = True
+                            logger.info("v2.9.23: ✅ Signals reconnected in transient state")
+                        
+                        # Don't touch has_loaded_layers or widget state
+                        # This allows the user to continue working
+                        return
+                    else:
+                        # TRULY NO LAYERS: Both PROJECT_LAYERS empty AND no valid current_layer
+                        # NOW we can safely disable the UI
+                        logger.info("v2.9.23: No valid layers - disabling UI")
+                        self.has_loaded_layers = False
+                        self.current_layer = None
+                        self.disconnect_widgets_signals()
+                        self._signals_connected = False
+                        self.set_widgets_enabled_state(False)
                     # Update backend indicator to show waiting state (badge style)
                     if self.backend_indicator_label:
                         self.backend_indicator_label.setText("...")

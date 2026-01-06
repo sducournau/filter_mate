@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 build/
 dist/
+!dist/filter_mate_v*.zip
 *.egg-info/
 
 # PyCharm
@@ -53,6 +54,9 @@ website/package-lock.json
 diagnose_*.py
 test_*.py
 !tests/test_*.py
+
+# BMAD output (artifacts d'implémentation)
+_bmad-output/
 
 # SQLite temporary files
 *.sqlite-wal

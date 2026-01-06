@@ -386,7 +386,7 @@ def reload_config():
         QgsMessageLog.logMessage(
             f"Configuration reloaded from: {config_json_path}",
             "FilterMate",
-            Qgis.Info
+            Qgis.Info  # DEBUG
         )
         
         return True
