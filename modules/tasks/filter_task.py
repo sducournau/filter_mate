@@ -2086,7 +2086,8 @@ class FilterEngineTask(QgsTask):
         # ================================================================
         # MODE ALL-FEATURES: Custom Selection sans filtre valide
         # ================================================================
-        # Quand skip_source_filter=True, utiliser TOUTES les features de la couche source
+        # Quand skip_source_filter=True (but not single_selection_mode), 
+        # utiliser TOUTES les features de la couche source
         # sans modifier son subset (garder l'existant)
         # ================================================================
         if skip_source_filter:
@@ -2235,6 +2236,8 @@ class FilterEngineTask(QgsTask):
             self.is_field_expression[0] is True
         )
         
+        # v2.9.23: Source layer is ALWAYS filtered according to active groupbox mode
+        # (single_selection, multiple_selection, or custom_selection with valid filter)
         if is_field_based_mode:
             # CRITICAL: In field-based mode, ALWAYS keep existing subset
             # The source layer stays filtered by its current subset (or no filter)
@@ -3850,10 +3853,29 @@ class FilterEngineTask(QgsTask):
         else:
             # FINAL FALLBACK: No task_features, no subset, no selection, no field mode
             # Use all features from source layer (this should be rare)
+            # v2.9.20: This is often a BUG - should not happen in single_selection mode!
             logger.info(f"=== prepare_spatialite_source_geom (FALLBACK MODE) ===")
             logger.info(f"  No specific mode matched - using all source features")
+            from qgis.core import QgsMessageLog, Qgis
+            QgsMessageLog.logMessage(
+                f"⚠️ FALLBACK MODE: Using ALL {self.source_layer.featureCount()} features from source layer",
+                "FilterMate", Qgis.Warning
+            )
+            QgsMessageLog.logMessage(
+                f"   This may cause incorrect filtering! Expected: single feature selected.",
+                "FilterMate", Qgis.Warning
+            )
+            QgsMessageLog.logMessage(
+                f"   Debug: has_task_features={has_task_features}, has_subset={has_subset}, has_selection={has_selection}, is_field_based_mode={is_field_based_mode}",
+                "FilterMate", Qgis.Warning
+            )
             features = list(self.source_layer.getFeatures())
             logger.info(f"  Retrieved {len(features)} features from source layer")
+            # v2.9.20: CRITICAL WARNING - If this is single_selection mode, using all features is WRONG!
+            # The user selected ONE feature but the system is using ALL features
+            if len(features) > 10:
+                logger.warning(f"  ⚠️ POTENTIAL BUG: FALLBACK MODE with {len(features)} features!")
+                logger.warning(f"  If you selected a single feature, this is a bug - source geometry will be too large!")
         
         # FALLBACK: If features list is empty, use all visible features from source layer
         # FIX v2.4.22: Also check for expression/subset that should be applied
@@ -11204,9 +11226,15 @@ class FilterEngineTask(QgsTask):
         FIX v2.6.5: PERFORMANCE - Only refresh layers involved in filtering,
         not ALL project layers. Skip updateExtents() for large layers.
         
+        FIX v2.9.11: REMOVED stopRendering() for Spatialite/OGR layers
+        For large FID filters (100k+ FIDs), rendering can take 30+ seconds.
+        Calling stopRendering() after the 1500ms delay cancels in-progress
+        rendering, causing "Building features list was canceled" messages
+        and empty/incomplete layer display.
+        
         This method:
-        1. Stops any ongoing rendering to avoid conflicts
-        2. Forces reload for layers with complex filters
+        1. Checks if only file-based layers are filtered (skip stopRendering)
+        2. Forces reload for layers with complex filters (PostgreSQL only)
         3. Triggers repaint for filtered layers (skip expensive updateExtents for large layers)
         4. Performs a single final canvas refresh
         """
@@ -11215,8 +11243,27 @@ class FilterEngineTask(QgsTask):
             
             canvas = iface.mapCanvas()
             
-            # Step 1: Stop any ongoing rendering to get a clean slate
-            canvas.stopRendering()
+            # v2.9.11: Only stop rendering for PostgreSQL layers
+            # For OGR/Spatialite with large FID filters, stopRendering() cancels
+            # in-progress feature loading, causing incomplete display
+            has_postgres_filtered = False
+            for layer_id, layer in QgsProject.instance().mapLayers().items():
+                try:
+                    if layer.type() == 0 and layer.providerType() == 'postgres':
+                        subset = layer.subsetString() or ''
+                        if subset:
+                            has_postgres_filtered = True
+                            break
+                except Exception:
+                    pass
+            
+            if has_postgres_filtered:
+                # PostgreSQL layers benefit from stopRendering() to clear stale cache
+                canvas.stopRendering()
+                logger.debug("stopRendering() called for PostgreSQL layers")
+            else:
+                # Skip stopRendering() for OGR/Spatialite to avoid canceling feature loading
+                logger.debug("Skipping stopRendering() for file-based layers")
             
             layers_reloaded = 0
             layers_repainted = 0
@@ -11501,6 +11548,32 @@ class FilterEngineTask(QgsTask):
         
         super().cancel()
 
+    def _restore_source_layer_selection(self):
+        """
+        v2.9.23: Restore the source layer selection after filter/unfilter.
+        
+        This ensures the selected features remain visually highlighted on the map
+        after the filtering operation completes.
+        """
+        if not self.source_layer or not is_valid_layer(self.source_layer):
+            return
+        
+        # Get feature FIDs from task parameters
+        feature_fids = self.task_parameters.get("task", {}).get("feature_fids", [])
+        
+        # Fallback: extract FIDs from features list if feature_fids not available
+        if not feature_fids:
+            task_features = self.task_parameters.get("task", {}).get("features", [])
+            if task_features:
+                feature_fids = [f.id() for f in task_features if hasattr(f, 'id') and f.id() is not None]
+        
+        if feature_fids:
+            try:
+                # Select features by their IDs
+                self.source_layer.selectByIds(feature_fids)
+                logger.info(f"✓ Restored source layer selection: {len(feature_fids)} feature(s) selected")
+            except Exception as e:
+                logger.debug(f"Could not restore selection: {e}")
 
     def finished(self, result):
         result_action = None
@@ -11771,6 +11844,13 @@ class FilterEngineTask(QgsTask):
                         message_category,
                         f'Filter task : {result_action}',
                         Qgis.Success)
+                    
+                    # v2.9.23: Restore source layer selection after filter/unfilter
+                    # This keeps the selected features visually highlighted on the map
+                    try:
+                        self._restore_source_layer_selection()
+                    except Exception as sel_err:
+                        logger.debug(f"Could not restore source layer selection: {sel_err}")
                     
                     # FIX v2.5.12: Ensure canvas is refreshed after successful filter operation
                     # This guarantees filtered features are visible on the map

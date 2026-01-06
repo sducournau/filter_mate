@@ -37,6 +37,7 @@ EXCLUDE_PATTERNS = [
     ".idea",
     ".serena",
     ".bmad-core",
+    "_bmad",
     ".editorconfig",
     ".mypy_cache",
     ".pytest_cache",

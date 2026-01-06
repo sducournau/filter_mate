@@ -4,6 +4,32 @@
 
 ## Critical Bug Fixes (v2.9.x Series - January 2026)
 
+### v2.9.24 - Force Reconnect ACTION Signals After Filtering (January 6, 2026)
+
+**Status:** ✅ FIXED
+
+**Problem:**
+- After filtering, clicking Filter/Unfilter/Undo/Redo buttons does nothing
+- "Les actions ne déclenchent plus de tâches après un filtre"
+- Buttons appear active but clicking them triggers no task
+
+**Root Cause:**
+- The signal connection cache (`_signal_connection_states`) becomes desynchronized with actual Qt signal state
+- Cache says signals are connected (True) but actual signals are disconnected
+- `connect_widgets_signals()` checks cache first and skips reconnection if cache says True
+
+**Solution:**
+- New method `force_reconnect_action_signals()` that bypasses the cache
+- Clears cache entries for ACTION signals before checking real state
+- Uses `changeSignalState()` which calls `isSignalConnected()` for actual state
+- Called in `filter_engine_task_completed()` finally block
+
+**Files Changed:**
+- `filter_mate_dockwidget.py` - New `force_reconnect_action_signals()` method
+- `filter_mate_app.py` - Call in `filter_engine_task_completed()` finally block
+
+---
+
 ### v2.9.8 - Dissolve Optimization for WKT Creation (January 6, 2026)
 
 **Status:** ✅ FIXED

@@ -3058,6 +3058,9 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             except Exception:
                 pass
             
+            # v2.9.19: FIX - Get feature count for optimization threshold check
+            feature_count = layer.featureCount()
+            
             # v2.6.5: Check for very large WKT and use bounding box pre-filter
             # This dramatically reduces the number of geometry comparisons needed
             # v2.6.8: CRITICAL FIX - Validate geometry column exists in table
@@ -3225,15 +3228,34 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             )
             self.log_info(f"  → Found {len(matching_fids)} matching features via direct SQL")
             
+            # v2.9.19: Get source WKT BEFORE cache intersection check
+            # This is needed to verify if the source geometry matches the cached one
+            source_wkt = ""
+            predicates_list = []
+            buffer_val = 0.0
+            if hasattr(self, 'task_params') and self.task_params:
+                infos = self.task_params.get('infos', {})
+                source_wkt = infos.get('source_geom_wkt', '')
+                # v2.8.12: FIX - geometric_predicates can be list or dict
+                geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
+                if isinstance(geom_preds, dict):
+                    predicates_list = list(geom_preds.keys())
+                elif isinstance(geom_preds, list):
+                    predicates_list = geom_preds
+                else:
+                    predicates_list = []
+                buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
+            
             # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+            # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
             step_number = 1
             if SPATIALITE_CACHE_AVAILABLE and old_subset:
-                # Check if this is a re-filter (multi-step)
-                previous_fids = get_previous_filter_fids(layer)
+                # Check if this is a re-filter (multi-step) with SAME source geometry
+                previous_fids = get_previous_filter_fids(layer, source_wkt)
                 if previous_fids is not None:
                     original_count = len(matching_fids)
-                    # Intersect new results with previous
-                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                    # Intersect new results with previous (only if same source geom)
+                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids), source_wkt)
                     matching_fids = list(matching_fids_set)
                     self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
                     QgsMessageLog.logMessage(
@@ -3248,22 +3270,6 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             )
             if SPATIALITE_CACHE_AVAILABLE and matching_fids:
                 try:
-                    source_wkt = ""
-                    predicates_list = []
-                    buffer_val = 0.0
-                    if hasattr(self, 'task_params') and self.task_params:
-                        infos = self.task_params.get('infos', {})
-                        source_wkt = infos.get('source_geom_wkt', '')
-                        # v2.8.12: FIX - geometric_predicates can be list or dict
-                        geom_preds = self.task_params.get('filtering', {}).get('geometric_predicates', [])
-                        if isinstance(geom_preds, dict):
-                            predicates_list = list(geom_preds.keys())
-                        elif isinstance(geom_preds, list):
-                            predicates_list = geom_preds
-                        else:
-                            predicates_list = []
-                        buffer_val = self.task_params.get('filtering', {}).get('buffer_value', 0.0)
-                    
                     cache_key = store_filter_fids(
                         layer=layer,
                         fids=matching_fids,
@@ -3288,6 +3294,21 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                 # v2.6.9: FIX - Use unquoted 'fid = -1' for OGR/GeoPackage compatibility
                 fid_expression = 'fid = -1'  # No valid FID is -1
                 self.log_info(f"  → No matching features, applying: {fid_expression}")
+            elif len(matching_fids) >= feature_count * 0.99 and feature_count > 10000:
+                # v2.9.11: OPTIMIZATION - Skip filter when 99%+ features match
+                # Applying a filter for 99%+ of features is wasteful - the filter expression
+                # can be huge (millions of FIDs), slow to parse, and provides no real filtering.
+                unmatched_count = feature_count - len(matching_fids)
+                match_ratio = len(matching_fids) / feature_count * 100
+                self.log_info(f"⚡ OPTIMIZATION: {match_ratio:.2f}% of features matched ({len(matching_fids):,}/{feature_count:,})")
+                self.log_info(f"   Only {unmatched_count:,} features excluded - skipping expensive FID filter")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"⚡ {layer.name()}: {match_ratio:.1f}% match - filter skipped (source geometry covers most of layer)",
+                    "FilterMate", Qgis.Info
+                )
+                # Clear filter to show all features (most efficient)
+                fid_expression = ''
             elif len(matching_fids) >= self.LARGE_FID_TABLE_THRESHOLD:
                 # v2.8.9: FIX - Use range-based filter instead of FID table subquery
                 # The subquery "fid IN (SELECT fid FROM _fm_fids_xxx)" does NOT work
@@ -4003,14 +4024,15 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
             )
             
             # v2.8.11: MULTI-STEP FILTERING - Intersect with previous cache if exists
+            # v2.9.19: FIX - Pass source_wkt to only intersect if geometry matches
             step_number = 1
             if SPATIALITE_CACHE_AVAILABLE and old_subset:
-                # Check if this is a re-filter (multi-step)
-                previous_fids = get_previous_filter_fids(layer)
+                # Check if this is a re-filter (multi-step) with SAME source geometry
+                previous_fids = get_previous_filter_fids(layer, source_wkt)
                 if previous_fids is not None:
                     original_count = len(matching_fids)
-                    # Intersect new results with previous
-                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids))
+                    # Intersect new results with previous (only if same source geom)
+                    matching_fids_set, step_number = intersect_filter_fids(layer, set(matching_fids), source_wkt)
                     matching_fids = list(matching_fids_set)
                     self.log_info(f"  🔄 Multi-step intersection: {original_count} ∩ {len(previous_fids)} = {len(matching_fids)}")
                     QgsMessageLog.logMessage(
@@ -4097,6 +4119,22 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
                     f"⚠️ {layer.name()}: 0 features matched - applying empty filter (fid = -1)",
                     "FilterMate", Qgis.Warning
                 )
+            elif len(matching_fids) >= feature_count * 0.99 and feature_count > 10000:
+                # v2.9.11: OPTIMIZATION - Skip filter when 99%+ features match
+                # Applying a filter for 99%+ of features is wasteful - the filter expression
+                # can be huge (millions of FIDs), slow to parse, and provides no real filtering.
+                # Instead, clear any existing filter to show all features.
+                unmatched_count = feature_count - len(matching_fids)
+                match_ratio = len(matching_fids) / feature_count * 100
+                self.log_info(f"⚡ OPTIMIZATION: {match_ratio:.2f}% of features matched ({len(matching_fids):,}/{feature_count:,})")
+                self.log_info(f"   Only {unmatched_count:,} features excluded - skipping expensive FID filter")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"⚡ {layer.name()}: {match_ratio:.1f}% match - filter skipped (source geometry covers most of layer)",
+                    "FilterMate", Qgis.Info
+                )
+                # Clear filter to show all features (most efficient)
+                fid_expression = ''
             elif len(matching_fids) >= self.LARGE_FID_TABLE_THRESHOLD:
                 # v2.8.9: FIX - Use range-based filter instead of FID table subquery
                 # The subquery "fid IN (SELECT fid FROM _fm_fids_xxx)" does NOT work

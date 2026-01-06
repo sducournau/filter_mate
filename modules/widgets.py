@@ -191,6 +191,11 @@ class PopulateListEngineTask(QgsTask):
         # Store the layer_id at creation time to detect if layer changed
         self._created_layer_id = self.layer.id() if self.layer else None
         
+        # CRASH FIX (v2.8.17): Cache layer name at task creation for safe logging in background thread.
+        # Accessing self.layer.name() during task cancellation can cause access violation
+        # if the layer C++ object has been deleted by the main thread.
+        self._cached_layer_name = self.layer.name() if self.layer else "Unknown"
+        
         # Vérifier que le layer existe toujours dans list_widgets
         if self.layer is None or self.layer.id() not in self.parent.list_widgets:
             self.identifier_field_name = None
@@ -230,10 +235,10 @@ class PopulateListEngineTask(QgsTask):
             
             # Test if layer C++ object is still valid before proceeding
             try:
-                _ = self.layer.name()  # Force access to C++ object
+                _ = self._cached_layer_name  # Force access to C++ object
                 layer_is_valid = self.layer.isValid()
                 if not layer_is_valid:
-                    logger.debug(f'Layer "{self.layer.name()}" is no longer valid, skipping task: {self.action}')
+                    logger.debug(f'Layer "{self._cached_layer_name}" is no longer valid, skipping task: {self.action}')
                     return True
             except (RuntimeError, AttributeError) as layer_err:
                 # C++ object already deleted - common with temporary Processing output layers
@@ -254,8 +259,8 @@ class PopulateListEngineTask(QgsTask):
             # This prevents race conditions where task was created for layer A but parent now has layer B
             if self._created_layer_id and self.parent.layer is not None:
                 if self.parent.layer.id() != self._created_layer_id:
-                    # Get layer names for more informative message
-                    old_layer_name = self.layer.name() if self.layer else "Unknown"
+                    # Get layer names for more informative message - use cached name to avoid crash
+                    old_layer_name = self._cached_layer_name
                     new_layer_name = self.parent.layer.name() if self.parent.layer else "Unknown"
                     logger.debug(f'Layer changed since task creation (was {old_layer_name}_{self._created_layer_id[:8]}, now {new_layer_name}_{self.parent.layer.id()[:8]}), skipping task: {self.action}')
                     # Return True for graceful skip (not an error, user just switched layers)
@@ -285,7 +290,7 @@ class PopulateListEngineTask(QgsTask):
             # and should not be treated as an error. When tasks with ParentDependsOnSubTask
             # are canceled, returning True ensures the parent task also completes gracefully.
             if self.isCanceled():
-                logger.debug(f'Task "{self.action}" was canceled for layer "{self.layer.name() if self.layer else "Unknown"}" - completing gracefully')
+                logger.debug(f'Task "{self.action}" was canceled for layer "{self._cached_layer_name}" - completing gracefully')
             
             return True
         
@@ -334,7 +339,7 @@ class PopulateListEngineTask(QgsTask):
                 # SQLite concurrent access error - log at DEBUG level (expected during high concurrency)
                 logger.debug(
                     f'PopulateListEngineTask: SQLite access error during "{self.action}" for '
-                    f'layer "{self.layer.name() if self.layer else "None"}". '
+                    f'layer "{self._cached_layer_name}". '
                     f'This is typically transient during multi-layer filtering. Error: {e}'
                 )
                 # Return True for transient errors to avoid "Task failed" message in QGIS
@@ -351,7 +356,7 @@ class PopulateListEngineTask(QgsTask):
                 # PostgreSQL connection error - log at DEBUG level (transient during cleanup)
                 logger.debug(
                     f'PopulateListEngineTask: PostgreSQL connection error during "{self.action}" for '
-                    f'layer "{self.layer.name() if self.layer else "None"}". '
+                    f'layer "{self._cached_layer_name}". '
                     f'This is typically transient when connection is lost. Error: {e}'
                 )
                 # Return True for transient errors to avoid "Task failed" message in QGIS
@@ -359,7 +364,7 @@ class PopulateListEngineTask(QgsTask):
             else:
                 # Other unexpected errors - log fully
                 logger.error(f'PopulateListEngineTask failed for action "{self.action}": {e}')
-                logger.error(f'  Layer: {self.layer.name() if self.layer else "None"}')
+                logger.error(f'  Layer: {self._cached_layer_name}')
                 logger.error(f'  Traceback:\n{traceback.format_exc()}')
             
             return False
@@ -400,7 +405,7 @@ class PopulateListEngineTask(QgsTask):
                 return
             
             # Test if layer C++ object is still valid
-            layer_name = self.layer.name()
+            layer_name = self._cached_layer_name
             layer_is_valid = self.layer.isValid()
             
             if not layer_is_valid:
@@ -441,7 +446,7 @@ class PopulateListEngineTask(QgsTask):
         # Check if list widget exists for this layer (may have been removed/changed)
         layer_id = self.layer.id()
         if layer_id not in self.parent.list_widgets:
-            logger.warning(f"buildFeaturesList: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            logger.warning(f"buildFeaturesList: Widget not found for layer {self._cached_layer_name} ({layer_id[:8]}...), skipping task")
             return True  # Graceful skip, not an error
 
         if self.parent.list_widgets[layer_id].getTotalFeaturesListCount() == 0 and total_features_list_count > 0:
@@ -457,7 +462,7 @@ class PopulateListEngineTask(QgsTask):
             
             # Check identifier field
             if self.identifier_field_name and self.identifier_field_name not in field_names:
-                logger.warning(f"Identifier field '{self.identifier_field_name}' not found in layer '{self.layer.name()}'. Available fields: {field_names}")
+                logger.warning(f"Identifier field '{self.identifier_field_name}' not found in layer '{self._cached_layer_name}'. Available fields: {field_names}")
                 return
             
             # Check display expression field (only when is_field_flag is True)
@@ -475,7 +480,7 @@ class PopulateListEngineTask(QgsTask):
                 
                 if fallback_field:
                     logger.info(
-                        f"Display field '{self.display_expression}' not found in layer '{self.layer.name()}'. "
+                        f"Display field '{self.display_expression}' not found in layer '{self._cached_layer_name}'. "
                         f"Using fallback field '{fallback_field}'."
                     )
                     # Update the display expression to use the fallback
@@ -485,7 +490,7 @@ class PopulateListEngineTask(QgsTask):
                         self.parent.list_widgets[self.layer.id()].setDisplayExpression(fallback_field)
                 else:
                     logger.error(
-                        f"Display field '{self.display_expression}' not found in layer '{self.layer.name()}' "
+                        f"Display field '{self.display_expression}' not found in layer '{self._cached_layer_name}' "
                         f"and no fallback field available. Cannot build features list."
                     )
                     return
@@ -525,7 +530,7 @@ class PopulateListEngineTask(QgsTask):
                             # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                             # when main thread modifies layer variables during setLayerVariable()
                             if self.isCanceled():
-                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                                 return
                             arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                             features_list.append(arr)
@@ -534,7 +539,7 @@ class PopulateListEngineTask(QgsTask):
                         
                         # Check if we got any features, handle empty result
                         if len(features_list) == 0:
-                            logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self.layer.name()}'")
+                            logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self._cached_layer_name}'")
                             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
                             return
                     else:
@@ -548,13 +553,13 @@ class PopulateListEngineTask(QgsTask):
                             if context is None:
                                 # Fallback: create minimal context without layer (less feature-rich but thread-safe)
                                 context = QgsExpressionContext()
-                                logger.debug(f"Using minimal expression context for layer '{self.layer.name()}'")
+                                logger.debug(f"Using minimal expression context for layer '{self._cached_layer_name}'")
 
                             # Single-pass iteration with incremental progress
                             for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                                 # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                                 if self.isCanceled():
-                                    logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                    logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                                     return
                                 context.setFeature(feature)
                                 result = display_expression.evaluate(context)
@@ -575,17 +580,17 @@ class PopulateListEngineTask(QgsTask):
                             
                             # Check if we got any features, handle empty result
                             if len(features_list) == 0:
-                                logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self.layer.name()}'")
+                                logger.debug(f"buildFeaturesList: No features match filter expression for layer '{self._cached_layer_name}'")
                                 self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
                                 return
                         else:
                             # Invalid expression - log and fallback to identifier field
                             expr_display = repr(self.display_expression) if self.display_expression else '<empty>'
-                            logger.debug(f"Invalid/empty display expression {expr_display} for layer '{self.layer.name()}', using identifier field")
+                            logger.debug(f"Invalid/empty display expression {expr_display} for layer '{self._cached_layer_name}', using identifier field")
                             for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                                 # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                                 if self.isCanceled():
-                                    logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                    logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                                     return
                                 id_value = get_feature_attribute(feature, self.identifier_field_name)
                                 arr = [id_value, id_value]
@@ -619,7 +624,7 @@ class PopulateListEngineTask(QgsTask):
                     for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                         # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                         if self.isCanceled():
-                            logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                            logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                             return
                         arr = [get_feature_attribute(feature, self.display_expression), get_feature_attribute(feature, self.identifier_field_name)]
                         features_list.append(arr)
@@ -628,7 +633,7 @@ class PopulateListEngineTask(QgsTask):
                     
                     # Handle empty result
                     if len(features_list) == 0:
-                        logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                        logger.debug(f"buildFeaturesList: No features available for layer '{self._cached_layer_name}'")
                         self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
                         return
                 else:
@@ -642,12 +647,12 @@ class PopulateListEngineTask(QgsTask):
                         if context is None:
                             # Fallback: create minimal context without layer (less feature-rich but thread-safe)
                             context = QgsExpressionContext()
-                            logger.debug(f"Using minimal expression context for layer '{self.layer.name()}'")
+                            logger.debug(f"Using minimal expression context for layer '{self._cached_layer_name}'")
 
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                             # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                             if self.isCanceled():
-                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                                 return
                             context.setFeature(feature)
                             result = display_expression.evaluate(context)
@@ -668,17 +673,17 @@ class PopulateListEngineTask(QgsTask):
                         
                         # Handle empty result
                         if len(features_list) == 0:
-                            logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                            logger.debug(f"buildFeaturesList: No features available for layer '{self._cached_layer_name}'")
                             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
                             return
                     else:
                         # Invalid expression - log and fallback to identifier field
                         expr_display = repr(self.display_expression) if self.display_expression else '<empty>'
-                        logger.debug(f"Invalid/empty display expression {expr_display} for layer '{self.layer.name()}', using identifier field")
+                        logger.debug(f"Invalid/empty display expression {expr_display} for layer '{self._cached_layer_name}', using identifier field")
                         for index, feature in enumerate(layer_features_source.getFeatures(filter_expression_request)):
                             # CRASH FIX (v2.3.20): Check for task cancellation to prevent access violation
                             if self.isCanceled():
-                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                                logger.debug(f"buildFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                                 return
                             id_value = get_feature_attribute(feature, self.identifier_field_name)
                             arr = [id_value, id_value]
@@ -688,13 +693,13 @@ class PopulateListEngineTask(QgsTask):
                         
                         # Handle empty result
                         if len(features_list) == 0:
-                            logger.debug(f"buildFeaturesList: No features available for layer '{self.layer.name()}'")
+                            logger.debug(f"buildFeaturesList: No features available for layer '{self._cached_layer_name}'")
                             self.parent.list_widgets[self.layer.id()].setFeaturesList(features_list)
                             return
 
             # CRASH FIX (v2.3.20): Final cancellation check before widget updates
             if self.isCanceled():
-                logger.debug(f"buildFeaturesList: Task cancelled before final updates for layer '{self.layer.name()}'")
+                logger.debug(f"buildFeaturesList: Task cancelled before final updates for layer '{self._cached_layer_name}'")
                 return
             
             # THREAD SAFETY FIX (v2.3.12): Use thread-safe layer_features_source instead of iterating layer.
@@ -705,7 +710,7 @@ class PopulateListEngineTask(QgsTask):
             nonSubset_features_list = []
             for feature in safe_iterate_features(layer_features_source):
                 if self.isCanceled():
-                    logger.debug(f"buildFeaturesList: Task cancelled during nonSubset iteration for layer '{self.layer.name()}'")
+                    logger.debug(f"buildFeaturesList: Task cancelled during nonSubset iteration for layer '{self._cached_layer_name}'")
                     return
                 nonSubset_features_list.append(get_feature_attribute(feature, self.identifier_field_name))
             
@@ -726,7 +731,7 @@ class PopulateListEngineTask(QgsTask):
         # Check if list widget exists for this layer (may have been removed/changed)
         layer_id = self.layer.id()
         if layer_id not in self.parent.list_widgets:
-            logger.warning(f"loadFeaturesList: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            logger.warning(f"loadFeaturesList: Widget not found for layer {self._cached_layer_name} ({layer_id[:8]}...), skipping task")
             return  # Graceful skip, not an error
 
         current_selected_features_list = [feature[1] for feature in self.parent.list_widgets[layer_id].getSelectedFeaturesList()]
@@ -740,16 +745,16 @@ class PopulateListEngineTask(QgsTask):
             nonSubset_features_list = []
             for feature in safe_iterate_features(layer_features_source):
                 if self.isCanceled():
-                    logger.debug(f"loadFeaturesList: Task cancelled during iteration for layer '{self.layer.name()}'")
+                    logger.debug(f"loadFeaturesList: Task cancelled during iteration for layer '{self._cached_layer_name}'")
                     return
                 nonSubset_features_list.append(get_feature_attribute(feature, self.identifier_field_name))
         else:
-            logger.warning(f"loadFeaturesList: No data provider for layer '{self.layer.name()}'")
+            logger.warning(f"loadFeaturesList: No data provider for layer '{self._cached_layer_name}'")
             nonSubset_features_list = []
         
         # CRASH FIX (v2.3.20): Check cancellation before UI operations
         if self.isCanceled():
-            logger.debug(f"loadFeaturesList: Task cancelled before UI operations for layer '{self.layer.name()}'")
+            logger.debug(f"loadFeaturesList: Task cancelled before UI operations for layer '{self._cached_layer_name}'")
             return
         
         if new_list is True:
@@ -765,14 +770,14 @@ class PopulateListEngineTask(QgsTask):
         
         # CRITICAL FIX: Prevent division by zero when list is empty
         if total_count == 0:
-            logger.warning(f"loadFeaturesList: No features to load for layer '{self.layer.name()}'")
+            logger.warning(f"loadFeaturesList: No features to load for layer '{self._cached_layer_name}'")
             self.updateFeatures()
             return
         
         for index, it in enumerate(list_to_load):
             # CRASH FIX (v2.3.20): Check for task cancellation during list iteration
             if self.isCanceled():
-                logger.debug(f"loadFeaturesList: Task cancelled during list loading for layer '{self.layer.name()}'")
+                logger.debug(f"loadFeaturesList: Task cancelled during list loading for layer '{self._cached_layer_name}'")
                 return
             lwi = QListWidgetItem(str(it[0]))
             lwi.setData(0,str(it[0]))
@@ -810,7 +815,7 @@ class PopulateListEngineTask(QgsTask):
         # Check if list widget exists for this layer (may have been removed/changed)
         layer_id = self.layer.id()
         if layer_id not in self.parent.list_widgets:
-            logger.warning(f"filterFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            logger.warning(f"filterFeatures: Widget not found for layer {self._cached_layer_name} ({layer_id[:8]}...), skipping task")
             return  # Graceful skip, not an error
 
         total_count = self.parent.list_widgets[layer_id].count()
@@ -849,7 +854,7 @@ class PopulateListEngineTask(QgsTask):
         # Check if list widget exists for this layer (may have been removed/changed)
         layer_id = self.layer.id()
         if layer_id not in self.parent.list_widgets:
-            logger.warning(f"selectAllFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            logger.warning(f"selectAllFeatures: Widget not found for layer {self._cached_layer_name} ({layer_id[:8]}...), skipping task")
             return  # Graceful skip, not an error
 
         # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of layer
@@ -926,7 +931,7 @@ class PopulateListEngineTask(QgsTask):
         # Check if list widget exists for this layer (may have been removed/changed)
         layer_id = self.layer.id()
         if layer_id not in self.parent.list_widgets:
-            logger.warning(f"deselectAllFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            logger.warning(f"deselectAllFeatures: Widget not found for layer {self._cached_layer_name} ({layer_id[:8]}...), skipping task")
             return  # Graceful skip, not an error
 
         # THREAD SAFETY FIX (v2.3.12): Use thread-safe featureSource() instead of layer
@@ -1002,7 +1007,7 @@ class PopulateListEngineTask(QgsTask):
         # Check if list widget exists for this layer (may have been removed/changed)
         layer_id = self.layer.id()
         if layer_id not in self.parent.list_widgets:
-            logger.warning(f"updateFeatures: Widget not found for layer {self.layer.name()} ({layer_id[:8]}...), skipping task")
+            logger.warning(f"updateFeatures: Widget not found for layer {self._cached_layer_name} ({layer_id[:8]}...), skipping task")
             return  # Graceful skip, not an error
 
         selection_data = []
@@ -1044,7 +1049,7 @@ class PopulateListEngineTask(QgsTask):
                 # FIX v2.8.16: Safe layer name extraction - handle temporary/deleted layers
                 try:
                     if self.layer and hasattr(self.layer, 'name'):
-                        layer_name = self.layer.name()
+                        layer_name = self._cached_layer_name
                     else:
                         layer_name = 'Unknown (layer deleted)'
                 except:
@@ -1058,7 +1063,7 @@ class PopulateListEngineTask(QgsTask):
                 # FIX v2.8.16: Safe layer name extraction and proper traceback handling
                 try:
                     if self.layer and hasattr(self.layer, 'name'):
-                        layer_name = self.layer.name()
+                        layer_name = self._cached_layer_name
                     else:
                         layer_name = 'Unknown (layer deleted)'
                 except:
@@ -1294,7 +1299,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 if pk_name is not None and self.layer.id() in self.list_widgets:
                     # Update identifier field name if it changed (important when reusing widgets)
                     if self.list_widgets[self.layer.id()].getIdentifierFieldName() != pk_name:
-                        logger.debug(f"Updating identifier field from '{self.list_widgets[self.layer.id()].getIdentifierFieldName()}' to '{pk_name}' for layer {self.layer.name()}")
+                        logger.debug(f"Updating identifier field from '{self.list_widgets[self.layer.id()].getIdentifierFieldName()}' to '{pk_name}' for layer {self._cached_layer_name}")
                         self.list_widgets[self.layer.id()].setIdentifierFieldName(pk_name)
                     
                     # CRITICAL: Clear stale display expression when reusing a widget
@@ -1303,7 +1308,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     if current_expr and current_expr != pk_name:
                         # Widget has an expression that's not the primary key
                         # Reset it to ensure it will be updated with correct layer_props expression
-                        logger.debug(f"Resetting stale display expression '{current_expr}' for reused widget of layer {self.layer.name()}")
+                        logger.debug(f"Resetting stale display expression '{current_expr}' for reused widget of layer {self._cached_layer_name}")
                         self.list_widgets[self.layer.id()].setDisplayExpression("")
                 elif self.layer.id() in self.list_widgets:
                     # FALLBACK: pk_name is None but widget was created with fallback identifier
@@ -1325,7 +1330,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     
                     # Force update if expression is different OR if widget was just created/reused
                     if current_expression != expected_expression or not current_expression:
-                        logger.debug(f"Updating display expression from '{current_expression}' to '{expected_expression}' for layer {self.layer.name()}")
+                        logger.debug(f"Updating display expression from '{current_expression}' to '{expected_expression}' for layer {self._cached_layer_name}")
                         self.setDisplayExpression(expected_expression)
                     else:
                         description = 'Loading features'
@@ -1376,7 +1381,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                 # Expression is empty, use identifier field as fallback
                 identifier_field = self.list_widgets[self.layer.id()].getIdentifierFieldName()
                 if identifier_field:
-                    logger.debug(f"Empty expression provided, using identifier field '{identifier_field}' for layer '{self.layer.name()}'")
+                    logger.debug(f"Empty expression provided, using identifier field '{identifier_field}' for layer '{self._cached_layer_name}'")
                     working_expression = identifier_field
                     self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
                 else:
@@ -1384,10 +1389,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     field_names = [field.name() for field in self.layer.fields()]
                     if field_names:
                         working_expression = field_names[0]
-                        logger.debug(f"No identifier field, using first field '{working_expression}' for layer '{self.layer.name()}'")
+                        logger.debug(f"No identifier field, using first field '{working_expression}' for layer '{self._cached_layer_name}'")
                         self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
                     else:
-                        logger.warning(f"No fields available for layer '{self.layer.name()}', cannot set display expression")
+                        logger.warning(f"No fields available for layer '{self._cached_layer_name}', cannot set display expression")
                         return
             elif QgsExpression(expression).isField():
                 working_expression = expression.replace('"', '')
@@ -1399,11 +1404,11 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     # Invalid expression, fall back to identifier field
                     identifier_field = self.list_widgets[self.layer.id()].getIdentifierFieldName()
                     if identifier_field:
-                        logger.debug(f"Invalid expression '{expression}', using identifier field '{identifier_field}' for layer '{self.layer.name()}'")
+                        logger.debug(f"Invalid expression '{expression}', using identifier field '{identifier_field}' for layer '{self._cached_layer_name}'")
                         working_expression = identifier_field
                         self.list_widgets[self.layer.id()].setExpressionFieldFlag(True)
                     else:
-                        logger.warning(f"Invalid expression and no identifier field for layer '{self.layer.name()}'")
+                        logger.warning(f"Invalid expression and no identifier field for layer '{self._cached_layer_name}'")
                         return
                 else:
                     working_expression = expression

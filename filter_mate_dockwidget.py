@@ -228,6 +228,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._pending_layers_update = False  # Flag to track if layers were updated before widgets_initialized
         self._plugin_busy = False  # Global flag to block operations during critical changes (project load, etc.)
         self._syncing_from_qgis = False  # Flag to prevent infinite recursion in QGIS ↔ widgets synchronization
+        self._filtering_in_progress = False  # v2.9.25: CRITICAL - Protect current_layer during filtering operations
         
         # Flag to track if LAYER_TREE_VIEW signal is connected (for bidirectional sync)
         self._layer_tree_view_signal_connected = False
@@ -320,6 +321,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Cache stores selected features and pre-computed bounding boxes per groupbox
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
         logger.debug("Initialized exploring features cache")
+        
+        # v2.9.20: Track last selected feature ID for single_selection mode
+        # This allows recovery when QgsFeaturePickerWidget loses its selection after layer refresh
+        self._last_single_selection_fid = None
+        self._last_single_selection_layer_id = None
 
         self.predicates = None
         self.buffer_property_has_been_init = False
@@ -1418,6 +1424,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Consistent left margin (0) to align all vertical bars
                     layout.setContentsMargins(0, 0, 0, 0)
                     layout.setSpacing(4)
+            
+            # CRITICAL FIX: Configure column stretch for gridLayout_main_actions
+            # Column 0 = widget_exploring_keys (fixed width), Column 1 = groupboxes (should expand)
+            if hasattr(self, 'gridLayout_main_actions'):
+                self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys column: no stretch (fixed)
+                self.gridLayout_main_actions.setColumnStretch(1, 1)  # Content column: takes remaining space
+            
+            # Also ensure gridLayout_main_header expands properly
+            if hasattr(self, 'gridLayout_main_header'):
+                self.gridLayout_main_header.setColumnStretch(0, 1)  # Takes all available space
             
             # Apply consistent styling to parent widget containers
             parent_widgets = [
@@ -6490,6 +6506,74 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         logger.debug(f"Could not disconnect signal for {widget_group}.{widget}: {e}")
                         pass
 
+    def force_reconnect_action_signals(self):
+        """
+        Force reconnection of ACTION widget signals, bypassing the cache.
+        
+        v2.9.24: CRITICAL FIX for "actions don't trigger tasks after filter" bug.
+        
+        The signal connection cache (_signal_connection_states) can become desynchronized
+        with the actual signal state. This method bypasses the cache and forces direct
+        reconnection of ACTION signals (FILTER, UNFILTER, UNDO_FILTER, REDO_FILTER, EXPORT).
+        
+        Called after filter/unfilter/reset operations complete to ensure buttons work.
+        
+        Notes:
+            - Clears ACTION signal cache entries before reconnecting
+            - Uses changeSignalState directly for actual signal state check
+            - Safe to call multiple times (idempotent)
+            - Logs reconnection status for debugging
+        """
+        logger.info("v2.9.24: Force reconnecting ACTION signals (bypassing cache)")
+        
+        if 'ACTION' not in self.widgets:
+            logger.warning("v2.9.24: ACTION widget group not found")
+            return
+        
+        action_widgets = ['FILTER', 'UNFILTER', 'UNDO_FILTER', 'REDO_FILTER', 'EXPORT']
+        reconnected_count = 0
+        
+        for widget_name in action_widgets:
+            if widget_name not in self.widgets['ACTION']:
+                continue
+                
+            widget_obj = self.widgets['ACTION'][widget_name]
+            
+            for signal_tuple in widget_obj.get("SIGNALS", []):
+                if signal_tuple[-1] is None:
+                    continue  # Skip signals with no handler
+                    
+                signal_name = signal_tuple[0]
+                handler = signal_tuple[-1]
+                
+                # Clear cache entry to force re-evaluation
+                cache_key = f"ACTION.{widget_name}.{signal_name}"
+                if cache_key in self._signal_connection_states:
+                    del self._signal_connection_states[cache_key]
+                
+                try:
+                    # Use changeSignalState which checks actual signal state
+                    state = self.changeSignalState(
+                        ['ACTION', widget_name],
+                        signal_name,
+                        handler,
+                        'connect'
+                    )
+                    
+                    # Update cache with actual state
+                    self._signal_connection_states[cache_key] = state
+                    
+                    if state is True:
+                        reconnected_count += 1
+                        logger.debug(f"v2.9.24: ✅ {widget_name}.{signal_name} connected")
+                    else:
+                        logger.warning(f"v2.9.24: ⚠️ {widget_name}.{signal_name} state={state}")
+                        
+                except (AttributeError, RuntimeError, TypeError, SignalStateChangeError) as e:
+                    logger.error(f"v2.9.24: ❌ Failed to reconnect {widget_name}.{signal_name}: {e}")
+        
+        logger.info(f"v2.9.24: Reconnected {reconnected_count} ACTION signals")
+
 
     def manage_interactions(self):
         """
@@ -7136,13 +7220,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("exploring_identify_clicked: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return
 
             layer_id = self.current_layer.id()
@@ -7213,13 +7300,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("get_current_features: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return [], ''
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return [], ''
 
             layer_id = self.current_layer.id()
@@ -7261,9 +7351,47 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # typing/searching. This is normal behavior - only log at debug level.
                 # Only log at info level when a valid feature is actually selected.
                 if input is None or (hasattr(input, 'isValid') and not input.isValid()):
-                    # Normal behavior during search - log at debug level only
-                    logger.debug(f"   SINGLE_SELECTION: awaiting valid feature selection (input={type(input).__name__})")
-                    return [], ''
+                    # v2.9.20: Try to recover using saved FID from last valid selection
+                    layer_id = self.current_layer.id() if self.current_layer else None
+                    if (hasattr(self, '_last_single_selection_fid') 
+                        and self._last_single_selection_fid is not None
+                        and layer_id == self._last_single_selection_layer_id):
+                        
+                        saved_fid = self._last_single_selection_fid
+                        logger.info(f"   ⚠️ SINGLE_SELECTION: Widget lost selection, recovering from saved FID={saved_fid}")
+                        
+                        try:
+                            recovered_feature = self.current_layer.getFeature(saved_fid)
+                            if recovered_feature.isValid() and recovered_feature.hasGeometry():
+                                logger.info(f"   ✓ SINGLE_SELECTION: Recovered feature id={saved_fid}")
+                                input = recovered_feature
+                                # Continue with normal processing below
+                            else:
+                                logger.warning(f"   ⚠️ SINGLE_SELECTION: Recovered feature {saved_fid} is invalid or has no geometry")
+                                from qgis.core import QgsMessageLog, Qgis
+                                QgsMessageLog.logMessage(
+                                    f"⚠️ SINGLE_SELECTION: Could not recover feature {saved_fid}!",
+                                    "FilterMate", Qgis.Warning
+                                )
+                                return [], ''
+                        except Exception as e:
+                            logger.warning(f"   ⚠️ SINGLE_SELECTION: Error recovering feature {saved_fid}: {e}")
+                            from qgis.core import QgsMessageLog, Qgis
+                            QgsMessageLog.logMessage(
+                                f"⚠️ SINGLE_SELECTION: Error recovering feature: {e}",
+                                "FilterMate", Qgis.Warning
+                            )
+                            return [], ''
+                    else:
+                        # No saved FID to recover from
+                        logger.warning(f"   ⚠️ SINGLE_SELECTION: No valid feature in widget and no saved FID!")
+                        logger.warning(f"   This will cause FALLBACK MODE with ALL features!")
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"⚠️ SINGLE_SELECTION: Widget has no valid feature selected!",
+                            "FilterMate", Qgis.Warning
+                        )
+                        return [], ''
                 
                 # Valid feature selected - log at info level
                 logger.info(f"   SINGLE_SELECTION valid feature: id={input.id()}")
@@ -7342,13 +7470,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("exploring_zoom_clicked: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return
 
             layer_id = self.current_layer.id()
@@ -7587,13 +7718,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("zooming_to_features: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return
 
             # DIAGNOSTIC: Log incoming features
@@ -8214,13 +8348,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("exploring_deselect_features: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return
             
             self.current_layer.removeSelection()
@@ -8238,13 +8375,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized is True and self.current_layer is not None:
             
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("exploring_select_features: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return
             
             # Activate QGIS selection tool on canvas
@@ -8292,6 +8432,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self._exploring_cache.invalidate(layer_id, self.current_exploring_groupbox)
                 logger.debug(f"exploring_features_changed: Invalidated cache for {layer_id[:8]}.../{self.current_exploring_groupbox}")
             
+            # v2.9.20: Save FID for single_selection mode to allow recovery after layer refresh
+            # This is critical because QgsFeaturePickerWidget can lose its selection after
+            # layer operations (filter/unfilter), causing FALLBACK MODE to use all features
+            if self.current_exploring_groupbox == "single_selection" and isinstance(input, QgsFeature):
+                if input.isValid() and input.id() is not None:
+                    self._last_single_selection_fid = input.id()
+                    self._last_single_selection_layer_id = self.current_layer.id()
+                    logger.debug(f"exploring_features_changed: Saved single_selection FID={input.id()} for layer {self.current_layer.name()}")
+            
             # Update buffer validation when source features/layer changes
             try:
                 self._update_buffer_validation()
@@ -8299,13 +8448,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.debug(f"Could not update buffer validation: {e}")
             
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("exploring_features_changed: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return []
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return []
             
             # Guard: Check if current_layer is in PROJECT_LAYERS
@@ -8446,13 +8598,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self.widgets_initialized and self.current_layer is not None:
 
             # CRITICAL: Check if layer C++ object has been deleted
+            # v2.9.25: But NOT during filtering - layer may appear deleted temporarily
             try:
                 if sip.isdeleted(self.current_layer):
                     logger.debug("get_exploring_features: current_layer C++ object deleted")
-                    self.current_layer = None
+                    if not self._filtering_in_progress:
+                        self.current_layer = None
                     return [], None
             except (RuntimeError, TypeError):
-                self.current_layer = None
+                if not self._filtering_in_progress:
+                    self.current_layer = None
                 return [], None
 
             if self.current_layer is None:
@@ -9449,6 +9604,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Single selection widget - use validated layer parameter
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
+                # v2.9.24: Save current selection FID before clearing widget
+                # This fixes the issue where 2nd filter uses wrong geometry because
+                # the widget loses its selection after filtering
+                saved_fid = None
+                saved_layer_id = None
+                picker_widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
+                
+                # First try to get FID from current widget
+                current_feature = picker_widget.feature() if picker_widget else None
+                if current_feature and current_feature.isValid() and current_feature.id() is not None:
+                    saved_fid = current_feature.id()
+                    if picker_widget.layer():
+                        saved_layer_id = picker_widget.layer().id()
+                    logger.debug(f"_reload_exploration_widgets: Saved current feature FID={saved_fid} from widget")
+                # Fallback to _last_single_selection_fid
+                elif hasattr(self, '_last_single_selection_fid') and self._last_single_selection_fid is not None:
+                    saved_fid = self._last_single_selection_fid
+                    saved_layer_id = getattr(self, '_last_single_selection_layer_id', None)
+                    logger.debug(f"_reload_exploration_widgets: Using saved _last_single_selection_fid={saved_fid}")
+                
                 # OGR FIX v2.8.16: Force refresh by clearing layer first, then resetting it
                 # QgsFeaturePickerWidget caches features internally and doesn't auto-refresh
                 # when the layer's subsetString changes (e.g., after OGR filtering).
@@ -9460,6 +9635,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setShowBrowserButtons(True)
                 # SPATIALITE FIX: Allow null to prevent widget from blocking on first load
                 self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setAllowNull(True)
+                
+                # v2.9.24: Restore saved feature selection after widget refresh
+                # This ensures the same feature remains selected for subsequent filters
+                if saved_fid is not None and layer is not None:
+                    # Only restore if we're reloading the same layer
+                    if saved_layer_id is None or saved_layer_id == layer.id():
+                        logger.info(f"_reload_exploration_widgets: Restoring feature FID={saved_fid} after widget refresh")
+                        try:
+                            # Use setFeature to restore the selection
+                            self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"].setFeature(saved_fid)
+                            # Also update _last_single_selection_fid to ensure consistency
+                            self._last_single_selection_fid = saved_fid
+                            self._last_single_selection_layer_id = layer.id()
+                        except Exception as e:
+                            logger.warning(f"_reload_exploration_widgets: Failed to restore feature FID={saved_fid}: {e}")
+                    else:
+                        logger.debug(f"_reload_exploration_widgets: Layer changed ({saved_layer_id} -> {layer.id()}), not restoring FID")
             
             # Multiple selection widget - use validated layer parameter
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
@@ -9592,6 +9784,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Enable widgets for this mode
                 if self.current_layer is not None:
                     self.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].setEnabled(True)
+            
+            # v2.9.28: Force visual update of groupboxes after state change
+            # QgsCollapsibleGroupBox may not update visually without explicit repaint
+            single_gb.update()
+            multiple_gb.update()
+            custom_gb.update()
+            
+            # Also update parent container to ensure layout is recalculated
+            if single_gb.parent():
+                single_gb.parent().update()
+                
+            logger.debug(f"_restore_groupbox_ui_state: Set {groupbox_name} - single: checked={single_gb.isChecked()}, collapsed={single_gb.isCollapsed()}")
         finally:
             # Always restore signals
             single_gb.blockSignals(False)
@@ -9776,9 +9980,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         STABILITY FIX: Added checks for plugin busy state and deferred processing
         to prevent crashes during project load operations.
+        
+        v2.9.26: Added filtering protection - ignore layer changes during filtering.
         """
         # CRITICAL: Check lock BEFORE any processing
         if self._updating_current_layer:
+            return
+        
+        # v2.9.26: CRITICAL - Ignore layer change signals during filtering
+        # This prevents the comboBox from changing value when layerTreeView emits currentLayerChanged
+        if getattr(self, '_filtering_in_progress', False):
+            logger.debug(f"v2.9.26: 🛡️ current_layer_changed BLOCKED - filtering in progress")
             return
         
         # v2.9.19: CRITICAL - Ensure we have a valid layer when layers exist in project
@@ -9844,6 +10056,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # Set lock immediately
         self._updating_current_layer = True
+        
+        # v2.9.20: Reset saved single_selection FID when changing source layer
+        # The saved FID is only valid for the layer it was saved from
+        if hasattr(self, '_last_single_selection_layer_id'):
+            if layer is None or layer.id() != self._last_single_selection_layer_id:
+                logger.debug(f"current_layer_changed: Clearing saved single_selection FID (layer changed)")
+                self._last_single_selection_fid = None
+                self._last_single_selection_layer_id = None
             
         try:
             # Validate layer and prepare for change
@@ -11051,6 +11271,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Handles cases with no layers gracefully
             - Called from FilterMateApp.layer_management_engine_task_completed()
         """
+        # v2.9.25: CRITICAL - Skip UI update if filtering is in progress
+        # This prevents current_layer from being reset during filter operations
+        if self._filtering_in_progress:
+            logger.info("v2.9.25: Skipping get_project_layers_from_app - filtering in progress")
+            # Only update PROJECT_LAYERS data, don't touch UI or current_layer
+            if project_layers is not None:
+                self.PROJECT_LAYERS = project_layers
+            if project is not None:
+                self.PROJECT = project
+            return
+        
         # CRITICAL: Prevent recursive/multiple simultaneous calls
         if self._updating_layers:
             logger.warning("Blocking recursive call to get_project_layers_from_app")

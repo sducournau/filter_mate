@@ -1981,6 +1981,11 @@ class FilterMateApp:
                 self._current_layer_id_before_filter = None
                 logger.warning("v2.9.19: ⚠️ No current_layer to save before filtering")
             
+            # v2.9.25: CRITICAL - Set filtering flag to prevent current_layer reset during filtering
+            if self.dockwidget:
+                self.dockwidget._filtering_in_progress = True
+                logger.info("v2.9.25: 🔒 Filtering in progress flag SET")
+            
             # v2.8.16: CRITICAL - Disconnect current_layer combobox during filtering
             # This prevents the combobox from automatically changing when layers are modified
             # The combobox will be restored to the correct layer after filtering completes
@@ -1990,6 +1995,16 @@ class FilterMateApp:
                     logger.debug("v2.8.16: Disconnected current_layer combobox signal during filtering")
                 except Exception as e:
                     logger.debug(f"Could not disconnect current_layer combobox: {e}")
+                
+                # v2.9.27: CRITICAL - Also disconnect LAYER_TREE_VIEW signal during filtering
+                # Canvas refresh in FilterEngineTask.finished() can trigger currentLayerChanged on the
+                # layer tree view. Without disconnecting, this can call current_layer_changed() after
+                # _filtering_in_progress is reset to False, causing current_layer to become None.
+                try:
+                    self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
+                    logger.debug("v2.9.27: Disconnected LAYER_TREE_VIEW signal during filtering")
+                except Exception as e:
+                    logger.debug(f"Could not disconnect LAYER_TREE_VIEW signal: {e}")
             
             # Show informational message with backend awareness
             layer_count = len(layers) + 1  # +1 for current layer
@@ -3366,10 +3381,35 @@ class FilterMateApp:
             logger.info(f"get_task_parameters: get_current_features() returned {len(features)} features, expression='{expression}'")
             
             # v2.7.17: CRITICAL CHECK - Warn if no features and no expression
+            # v2.9.20: Enhanced warning with QGIS MessageLog for visibility
+            # v2.9.21: FIX - Abort filter in single_selection mode to prevent FALLBACK MODE
             if len(features) == 0 and not expression:
                 logger.warning(f"⚠️ get_task_parameters: NO FEATURES and NO EXPRESSION!")
                 logger.warning(f"   current_exploring_groupbox: {self.dockwidget.current_exploring_groupbox}")
                 logger.warning(f"   This may cause the filter task to abort or filter incorrectly")
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"⚠️ CRITICAL: No source features selected! Groupbox: {self.dockwidget.current_exploring_groupbox}",
+                    "FilterMate", Qgis.Warning
+                )
+                
+                # v2.9.21: ABORT filter in single_selection mode instead of continuing with ALL features
+                if self.dockwidget.current_exploring_groupbox == "single_selection":
+                    QgsMessageLog.logMessage(
+                        f"   Aborting filter - single_selection mode requires a selected feature!",
+                        "FilterMate", Qgis.Warning
+                    )
+                    iface.messageBar().pushWarning(
+                        "FilterMate",
+                        "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
+                    )
+                    logger.warning(f"⚠️ ABORTING filter task - single_selection mode with no selection!")
+                    return None  # v2.9.21: Abort filter instead of using FALLBACK MODE
+                else:
+                    QgsMessageLog.logMessage(
+                        f"   The filter will use ALL features from source layer - this is probably NOT what you want!",
+                        "FilterMate", Qgis.Warning
+                    )
 
             if task_name in ('filter', 'unfilter', 'reset'):
                 # Build validated list of layers to filter
@@ -3402,15 +3442,22 @@ class FilterMateApp:
                 # NOUVEAU: Détecter si le filtre source doit être ignoré
                 # Cas: custom_selection active ET expression n'est pas un filtre valide
                 # (pas d'opérateurs de comparaison - ex: juste un nom de champ ou expression display)
+                # 
+                # NOTE v2.9.23: single_selection et multiple_selection filtrent TOUJOURS la couche source
+                # Le filtre est appliqué selon la logique du groupbox actif
                 skip_source_filter = False
-                if (task_name == 'filter' and 
-                    self.dockwidget.current_exploring_groupbox == "custom_selection"):
-                    # L'expression validée est vide si l'expression originale n'était pas un filtre
-                    # (car _build_common_task_params la vide si pas d'opérateurs de comparaison)
-                    validated_expr = task_parameters["task"].get("expression", "")
-                    if not validated_expr or not validated_expr.strip():
-                        skip_source_filter = True
-                        logger.info(f"FilterMate: Custom selection with non-filter expression '{expression}' - will use ALL features from source layer")
+                current_groupbox = self.dockwidget.current_exploring_groupbox
+                
+                if task_name == 'filter':
+                    if current_groupbox == "custom_selection":
+                        # L'expression validée est vide si l'expression originale n'était pas un filtre
+                        # (car _build_common_task_params la vide si pas d'opérateurs de comparaison)
+                        validated_expr = task_parameters["task"].get("expression", "")
+                        if not validated_expr or not validated_expr.strip():
+                            skip_source_filter = True
+                            logger.info(f"FilterMate: Custom selection with non-filter expression '{expression}' - will use ALL features from source layer")
+                    # single_selection et multiple_selection: la couche source EST filtrée
+                    # en utilisant l'expression construite à partir des features sélectionnées
                 
                 task_parameters["task"]["skip_source_filter"] = skip_source_filter
                 
@@ -3919,6 +3966,25 @@ class FilterMateApp:
         if task_name not in ('filter', 'unfilter', 'reset'):
             return
         
+        # v2.9.19: Clear Spatialite cache for all affected layers when unfiltering/resetting
+        # This ensures the multi-step cache doesn't interfere with subsequent filter operations
+        if task_name in ('unfilter', 'reset'):
+            try:
+                from modules.backends.spatialite_cache import get_cache
+                cache = get_cache()
+                # Clear cache for source layer
+                cache.clear_layer_cache(source_layer.id())
+                logger.debug(f"FilterMate: Cleared Spatialite cache for {source_layer.name()}")
+                
+                # Clear cache for all associated layers
+                layers_list = task_parameters.get("task", {}).get("layers", [])
+                for lyr in layers_list:
+                    if lyr and hasattr(lyr, 'id'):
+                        cache.clear_layer_cache(lyr.id())
+                        logger.debug(f"FilterMate: Cleared Spatialite cache for {lyr.name()}")
+            except Exception as e:
+                logger.debug(f"Could not clear Spatialite cache: {e}")
+        
         # Refresh layers and map canvas
         self._refresh_layers_and_canvas(source_layer)
         
@@ -4048,10 +4114,18 @@ class FilterMateApp:
                         # FORCE complete reload of exploring widgets
                         self.dockwidget._reload_exploration_widgets(self.dockwidget.current_layer, layer_props)
                         
-                        # v2.9.20: Also update the groupbox UI state to ensure proper visibility
-                        if hasattr(self.dockwidget, 'current_exploring_groupbox') and self.dockwidget.current_exploring_groupbox:
-                            self.dockwidget._restore_groupbox_ui_state(self.dockwidget.current_exploring_groupbox)
-                            logger.debug(f"v2.9.20: Restored groupbox UI state for '{self.dockwidget.current_exploring_groupbox}'")
+                        # v2.9.28: CRITICAL FIX - Always restore groupbox UI state after filtering
+                        # Use saved groupbox from layer_props if available, fallback to current or default
+                        groupbox_to_restore = None
+                        if "current_exploring_groupbox" in layer_props.get("exploring", {}):
+                            groupbox_to_restore = layer_props["exploring"]["current_exploring_groupbox"]
+                        if not groupbox_to_restore and hasattr(self.dockwidget, 'current_exploring_groupbox'):
+                            groupbox_to_restore = self.dockwidget.current_exploring_groupbox
+                        if not groupbox_to_restore:
+                            groupbox_to_restore = "single_selection"  # Default fallback
+                        
+                        self.dockwidget._restore_groupbox_ui_state(groupbox_to_restore)
+                        logger.info(f"v2.9.28: ✅ Restored groupbox UI state for '{groupbox_to_restore}'")
                         
                         logger.info(f"v2.9.20: ✅ Exploring widgets reloaded successfully")
                     else:
@@ -4091,9 +4165,37 @@ class FilterMateApp:
             # This ensures signal reconnection happens even if current_layer is None
             if self.dockwidget:
                 try:
+                    # v2.9.26: CRITICAL - Ensure combobox shows correct layer BEFORE reconnecting signal
+                    # and BEFORE resetting the filtering flag
+                    if hasattr(self, '_current_layer_id_before_filter') and self._current_layer_id_before_filter:
+                        restored_layer = QgsProject.instance().mapLayer(self._current_layer_id_before_filter)
+                        if restored_layer and restored_layer.isValid():
+                            current_combo_layer = self.dockwidget.comboBox_filtering_current_layer.currentLayer()
+                            if not current_combo_layer or current_combo_layer.id() != restored_layer.id():
+                                # Block signals to prevent triggering during setLayer
+                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
+                                self.dockwidget.comboBox_filtering_current_layer.setLayer(restored_layer)
+                                self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                                logger.info(f"v2.9.26: ✅ FINALLY - Forced combobox to '{restored_layer.name()}'")
+                    
                     # v2.9.20: ALWAYS reconnect signal
                     self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
                     logger.info("v2.9.20: ✅ FINALLY - Reconnected current_layer signal after filtering")
+                    
+                    # v2.9.27: Reconnect LAYER_TREE_VIEW signal (disconnected in manage_task)
+                    # Only if the legend link option is enabled (otherwise signal was never connected)
+                    if self.dockwidget.project_props.get("OPTIONS", {}).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False):
+                        try:
+                            self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
+                            logger.info("v2.9.27: ✅ FINALLY - Reconnected LAYER_TREE_VIEW signal after filtering")
+                        except Exception as e:
+                            logger.debug(f"Could not reconnect LAYER_TREE_VIEW signal: {e}")
+                    
+                    # v2.9.24: CRITICAL FIX - Force reconnect ACTION signals after filtering
+                    # The signal cache can become desynchronized, causing buttons to stop working.
+                    # This bypasses the cache and forces direct reconnection of ACTION signals.
+                    if hasattr(self.dockwidget, 'force_reconnect_action_signals'):
+                        self.dockwidget.force_reconnect_action_signals()
                     
                     # v2.9.20: FORCE invalidation of exploring cache after filtering
                     # This ensures the panel shows fresh, filtered features
@@ -4101,8 +4203,15 @@ class FilterMateApp:
                         self.dockwidget.invalidate_exploring_cache(self.dockwidget.current_layer.id())
                         logger.info(f"v2.9.20: ✅ Invalidated exploring cache for '{self.dockwidget.current_layer.name()}'")
                     
+                    # v2.9.26: CRITICAL - Reset filtering flag LAST to ensure all operations complete
+                    # while the flag is still protecting against unwanted signal emissions
+                    self.dockwidget._filtering_in_progress = False
+                    logger.info("v2.9.26: 🔓 Filtering in progress flag RESET (after signal reconnection)")
+                    
                 except Exception as reconnect_error:
                     logger.error(f"v2.9.20: ❌ Failed to reconnect layerChanged signal: {reconnect_error}")
+                    # v2.9.25: Reset flag even on error
+                    self.dockwidget._filtering_in_progress = False
         
         # v2.8.13: CRITICAL - Invalidate expression cache after filtering
         # When a layer's subsetString changes, cached expression results become stale.

@@ -1927,10 +1927,16 @@ class OGRGeometricFilter(GeometricFilterBackend):
                         if provider:
                             _ = provider.name()  # Force provider property access
                         self.log_debug(f"🔒 TEMP reference for GEOS-safe intersect: '{layer_name}' (fully materialized)")
-                        # FIX v2.8.15: Add tiny delay to ensure C++/Qt finishes initialization
-                        # This prevents race condition on some systems where pre-flight check happens
-                        # before Qt's event loop processes the memory layer completely
-                        time.sleep(0.001)  # 1ms delay - imperceptible but critical for stability
+                        # FIX v2.9.19: CRITICAL - Process Qt events and add delay to prevent GC race condition
+                        # The C++ object can be deleted by Qt's GC between creation and processing.run()
+                        # This happens intermittently after 5-7 target layer iterations.
+                        # Process events BEFORE any further operations to ensure the layer is stable.
+                        from qgis.PyQt.QtCore import QCoreApplication
+                        QCoreApplication.processEvents()
+                        time.sleep(0.005)  # 5ms delay - still imperceptible but more reliable
+                        # Re-validate after event processing to catch late GC
+                        _ = safe_intersect.isValid()
+                        _ = safe_intersect.featureCount()
                     except RuntimeError as name_err:
                         # If even basic access fails after adding to list, the layer is already dead
                         QgsMessageLog.logMessage(

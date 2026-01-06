@@ -410,7 +410,7 @@
                 <property name="spacing">
                  <number>4</number>
                 </property>
-                <item row="0" column="1">
+                <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
@@ -917,7 +917,7 @@
                   </layout>
                  </widget>
                 </item>
-                <item row="0" column="2">
+                <item row="0" column="1">
                  <layout class="QVBoxLayout" name="verticalLayout_exploring_tabs_content">
                   <property name="spacing">
                    <number>4</number>

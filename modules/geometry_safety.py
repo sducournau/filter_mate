@@ -747,6 +747,24 @@ def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Opti
             logger.warning("create_geos_safe_layer: Falling back to original layer")
             return layer
         
+        # FIX v2.9.19: CRITICAL - Force IMMEDIATE materialization to prevent GC race condition
+        # The C++ object can be deleted by Qt's GC between createMemoryLayer() and first use.
+        # This happens intermittently after 5-7 iterations when filtering multiple target layers.
+        # Force Python to take ownership and materialize the object immediately:
+        try:
+            # 1. Force all basic property access immediately
+            _ = safe_layer.name()
+            _ = safe_layer.isValid()
+            _ = safe_layer.wkbType()
+            _ = safe_layer.crs().authid()
+            _ = safe_layer.fields().count()
+            # 2. Process pending Qt events to ensure C++ object is fully initialized
+            from qgis.PyQt.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+        except RuntimeError as materialize_err:
+            logger.error(f"create_geos_safe_layer: Layer deleted immediately after creation: {materialize_err}")
+            return layer  # Fallback to original
+        
         data_provider = safe_layer.dataProvider()
         safe_features = []
         repaired_features = []  # Features that needed makeValid()
@@ -825,6 +843,18 @@ def create_geos_safe_layer(layer, layer_name_suffix: str = "_geos_safe") -> Opti
                        f"({skipped_count} skipped, {repaired_count} repaired)")
         else:
             logger.debug(f"create_geos_safe_layer: All {feature_count} geometries passed validation")
+        
+        # FIX v2.9.19: CRITICAL - Final stabilization before returning layer
+        # Force full materialization and process Qt events to ensure layer survives return
+        try:
+            _ = safe_layer.name()
+            _ = safe_layer.featureCount()
+            _ = safe_layer.extent()  # Force extent calculation
+            from qgis.PyQt.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+        except RuntimeError as final_err:
+            logger.error(f"create_geos_safe_layer: Layer GC'd before return: {final_err}")
+            return layer  # Fallback to original
         
         return safe_layer
         
