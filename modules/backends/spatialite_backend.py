@@ -2248,10 +2248,17 @@ class SpatialiteGeometricFilter(GeometricFilterBackend):
         predicate_expressions = []
         for predicate_name, predicate_func in ordered_predicates:
             # Apply spatial predicate
-            # Format: ST_Intersects("geometry", source_geom_expr)
-            expr = f"{predicate_func}({geom_expr}, {source_geom_expr})"
+            # Format: ST_Intersects("geometry", source_geom_expr) = 1
+            # 
+            # v2.8.13 FIX: Add explicit "= 1" comparison to handle NULL geometry from negative buffer
+            # When a negative buffer produces an empty geometry, source_geom_expr becomes NULL via:
+            #   CASE WHEN ST_IsEmpty(...) THEN NULL ELSE ... END
+            # Without "= 1", ST_Intersects(geom, NULL) returns NULL (not FALSE), and in SQLite,
+            # NULL in WHERE clause doesn't filter records - causing ALL features to be returned!
+            # With "= 1", NULL = 1 evaluates to FALSE, correctly filtering out all features.
+            expr = f"{predicate_func}({geom_expr}, {source_geom_expr}) = 1"
             predicate_expressions.append(expr)
-            self.log_debug(f"Added predicate: {predicate_func} (optimal order)")
+            self.log_debug(f"Added predicate: {predicate_func} = 1 (optimal order, NULL-safe)")
         
         # Combine predicates with OR
         # Note: SQL engines typically evaluate OR left-to-right

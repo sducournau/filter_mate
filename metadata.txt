@@ -10,15 +10,13 @@ version=2.9.6
 author=imagodata
 email=simon.ducournau+filter_mate@gmail.com
 
-about=FilterMate v2.9.6 - Multi-Step Filtering Fix + Code Quality Audit
+about=FilterMate v2.9.6 - Spatialite NULL Geometry Fix
 
  NEW in v2.9.6:
- - 🐛 FIX: Multi-step filtering now correctly uses filtered source layer geometry
- - 🔧 FIX: Expression cache includes subsetString to prevent stale results
- - ✅ Step 2 now properly filters using custom expression on filtered features from Step 1
- - 🧹 Expression cache auto-invalidates when layer filter changes
- - 🔧 AUDIT: Replaced 17 bare except clauses with specific exception types
- - ✅ Code quality improved: 9.1/10 → 9.3/10
+ - 🐛 FIX: Negative buffer now correctly returns 0 features when geometry is empty
+ - 🔧 FIX: Spatialite predicates now use explicit "= 1" for NULL-safe evaluation
+ - ✅ ST_Intersects(geom, NULL) now correctly filters to 0 results instead of all features
+ - 🔒 Prevents silent filter failures with complex buffer operations
 
  Previous in v2.9.5:
  - 🐛 FIX: Windows crash during QGIS shutdown (fatal access violation)

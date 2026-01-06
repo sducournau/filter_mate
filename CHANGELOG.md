@@ -2,6 +2,46 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [2.9.6] - 2026-01-06 - Spatialite NULL Geometry Fix
+
+### 🐛 Bug Fix: Negative Buffer Returns All Features Instead of 0
+
+**Problem Solved:**
+
+- Negative buffer producing empty geometry returned ALL features instead of 0
+- Filter silently failed when `ST_Intersects(geom, NULL)` was evaluated
+- Users expected 0 results but got entire layer content
+
+**Root Cause:**
+
+- When negative buffer produces empty geometry, expression becomes `CASE WHEN ST_IsEmpty(...) THEN NULL ELSE ... END`
+- `ST_Intersects(geom, NULL)` returns NULL in SQLite (not FALSE)
+- NULL in WHERE clause doesn't filter records - all rows pass through!
+
+**Solution:**
+
+- All Spatialite spatial predicates now use explicit `= 1` comparison
+- Format changed from `ST_Intersects(geom, source)` to `ST_Intersects(geom, source) = 1`
+- `NULL = 1` evaluates to FALSE, correctly filtering out all features
+
+**Technical Details:**
+
+```python
+# BEFORE (v2.8.13-): Silent filter failure
+expr = f"{predicate_func}({geom_expr}, {source_geom_expr})"
+# ST_Intersects(geom, NULL) → NULL → WHERE NULL → ALL ROWS PASS!
+
+# AFTER (v2.9.6): NULL-safe evaluation
+expr = f"{predicate_func}({geom_expr}, {source_geom_expr}) = 1"
+# ST_Intersects(geom, NULL) = 1 → NULL = 1 → FALSE → 0 ROWS
+```
+
+### 📊 Files Modified
+
+- `modules/backends/spatialite_backend.py`: NULL-safe predicate expressions
+
+---
+
 ## [2.9.5] - 2026-01-05 - QGIS Shutdown Crash Fix
 
 ### 🐛 Bug Fix: Windows Fatal Access Violation During Shutdown

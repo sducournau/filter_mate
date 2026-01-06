@@ -1,6 +1,6 @@
 # ![alt title logo](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
-**Version 2.9.5** | January 2026 | **Production-Ready**
+**Version 2.9.6** | January 2026 | **Production-Ready**
 
 > Advanced filtering and export capabilities for vector data in QGIS - works with ANY data source!
 
@@ -26,6 +26,12 @@
 ---
 
 ## 📋 Recent Changes
+
+### v2.9.6 - Spatialite NULL Geometry Fix (January 2026)
+
+- 🐛 **FIX: Negative buffer 0 features** - Correctly returns empty result when buffer produces NULL geometry
+- 🔧 **FIX: NULL-safe predicates** - Spatialite predicates now use explicit `= 1` comparison
+- ✅ **Reliable filtering** - ST_Intersects(geom, NULL) now correctly filters to 0 results
 
 ### v2.9.5 - QGIS Shutdown Crash Fix (January 2026)
 

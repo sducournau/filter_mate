@@ -5,7 +5,7 @@ slug: /
 
 # Welcome to FilterMate
 
-**FilterMate v2.9.5** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
+**FilterMate v2.9.6** is a production-ready QGIS plugin that provides advanced filtering and export capabilities for vector data - works with ANY data source!
 
 ## ✨ Key Features
 
@@ -21,21 +21,29 @@ slug: /
 
 ---
 
-## 🎉 What's New in v2.9.5 - QGIS Shutdown Crash Fix
+## 🎉 What's New in v2.9.6 - Spatialite NULL Geometry Fix
 
-This release fixes a critical Windows crash that occurred during QGIS shutdown.
+This release fixes a critical issue where negative buffer operations could return ALL features instead of 0.
 
-### 🐛 Bug Fix: Windows Fatal Access Violation
+### 🐛 Bug Fix: NULL Geometry Filter Failure
 
-- **Problem:** QGIS crashed on Windows during shutdown with fatal exception
-- **Cause:** `QgsMessageLog` destroyed before `QApplication` during `QgsApplication::~QgsApplication()`
-- **Solution:** Task cancellation now uses Python file-based logger instead of QgsMessageLog
+- **Problem:** Negative buffer producing empty geometry returned ALL features instead of 0
+- **Cause:** `ST_Intersects(geom, NULL)` returns NULL in SQLite, which doesn't filter in WHERE clause
+- **Solution:** Spatialite predicates now use explicit `= 1` comparison for NULL-safe evaluation
 
-### ✅ Safe Shutdown Implementation
+### ✅ NULL-Safe Predicate Implementation
 
-- `cancel()` method no longer calls any QGIS C++ API during shutdown
-- Python logger (file-based) used for task cancellation logging
-- No more access violations during `QgsTaskManager::cancelAll()`
+- All spatial predicates now use `ST_Intersects(...) = 1` format
+- `NULL = 1` evaluates to FALSE, correctly filtering out all features
+- Prevents silent filter failures with complex buffer operations
+
+---
+
+## Previous: v2.9.5 - QGIS Shutdown Crash Fix
+
+- 🐛 Fixed Windows fatal access violation during QGIS shutdown
+- 🔧 Task cancellation now uses Python logger instead of QgsMessageLog
+- ✅ Safe shutdown: Avoids calling destroyed C++ objects
 
 ---
 
