@@ -3939,6 +3939,25 @@ class FilterMateApp:
             self.iface.mapCanvas().refresh()
             
         self.dockwidget.PROJECT_LAYERS = self.PROJECT_LAYERS
+        
+        # v2.8.13: CRITICAL - Invalidate expression cache after filtering
+        # When a layer's subsetString changes, cached expression results become stale.
+        # This is essential for multi-step filtering: Step 2 must re-evaluate expressions
+        # on the filtered features from Step 1, not use cached results from before filtering.
+        if hasattr(self.dockwidget, 'invalidate_expression_cache'):
+            # Invalidate cache for all layers that were filtered (their subsetString changed)
+            affected_layer_ids = []
+            if source_layer:
+                affected_layer_ids.append(source_layer.id())
+            # Also include all distant layers from task_parameters
+            distant_layers = task_parameters.get("task", {}).get("layers", [])
+            for dl in distant_layers:
+                if hasattr(dl, 'id'):
+                    affected_layer_ids.append(dl.id())
+            
+            for layer_id in affected_layer_ids:
+                self.dockwidget.invalidate_expression_cache(layer_id)
+                logger.debug(f"v2.8.13: Invalidated expression cache for layer {layer_id}")
 
 
     def apply_subset_filter(self, task_name, layer):

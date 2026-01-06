@@ -4710,6 +4710,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         Get cached result for an expression if available and not expired.
         
+        v2.8.13: Cache key now includes subsetString to ensure cache invalidation
+        when layer is filtered. This is critical for multi-step filtering where
+        Step 2 must re-evaluate expressions on features filtered by Step 1.
+        
         Args:
             layer_id: The layer ID
             expression: The expression string
@@ -4719,7 +4723,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         import time
         
-        cache_key = (layer_id, expression)
+        # v2.8.13: Include subsetString in cache key for multi-step filtering support
+        # When layer is filtered, subsetString changes, automatically invalidating cache
+        layer = QgsProject.instance().mapLayer(layer_id)
+        subset_string = layer.subsetString() if layer else ""
+        cache_key = (layer_id, expression, subset_string)
+        
         if cache_key not in self._expression_cache:
             return None
         
@@ -4751,7 +4760,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                            key=lambda k: self._expression_cache[k][1])
             del self._expression_cache[oldest_key]
         
-        cache_key = (layer_id, expression)
+        # v2.8.13: Include subsetString in cache key for multi-step filtering support
+        layer = QgsProject.instance().mapLayer(layer_id)
+        subset_string = layer.subsetString() if layer else ""
+        cache_key = (layer_id, expression, subset_string)
         self._expression_cache[cache_key] = (features, time.time())
     
     def invalidate_expression_cache(self, layer_id: str = None):
